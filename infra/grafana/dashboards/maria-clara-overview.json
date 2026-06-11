@@ -1,0 +1,135 @@
+{
+  "uid": "maria-clara-overview",
+  "title": "Maria Clara — Store Overview",
+  "tags": ["maria-clara", "ecommerce"],
+  "timezone": "Asia/Manila",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Revenue (₱, excl. cancelled)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "maria-clara-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(total_cents), 0) / 100.0 AS revenue FROM orders WHERE status <> 'cancelled' AND placed_at BETWEEN $__timeFrom() AND $__timeTo();"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyPHP", "color": { "mode": "fixed", "fixedColor": "orange" } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Orders (excl. cancelled)",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "maria-clara-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS orders FROM orders WHERE status <> 'cancelled' AND placed_at BETWEEN $__timeFrom() AND $__timeTo();"
+        }
+      ],
+      "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "dark-orange" } }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "piechart",
+      "title": "Order status breakdown",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "maria-clara-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT status, COUNT(*) AS orders FROM orders WHERE placed_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY status ORDER BY orders DESC;"
+        }
+      ],
+      "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["value"] } }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Orders per day",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "postgres", "uid": "maria-clara-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('day', placed_at) AS time, COUNT(*) AS orders FROM orders WHERE placed_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1 }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Top products by quantity sold",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "postgres", "uid": "maria-clara-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT item->>'productName' AS product, item->>'size' AS size, SUM((item->>'quantity')::int) AS quantity, SUM((item->>'quantity')::int * (item->>'unitPriceCents')::int) / 100.0 AS revenue FROM orders, jsonb_array_elements(items) AS item WHERE status <> 'cancelled' AND placed_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1, 2 ORDER BY quantity DESC LIMIT 15;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "revenue" }, "properties": [{ "id": "unit", "value": "currencyPHP" }] }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "COD confirmation funnel",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "postgres", "uid": "maria-clara-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT cod_confirmation_status AS stage, COUNT(*) AS orders, SUM(total_cents) / 100.0 AS value FROM orders WHERE placed_at BETWEEN $__timeFrom() AND $__timeTo() GROUP BY 1 ORDER BY orders DESC;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "value" }, "properties": [{ "id": "unit", "value": "currencyPHP" }] }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Low stock (≤ 12 pieces total)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "postgres", "uid": "maria-clara-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT p.name AS product, p.status, SUM(v.stock_quantity) AS stock FROM products p JOIN product_variants v ON v.product_slug = p.slug GROUP BY p.name, p.status HAVING SUM(v.stock_quantity) <= 12 ORDER BY stock ASC;"
+        }
+      ]
+    }
+  ]
+}

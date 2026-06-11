@@ -3,6 +3,49 @@
 Guidance for working in this repository. Read this before adding features or fixing bugs.
 Every section is written so it can be updated independently when the code changes.
 
+## ⚠️ Monorepo restructure (2026-06-12)
+
+The repo is now an **npm-workspaces monorepo**. The entire original app moved, unchanged,
+into `apps/api/`. **Every path in the sections below that mentions `src/`, `test/`,
+`data/`, `db/`, `scripts/`, or `public/` now lives under `apps/api/`** (e.g.
+`apps/api/src/routes/admin.js`, `apps/api/data/products.json`). Everything else in this
+document — patterns, contracts, enums, test conventions — still holds.
+
+New top-level pieces:
+
+- **`apps/web/`** — the redesigned frontend: Vite + React 18 + Tailwind CSS v4 +
+  react-router. Storefront at `/`, admin SPA at `/admin`. It consumes the same `/api`
+  endpoints (dev: Vite proxy to `:3000`; Docker: nginx proxy). It reuses the exact
+  browser-storage contracts (`maria-clara-cart`, `maria-clara-admin-token`,
+  `maria-clara-last-order`) and the checkout payload shape, so carts/sessions work across
+  old and new UIs. The legacy static site in `apps/api/public/` is intentionally kept
+  (tests pin it; it is the fallback UI).
+- **`docker-compose.yml`** — full stack: `postgres:16` + `api` (auto-migrates, seeds only
+  when the products table is empty — see `apps/api/docker-entrypoint.sh`) + `web`
+  (nginx serving the built React app on :8080) + `grafana` (:3001, provisioned from
+  `infra/grafana/` with the "Maria Clara — Store Overview" dashboard, uid
+  `maria-clara-overview`).
+- **Root `package.json`** — workspace proxy scripts: `npm test`, `npm run dev:api`,
+  `npm run dev:web`, `npm run build:web`, `npm run db:*` all work from the repo root.
+- One test was path-adjusted for the move: `apps/api/test/adminReadiness.test.js` reads
+  `docs/admin-system-roadmap.md` from the **repo root** `docs/` (three levels up).
+- Design/spec docs for the redesign: `docs/superpowers/specs/2026-06-12-modern-redesign-design.md`,
+  plan in `docs/superpowers/plans/`, and pending-review ideas in `docs/ENHANCEMENT_PROPOSALS.md`.
+
+### apps/web conventions
+
+- ES modules, JSX, functional components + hooks only; no state library. Shared logic in
+  `src/lib/` (`api.js`, `adminApi.js`, `cart.js`, `money.js`, `addressGuide.js`,
+  `richText.js` — the sanitizer allow-list mirrors the legacy `sanitizeRichNode`).
+- Tailwind v4 CSS-first config: design tokens live in `@theme` in `src/index.css`
+  (paper/ink/clay/accent palette, Clash Display + Switzer via Fontshare).
+- Money is still integer centavos everywhere; format only via `lib/money.js`.
+- Admin API field names differ between list and detail endpoints (e.g. product list rows
+  use `image`/`inventoryQuantity`; the public order confirmation returns flattened
+  `{ order: { customerName, addressLine, ... } }`) — check `productSummaryRecord`,
+  `orderSummary`, and the public confirmation shape in `apps/api/src/routes/orders.js`
+  before adding fields.
+
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
