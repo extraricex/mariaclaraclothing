@@ -19,7 +19,7 @@ docs        Specs, plans, and recommendations (see docs/ENHANCEMENT_PROPOSALS.md
 docker compose up --build
 ```
 
-- React storefront + admin: `http://localhost:8080` (admin at `/admin`)
+- React storefront + admin: `http://localhost:8081` (admin at `/admin`)
 - API + legacy static site: `http://localhost:3000`
 - Grafana dashboards: `http://localhost:3001` (provisioned "Maria Clara — Store Overview")
 - PostgreSQL is migrated and seeded automatically on first start.

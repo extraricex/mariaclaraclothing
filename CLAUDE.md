@@ -22,7 +22,7 @@ New top-level pieces:
   (tests pin it; it is the fallback UI).
 - **`docker-compose.yml`** — full stack: `postgres:16` + `api` (auto-migrates, seeds only
   when the products table is empty — see `apps/api/docker-entrypoint.sh`) + `web`
-  (nginx serving the built React app on :8080) + `grafana` (:3001, provisioned from
+  (nginx serving the built React app on :8081) + `grafana` (:3001, provisioned from
   `infra/grafana/` with the "Maria Clara — Store Overview" dashboard, uid
   `maria-clara-overview`).
 - **Root `package.json`** — workspace proxy scripts: `npm test`, `npm run dev:api`,

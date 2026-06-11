@@ -1,6 +1,6 @@
 # Maria Clara webstore — full stack.
 #   docker compose up --build
-# Storefront/admin (React):  http://localhost:8080   (admin at /admin)
+# Storefront/admin (React):  http://localhost:8081   (admin at /admin)
 # API + legacy static site:  http://localhost:3000
 # Grafana dashboards:        http://localhost:3001
 #
@@ -41,7 +41,7 @@ services:
   web:
     build: ./apps/web
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - api
 
