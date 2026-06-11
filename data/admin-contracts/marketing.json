@@ -1,0 +1,18 @@
+{
+  "area": "marketing",
+  "managedFields": [
+    "announcementText",
+    "homepageCarousel",
+    "banners",
+    "featuredCollections",
+    "campaignSections",
+    "promotionalCopy"
+  ],
+  "futureAdminActions": [
+    "edit announcement",
+    "replace carousel image",
+    "reorder carousel",
+    "feature product",
+    "publish campaign"
+  ]
+}

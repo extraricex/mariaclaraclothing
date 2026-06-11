@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MARIA CLARA CLOTHING | Maria Clara</title>
+    <meta name="description" content="Maria Clara Clothing streetwear storefront visual prototype.">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/js/meta-pixel-config.js"></script>
+    <script src="/js/meta-pixel.js"></script>
+    <script type="module" src="/js/shell.js"></script>
+    <script type="module" src="/js/storefront.js"></script>
+  </head>
+  <body class="shopify-prototype">
+    <header class="shopify-header">
+      <button class="icon-button mobile-menu-button" type="button" aria-label="Open menu" data-menu-open>
+        <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-list" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5"/>
+</svg>
+      </button>
+      <nav class="header-inline-nav" aria-label="Primary">
+        <a href="/faq.html">FAQ</a>
+        <a href="/shipping-returns.html">Shipping and Returns</a>
+        <a href="/terms.html">Terms of Use</a>
+        <a href="/#new-arrivals">NEW ARRIVALS</a>
+      </nav>
+      <a class="logo-mark" href="/" aria-label="Maria Clara home">
+        <img src="/brand/logo.png" alt="Maria Clara">
+      </a>
+      <div class="header-actions">
+        <button class="header-action-text search-link" type="button" aria-label="Search products" data-search-open><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+  <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+</svg></button>
+        <a class="header-action-text account-link" href="#" aria-label="Log in" aria-disabled="true"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-person-circle" viewBox="0 0 16 16">
+  <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/>
+  <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"/>
+</svg></a>
+        <a class="header-action-text cart-link" href="/cart.html" aria-label="Cart"><svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-cart4" viewBox="0 0 16 16">
+  <path d="M0 2.5A.5.5 0 0 1 .5 2H2a.5.5 0 0 1 .485.379L2.89 4H14.5a.5.5 0 0 1 .485.621l-1.5 6A.5.5 0 0 1 13 11H4a.5.5 0 0 1-.485-.379L1.61 3H.5a.5.5 0 0 1-.5-.5M3.14 5l.5 2H5V5zM6 5v2h2V5zm3 0v2h2V5zm3 0v2h1.36l.5-2zm1.11 3H12v2h.61zM11 8H9v2h2zM8 8H6v2h2zM5 8H3.89l.5 2H5zm0 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m9-1a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0"/>
+</svg> <span data-cart-count></span></a>
+      </div>
+    </header>
+
+    <aside class="drawer" data-menu-drawer aria-hidden="true">
+      <div class="drawer-panel">
+        <button class="drawer-close" type="button" aria-label="Close menu" data-menu-close>Close</button>
+        <nav aria-label="Menu">
+          <a href="#new-arrivals">NEW ARRIVALS</a>
+          <a href="#freedom-of-mind">FREEDOM OF MIND</a>
+          <a href="#about-us">ABOUT US</a>
+          <a href="/cart.html">CART</a>
+          <a href="/faq.html">FAQ</a>
+          <a href="/shipping-returns.html">SHIPPING &amp; RETURNS</a>
+          <a href="/terms.html">TERMS</a>
+        </nav>
+      </div>
+      <button class="drawer-backdrop" type="button" aria-label="Close menu" data-menu-close></button>
+    </aside>
+
+    <aside class="search-overlay" data-search-overlay aria-hidden="true">
+      <div class="search-panel">
+        <div class="search-panel-top">
+          <label>
+            <span>Search</span>
+            <input type="search" placeholder="Search products" data-search-input>
+          </label>
+          <button class="drawer-close" type="button" aria-label="Close search" data-search-close>Close</button>
+        </div>
+        <div class="search-results" data-search-results></div>
+      </div>
+      <button class="drawer-backdrop" type="button" aria-label="Close search" data-search-close></button>
+    </aside>
+
+    <div class="announcement-bar" data-announcement-bar>
+      <span>BUY 2 ITEMS TO GET FREE SHIPPING FEE</span>
+    </div>
+
+    <main>
+      <section class="shopify-slideshow homepage-carousel" aria-label="Featured campaigns" data-carousel>
+        <article class="slide is-active">
+          <img src="/brand/hero1v2.jpg" alt="Maria Clara campaign">
+        </article>
+        <article class="slide">
+          <img src="/brand/hero2-web.jpg" alt="Maria Clara streetwear editorial">
+        </article>
+        <div class="slide-dots" aria-hidden="true"><span></span><span></span></div>
+      </section>
+      <button class="visually-hidden" type="button" data-video-poster data-video-src="/brand/video-poster.mp4" aria-hidden="true" tabindex="-1">Play Maria Clara campaign video</button>
+
+      <section id="new-arrivals" class="shopify-section">
+        <h2>NEW ARRIVALS</h2>
+        <div id="product-grid" class="product-grid shopify-product-grid" aria-live="polite"></div>
+      </section>
+
+      <section id="freedom-of-mind" class="shopify-section">
+        <h2>FREEDOM OF MIND</h2>
+        <div id="freedom-grid" class="product-grid shopify-product-grid" aria-live="polite"></div>
+      </section>
+
+      <section id="about-us" class="rich-text-section">
+        <h2>ABOUT US</h2>
+        <p>AT <strong>MARIA CLARA CLOTHING</strong>, WE BLEND CLASSIC FILIPINO ELEGANCE WITH EVERYDAY STYLE. INSPIRED BY TRADITION, MADE FOR THE MODERN SOUL, OUR PIECES ARE CRAFTED TO MAKE YOU FEEL CONFIDENT, COMFORTABLE, AND PROUD OF YOUR ROOTS. WEAR CULTURE. WEAR CONFIDENCE.</p>
+        <p>STAY IN PEACE OF MIND</p>
+      </section>
+    </main>
+
+    <footer class="site-footer shopify-footer">
+      <small>&copy; 2026, <a href="/">Maria Clara</a></small>
+      <nav aria-label="Footer">
+        <a href="/faq.html">FAQ</a>
+        <a href="/shipping-returns.html">Shipping and Returns</a>
+        <a href="/terms.html">Terms of Use</a>
+        <a href="mailto:support@mariaclaraclothing.com">Contact</a>
+      </nav>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

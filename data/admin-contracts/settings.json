@@ -1,0 +1,18 @@
+{
+  "area": "settings",
+  "managedFields": [
+    "storeName",
+    "contactEmail",
+    "shippingRules",
+    "paymentMethods",
+    "policyLinks",
+    "seoDefaults"
+  ],
+  "futureAdminActions": [
+    "edit store settings",
+    "configure shipping",
+    "configure payments",
+    "edit policy links",
+    "edit SEO defaults"
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "orders": [
+    {
+      "customer": {
+        "fullName": "ARIAN CARLO PAREDES",
+        "phone": "+639358561971",
+        "email": ""
+      },
+      "address": {
+        "addressLine": "313 PAGASA SUBDIVISION BUCANDALA 4, 0402109051, City of Imus, Cavite, Philippines",
+        "houseAddress": "313 PAGASA SUBDIVISION BUCANDALA 4",
+        "barangay": "0402109051",
+        "city": "City of Imus",
+        "province": "Cavite",
+        "country": "Philippines",
+        "postalCode": ""
+      },
+      "items": [
+        {
+          "productId": "catalog-copy-of-copy-of-box-fit-oversized-tee-mandala-shirt-white",
+          "variantId": "catalog-copy-of-copy-of-box-fit-oversized-tee-mandala-shirt-white-1",
+          "productName": "MANDALA WHITE V1 — Oversized 240 GSM Shirt",
+          "size": "Medium",
+          "quantity": 1,
+          "unitPriceCents": 64900
+        }
+      ],
+      "subtotalCents": 64900,
+      "discountTotalCents": 0,
+      "shippingFeeCents": 8000,
+      "shippingRegion": "metro_manila_cavite",
+      "shippingRegionLabel": "Metro Manila & Cavite Region",
+      "freeShippingUnlocked": false,
+      "totalCents": 72900,
+      "cartSnapshot": [
+        {
+          "productId": "catalog-copy-of-copy-of-box-fit-oversized-tee-mandala-shirt-white",
+          "variantId": "catalog-copy-of-copy-of-box-fit-oversized-tee-mandala-shirt-white-1",
+          "productName": "MANDALA WHITE V1 — Oversized 240 GSM Shirt",
+          "size": "Medium",
+          "quantity": 1,
+          "unitPriceCents": 64900
+        }
+      ],
+      "checkoutChannel": "storefront_checkout",
+      "paymentMethod": "cash_on_delivery",
+      "adminEditableTotals": {
+        "subtotalCents": 64900,
+        "discountTotalCents": 0,
+        "shippingFeeCents": 8000,
+        "shippingRegion": "metro_manila_cavite",
+        "shippingRegionLabel": "Metro Manila & Cavite Region",
+        "freeShippingUnlocked": false,
+        "totalCents": 72900
+      },
+      "status": "received",
+      "fulfillmentStatus": "unfulfilled",
+      "paymentStatus": "cod_pending",
+      "orderNumber": "DEMO-1780493241348-FD81",
+      "codConfirmationStatus": "pending",
+      "notes": "",
+      "placedAt": "2026-06-03T13:27:21.353Z"
+    }
+  ]
+}

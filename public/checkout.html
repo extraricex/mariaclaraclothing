@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Checkout | Maria Clara</title>
+    <meta name="description" content="Complete your Maria Clara Clothing order.">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/js/meta-pixel-config.js"></script>
+    <script src="/js/meta-pixel.js"></script>
+    <script type="module" src="/js/shell.js"></script>
+    <script type="module" src="/js/checkout.js"></script>
+  </head>
+  <body class="shopify-prototype inner-page checkout-page">
+
+    <main class="shopify-checkout-shell container-fluid">
+      <section class="checkout-main">
+        <header class="checkout-brand-header">
+          <a class="checkout-logo" href="/" aria-label="Maria Clara home">
+            <img src="/brand/logo.png" alt="Maria Clara">
+          </a>
+          <nav class="checkout-breadcrumbs" aria-label="Checkout progress">
+            <a href="/cart.html">Cart</a>
+            <span aria-hidden="true">/</span>
+            <span>Information</span>
+            <span aria-hidden="true">/</span>
+            <span>Shipping</span>
+            <span aria-hidden="true">/</span>
+            <span>Payment</span>
+          </nav>
+        </header>
+        <a class="checkout-return-link" href="/cart.html">Return to cart</a>
+        <h1>Checkout</h1>
+
+        <form id="checkout-form" class="shopify-checkout-form">
+          <section class="checkout-card">
+            <div class="checkout-section-heading">
+              <h2>Contact</h2>
+              <span class="checkout-disabled-action">Log in</span>
+            </div>
+            <label class="checkout-field">
+              <span>Mobile number for COD confirmation</span>
+              <input name="contact" autocomplete="tel" inputmode="tel" required>
+            </label>
+          </section>
+
+          <section class="checkout-card">
+            <h2>Delivery</h2>
+            <label class="checkout-field">
+              <span>Country/Region</span>
+              <select name="country" autocomplete="country-name">
+                <option>Philippines</option>
+              </select>
+            </label>
+            <label class="checkout-field">
+              <span>Full Name</span>
+              <input name="fullName" autocomplete="name" required>
+            </label>
+            <label class="checkout-field">
+              <span>House Number / Street / Building / Unit</span>
+              <input name="addressLine" autocomplete="street-address" data-house-address required>
+            </label>
+            <div class="checkout-field-grid">
+              <label class="checkout-field">
+                <span>Province / Area</span>
+                <select name="province" autocomplete="address-level1" data-province-select required>
+                  <option value="">Loading provinces...</option>
+                </select>
+              </label>
+              <label class="checkout-field">
+                <span>City / Municipality</span>
+                <select name="city" autocomplete="address-level2" data-city-select required disabled>
+                  <option value="">Select province first</option>
+                </select>
+              </label>
+            </div>
+            <label class="checkout-field">
+              <span>Barangay</span>
+              <select name="barangay" autocomplete="address-level3" data-barangay-select required disabled>
+                <option value="">Select city / municipality first</option>
+              </select>
+            </label>
+            <p class="checkout-door-warning" data-door-to-door-warning hidden aria-live="polite"></p>
+            <label class="checkout-field">
+              <span>Order Notes optional</span>
+              <textarea name="orderNotes" rows="3" placeholder="Landmark, color/size note, or delivery instruction"></textarea>
+            </label>
+          </section>
+
+          <section class="checkout-card">
+            <h2>Shipping method</h2>
+            <p class="checkout-muted">Shipping is free when your cart has 2 items or more.</p>
+            <p class="checkout-muted">Rates: NCR/Metro Manila ₱80, Luzon Region ₱120, Visayas and Mindanao Region ₱180.</p>
+            <p class="checkout-muted" data-delivery-estimate>Complete your address to see estimated delivery time.</p>
+            <div class="checkout-choice checkout-shipping-calculated">
+              <span>Standard shipping</span>
+              <strong data-shipping-method-price data-shipping-pending>Calculated after address</strong>
+            </div>
+            <p class="checkout-free-shipping-message" data-free-shipping-message aria-live="polite"></p>
+          </section>
+
+          <section class="checkout-card">
+            <h2>Payment</h2>
+            <p class="checkout-muted">No online payment needed. Pay when your order arrives and we will text you first to confirm your delivery details.</p>
+            <label class="checkout-choice">
+              <input type="radio" name="paymentMethod" value="cash_on_delivery" checked>
+              <span>Cash on Delivery</span>
+              <strong>COD</strong>
+            </label>
+          </section>
+
+          <section class="checkout-card">
+            <h2>Billing address</h2>
+            <label class="checkout-choice">
+              <input type="radio" name="billingAddress" value="same" checked>
+              <span>Same as shipping address</span>
+            </label>
+          </section>
+
+          <div class="checkout-actions">
+            <a class="checkout-return-link" href="/cart.html">Return to cart</a>
+            <button class="button button-dark btn btn-dark checkout-pay-button" type="submit" data-checkout-submit data-default-text="Place COD order">Place COD order</button>
+          </div>
+          <p class="checkout-support-note">Need help? Email <a href="mailto:support@mariaclaraclothing.com">support@mariaclaraclothing.com</a>.</p>
+          <p data-checkout-status class="form-status checkout-status" aria-live="polite"></p>
+          <section class="checkout-success" data-checkout-success hidden aria-live="polite">
+            <p class="checkout-success-eyebrow">Order received</p>
+            <h2 data-checkout-success-title>Thank you for your order.</h2>
+            <p data-checkout-success-body>We will text you to confirm COD delivery.</p>
+            <a class="button button-dark btn btn-dark" href="/#new-arrivals">Continue shopping</a>
+          </section>
+        </form>
+      </section>
+
+      <aside class="checkout-summary" aria-label="Order summary">
+        <button class="checkout-summary-toggle" type="button" data-summary-toggle aria-expanded="true" aria-controls="checkout-summary-panel">
+          <span>Show order summary</span>
+          <strong data-total>₱0.00 PHP</strong>
+        </button>
+        <div id="checkout-summary-panel" class="checkout-summary-panel" data-summary-panel>
+          <div class="checkout-summary-items" data-checkout-items></div>
+          <dl class="checkout-totals">
+            <div><dt>Subtotal</dt><dd data-subtotal>₱0.00 PHP</dd></div>
+            <div><dt>Shipping</dt><dd data-shipping>Free</dd></div>
+            <div class="checkout-total-row"><dt>Total</dt><dd data-total>₱0.00 PHP</dd></div>
+          </dl>
+          <section class="checkout-related-products" aria-label="Other products">
+            <div class="checkout-related-heading">
+              <h2>Complete your order</h2>
+              <p data-related-products-message>Add another item without leaving checkout.</p>
+            </div>
+            <div class="checkout-related-grid" data-related-products></div>
+          </section>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="site-footer shopify-footer">
+      <small>&copy; 2026, <a href="/">Maria Clara</a></small>
+    </footer>
+  </body>
+</html>

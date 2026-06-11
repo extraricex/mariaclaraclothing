@@ -1,0 +1,19 @@
+{
+  "area": "analytics",
+  "managedFields": [
+    "revenue",
+    "orderCount",
+    "averageOrderValue",
+    "bestSellers",
+    "inventoryMovement",
+    "discountUsage",
+    "marketingPerformance"
+  ],
+  "futureAdminActions": [
+    "view dashboard",
+    "filter by date",
+    "review best sellers",
+    "review campaign performance",
+    "export report"
+  ]
+}

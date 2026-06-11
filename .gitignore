@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# macOS
+.DS_Store
+
+# Browser/test artifacts
+.playwright-profile/
+playwright-report/
+test-results/
+
+# Local agent/session artifacts
+.superpowers/
+
+# Root screenshots and visual references generated during local review
+/.admin-*.png
+/.product-editor-*.png
+/.products-*.png
+/.shopify-login-reference.png
+

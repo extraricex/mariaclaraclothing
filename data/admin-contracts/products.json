@@ -1,0 +1,55 @@
+{
+  "area": "products",
+  "managedFields": [
+    "slug",
+    "name",
+    "description",
+    "collections",
+    "priceCents",
+    "compareAtPriceCents",
+    "merchandisingStatus",
+    "featured",
+    "productPage",
+    "images",
+    "variants"
+  ],
+  "storefrontFieldMap": {
+    "name": {
+      "apiField": "name",
+      "productPageDisplay": "Product title"
+    },
+    "priceCents": {
+      "apiField": "priceCents",
+      "productPageDisplay": "Sale price"
+    },
+    "compareAtPriceCents": {
+      "apiField": "compareAtPriceCents",
+      "productPageDisplay": "Compare-at regular price"
+    },
+    "merchandisingStatus": {
+      "apiField": "merchandisingStatus",
+      "productPageDisplay": "Sale/sold-out badges and disabled purchase state"
+    },
+    "images": {
+      "apiField": "images",
+      "productPageDisplay": "Product gallery and thumbnail order"
+    },
+    "variants": {
+      "apiField": "variants",
+      "productPageDisplay": "Size selector, SKU, and stock availability"
+    },
+    "productPage": {
+      "apiField": "productPage",
+      "productPageDisplay": "Description heading, intro, sections, size chart, media limit, sold-out text"
+    }
+  },
+  "futureAdminActions": [
+    "create product",
+    "edit product details",
+    "add image",
+    "replace image",
+    "reorder images",
+    "edit variants",
+    "update inventory"
+  ]
+}

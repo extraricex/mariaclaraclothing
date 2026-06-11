@@ -1,0 +1,19 @@
+{
+  "area": "customers",
+  "managedFields": [
+    "fullName",
+    "phone",
+    "email",
+    "addresses",
+    "orderHistory",
+    "notes",
+    "marketingConsent"
+  ],
+  "futureAdminActions": [
+    "view customer",
+    "edit contact details",
+    "manage addresses",
+    "view order history",
+    "add customer notes"
+  ]
+}
