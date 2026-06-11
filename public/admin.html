@@ -22,6 +22,7 @@
           <a class="is-active" href="#orders" data-admin-nav-link="orders">Orders</a>
           <a href="#products" data-admin-nav-link="products">Products</a>
           <a href="#collections" data-admin-nav-link="collections">Collections</a>
+          <a href="#website-content" data-admin-nav-link="website-content">Website</a>
           <a href="#settings" data-admin-nav-link="settings">Settings</a>
         </nav>
       </aside>
@@ -244,7 +245,35 @@
             </section>
             <section class="admin-page-section" data-admin-page="customers" hidden><h1>Customers</h1><p>Customer profiles, order history, notes, and tags will be managed here.</p></section>
             <section class="admin-page-section" data-admin-page="discounts" hidden><h1>Discounts</h1><p>Promo codes, free shipping rules, and campaign discounts will be managed here.</p></section>
-            <section class="admin-page-section" data-admin-page="website-content" hidden><h1>Website Content</h1><p>Homepage banners, announcement bar, featured collections, pages, and website copy will be managed here.</p></section>
+            <section class="admin-page-section admin-website-content-page" data-admin-page="website-content" hidden>
+              <header class="admin-page-heading">
+                <div>
+                  <h1>Website</h1>
+                  <p>Change the customer homepage banner images without editing code.</p>
+                </div>
+                <div class="admin-page-actions">
+                  <a class="btn btn-outline-secondary" href="/" target="_blank" rel="noreferrer">View store</a>
+                </div>
+              </header>
+
+              <section class="admin-card card admin-banner-manager">
+                <div class="admin-card-header">
+                  <div>
+                    <h2>Homepage banner images</h2>
+                    <span>Upload, rename, reorder, or remove carousel images.</span>
+                  </div>
+                  <label class="btn btn-outline-secondary admin-file-action">
+                    Add banner
+                    <input type="file" accept="image/*" multiple data-admin-banner-upload>
+                  </label>
+                </div>
+                <section class="admin-banner-list" data-admin-banner-list aria-label="Homepage banner images"></section>
+                <div class="admin-banner-actions">
+                  <button class="btn btn-dark" type="button" data-admin-banner-save>Save banners</button>
+                  <p class="form-status" data-admin-banner-status aria-live="polite"></p>
+                </div>
+              </section>
+            </section>
             <section class="admin-page-section" data-admin-page="shipping-settings" hidden><h1>Shipping Settings</h1><p>Metro Manila/Cavite, Luzon, Visayas/Mindanao rates, free shipping rules, and delivery estimates will be managed here.</p></section>
             <section class="admin-page-section" data-admin-page="settings" hidden>
               <header class="admin-page-heading">
@@ -261,6 +290,7 @@
                     <li>Order review and J&T export</li>
                     <li>Product editor and image manager</li>
                     <li>Storefront collections</li>
+                    <li>Homepage banner editor</li>
                   </ul>
                 </article>
                 <article>
@@ -268,7 +298,6 @@
                   <ul>
                     <li>Customer profiles</li>
                     <li>Discount rules</li>
-                    <li>Website content editor</li>
                     <li>Shipping settings editor</li>
                   </ul>
                 </article>

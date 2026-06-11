@@ -5,6 +5,11 @@ const multer = require('multer');
 const { findOrderByNumber, listOrders, updateOrder } = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
 const {
+  appendHomepageBanners,
+  getSiteContent,
+  updateHomepageBanners
+} = require('../siteContent/siteContentRepository');
+const {
   deleteEditableProduct,
   findEditableProductBySlug,
   listEditableProducts,
@@ -44,6 +49,29 @@ const upload = multer({
     return callback(null, true);
   }
 });
+const bannerUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => {
+      const uploadDir = bannerUploadDir();
+      fs.mkdirSync(uploadDir, { recursive: true });
+      callback(null, uploadDir);
+    },
+    filename: (_req, file, callback) => {
+      const extension = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+      callback(null, `homepage-banner-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`);
+    }
+  }),
+  limits: {
+    fileSize: 8 * 1024 * 1024,
+    files: 6
+  },
+  fileFilter: (_req, file, callback) => {
+    if (!/^image\//.test(file.mimetype || '')) {
+      return callback(new Error('Only image uploads are allowed'));
+    }
+    return callback(null, true);
+  }
+});
 
 router.post('/login', (req, res) => {
   const password = String(req.body?.password || '');
@@ -63,6 +91,40 @@ router.get('/products/export', async (req, res, next) => {
   try {
     res.setHeader('content-disposition', 'attachment; filename="maria-clara-products.json"');
     return res.json({ products: await listEditableProducts() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/site-content', (_req, res) => {
+  res.json({ siteContent: getSiteContent() });
+});
+
+router.put('/site-content/homepage-banners', (req, res, next) => {
+  try {
+    const siteContent = updateHomepageBanners(req.body?.banners);
+    return res.json({ siteContent, banners: siteContent.homepageBanners });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/site-content/homepage-banners/images', bannerUpload.array('images', 6), (req, res, next) => {
+  try {
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) {
+      return res.status(400).json({ error: 'At least one banner image is required' });
+    }
+
+    const currentBanners = getSiteContent().homepageBanners;
+    const uploadedBanners = files.map((file, index) => ({
+      url: bannerUploadUrl(file.filename),
+      altText: 'Homepage banner',
+      sortOrder: currentBanners.length + index
+    }));
+    const siteContent = appendHomepageBanners(uploadedBanners);
+
+    return res.status(201).json({ siteContent, banners: siteContent.homepageBanners, uploadedBanners });
   } catch (error) {
     return next(error);
   }
@@ -383,6 +445,14 @@ function productUploadDir() {
 
 function productUploadUrl(filename) {
   return `/uploads/products/${filename}`;
+}
+
+function bannerUploadDir() {
+  return process.env.BANNER_UPLOAD_DIR || path.join(__dirname, '..', '..', 'public', 'uploads', 'banners');
+}
+
+function bannerUploadUrl(filename) {
+  return `/uploads/banners/${filename}`;
 }
 
 function normalizeProductRequest(body) {

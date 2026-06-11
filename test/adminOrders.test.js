@@ -79,11 +79,11 @@ test('admin dashboard page has login order management and status controls', asyn
   [
     'Customers',
     'Discounts',
-    'Website Content',
     'Shipping Settings'
   ].forEach((label) => {
     assert.doesNotMatch(adminHtml, new RegExp(`data-admin-nav-link="[^"]+">${label}<\\/a>`));
   });
+  assert.match(adminHtml, /data-admin-nav-link="website-content">Website<\/a>/);
   assert.match(adminHtml, /data-admin-page="settings"[\s\S]*Working now[\s\S]*Coming next/);
   [
     'Marketing',

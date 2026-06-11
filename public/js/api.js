@@ -6,6 +6,14 @@ export async function getProducts() {
   return response.json();
 }
 
+export async function getSiteContent() {
+  const response = await fetch('/api/site-content', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('Unable to load site content');
+  }
+  return response.json();
+}
+
 export async function getProduct(slug) {
   if (!slug) {
     throw new Error('Product slug is required');

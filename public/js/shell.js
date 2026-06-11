@@ -1,4 +1,4 @@
-import { getProducts } from './api.js';
+import { getProducts, getSiteContent } from './api.js';
 
 const CART_KEY = 'maria-clara-cart';
 
@@ -13,7 +13,7 @@ export function trackStorefrontEvent(eventName, payload = {}) {
   });
 }
 
-export function initializeShell() {
+export async function initializeShell() {
   const menuDrawer = document.querySelector('[data-menu-drawer]');
   const searchOverlay = document.querySelector('[data-search-overlay]');
   const searchInput = document.querySelector('[data-search-input]');
@@ -30,6 +30,7 @@ export function initializeShell() {
     renderSearchResults(searchInput.value, searchResults);
   });
 
+  await renderHomepageBanners();
   initializeCarousel();
 
   document.addEventListener('keydown', (event) => {
@@ -46,6 +47,24 @@ export function initializeShell() {
       <source src="${escapeAttribute(videoSrc)}" type="video/mp4">
     </video>`;
   });
+}
+
+async function renderHomepageBanners() {
+  const carousel = document.querySelector('[data-homepage-banners]');
+  if (!carousel) return;
+
+  try {
+    const { siteContent } = await getSiteContent();
+    const banners = Array.isArray(siteContent?.homepageBanners) ? siteContent.homepageBanners : [];
+    if (!banners.length) return;
+
+    carousel.innerHTML = `${banners.map((banner, index) => `<article class="slide${index === 0 ? ' is-active' : ''}">
+      <img src="${escapeAttribute(banner.url)}" alt="${escapeAttribute(banner.altText || 'Maria Clara banner')}">
+    </article>`).join('')}
+    <div class="slide-dots" aria-hidden="true">${banners.map(() => '<span></span>').join('')}</div>`;
+  } catch (_error) {
+    // Keep the static fallback banners if the content API is unavailable.
+  }
 }
 
 function bindPageTransitions() {

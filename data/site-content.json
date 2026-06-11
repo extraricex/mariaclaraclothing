@@ -1,0 +1,14 @@
+{
+  "homepageBanners": [
+    {
+      "url": "/brand/hero1v2.jpg",
+      "altText": "Maria Clara campaign",
+      "sortOrder": 0
+    },
+    {
+      "url": "/brand/hero2-web.jpg",
+      "altText": "Maria Clara streetwear editorial",
+      "sortOrder": 1
+    }
+  ]
+}

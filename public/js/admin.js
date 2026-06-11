@@ -52,6 +52,10 @@ const collectionTabsRoot = document.querySelector('[data-admin-collection-tabs]'
 const collectionProductsRoot = document.querySelector('[data-admin-collection-products]');
 const collectionAddProductInput = document.querySelector('[data-admin-collection-add-product]');
 const collectionStatusRoot = document.querySelector('[data-admin-collection-status]');
+const bannerListRoot = document.querySelector('[data-admin-banner-list]');
+const bannerUploadInput = document.querySelector('[data-admin-banner-upload]');
+const bannerSaveButton = document.querySelector('[data-admin-banner-save]');
+const bannerStatusRoot = document.querySelector('[data-admin-banner-status]');
 const isLoginPage = Boolean(loginForm) && !dashboard;
 const isDashboardPage = Boolean(dashboard);
 
@@ -1521,6 +1525,108 @@ function productInCollection(product, collectionName) {
   return Array.isArray(product.collections) && product.collections.includes(collectionName);
 }
 
+async function loadWebsiteContentPage() {
+  if (!bannerListRoot) return;
+
+  bannerListRoot.innerHTML = '<p class="loading-copy">Loading homepage banners...</p>';
+  if (bannerStatusRoot) bannerStatusRoot.textContent = '';
+
+  try {
+    const { siteContent } = await adminFetch('/api/admin/site-content');
+    renderHomepageBannerManager(siteContent.homepageBanners || []);
+  } catch (error) {
+    bannerListRoot.innerHTML = `<p class="form-status">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderHomepageBannerManager(banners = []) {
+  if (!bannerListRoot) return;
+
+  if (!banners.length) {
+    bannerListRoot.innerHTML = `<div class="admin-empty-state">
+      <h2>No homepage banners</h2>
+      <p>Add banner images to show a carousel on the customer homepage.</p>
+    </div>`;
+    return;
+  }
+
+  bannerListRoot.innerHTML = banners.map((banner, index) => `<article class="admin-banner-row" data-admin-banner-row>
+    <img src="${escapeAttribute(banner.url)}" alt="">
+    <div class="admin-banner-fields">
+      <label class="checkout-field">
+        <span>Image URL</span>
+        <input type="text" value="${escapeAttribute(banner.url)}" data-admin-banner-url>
+      </label>
+      <label class="checkout-field">
+        <span>Alt text</span>
+        <input type="text" value="${escapeAttribute(banner.altText || 'Homepage banner')}" data-admin-banner-alt>
+      </label>
+      <input type="hidden" value="${index}" data-admin-banner-sort>
+    </div>
+    <button class="btn btn-outline-danger btn-sm admin-critical-link" type="button" data-admin-banner-delete>Remove</button>
+  </article>`).join('');
+
+  bannerListRoot.querySelectorAll('[data-admin-banner-delete]').forEach((button) => {
+    button.addEventListener('click', () => {
+      button.closest('[data-admin-banner-row]')?.remove();
+      saveHomepageBanners();
+    });
+  });
+}
+
+function collectHomepageBanners() {
+  return Array.from(document.querySelectorAll('[data-admin-banner-row]')).map((row, index) => ({
+    url: row.querySelector('[data-admin-banner-url]')?.value.trim() || '',
+    altText: row.querySelector('[data-admin-banner-alt]')?.value.trim() || 'Homepage banner',
+    sortOrder: index
+  })).filter((banner) => banner.url);
+}
+
+async function saveHomepageBanners() {
+  if (bannerStatusRoot) bannerStatusRoot.textContent = 'Saving homepage banners...';
+
+  try {
+    const body = await adminFetch('/api/admin/site-content/homepage-banners', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ banners: collectHomepageBanners() })
+    });
+    renderHomepageBannerManager(body.banners || body.siteContent?.homepageBanners || []);
+    showAdminToast('Homepage banners saved.');
+    if (bannerStatusRoot) bannerStatusRoot.textContent = 'Homepage banners saved.';
+  } catch (error) {
+    if (bannerStatusRoot) bannerStatusRoot.textContent = error.message;
+  }
+}
+
+async function uploadHomepageBannerImages(event) {
+  const files = Array.from(event.currentTarget.files || []);
+  if (!files.length) return;
+
+  if (bannerStatusRoot) bannerStatusRoot.textContent = 'Uploading banner image...';
+  const formData = new FormData();
+  files.forEach((file) => formData.append('images', file));
+
+  try {
+    const response = await fetch('/api/admin/site-content/homepage-banners/images', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: formData
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error || 'Banner upload failed');
+    }
+    renderHomepageBannerManager(body.banners || []);
+    showAdminToast('Banner image uploaded.');
+    if (bannerStatusRoot) bannerStatusRoot.textContent = 'Banner image uploaded.';
+  } catch (error) {
+    if (bannerStatusRoot) bannerStatusRoot.textContent = error.message;
+  } finally {
+    event.currentTarget.value = '';
+  }
+}
+
 function productBadgeClass(status) {
   if (status === 'active') return 'admin-badge--success';
   if (status === 'draft') return 'admin-badge--attention';
@@ -2442,6 +2548,8 @@ productStockFilter?.addEventListener('change', () => loadProducts());
 productSortInput?.addEventListener('change', () => loadProducts());
 dashboardDateRangeInput?.addEventListener('change', () => loadDashboardSummary());
 collectionAddProductInput?.addEventListener('change', () => addProductToActiveCollection(collectionAddProductInput.value));
+bannerUploadInput?.addEventListener('change', uploadHomepageBannerImages);
+bannerSaveButton?.addEventListener('click', () => saveHomepageBanners());
 document.querySelector('[data-admin-create-product]')?.addEventListener('click', () => renderProductDetail(null));
 document.querySelector('[data-admin-dashboard-refresh]')?.addEventListener('click', () => loadDashboardSummary());
 document.querySelector('[data-admin-export-products]')?.addEventListener('click', () => exportProducts());
@@ -2533,6 +2641,9 @@ function renderAdminPage(page) {
   }
   if (normalizedPage === 'collections') {
     loadCollectionsPage();
+  }
+  if (normalizedPage === 'website-content') {
+    loadWebsiteContentPage();
   }
 }
 

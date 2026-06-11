@@ -2223,6 +2223,49 @@ img { display: block; width: 100%; height: auto; object-fit: cover; }
   justify-content: end;
 }
 
+.admin-banner-manager {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-banner-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-banner-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e1e3e5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.admin-banner-row img {
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  border-radius: 10px;
+  background: #f1f2f3;
+  object-fit: cover;
+}
+
+.admin-banner-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .5fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .admin-products-page-heading .admin-page-actions {
   align-items: center;
 }
@@ -6829,6 +6872,15 @@ img { display: block; width: 100%; height: auto; object-fit: cover; }
 
   .admin-collection-product-actions .btn {
     flex: 1 1 120px;
+  }
+
+  .admin-banner-row,
+  .admin-banner-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-banner-row .btn {
+    width: 100%;
   }
 
   .admin-product-summary-column,

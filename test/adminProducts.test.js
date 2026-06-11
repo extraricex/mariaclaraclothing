@@ -22,7 +22,12 @@ test('admin products page includes product management controls', async () => {
   assert.match(adminHtml, /data-admin-products/);
   assert.match(adminHtml, /data-admin-product-detail/);
   assert.match(adminHtml, /data-admin-nav-link="collections"/);
+  assert.match(adminHtml, /data-admin-nav-link="website-content"/);
   assert.match(adminHtml, /data-admin-page="collections"/);
+  assert.match(adminHtml, /data-admin-page="website-content"/);
+  assert.match(adminHtml, /data-admin-banner-upload/);
+  assert.match(adminHtml, /data-admin-banner-list/);
+  assert.match(adminHtml, /data-admin-banner-status/);
   assert.match(adminHtml, /data-admin-collection-tabs/);
   assert.match(adminHtml, /data-admin-collection-products/);
   assert.match(adminHtml, /data-admin-collection-add-product/);
@@ -51,6 +56,10 @@ test('admin products page includes product management controls', async () => {
   assert.match(adminJs, /\/api\/admin\/products/);
   assert.match(adminJs, /STOREFRONT_COLLECTIONS/);
   assert.match(adminJs, /loadCollectionsPage/);
+  assert.match(adminJs, /loadWebsiteContentPage/);
+  assert.match(adminJs, /uploadHomepageBannerImages/);
+  assert.match(adminJs, /saveHomepageBanners/);
+  assert.match(adminJs, /\/api\/admin\/site-content\/homepage-banners/);
   assert.match(adminJs, /addProductToActiveCollection/);
   assert.match(adminJs, /removeProductFromActiveCollection/);
   assert.match(adminJs, /method:\s*'POST'/);

@@ -23,6 +23,7 @@ test('homepage applies the requested carousel and uppercase about layout', () =>
   const shellScript = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'shell.js'), 'utf8');
 
   assert.match(homepage, /<section class="shopify-slideshow homepage-carousel"[^>]*data-carousel/);
+  assert.match(homepage, /data-homepage-banners/);
   assert.match(styles, /\.shopify-header\s*{[^}]*grid-template-columns:\s*auto\s+1fr\s+auto/s);
   assert.match(styles, /\.logo-mark\s*{[^}]*background:\s*transparent/s);
   assert.match(styles, /\.shopify-slideshow\s*{[^}]*aspect-ratio:\s*9795\s*\/\s*3681/s);
@@ -32,6 +33,8 @@ test('homepage applies the requested carousel and uppercase about layout', () =>
   assert.doesNotMatch(styles, /\.slide,\s*\.slide img\s*{[^}]*min-height:\s*72vh/s);
   assert.match(styles, /\.rich-text-section\s*{[^}]*text-transform:\s*uppercase/s);
   assert.match(shellScript, /initializeCarousel/);
+  assert.match(shellScript, /renderHomepageBanners/);
+  assert.match(shellScript, /getSiteContent/);
   assert.match(homepage, /AT <strong>MARIA CLARA CLOTHING<\/strong>/);
   assert.match(homepage, /STAY IN PEACE OF MIND/);
 });
