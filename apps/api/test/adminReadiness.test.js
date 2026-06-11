@@ -5,7 +5,8 @@ const path = require('node:path');
 
 test('future admin system has roadmap modules and data contracts', () => {
   const root = path.join(__dirname, '..');
-  const roadmapPath = path.join(root, 'docs', 'admin-system-roadmap.md');
+  const repoRoot = path.join(root, '..', '..');
+  const roadmapPath = path.join(repoRoot, 'docs', 'admin-system-roadmap.md');
   const adminAreas = ['products', 'orders', 'customers', 'discounts', 'analytics', 'marketing', 'settings'];
 
   const roadmap = fs.readFileSync(roadmapPath, 'utf8');
@@ -34,7 +35,7 @@ test('cart and checkout fields map to future admin order management', () => {
   const root = path.join(__dirname, '..');
   const cartScript = fs.readFileSync(path.join(root, 'public', 'js', 'cart.js'), 'utf8');
   const orderContract = JSON.parse(fs.readFileSync(path.join(root, 'data', 'admin-contracts', 'orders.json'), 'utf8'));
-  const roadmap = fs.readFileSync(path.join(root, 'docs', 'admin-system-roadmap.md'), 'utf8');
+  const roadmap = fs.readFileSync(path.join(root, '..', '..', 'docs', 'admin-system-roadmap.md'), 'utf8');
 
   assert.ok(orderContract.managedFields.includes('cartSnapshot'));
   assert.ok(orderContract.managedFields.includes('checkoutChannel'));

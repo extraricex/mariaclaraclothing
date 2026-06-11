@@ -1,27 +1,19 @@
 {
-  "name": "maria-clara-clothing",
-  "version": "1.0.0",
+  "name": "maria-clara-monorepo",
   "private": true,
-  "description": "Maria Clara Clothing frontend storefront prototype.",
-  "main": "src/server.js",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "db:migrate": "node scripts/db-migrate.js",
-    "db:reset:local": "node scripts/db-reset-local.js",
-    "db:seed": "node scripts/db-seed.js",
-    "dev": "node --watch src/server.js",
-    "audit:product-images": "node scripts/audit-product-images.js",
-    "jnt:address-guide": "node scripts/generate-jnt-address-guide.js",
-    "start": "node src/server.js",
-    "test": "node --test"
-  },
-  "dependencies": {
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "multer": "^2.1.1",
-    "pg": "^8.21.0",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.60.0"
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "start": "npm start -w apps/api",
+    "build:web": "npm run build -w apps/web",
+    "test": "npm test -w apps/api",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "db:seed": "npm run db:seed -w apps/api",
+    "db:reset:local": "npm run db:reset:local -w apps/api",
+    "audit:product-images": "npm run audit:product-images -w apps/api",
+    "jnt:address-guide": "npm run jnt:address-guide -w apps/api"
   }
 }
