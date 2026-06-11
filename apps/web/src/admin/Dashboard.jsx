@@ -36,8 +36,10 @@ export default function Dashboard() {
     adminJson('/api/admin/orders')
       .then((body) => setOrders(body.orders))
       .catch(() => {});
-    fetch(`${GRAFANA_URL}/api/health`, { mode: 'cors' })
-      .then((response) => setGrafanaUp(response.ok))
+    // no-cors: Grafana sends no CORS headers, but an opaque response still
+    // proves it is reachable; only a network failure rejects.
+    fetch(`${GRAFANA_URL}/api/health`, { mode: 'no-cors' })
+      .then(() => setGrafanaUp(true))
       .catch(() => setGrafanaUp(false));
   }, []);
 
