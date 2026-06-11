@@ -266,6 +266,7 @@ export default function Dashboard() {
             <Link to="/admin/orders" className="btn-ghost !py-2.5 text-center">View orders</Link>
             <Link to="/admin/orders" className="btn-ghost !py-2.5 text-center">Export orders to J&T</Link>
             <Link to="/admin/products" className="btn-ghost !py-2.5 text-center">Manage products</Link>
+            <Link to="/admin/collections" className="btn-ghost !py-2.5 text-center">Manage collections</Link>
             <Link to="/admin/banners" className="btn-ghost !py-2.5 text-center">Manage homepage banners</Link>
           </div>
         </Card>

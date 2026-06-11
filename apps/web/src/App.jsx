@@ -13,7 +13,9 @@ import Orders from './admin/Orders.jsx';
 import OrderDetail from './admin/OrderDetail.jsx';
 import Products from './admin/Products.jsx';
 import ProductEditor from './admin/ProductEditor.jsx';
+import Collections from './admin/Collections.jsx';
 import Banners from './admin/Banners.jsx';
+import Settings from './admin/Settings.jsx';
 
 export default function App() {
   return (
@@ -35,7 +37,9 @@ export default function App() {
         <Route path="orders/:orderNumber" element={<OrderDetail />} />
         <Route path="products" element={<Products />} />
         <Route path="products/:slug" element={<ProductEditor />} />
+        <Route path="collections" element={<Collections />} />
         <Route path="banners" element={<Banners />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Shell />} />
     </Routes>
