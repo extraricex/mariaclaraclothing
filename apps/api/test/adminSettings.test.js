@@ -126,3 +126,75 @@ test('admin settings expose defaults and save sections', async () => {
     assert.equal((await codOff.json()).error, 'Cash on Delivery cannot be disabled.');
   });
 });
+
+test('admin can change the password and the token rotates', async () => {
+  await withSettingsServer(async (port) => {
+    const wrongCurrent = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/security/password`,
+      adminRequest('POST', { currentPassword: 'nope', newPassword: 'brand-new-password' })
+    );
+    assert.equal(wrongCurrent.status, 401);
+    assert.equal((await wrongCurrent.json()).error, 'Current password is invalid');
+
+    const tooShort = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/security/password`,
+      adminRequest('POST', { currentPassword: 'admin', newPassword: 'short' })
+    );
+    assert.equal(tooShort.status, 400);
+    assert.equal((await tooShort.json()).error, 'Password must be at least 8 characters.');
+
+    const changed = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/security/password`,
+      adminRequest('POST', { currentPassword: 'admin', newPassword: 'brand-new-password' })
+    );
+    assert.equal(changed.status, 200);
+    const { token: newToken } = await changed.json();
+    assert.ok(newToken);
+    assert.notEqual(newToken, ADMIN_TOKEN);
+
+    const oldTokenResponse = await fetch(`http://127.0.0.1:${port}/api/admin/settings`, adminRequest());
+    assert.equal(oldTokenResponse.status, 401);
+
+    const newTokenResponse = await fetch(`http://127.0.0.1:${port}/api/admin/settings`, adminRequest('GET', undefined, newToken));
+    assert.equal(newTokenResponse.status, 200);
+
+    const oldLogin = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'admin' })
+    });
+    assert.equal(oldLogin.status, 401);
+
+    const newLogin = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'brand-new-password' })
+    });
+    assert.equal(newLogin.status, 200);
+    assert.equal((await newLogin.json()).token, newToken);
+  });
+});
+
+test('admin can rotate the token without changing the password', async () => {
+  await withSettingsServer(async (port) => {
+    const rotated = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/security/rotate-token`,
+      adminRequest('POST', {})
+    );
+    assert.equal(rotated.status, 200);
+    const { token } = await rotated.json();
+    assert.ok(token);
+    assert.notEqual(token, ADMIN_TOKEN);
+
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/admin/settings`, adminRequest())).status, 401);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/admin/settings`, adminRequest('GET', undefined, token))).status, 200);
+
+    const login = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'admin' })
+    });
+    assert.equal(login.status, 200);
+    assert.equal((await login.json()).token, token);
+  });
+});

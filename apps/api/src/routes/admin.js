@@ -113,14 +113,22 @@ const logoUpload = multer({
   }
 });
 
-router.post('/login', (req, res) => {
-  const password = String(req.body?.password || '');
+router.post('/login', async (req, res, next) => {
+  try {
+    const password = String(req.body?.password || '');
+    const credentials = await getAdminCredentials();
+    const valid = credentials?.passwordHash
+      ? Boolean(password) && verifyAdminPassword(password, credentials)
+      : Boolean(password) && password === adminPassword();
 
-  if (!password || password !== adminPassword()) {
-    return res.status(401).json({ error: 'Admin password is invalid' });
+    if (!valid) {
+      return res.status(401).json({ error: 'Admin password is invalid' });
+    }
+
+    return res.json({ token: credentials?.token || adminToken() });
+  } catch (error) {
+    return next(error);
   }
-
-  return res.json({ token: adminToken() });
 });
 
 router.use(requireAdmin);
@@ -190,6 +198,38 @@ router.post('/site-content/logo/image', logoUpload.single('image'), (req, res, n
 router.get('/settings', async (_req, res, next) => {
   try {
     return res.json({ settings: await getStoreSettings() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/settings/security/password', async (req, res, next) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    const credentials = await getAdminCredentials();
+    const currentValid = credentials?.passwordHash
+      ? Boolean(currentPassword) && verifyAdminPassword(currentPassword, credentials)
+      : Boolean(currentPassword) && currentPassword === adminPassword();
+
+    if (!currentValid) {
+      return res.status(401).json({ error: 'Current password is invalid' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+
+    const record = await setAdminPassword(newPassword);
+    return res.json({ token: record.token });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/settings/security/rotate-token', async (req, res, next) => {
+  try {
+    const record = await rotateAdminToken();
+    return res.json({ token: record.token });
   } catch (error) {
     return next(error);
   }
@@ -502,15 +542,21 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
   }
 });
 
-function requireAdmin(req, res, next) {
-  const header = String(req.headers.authorization || '');
-  const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+async function requireAdmin(req, res, next) {
+  try {
+    const header = String(req.headers.authorization || '');
+    const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+    const credentials = await getAdminCredentials();
+    const activeToken = credentials?.token || adminToken();
 
-  if (token !== adminToken()) {
-    return res.status(401).json({ error: 'Admin authentication is required' });
+    if (!token || token !== activeToken) {
+      return res.status(401).json({ error: 'Admin authentication is required' });
+    }
+
+    return next();
+  } catch (error) {
+    return next(error);
   }
-
-  return next();
 }
 
 function productUploadDir() {
