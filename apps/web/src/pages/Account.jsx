@@ -4,14 +4,28 @@ import { clearCustomerToken, customerJson, useCustomerLoggedIn } from '../lib/cu
 import { fetchProduct } from '../lib/api.js';
 import { addToCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
-import { loadBarangays, loadCities, loadProvinces } from '../lib/addressGuide.js';
 
 const STATUS_STEPS = ['received', 'confirmed', 'packed', 'shipped', 'delivered'];
 
-function statusLabel(order) {
-  if (order.status === 'cancelled') return 'Cancelled';
-  const index = STATUS_STEPS.indexOf(order.status);
-  return index >= 0 ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : order.status;
+function StatusTracker({ order }) {
+  if (order.status === 'cancelled') {
+    return <span className="bg-line px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-clay">Cancelled</span>;
+  }
+  const current = STATUS_STEPS.indexOf(order.status);
+  return (
+    <div className="flex items-center gap-1.5" aria-label={`Order status: ${order.status}`}>
+      {STATUS_STEPS.map((step, index) => (
+        <div key={step} className="flex items-center gap-1.5">
+          <span
+            title={step}
+            className={`h-2.5 w-2.5 rounded-full ${index <= current ? 'bg-accent' : 'bg-line'}`}
+          />
+          {index < STATUS_STEPS.length - 1 && <span className={`h-px w-4 ${index < current ? 'bg-accent' : 'bg-line'}`} />}
+        </div>
+      ))}
+      <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-accent-deep">{order.status}</span>
+    </div>
+  );
 }
 
 export default function Account() {
@@ -21,12 +35,6 @@ export default function Account() {
   const [orders, setOrders] = useState([]);
   const [message, setMessage] = useState('');
   const [buyAgainNote, setBuyAgainNote] = useState('');
-  const [profile, setProfile] = useState({ fullName: '', phone: '' });
-  const [editAddress, setEditAddress] = useState(false);
-  const [provinces, setProvinces] = useState([]);
-  const [cities, setCities] = useState([]);
-  const [barangays, setBarangays] = useState([]);
-  const [draft, setDraft] = useState({ house: '', provinceCode: '', cityCode: '', barangayCode: '' });
 
   useEffect(() => {
     if (!loggedIn) {
@@ -34,59 +42,15 @@ export default function Account() {
       return;
     }
     customerJson('/api/customer/me')
-      .then((body) => {
-        setCustomer(body.customer);
-        setProfile({ fullName: body.customer.fullName, phone: body.customer.phone });
-      })
+      .then((body) => setCustomer(body.customer))
       .catch((err) => setMessage(err.message));
     customerJson('/api/customer/orders')
       .then((body) => setOrders(body.orders))
       .catch(() => {});
   }, [loggedIn, navigate]);
 
-  useEffect(() => {
-    if (editAddress && !provinces.length) loadProvinces().then(setProvinces);
-  }, [editAddress, provinces.length]);
-  useEffect(() => {
-    setCities([]);
-    if (draft.provinceCode) loadCities(draft.provinceCode).then(setCities);
-  }, [draft.provinceCode]);
-  useEffect(() => {
-    setBarangays([]);
-    if (draft.cityCode) loadBarangays(draft.cityCode).then(setBarangays);
-  }, [draft.cityCode]);
-
   if (!customer) {
-    return <div className="mx-auto max-w-4xl px-5 py-16 text-sm text-clay">{message || 'Loading account…'}</div>;
-  }
-
-  async function saveProfile() {
-    setMessage('');
-    try {
-      const changes = { fullName: profile.fullName, phone: profile.phone };
-      if (editAddress) {
-        const province = provinces.find((item) => item.code === draft.provinceCode);
-        const city = cities.find((item) => item.code === draft.cityCode);
-        const barangay = barangays.find((item) => item.code === draft.barangayCode);
-        if (!draft.house.trim() || !province || !city || !barangay) {
-          setMessage('Complete all address fields before saving.');
-          return;
-        }
-        changes.savedAddress = {
-          houseAddress: draft.house.trim(),
-          barangay: barangay.name,
-          city: city.name,
-          province: province.name,
-          postalCode: ''
-        };
-      }
-      const body = await customerJson('/api/customer/me', { method: 'PUT', body: JSON.stringify(changes) });
-      setCustomer(body.customer);
-      setEditAddress(false);
-      setMessage('Account updated.');
-    } catch (error) {
-      setMessage(error.message);
-    }
+    return <div className="mx-auto max-w-7xl px-5 py-16 text-sm text-clay lg:px-8">{message || 'Loading account…'}</div>;
   }
 
   async function buyAgain(order) {
@@ -126,106 +90,95 @@ export default function Account() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-12 lg:px-8">
+    <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Account</p>
-          <h1 className="display mt-1 text-4xl">Hi, {customer.fullName.split(' ')[0]}</h1>
+          <h1 className="display mt-1 text-4xl sm:text-5xl">Hi, {customer.fullName.split(' ')[0]}</h1>
         </div>
-        <button
-          type="button"
-          className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent"
-          onClick={() => { clearCustomerToken(); navigate('/'); }}
-        >
-          Log out
-        </button>
+        <div className="flex items-center gap-3">
+          <Link to="/account/settings" className="btn-ghost !px-5 !py-2.5 text-xs">Account settings</Link>
+          <button
+            type="button"
+            className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent"
+            onClick={() => { clearCustomerToken(); navigate('/'); }}
+          >
+            Log out
+          </button>
+        </div>
       </div>
       {message && <p className="mt-4 text-sm text-accent-deep" role="status">{message}</p>}
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_1.4fr]">
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Profile & address</h2>
-          <div className="mt-4 space-y-4 border border-line bg-white p-5">
-            <label className="block">
-              <span className="eyebrow">Full name</span>
-              <input className="field mt-1" value={profile.fullName} onChange={(e) => setProfile((p) => ({ ...p, fullName: e.target.value }))} />
-            </label>
-            <label className="block">
-              <span className="eyebrow">Mobile number</span>
-              <input className="field mt-1" value={profile.phone} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} />
-            </label>
-            <p className="text-xs text-clay">Email: {customer.email}</p>
-
-            <div className="border-t border-line pt-4">
-              <div className="flex items-center justify-between">
-                <span className="eyebrow">Saved shipping address</span>
-                <button type="button" className="text-xs text-accent underline" onClick={() => setEditAddress((value) => !value)}>
-                  {editAddress ? 'Cancel' : customer.savedAddress ? 'Change' : 'Add'}
-                </button>
+      <div className="mt-8 grid gap-8 lg:grid-cols-[280px_1fr]">
+        {/* compact read-only summary */}
+        <aside>
+          <div className="border border-line bg-white p-5">
+            <p className="eyebrow">Your details</p>
+            <dl className="mt-3 space-y-3 text-sm">
+              <div>
+                <dt className="text-xs uppercase tracking-[0.1em] text-clay">Name</dt>
+                <dd className="font-semibold">{customer.fullName}</dd>
               </div>
-              {!editAddress ? (
-                <p className="mt-2 text-sm text-ink-soft">
+              <div>
+                <dt className="text-xs uppercase tracking-[0.1em] text-clay">Mobile</dt>
+                <dd>{customer.phone}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-[0.1em] text-clay">Email</dt>
+                <dd className="break-all">{customer.email}</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-[0.1em] text-clay">Saved shipping address</dt>
+                <dd className="text-ink-soft">
                   {customer.savedAddress
                     ? `${customer.savedAddress.houseAddress}, ${customer.savedAddress.barangay}, ${customer.savedAddress.city}, ${customer.savedAddress.province}`
-                    : 'None yet — save one to prefill checkout.'}
-                </p>
-              ) : (
-                <div className="mt-3 space-y-3">
-                  <input className="field" placeholder="House no. / Street / Unit" value={draft.house} onChange={(e) => setDraft((d) => ({ ...d, house: e.target.value }))} />
-                  <select className="field" value={draft.provinceCode} onChange={(e) => setDraft((d) => ({ ...d, provinceCode: e.target.value, cityCode: '', barangayCode: '' }))}>
-                    <option value="">Select province</option>
-                    {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-                  </select>
-                  <select className="field" value={draft.cityCode} disabled={!cities.length} onChange={(e) => setDraft((d) => ({ ...d, cityCode: e.target.value, barangayCode: '' }))}>
-                    <option value="">Select city / municipality</option>
-                    {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-                  </select>
-                  <select className="field" value={draft.barangayCode} disabled={!barangays.length} onChange={(e) => setDraft((d) => ({ ...d, barangayCode: e.target.value }))}>
-                    <option value="">Select barangay</option>
-                    {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <button type="button" className="btn-ink w-full" onClick={saveProfile}>Save changes</button>
+                    : 'None yet'}
+                </dd>
+              </div>
+            </dl>
+            <Link to="/account/settings" className="mt-4 inline-block text-xs font-semibold uppercase tracking-[0.1em] text-accent underline">
+              Edit in account settings
+            </Link>
           </div>
-        </section>
+          <div className="mt-4 border border-line bg-cream p-5 text-sm text-ink-soft">
+            <p className="font-semibold text-ink">COD reminder</p>
+            <p className="mt-1">We text {customer.phone} to confirm every order before it ships. Pay cash when it arrives.</p>
+          </div>
+        </aside>
 
+        {/* order history — main area */}
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order history</h2>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order history</h2>
+            <span className="text-xs text-clay">{orders.length} order{orders.length === 1 ? '' : 's'}</span>
+          </div>
           {buyAgainNote && (
             <p className="mt-3 text-sm text-ink-soft" role="status">
               {buyAgainNote} <Link to="/cart" className="text-accent underline">View cart</Link>
             </p>
           )}
-          <div className="mt-4 space-y-4">
+          <div className="mt-4 space-y-3">
             {orders.map((order) => (
-              <article key={order.orderNumber} className="border border-line bg-white p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
+              <article key={order.orderNumber} className="grid gap-4 border border-line bg-white p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <strong className="text-sm">{order.orderNumber}</strong>
-                    <p className="text-xs text-clay">{order.placedAt ? new Date(order.placedAt).toLocaleDateString('en-PH', { dateStyle: 'medium' }) : ''}</p>
+                    <span className="text-xs text-clay">
+                      {order.placedAt ? new Date(order.placedAt).toLocaleDateString('en-PH', { dateStyle: 'medium' }) : ''}
+                    </span>
+                    <StatusTracker order={order} />
                   </div>
-                  <span className={`px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] ${
-                    order.status === 'cancelled' ? 'bg-line text-clay' :
-                    order.status === 'delivered' ? 'bg-[#2f7d32]/10 text-[#2f7d32]' : 'bg-accent/10 text-accent-deep'
-                  }`}>
-                    {statusLabel(order)}
-                  </span>
+                  <ul className="mt-2 text-sm text-ink-soft">
+                    {order.items.map((item, index) => (
+                      <li key={index}>{item.quantity}× {item.productName} — {item.size}</li>
+                    ))}
+                  </ul>
+                  {order.trackingNumber && (
+                    <p className="mt-1 text-xs text-clay">J&T tracking: <strong className="text-ink">{order.trackingNumber}</strong></p>
+                  )}
                 </div>
-                <ul className="mt-3 space-y-1 text-sm text-ink-soft">
-                  {order.items.map((item, index) => (
-                    <li key={index}>{item.quantity}× {item.productName} — {item.size}</li>
-                  ))}
-                </ul>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-                  <div className="text-sm">
-                    <strong>{formatMoney(order.totalCents)}</strong>
-                    {order.trackingNumber && (
-                      <span className="ml-3 text-xs text-clay">J&T tracking: <strong className="text-ink">{order.trackingNumber}</strong></span>
-                    )}
-                  </div>
+                <div className="flex items-center gap-4 lg:flex-col lg:items-end">
+                  <strong className="text-base">{formatMoney(order.totalCents)}</strong>
                   {order.status !== 'cancelled' && (
                     <button type="button" className="btn-ghost !px-4 !py-2 text-xs" onClick={() => buyAgain(order)}>
                       Buy again
@@ -235,7 +188,7 @@ export default function Account() {
               </article>
             ))}
             {!orders.length && (
-              <div className="border border-line bg-white p-8 text-center">
+              <div className="border border-line bg-white p-10 text-center">
                 <p className="text-sm text-ink-soft">No orders yet.</p>
                 <Link to="/#new-arrivals" className="btn-ink mt-4">Start shopping</Link>
               </div>
