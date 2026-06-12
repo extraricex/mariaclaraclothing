@@ -8,6 +8,7 @@ const {
   findDiscountByCode,
   incrementDiscountUsage
 } = require('../discounts/discountRepository');
+const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.post('/', async (req, res, next) => {
   try {
     const order = await normalizeCheckout(req.body);
     const orderNumber = createOrderNumber();
+    const customerAccountId = await resolveCustomerAccountId(req);
     const persistedOrder = {
       ...order,
       orderNumber,
@@ -40,6 +42,7 @@ router.post('/', async (req, res, next) => {
       trackingNumber: '',
       tags: [],
       notes: order.notes || '',
+      customerAccountId,
       placedAt: new Date().toISOString()
     };
     await saveOrder(persistedOrder);
@@ -177,6 +180,15 @@ async function normalizeCheckout(body) {
     fulfillmentStatus: 'unfulfilled',
     paymentStatus: 'cod_pending'
   };
+}
+
+async function resolveCustomerAccountId(req) {
+  const header = String(req.headers.authorization || '');
+  if (!header.startsWith('Bearer ')) return '';
+  const accountId = verifyCustomerToken(header.slice(7));
+  if (!accountId) return '';
+  const account = await findAccountById(accountId);
+  return account ? account.id : '';
 }
 
 async function resolveCheckoutDiscount(body, subtotalCents) {

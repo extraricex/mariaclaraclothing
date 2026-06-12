@@ -5,6 +5,7 @@ const { productRouter } = require('./routes/products');
 const { orderRouter } = require('./routes/orders');
 const { siteContentRouter } = require('./routes/siteContent');
 const { discountRouter } = require('./routes/discounts');
+const { customerRouter } = require('./routes/customer');
 
 function createApp() {
   const app = express();
@@ -24,6 +25,7 @@ function createApp() {
   app.use('/api/site-content', siteContentRouter);
   app.use('/api/orders', orderRouter);
   app.use('/api/discounts', discountRouter);
+  app.use('/api/customer', customerRouter);
   app.use('/api/admin', adminRouter);
 
   app.use((error, _req, res, _next) => {
