@@ -3,16 +3,22 @@
   "managedFields": [
     "storeName",
     "contactEmail",
+    "contactNumber",
+    "storeAddress",
+    "socialLinks",
     "shippingRules",
+    "freeShippingRule",
     "paymentMethods",
+    "adminPassword",
+    "adminToken",
     "policyLinks",
     "seoDefaults"
   ],
   "futureAdminActions": [
-    "edit store settings",
-    "configure shipping",
-    "configure payments",
     "edit policy links",
-    "edit SEO defaults"
+    "edit SEO defaults",
+    "configure notifications",
+    "edit message templates",
+    "configure maintenance mode"
   ]
 }
