@@ -19,6 +19,14 @@ const {
   updateHomepageBanners
 } = require('../siteContent/siteContentRepository');
 const {
+  getAdminCredentials,
+  getStoreSettings,
+  rotateAdminToken,
+  setAdminPassword,
+  updateSettingsSection,
+  verifyAdminPassword
+} = require('../settings/storeSettingsRepository');
+const {
   deleteEditableProduct,
   findEditableProductBySlug,
   listEditableProducts,
@@ -174,6 +182,23 @@ router.post('/site-content/logo/image', logoUpload.single('image'), (req, res, n
     });
 
     return res.status(201).json({ siteContent, logo: siteContent.logo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/settings', async (_req, res, next) => {
+  try {
+    return res.json({ settings: await getStoreSettings() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put('/settings/:section', async (req, res, next) => {
+  try {
+    const settings = await updateSettingsSection(req.params.section, req.body || {});
+    return res.json({ settings });
   } catch (error) {
     return next(error);
   }
