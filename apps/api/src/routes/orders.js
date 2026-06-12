@@ -9,6 +9,7 @@ const {
   incrementDiscountUsage
 } = require('../discounts/discountRepository');
 const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
+const { listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
 
 const router = express.Router();
 
@@ -134,6 +135,12 @@ async function normalizeCheckout(body) {
     ? body.checkoutChannel
     : 'storefront_checkout';
   const paymentMethod = body.paymentMethod ? String(body.paymentMethod).trim() : 'cash_on_delivery';
+  const enabledPaymentMethods = await listEnabledPaymentMethodIds();
+  if (!enabledPaymentMethods.includes(paymentMethod)) {
+    const error = new Error('Payment method is not available.');
+    error.status = 400;
+    throw error;
+  }
   const shippingRegion = body.shippingRegion ? String(body.shippingRegion).trim() : '';
   const shippingRegionLabel = body.shippingRegionLabel ? String(body.shippingRegionLabel).trim() : '';
   const freeShippingUnlocked = Boolean(body.freeShippingUnlocked);
