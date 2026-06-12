@@ -1,0 +1,38 @@
+{
+  "area": "orders",
+  "managedFields": [
+    "orderNumber",
+    "customer",
+    "address",
+    "items",
+    "subtotalCents",
+    "discountTotalCents",
+    "shippingFeeCents",
+    "shippingRegion",
+    "shippingRegionLabel",
+    "freeShippingUnlocked",
+    "totalCents",
+    "cartSnapshot",
+    "channel",
+    "checkoutChannel",
+    "codConfirmationStatus",
+    "deliveryMethod",
+    "deliveryStatus",
+    "paymentMethod",
+    "fulfillmentStatus",
+    "paymentStatus",
+    "trackingNumber",
+    "adminEditableTotals",
+    "status",
+    "notes",
+    "tags",
+    "discountCode"
+  ],
+  "futureAdminActions": [
+    "view order",
+    "update order status",
+    "confirm COD",
+    "add fulfillment notes",
+    "cancel order"
+  ]
+}

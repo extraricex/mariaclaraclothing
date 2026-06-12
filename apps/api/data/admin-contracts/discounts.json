@@ -1,0 +1,19 @@
+{
+  "area": "discounts",
+  "managedFields": [
+    "code",
+    "type",
+    "value",
+    "status",
+    "endsAt",
+    "usageLimit",
+    "usageCount",
+    "minimumSubtotalCents"
+  ],
+  "futureAdminActions": [
+    "configure free shipping promos",
+    "eligible collections targeting",
+    "scheduled start dates (startsAt)",
+    "per-customer usage limits"
+  ]
+}

@@ -1,77 +1,82 @@
 # Maria Clara Clothing Webstore
 
-Node/Express storefront and admin workspace for Maria Clara Clothing.
+Monorepo for the Maria Clara Clothing webstore: an Express API with dual JSON/PostgreSQL
+persistence, a redesigned React + Tailwind storefront/admin, and a Grafana analytics
+dashboard, all runnable with Docker Compose.
 
-## Setup
+## Layout
+
+```
+apps/api    Express API + legacy static site (src/, test/, data/, db/, scripts/, public/)
+apps/web    React + Tailwind redesign (storefront at /, admin at /admin)
+infra       Grafana provisioning (Postgres datasource + store dashboard)
+docs        Specs, plans, and recommendations (see docs/ENHANCEMENT_PROPOSALS.md)
+```
+
+## Quick start (Docker — full stack)
+
+```bash
+docker compose up --build
+```
+
+- React storefront + admin: `http://localhost:8081` (admin at `/admin`)
+- API + legacy static site: `http://localhost:3000`
+- Grafana dashboards: `http://localhost:3001` (provisioned "Maria Clara — Store Overview")
+- PostgreSQL is migrated and seeded automatically on first start.
+
+Default credentials are for local use only — override `ADMIN_TOKEN`, `ADMIN_PASSWORD`,
+`POSTGRES_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, and disable `GF_AUTH_ANONYMOUS_ENABLED`
+before deploying anywhere public.
+
+## Quick start (no Docker)
 
 ```bash
 npm install
-cp .env.example .env
-npm start
+cp apps/api/.env.example apps/api/.env   # defaults work without Postgres (JSON files)
+npm run dev:api                          # Express API on :3000
+npm run dev:web                          # React app on :5173 (proxies /api to :3000)
 ```
 
-Local app:
+- New storefront: `http://localhost:5173/`, admin: `http://localhost:5173/admin`
+- Legacy static site (still served by the API): `http://localhost:3000/`
 
-- Customer website: `http://localhost:3100/`
-- Admin website: `http://localhost:3100/admin-login.html`
+## Environment (apps/api/.env)
 
-## Environment
+- `ADMIN_TOKEN` / `ADMIN_PASSWORD` — admin auth (defaults `local-admin-token` / `admin`)
+- `DATABASE_URL` — optional; enables PostgreSQL persistence (JSON files otherwise)
+- `PANCAKE_WEBHOOK_SECRET` — reserved for future POS integration
 
-Required for admin access:
+`.env` files are gitignored; only `.env.example` is committed.
 
-- `ADMIN_TOKEN`
-- `PANCAKE_WEBHOOK_SECRET`
-
-Optional for PostgreSQL persistence:
-
-- `DATABASE_URL`
-
-The `.env` file is ignored and must not be uploaded to GitHub. Keep only `.env.example` in the repository.
-
-## Commands
+## Commands (run from repo root)
 
 ```bash
-npm test
-npm run audit:product-images
-npm run jnt:address-guide
-npm run db:migrate
-npm run db:seed
+npm test                       # API test suite (54 tests, never needs Postgres)
+npm run build:web              # production build of the React app
+npm run db:migrate             # apply db/schema.sql (needs DATABASE_URL)
+npm run db:seed                # import JSON data into Postgres
+npm run audit:product-images   # classify product image references
+npm run jnt:address-guide      # regenerate the J&T address guide JSON
 ```
+
+If your shell has `DATABASE_URL` or `ADMIN_TOKEN` set, clear them for tests:
+`DATABASE_URL= ADMIN_TOKEN= npm test`.
 
 ## Product Data And Images
 
-`data/products.json` is the seed/backup catalog. When `DATABASE_URL` is enabled, product records, variants, and image records are stored in PostgreSQL tables, including `product_images`.
+`apps/api/data/products.json` is the seed/backup catalog. When `DATABASE_URL` is enabled,
+product records, variants, and image records are stored in PostgreSQL tables, including
+`product_images`.
 
 Product image cleanup rule:
 
 - Remote CDN image URLs are safe because they are hosted outside this repo.
-- Local URLs under `/uploads/products/` still need their physical files in `public/uploads/products/`.
+- Local URLs under `/uploads/products/` still need their physical files in
+  `apps/api/public/uploads/products/`.
 - Run `npm run audit:product-images` before deleting local upload files.
 
 ## J&T Export
 
-The J&T Excel export uses the template in:
-
-```text
-data/jnt/jntexportfile.xlsx
-```
-
-Do not delete files inside `data/jnt/` unless the export feature is changed and tested.
-
-## GitHub Upload Checklist
-
-Before uploading:
-
-```bash
-npm test
-npm run audit:product-images
-```
-
-Do not upload:
-
-- `.env`
-- `node_modules/`
-- `.playwright-profile/`
-- `.superpowers/`
-- `.DS_Store`
-- generated root screenshot PNG files
+The J&T Excel export uses the template in `apps/api/data/jnt/jntexportfile.xlsx`.
+Do not delete files inside `apps/api/data/jnt/` unless the export feature is changed
+and tested.

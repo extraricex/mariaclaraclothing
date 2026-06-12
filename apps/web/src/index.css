@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #faf7f2;
+  --color-cream: #f3eee6;
+  --color-ink: #171411;
+  --color-ink-soft: #4d4742;
+  --color-clay: #8a7d70;
+  --color-line: #d9d2c7;
+  --color-accent: #e8590c;
+  --color-accent-deep: #b83d00;
+
+  --font-display: "Clash Display", "Archivo Black", sans-serif;
+  --font-body: "Switzer", "Helvetica Neue", sans-serif;
+}
+
+@layer base {
+  html {
+    @apply bg-paper text-ink antialiased;
+    font-family: var(--font-body);
+  }
+  ::selection {
+    @apply bg-accent text-paper;
+  }
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display);
+    @apply font-semibold uppercase tracking-tight;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-clay;
+  }
+  .btn-ink {
+    @apply inline-flex items-center justify-center gap-2 bg-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-paper transition-colors duration-200 hover:bg-accent disabled:cursor-not-allowed disabled:bg-line disabled:text-clay;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 border border-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:border-line disabled:text-clay;
+  }
+  .field {
+    @apply w-full border border-line bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-clay focus:border-ink disabled:bg-cream disabled:text-clay;
+  }
+  .hairline {
+    @apply border-t border-line;
+  }
+}
+
+/* marquee ticker */
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-track {
+  animation: ticker 22s linear infinite;
+}
+
+/* staggered page-load reveal */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reveal {
+  opacity: 0;
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.reveal-1 { animation-delay: 0.05s; }
+.reveal-2 { animation-delay: 0.15s; }
+.reveal-3 { animation-delay: 0.25s; }
+.reveal-4 { animation-delay: 0.35s; }
+
+/* product media hover */
+.media-zoom img {
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.media-zoom:hover img {
+  transform: scale(1.04);
+}
+
+/* grain overlay for hero */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+}

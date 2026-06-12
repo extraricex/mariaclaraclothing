@@ -1,0 +1,101 @@
+import { useEffect, useState } from 'react';
+import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
+
+export default function Banners() {
+  const [banners, setBanners] = useState([]);
+  const [message, setMessage] = useState('');
+
+  function load() {
+    adminJson('/api/admin/site-content')
+      .then((body) => setBanners(body.siteContent?.homepageBanners || []))
+      .catch((err) => setMessage(err.message));
+  }
+
+  useEffect(load, []);
+
+  function updateBanner(index, field, value) {
+    setBanners((previous) => previous.map((banner, i) => i === index ? { ...banner, [field]: value } : banner));
+  }
+
+  function move(index, delta) {
+    setBanners((previous) => {
+      const next = [...previous];
+      const target = index + delta;
+      if (target < 0 || target >= next.length) return previous;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next.map((banner, i) => ({ ...banner, sortOrder: i }));
+    });
+  }
+
+  async function save() {
+    setMessage('');
+    try {
+      const body = await adminSend('PUT', '/api/admin/site-content/homepage-banners', {
+        banners: banners.map((banner, index) => ({ ...banner, sortOrder: index }))
+      });
+      setBanners(body.siteContent?.homepageBanners || []);
+      setMessage('Changes saved successfully.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function upload(files) {
+    if (!files.length) return;
+    const formData = new FormData();
+    [...files].forEach((file) => formData.append('images', file));
+    try {
+      const response = await adminFetch('/api/admin/site-content/homepage-banners/images', {
+        method: 'POST',
+        body: formData
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Upload failed.');
+      setBanners(body.siteContent?.homepageBanners || []);
+      setMessage('Banner uploaded.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">Website content</p>
+          <h1 className="display mt-1 text-3xl">Homepage banners</h1>
+        </div>
+        <div className="flex gap-2">
+          <label className="btn-ghost cursor-pointer">
+            Upload banner
+            <input type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />
+          </label>
+          <button type="button" className="btn-ink" onClick={save}>Save</button>
+        </div>
+      </div>
+      {message && <p className="mt-3 text-sm text-accent-deep" role="status">{message}</p>}
+
+      <div className="mt-8 space-y-4">
+        {banners.map((banner, index) => (
+          <article key={`${banner.url}-${index}`} className="flex gap-4 border border-line bg-paper p-4">
+            <img src={banner.url} alt={banner.altText || ''} className="h-24 w-40 shrink-0 object-cover" />
+            <div className="flex-1">
+              <label className="block">
+                <span className="eyebrow">Alt text</span>
+                <input className="field mt-1" value={banner.altText || ''} onChange={(e) => updateBanner(index, 'altText', e.target.value)} />
+              </label>
+              <div className="mt-3 flex gap-3 text-xs">
+                <button type="button" className="border border-line px-3 py-1 hover:border-ink" onClick={() => move(index, -1)} disabled={index === 0}>↑ Up</button>
+                <button type="button" className="border border-line px-3 py-1 hover:border-ink" onClick={() => move(index, 1)} disabled={index === banners.length - 1}>↓ Down</button>
+                <button type="button" className="text-clay underline hover:text-accent" onClick={() => setBanners((previous) => previous.filter((_, i) => i !== index))}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+        {!banners.length && <p className="border border-line bg-paper p-6 text-sm text-clay">No banners yet. Upload one to get started.</p>}
+      </div>
+    </div>
+  );
+}
