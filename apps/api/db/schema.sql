@@ -119,3 +119,9 @@ CREATE TABLE IF NOT EXISTS customer_accounts (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS store_settings (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
