@@ -16,6 +16,9 @@ test('admin settings page edits all four sections against the settings API', asy
   assert.match(source, /\/api\/admin\/settings\/security\/rotate-token/);
   assert.match(source, /setAdminToken/);
   assert.match(source, /freeShippingMinimumItems/);
+  // section headers are collapsible toggles
+  assert.match(source, /aria-expanded=\{open\}/);
+  assert.match(source, /setOpen/);
   // peso at the UI edge only
   assert.match(source, /centsFromPeso/);
   assert.doesNotMatch(source, /name="feeCents"/);

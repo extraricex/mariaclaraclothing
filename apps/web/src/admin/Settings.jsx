@@ -19,12 +19,23 @@ function Status({ status }) {
   );
 }
 
-function SectionCard({ title, hint, children }) {
+function SectionCard({ title, hint, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="border border-line bg-paper p-6">
-      <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">{title}</h2>
-      {hint && <p className="mt-1 text-xs text-clay">{hint}</p>}
-      {children}
+    <section className="border border-line bg-paper">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>
+          <span className="block text-sm font-semibold uppercase tracking-[0.12em]">{title}</span>
+          {hint && <span className="mt-1 block text-xs text-clay">{hint}</span>}
+        </span>
+        <span className={`text-clay transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">▾</span>
+      </button>
+      {open && <div className="px-6 pb-6">{children}</div>}
     </section>
   );
 }
@@ -64,7 +75,7 @@ function GeneralCard({ initial }) {
   }
 
   return (
-    <SectionCard title="General" hint="Store identity shown to customers.">
+    <SectionCard title="General" hint="Store identity shown to customers." defaultOpen>
       <div className="mt-4 space-y-3">
         <Field label="Store name"><input className="field mt-1" value={form.storeName} onChange={(e) => set('storeName', e.target.value)} /></Field>
         <Field label="Contact email"><input className="field mt-1" type="email" value={form.contactEmail} onChange={(e) => set('contactEmail', e.target.value)} /></Field>
