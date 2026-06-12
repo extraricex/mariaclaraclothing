@@ -9,6 +9,7 @@ function activeSiteContentPath() {
 
 function defaultSiteContent() {
   return {
+    logo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing logo' },
     homepageBanners: [
       { url: '/brand/hero1v2.jpg', altText: 'Maria Clara campaign', sortOrder: 0 },
       { url: '/brand/hero2-web.jpg', altText: 'Maria Clara streetwear editorial', sortOrder: 1 }
@@ -49,9 +50,27 @@ function appendHomepageBanners(banners) {
   ]);
 }
 
+function updateLogo(logo) {
+  const content = getSiteContent();
+  return saveSiteContent({
+    ...content,
+    logo: normalizeLogo(logo)
+  });
+}
+
 function normalizeSiteContent(content) {
   return {
+    logo: normalizeLogo(content?.logo),
     homepageBanners: normalizeBanners(content?.homepageBanners)
+  };
+}
+
+function normalizeLogo(logo) {
+  const url = String(logo?.url || '').trim();
+  const altText = String(logo?.altText || 'Maria Clara Clothing logo').trim();
+  return {
+    url: url || '/brand/logo.png',
+    altText: altText || 'Maria Clara Clothing logo'
   };
 }
 
@@ -71,7 +90,9 @@ function normalizeBanners(banners) {
 module.exports = {
   appendHomepageBanners,
   getSiteContent,
+  normalizeLogo,
   saveSiteContent,
+  updateLogo,
   updateHomepageBanners,
   normalizeBanners
 };

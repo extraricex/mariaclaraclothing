@@ -26,6 +26,7 @@ function CollectionSection({ id, index, title, blurb, products }) {
 export default function Home() {
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState([]);
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -37,38 +38,62 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (banners.length < 2) {
+      setActiveHeroIndex(0);
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => {
+      setActiveHeroIndex((index) => (index + 1) % banners.length);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [banners.length]);
+
   const newArrivals = products.filter((product) => (product.collections || []).includes('New Arrivals'));
   const freedom = products.filter((product) => (product.collections || []).includes('Freedom of Mind'));
-  const hero = banners[0];
 
   return (
     <div className="pb-4">
-      <section className="grain relative overflow-hidden bg-ink text-paper">
-        <div className="mx-auto grid max-w-7xl gap-0 px-5 lg:grid-cols-[1.1fr_1fr] lg:px-8">
-          <div className="flex flex-col justify-center py-16 lg:py-28">
-            <p className="eyebrow reveal reveal-1 text-accent">Philippine streetwear · est. Imus, Cavite</p>
-            <h1 className="display reveal reveal-2 mt-4 text-5xl leading-[0.95] sm:text-7xl lg:text-8xl">
-              Heavy<br />cotton.<br /><span className="text-accent">Loose</span> rules.
-            </h1>
-            <p className="reveal reveal-3 mt-6 max-w-sm text-sm leading-relaxed text-paper/70">
-              Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it
-              arrives — free shipping when you grab two.
-            </p>
-            <div className="reveal reveal-4 mt-8 flex flex-wrap gap-3">
-              <a href="#new-arrivals" className="btn-ink !bg-accent hover:!bg-accent-deep">Shop new arrivals</a>
-              <a href="#freedom-of-mind" className="btn-ghost !border-paper/40 !text-paper hover:!border-accent hover:!text-accent">Freedom of Mind</a>
+      <section className="grain relative flex min-h-[520px] items-center justify-center overflow-hidden bg-ink px-5 py-20 text-center text-paper sm:min-h-[620px] lg:px-8">
+        {banners.map((banner, index) => (
+          <img
+            key={`${banner.url}-${index}`}
+            src={banner.url}
+            alt={index === activeHeroIndex ? banner.altText || 'Maria Clara Clothing' : ''}
+            aria-hidden={index !== activeHeroIndex}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroIndex ? 'opacity-100' : 'opacity-0'}`}
+          />
+        ))}
+        <div className="absolute inset-0 bg-ink/55" />
+        <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center">
+          <p className="eyebrow reveal reveal-1 text-accent">Philippine streetwear · est. Imus, Cavite</p>
+          <h1 className="display reveal reveal-2 mt-4 text-5xl leading-[0.95] sm:text-7xl lg:text-8xl">
+            100%<br />Pure<br /><span className="text-accent">Cotton</span>
+          </h1>
+          <p className="reveal reveal-3 mt-6 max-w-sm text-sm leading-relaxed text-paper/80">
+            Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it
+            arrives — free shipping when you grab two.
+          </p>
+          <div className="reveal reveal-4 mt-8 flex flex-wrap justify-center gap-3">
+            <a href="#new-arrivals" className="btn-ink !bg-accent hover:!bg-accent-deep">Shop new arrivals</a>
+            <a href="#freedom-of-mind" className="btn-ghost !border-paper/40 !text-paper hover:!border-accent hover:!text-accent">Freedom of Mind</a>
+          </div>
+          {banners.length > 1 && (
+            <div className="mt-10 flex gap-2" aria-label="Homepage banner slides">
+              {banners.map((banner, index) => (
+                <button
+                  key={`${banner.url}-dot-${index}`}
+                  type="button"
+                  className={`h-2.5 w-2.5 rounded-full border border-paper/70 transition-colors ${index === activeHeroIndex ? 'bg-paper' : 'bg-transparent'}`}
+                  aria-label={`Show banner ${index + 1}`}
+                  aria-current={index === activeHeroIndex ? 'true' : undefined}
+                  onClick={() => setActiveHeroIndex(index)}
+                />
+              ))}
             </div>
-          </div>
-          <div className="relative hidden min-h-[420px] lg:block">
-            {hero && (
-              <img
-                src={hero.url}
-                alt={hero.altText || 'Maria Clara Clothing'}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-r from-ink via-transparent to-transparent" />
-          </div>
+          )}
         </div>
       </section>
 

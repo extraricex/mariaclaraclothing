@@ -509,8 +509,13 @@ test('add to cart controls stay responsive across screen sizes', () => {
 });
 
 test('product cards and storefront buttons use centered text and hover-only underlines', () => {
+  const storefront = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'storefront.js'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 
+  assert.match(storefront, /class="product-size-button"/);
+  assert.match(storefront, />Choose size</);
+  assert.match(styles, /\.product-media img\s*{[^}]*object-fit:\s*contain/s);
+  assert.match(styles, /\.product-size-button\s*{/);
   assert.match(styles, /\.product-card-copy\s*{[^}]*grid-template-columns:\s*1fr[^}]*text-align:\s*center/s);
   assert.match(styles, /\.product-card h3\s*{[^}]*text-align:\s*center/s);
   assert.match(styles, /\.product-card p\s*{[^}]*text-align:\s*center/s);

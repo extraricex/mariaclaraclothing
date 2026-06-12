@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { cartQuantity, useCart } from '../lib/cart.js';
+import { fetchSiteContent } from '../lib/api.js';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -36,10 +37,33 @@ function Ticker() {
   );
 }
 
+function CartIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-bag" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1m3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
+    </svg>
+  );
+}
+
 export default function Shell() {
   const items = useCart();
   const count = cartQuantity(items);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logo, setLogo] = useState(null);
+
+  useEffect(() => {
+    fetchSiteContent()
+      .then((body) => setLogo(body.siteContent?.logo || null))
+      .catch(() => {});
+  }, []);
+
+  const logoMarkup = logo?.url ? (
+    <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing'} className="h-[65px] max-w-[205px] object-contain lg:h-[73px] lg:max-w-[230px]" />
+  ) : (
+    <span className="display text-[45px] tracking-tight lg:text-[49px]">
+      Maria<span className="text-accent">Clara</span>
+    </span>
+  );
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -54,8 +78,8 @@ export default function Shell() {
           >
             {menuOpen ? 'Close' : 'Menu'}
           </button>
-          <Link to="/" className="display text-xl tracking-tight lg:text-2xl">
-            Maria<span className="text-accent">Clara</span>
+          <Link to="/" className="flex shrink-0 items-center">
+            {logoMarkup}
           </Link>
           <nav className="hidden items-center gap-8 lg:flex">
             {NAV_LINKS.map((link) => (
@@ -69,8 +93,8 @@ export default function Shell() {
               </NavLink>
             ))}
           </nav>
-          <Link to="/cart" className="relative text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent">
-            Cart
+          <Link to="/cart" className="relative flex h-9 w-9 items-center justify-center hover:text-accent" aria-label="Cart">
+            <CartIcon />
             {count > 0 && (
               <span className="absolute -right-4 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-paper">
                 {count}
@@ -100,9 +124,15 @@ export default function Shell() {
 
       <footer className="mt-24 bg-ink text-paper">
         <div className="mx-auto max-w-7xl px-5 py-14 lg:px-8">
-          <p className="display text-4xl leading-none sm:text-6xl lg:text-7xl">
-            Maria<span className="text-accent">Clara</span>
-          </p>
+          {logo?.url ? (
+            <div className="inline-flex bg-paper p-3">
+              <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing'} className="max-h-20 max-w-64 object-contain" />
+            </div>
+          ) : (
+            <p className="display text-4xl leading-none sm:text-6xl lg:text-7xl">
+              Maria<span className="text-accent">Clara</span>
+            </p>
+          )}
           <div className="mt-10 grid gap-10 sm:grid-cols-3">
             <div>
               <p className="eyebrow text-paper/60">Shop</p>

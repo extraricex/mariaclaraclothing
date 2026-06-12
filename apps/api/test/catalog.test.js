@@ -108,12 +108,12 @@ test('catalog recreates Shopify product pricing and sizing structure', () => {
   assert.equal(kamalayan.image, 'https://cdn.shopify.com/s/files/1/0781/7979/5224/files/bloom2_f5c7395e-3383-499c-bdd1-618cef4b40ac.jpg?v=1774461974');
   assert.equal(kamalayan.images[1], 'https://cdn.shopify.com/s/files/1/0781/7979/5224/files/bloom1_5097625b-ac4c-4a58-8514-8959bf59ac2f.jpg?v=1774461974');
   assert.deepEqual(kamalayan.variants.map((variant) => [variant.size, variant.sku, variant.available]), [
-    ['Small', 'BLOOM-001S', false],
-    ['Medium', 'BLOOM-001M', true],
-    ['Large', 'BLOOM-001L', true],
-    ['XLarge', 'BLOOM-001XL', true],
-    ['2XLarge', 'BLOOM-001XXL', false],
-    ['3XLarge', 'BLOOM-001XXXL', false]
+    ['s', 'BLOOM-001S', false],
+    ['m', 'BLOOM-001M', true],
+    ['l', 'BLOOM-001L', true],
+    ['xl', 'BLOOM-001XL', true],
+    ['xxl', 'BLOOM-001XXL', false],
+    ['xxxl', 'BLOOM-001XXXL', false]
   ]);
 
   const iconicOrange = catalogProducts.find((product) => product.slug === 'oranges-mcc-box-tee');
@@ -135,6 +135,8 @@ test('catalog presenter exposes storefront product fields from in-project data',
   assert.equal(product.merchandisingStatus, 'sale');
   assert.equal(product.variants.length, 6);
   assert.equal(product.variants[0].stockQuantity, 0);
+  assert.equal(product.variants[0].size, 's');
+  assert.equal(product.variants[1].size, 'm');
   assert.equal(product.variants[1].stockQuantity, 12);
   assert.equal(product.variants[1].sku, 'BLOOM-001M');
   assert.equal(product.images[0].url, 'https://cdn.shopify.com/s/files/1/0781/7979/5224/files/bloom2_f5c7395e-3383-499c-bdd1-618cef4b40ac.jpg?v=1774461974');

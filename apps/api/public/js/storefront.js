@@ -41,9 +41,11 @@ async function renderProductGrid(root, collection) {
       const sizes = product.variants.map((variant) => variant.size).join(' / ');
       const isSoldOut = product.merchandisingStatus === 'sold_out' || product.variants.every((variant) => Number(variant.stockQuantity) < 1);
 
+      const productHref = `/product.html?slug=${encodeURIComponent(product.slug)}`;
+
       return `<article class="product-card">
         <div class="product-badge ${isSoldOut ? 'is-sold-out' : ''}">${isSoldOut ? 'Sold out' : 'Sale'}</div>
-        <a href="/product.html?slug=${encodeURIComponent(product.slug)}" aria-label="View ${escapeHtml(product.name)}">
+        <a href="${productHref}" aria-label="View ${escapeHtml(product.name)}">
           <span class="product-media">
             <img class="primary-image" src="${escapeAttribute(image)}" alt="${escapeAttribute(product.images[0]?.altText || product.name)}" loading="lazy">
             <img class="hover-image" src="${escapeAttribute(hoverImage)}" alt="" loading="lazy" aria-hidden="true">
@@ -54,6 +56,7 @@ async function renderProductGrid(root, collection) {
             <span>${escapeHtml(sizes)}</span>
           </div>
         </a>
+        <a class="product-size-button" href="${productHref}" aria-label="Choose size for ${escapeAttribute(product.name)}">Choose size</a>
       </article>`;
     }).join('');
   } catch (error) {
