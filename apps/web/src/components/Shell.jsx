@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { cartQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { fetchSiteContent } from '../lib/api.js';
+import { loadStorefrontSettings } from '../lib/storeSettings.js';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -52,11 +53,16 @@ export default function Shell() {
   const loggedIn = useCustomerLoggedIn();
   const [menuOpen, setMenuOpen] = useState(false);
   const [logo, setLogo] = useState(null);
+  const [storeInfo, setStoreInfo] = useState(null);
 
   useEffect(() => {
     fetchSiteContent()
       .then((body) => setLogo(body.siteContent?.logo || null))
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadStorefrontSettings().then(setStoreInfo);
   }, []);
 
   const logoMarkup = logo?.url ? (
@@ -169,6 +175,23 @@ export default function Shell() {
                 Premium 240 GSM cotton, cut oversized. Cash on delivery anywhere in the Philippines —
                 we text before we ship.
               </p>
+              {storeInfo && (storeInfo.contactEmail || storeInfo.contactNumber) && (
+                <ul className="mt-4 space-y-1 text-sm text-paper/80">
+                  {storeInfo.contactEmail && (
+                    <li><a className="hover:text-accent" href={`mailto:${storeInfo.contactEmail}`}>{storeInfo.contactEmail}</a></li>
+                  )}
+                  {storeInfo.contactNumber && <li>{storeInfo.contactNumber}</li>}
+                </ul>
+              )}
+              {storeInfo && Object.values(storeInfo.socialLinks || {}).some(Boolean) && (
+                <ul className="mt-3 flex gap-4 text-sm text-paper/80">
+                  {Object.entries(storeInfo.socialLinks).filter(([, url]) => url).map(([name, url]) => (
+                    <li key={name}>
+                      <a className="capitalize hover:text-accent" href={url} target="_blank" rel="noreferrer">{name}</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
           <p className="mt-12 border-t border-paper/20 pt-6 text-xs uppercase tracking-[0.18em] text-paper/50">

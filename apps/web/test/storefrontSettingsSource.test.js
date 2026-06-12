@@ -31,3 +31,12 @@ test('checkout uses store settings for shipping and payment methods', async () =
   assert.doesNotMatch(source, /cartQuantity\(items\) >= 2/);
   assert.doesNotMatch(source, /paymentMethod: 'cash_on_delivery'/);
 });
+
+test('storefront footer shows contact info from store settings', async () => {
+  const source = await readFile(path.join(root, 'components', 'Shell.jsx'), 'utf8');
+
+  assert.match(source, /loadStorefrontSettings/);
+  assert.match(source, /contactEmail/);
+  assert.match(source, /contactNumber/);
+  assert.match(source, /socialLinks/);
+});
