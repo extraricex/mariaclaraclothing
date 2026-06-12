@@ -6,6 +6,8 @@ import Cart from './pages/Cart.jsx';
 import Checkout from './pages/Checkout.jsx';
 import ThankYou from './pages/ThankYou.jsx';
 import InfoPage, { FAQ_SECTIONS, SHIPPING_SECTIONS, TERMS_SECTIONS } from './pages/InfoPage.jsx';
+import { CustomerLogin, CustomerRegister } from './pages/CustomerAuth.jsx';
+import Account from './pages/Account.jsx';
 import Login from './admin/Login.jsx';
 import AdminLayout from './admin/AdminLayout.jsx';
 import Dashboard from './admin/Dashboard.jsx';
@@ -27,6 +29,9 @@ export default function App() {
         <Route path="/product/:slug" element={<Product />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/thank-you" element={<ThankYou />} />
+        <Route path="/login" element={<CustomerLogin />} />
+        <Route path="/register" element={<CustomerRegister />} />
+        <Route path="/account" element={<Account />} />
         <Route path="/faq" element={<InfoPage title="Frequently asked questions" sections={FAQ_SECTIONS} />} />
         <Route path="/shipping-returns" element={<InfoPage title="Shipping & returns" sections={SHIPPING_SECTIONS} />} />
         <Route path="/terms" element={<InfoPage title="Terms of service" sections={TERMS_SECTIONS} />} />

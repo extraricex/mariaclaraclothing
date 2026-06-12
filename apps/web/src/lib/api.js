@@ -23,10 +23,10 @@ export function fetchOrder(orderNumber) {
   return request(`/api/orders/${encodeURIComponent(orderNumber)}`);
 }
 
-export function createOrder(payload) {
+export function createOrder(payload, headers = {}) {
   return request('/api/orders', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payload)
   });
 }

@@ -31,6 +31,15 @@ New top-level pieces:
   `docs/admin-system-roadmap.md` from the **repo root** `docs/` (three levels up).
 - Design/spec docs for the redesign: `docs/superpowers/specs/2026-06-12-modern-redesign-design.md`,
   plan in `docs/superpowers/plans/`, and pending-review ideas in `docs/ENHANCEMENT_PROPOSALS.md`.
+- **Customer accounts (optional, never required for checkout)** — `apps/api/src/customers/customerAccountRepository.js`
+  (dual persistence: `data/customer-accounts.json` / `customer_accounts` PG table; scrypt password
+  hashing; HMAC bearer tokens signed with `CUSTOMER_AUTH_SECRET`, dev default `local-customer-auth-secret`).
+  Routes at `/api/customer/*` (`register`, `login`, `me`, `orders`). Orders carry optional
+  `customerAccountId` (stamped when checkout has a valid customer Bearer); customer order history =
+  account-id match OR phone match (links past guest orders). Client token in
+  `localStorage['maria-clara-customer-token']` (`apps/web/src/lib/customerAuth.js`); pages
+  `/login`, `/register`, `/account`. Test override env: `CUSTOMER_ACCOUNTS_DATA_FILE`.
+  Spec: `docs/superpowers/specs/2026-06-12-customer-accounts-design.md`.
 
 ### apps/web conventions
 

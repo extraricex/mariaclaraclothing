@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { cartQuantity, useCart } from '../lib/cart.js';
+import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -39,6 +40,7 @@ function Ticker() {
 export default function Shell() {
   const items = useCart();
   const count = cartQuantity(items);
+  const loggedIn = useCustomerLoggedIn();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -69,6 +71,10 @@ export default function Shell() {
               </NavLink>
             ))}
           </nav>
+          <div className="flex items-center gap-6">
+          <Link to={loggedIn ? '/account' : '/login'} className="hidden text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent sm:block">
+            {loggedIn ? 'Account' : 'Log in'}
+          </Link>
           <Link to="/cart" className="relative text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent">
             Cart
             {count > 0 && (
@@ -77,6 +83,7 @@ export default function Shell() {
               </span>
             )}
           </Link>
+          </div>
         </div>
         {menuOpen && (
           <nav className="flex flex-col border-t border-line lg:hidden">
@@ -90,6 +97,13 @@ export default function Shell() {
                 {link.label}
               </NavLink>
             ))}
+            <NavLink
+              to={loggedIn ? '/account' : '/login'}
+              onClick={() => setMenuOpen(false)}
+              className="border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em] text-accent"
+            >
+              {loggedIn ? 'My account' : 'Log in / Register'}
+            </NavLink>
           </nav>
         )}
       </header>
