@@ -198,3 +198,34 @@ test('admin can rotate the token without changing the password', async () => {
     assert.equal((await login.json()).token, token);
   });
 });
+
+test('public storefront settings expose only the safe subset', async () => {
+  await withSettingsServer(async (port) => {
+    await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/payments`,
+      adminRequest('PUT', { methods: [{ id: 'gcash', enabled: true, instructions: 'Send to 0917 000 0000.' }] })
+    );
+    await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/security/password`,
+      adminRequest('POST', { currentPassword: 'admin', newPassword: 'brand-new-password' })
+    );
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/storefront-settings`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+
+    const body = await response.json();
+    assert.equal(body.settings.storeName, 'Maria Clara Clothing');
+    assert.equal(body.settings.shipping.regions.length, 3);
+    assert.deepEqual(
+      body.settings.paymentMethods.map((method) => method.id),
+      ['cash_on_delivery', 'gcash']
+    );
+    assert.equal(body.settings.paymentMethods.find((method) => method.id === 'gcash').instructions, 'Send to 0917 000 0000.');
+
+    const raw = JSON.stringify(body);
+    assert.equal(raw.includes('bank_transfer'), false);
+    assert.equal(raw.includes('passwordHash'), false);
+    assert.equal(raw.includes('"token"'), false);
+  });
+});
