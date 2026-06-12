@@ -2,12 +2,16 @@ import { useEffect, useState } from 'react';
 import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
 
 export default function Banners() {
+  const [logo, setLogo] = useState(null);
   const [banners, setBanners] = useState([]);
   const [message, setMessage] = useState('');
 
   function load() {
     adminJson('/api/admin/site-content')
-      .then((body) => setBanners(body.siteContent?.homepageBanners || []))
+      .then((body) => {
+        setLogo(body.siteContent?.logo || null);
+        setBanners(body.siteContent?.homepageBanners || []);
+      })
       .catch((err) => setMessage(err.message));
   }
 
@@ -58,12 +62,30 @@ export default function Banners() {
     }
   }
 
+  async function uploadLogo(files) {
+    if (!files.length) return;
+    const formData = new FormData();
+    formData.append('image', files[0]);
+    try {
+      const response = await adminFetch('/api/admin/site-content/logo/image', {
+        method: 'POST',
+        body: formData
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Upload failed.');
+      setLogo(body.siteContent?.logo || null);
+      setMessage('Logo uploaded.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   return (
     <div className="max-w-3xl">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Website content</p>
-          <h1 className="display mt-1 text-3xl">Homepage banners</h1>
+          <h1 className="display mt-1 text-3xl">Logo & homepage banners</h1>
         </div>
         <div className="flex gap-2">
           <label className="btn-ghost cursor-pointer">
@@ -74,6 +96,29 @@ export default function Banners() {
         </div>
       </div>
       {message && <p className="mt-3 text-sm text-accent-deep" role="status">{message}</p>}
+
+      <section className="mt-8 border border-line bg-paper p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="eyebrow">Logo</p>
+            <p className="mt-1 text-sm text-ink-soft">Used in the website header and footer.</p>
+          </div>
+          <label className="btn-ghost cursor-pointer">
+            Upload logo
+            <input type="file" accept="image/*" hidden onChange={(e) => uploadLogo(e.target.files)} />
+          </label>
+        </div>
+        <div className="mt-4 flex items-center gap-4 border border-line p-4">
+          {logo?.url ? (
+            <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing logo'} className="max-h-16 max-w-48 object-contain" />
+          ) : (
+            <p className="text-sm text-clay">No logo uploaded yet.</p>
+          )}
+          <div className="text-xs text-clay">
+            <p>{logo?.url || '/brand/logo.png'}</p>
+          </div>
+        </div>
+      </section>
 
       <div className="mt-8 space-y-4">
         {banners.map((banner, index) => (

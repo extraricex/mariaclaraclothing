@@ -225,7 +225,7 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(listBody.products[0].channels, 'Online Store');
     assert.ok(listBody.products[0].category);
     assert.ok(listBody.products[0].productType);
-    assert.equal(listBody.products[0].vendor, 'Maria Clara Clothing');
+    assert.equal(listBody.products[0].vendor, 'Maria Clara');
 
     const newProduct = {
       slug: 'admin-test-shirt',

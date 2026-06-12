@@ -15,7 +15,7 @@ const EMPTY_PRODUCT = {
   priceCents: 0,
   compareAtPriceCents: null,
   images: [],
-  variants: [{ size: 'One Size', sku: '', stockQuantity: 0 }]
+  variants: [{ size: 's', sku: '', stockQuantity: 0 }]
 };
 
 export default function ProductEditor() {
@@ -193,7 +193,7 @@ export default function ProductEditor() {
             <button
               type="button"
               className="btn-ghost mt-4 !px-4 !py-2 text-xs"
-              onClick={() => update('variants', [...product.variants, { size: '', sku: '', stockQuantity: 0 }])}
+              onClick={() => update('variants', [...product.variants, { size: 's', sku: '', stockQuantity: 0 }])}
             >
               Add variant
             </button>

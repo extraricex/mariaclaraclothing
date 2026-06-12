@@ -17,7 +17,7 @@ function usePostgresProducts() {
 function loadEditableProducts(filePath = activeProductsPath()) {
   const products = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   validateProducts(products);
-  return products;
+  return products.map(normalizeEditableProduct);
 }
 
 function listEditableProducts() {
@@ -377,7 +377,7 @@ function fromPostgresImage(row) {
 function fromPostgresVariant(row) {
   return {
     productSlug: row.product_slug,
-    size: row.size,
+    size: normalizeSizeLabel(row.size),
     sku: row.sku,
     priceCents: row.price_cents,
     stockQuantity: row.stock_quantity,
@@ -415,11 +415,11 @@ function normalizeImages(images, productName) {
 
 function normalizeVariants(variants, slug) {
   const records = Array.isArray(variants) && variants.length ? variants : [
-    { size: 'Small', sku: `${slug}-S`, stockQuantity: 0 }
+    { size: 's', sku: `${slug}-S`, stockQuantity: 0 }
   ];
 
   return records.map((variant, index) => {
-    const size = String(variant.size || `Size ${index + 1}`).trim();
+    const size = normalizeSizeLabel(variant.size || `Size ${index + 1}`);
     return {
       size,
       sku: String(variant.sku || `${slug}-${size}`).trim(),
@@ -430,6 +430,28 @@ function normalizeVariants(variants, slug) {
       externalPosVariantId: String(variant.externalPosVariantId || '').trim()
     };
   });
+}
+
+function normalizeSizeLabel(size) {
+  const value = String(size || '').trim();
+  const key = value.toLowerCase().replace(/\s+/g, '');
+  const labels = {
+    small: 's',
+    s: 's',
+    medium: 'm',
+    m: 'm',
+    large: 'l',
+    l: 'l',
+    xlarge: 'xl',
+    xl: 'xl',
+    '2xlarge': 'xxl',
+    '2xl': 'xxl',
+    xxl: 'xxl',
+    '3xlarge': 'xxxl',
+    '3xl': 'xxxl',
+    xxxl: 'xxxl'
+  };
+  return labels[key] || value;
 }
 
 function normalizeProductPage(productPage, productName) {

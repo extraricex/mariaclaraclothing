@@ -1,5 +1,5 @@
 const { catalogProducts } = require('./catalogRepository');
 
-const sizeRun = ['Small', 'Medium', 'Large', 'XLarge', '2XLarge', '3XLarge'];
+const sizeRun = ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'];
 
 module.exports = { catalogProducts, sizeRun };

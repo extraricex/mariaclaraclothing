@@ -1242,7 +1242,7 @@ img { display: block; width: 100%; height: auto; object-fit: cover; }
   aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 16px;
-  background: var(--paper);
+  background: var(--white);
 }
 
 .product-media img {
@@ -1250,7 +1250,8 @@ img { display: block; width: 100%; height: auto; object-fit: cover; }
   height: 100%;
   border-radius: 0;
   box-shadow: none;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
   transition: opacity .18s ease, transform .18s ease;
 }
 
@@ -1318,6 +1319,32 @@ img { display: block; width: 100%; height: auto; object-fit: cover; }
   font-size: 11px;
   font-weight: 400;
   line-height: 1.35;
+}
+
+.product-size-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  width: min(100%, 220px);
+  min-height: 42px;
+  border: 1px solid var(--black);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--black);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
+}
+
+.product-size-button:is(:hover, :focus-visible) {
+  border-color: var(--black);
+  background: var(--black);
+  color: var(--white);
+  text-decoration: none;
 }
 
 .campaign-video {

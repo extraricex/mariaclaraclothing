@@ -15,6 +15,7 @@ const {
 const {
   appendHomepageBanners,
   getSiteContent,
+  updateLogo,
   updateHomepageBanners
 } = require('../siteContent/siteContentRepository');
 const {
@@ -72,6 +73,29 @@ const bannerUpload = multer({
   limits: {
     fileSize: 8 * 1024 * 1024,
     files: 6
+  },
+  fileFilter: (_req, file, callback) => {
+    if (!/^image\//.test(file.mimetype || '')) {
+      return callback(new Error('Only image uploads are allowed'));
+    }
+    return callback(null, true);
+  }
+});
+const logoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, callback) => {
+      const uploadDir = logoUploadDir();
+      fs.mkdirSync(uploadDir, { recursive: true });
+      callback(null, uploadDir);
+    },
+    filename: (_req, file, callback) => {
+      const extension = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+      callback(null, `site-logo-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`);
+    }
+  }),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1
   },
   fileFilter: (_req, file, callback) => {
     if (!/^image\//.test(file.mimetype || '')) {
@@ -138,6 +162,23 @@ router.post('/site-content/homepage-banners/images', bannerUpload.array('images'
   }
 });
 
+router.post('/site-content/logo/image', logoUpload.single('image'), (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'A logo image is required' });
+    }
+
+    const siteContent = updateLogo({
+      url: logoUploadUrl(req.file.filename),
+      altText: 'Maria Clara Clothing logo'
+    });
+
+    return res.status(201).json({ siteContent, logo: siteContent.logo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post('/products/import', async (req, res, next) => {
   try {
     const incomingProducts = Array.isArray(req.body?.products) ? req.body.products : null;
@@ -159,7 +200,7 @@ router.get('/products/settings', (req, res) => res.json({
     defaultStatus: 'active',
     lowStockThreshold: 12,
     recommendedCollections: ['New Arrivals', 'Best Sellers', 'Maria Clara', 'Oversized Shirt', 'Sale'],
-    recommendedVariantSizes: ['Small', 'Medium', 'Large', 'XL', '2XL'],
+    recommendedVariantSizes: ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'],
     imageGuidance: 'Use square or 4:5 product photos with clear alt text.'
   }
 }));
@@ -461,6 +502,14 @@ function bannerUploadDir() {
 
 function bannerUploadUrl(filename) {
   return `/uploads/banners/${filename}`;
+}
+
+function logoUploadDir() {
+  return process.env.LOGO_UPLOAD_DIR || path.join(__dirname, '..', '..', 'public', 'uploads', 'logos');
+}
+
+function logoUploadUrl(filename) {
+  return `/uploads/logos/${filename}`;
 }
 
 function normalizeProductRequest(body) {
