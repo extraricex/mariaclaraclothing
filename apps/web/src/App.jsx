@@ -11,6 +11,7 @@ import AdminLayout from './admin/AdminLayout.jsx';
 import Dashboard from './admin/Dashboard.jsx';
 import Orders from './admin/Orders.jsx';
 import OrderDetail from './admin/OrderDetail.jsx';
+import CartSessions from './admin/CartSessions.jsx';
 import Products from './admin/Products.jsx';
 import ProductEditor from './admin/ProductEditor.jsx';
 import Collections from './admin/Collections.jsx';
@@ -36,6 +37,8 @@ export default function App() {
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="orders" element={<Orders />} />
+        <Route path="orders/draft" element={<CartSessions status="draft" />} />
+        <Route path="orders/abandoned-checkout" element={<CartSessions status="abandoned_checkout" />} />
         <Route path="orders/:orderNumber" element={<OrderDetail />} />
         <Route path="products" element={<Products />} />
         <Route path="products/:slug" element={<ProductEditor />} />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createOrder } from '../lib/api.js';
-import { cartQuantity, clearCart, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
+import { cartQuantity, clearCart, getCartSessionId, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import {
   deliveryEstimate,
@@ -106,6 +106,21 @@ export default function Checkout() {
   const totals = useMemo(() => checkoutTotals(items, region, discountCents), [items, region, discountCents]);
   const doorToDoorWarning = Boolean(barangay) && String(barangay.doorToDoor || '').toUpperCase() !== 'YES';
 
+  useEffect(() => {
+    if (!items.length) return;
+    syncCartSession({
+      checkoutStarted: true,
+      customer: { fullName, phone, email },
+      address: {
+        addressLine: [house, barangay?.name, city?.name, province?.name].filter(Boolean).join(', '),
+        province: province?.name || '',
+        city: city?.name || '',
+        barangay: barangay?.name || ''
+      },
+      items
+    });
+  }, [items, fullName, phone, email, house, province, city, barangay]);
+
   async function applyDiscount() {
     const code = discountInput.trim();
     setDiscountError('');
@@ -150,6 +165,7 @@ export default function Checkout() {
     const submitTotals = checkoutTotals(items, regionForProvince(province), discountCents);
     const addressLine = `${house.trim()}, ${barangay.name}, ${city.name}, ${province.name}, Philippines`;
     const payload = {
+      cartSessionId: getCartSessionId(),
       customer: { fullName: fullName.trim(), phone: phone.trim(), email: email.trim() },
       address: {
         addressLine,
@@ -184,6 +200,7 @@ export default function Checkout() {
         placedAt: new Date().toISOString()
       }));
       clearCart();
+      resetCartSessionId();
       navigate(`/thank-you?order=${encodeURIComponent(result.orderNumber)}`);
     } catch (error) {
       setStatus({ tone: 'error', message: error.message });

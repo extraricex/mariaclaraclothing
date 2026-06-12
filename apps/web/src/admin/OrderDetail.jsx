@@ -20,6 +20,52 @@ const ENUM_LABELS = {
   deliveryStatus: 'Delivery'
 };
 
+function orderForm(order) {
+  return {
+    status: order.status,
+    fulfillmentStatus: order.fulfillmentStatus,
+    paymentStatus: order.paymentStatus,
+    codConfirmationStatus: order.codConfirmationStatus,
+    deliveryStatus: order.deliveryStatus,
+    trackingNumber: order.trackingNumber || '',
+    notes: order.notes || '',
+    customer: {
+      fullName: order.customer?.fullName || '',
+      phone: order.customer?.phone || '',
+      email: order.customer?.email || ''
+    },
+    items: (order.items || []).map((item) => ({
+      productId: item.productId || '',
+      variantId: item.variantId || '',
+      sku: item.sku || '',
+      slug: item.slug || '',
+      productName: item.productName || '',
+      size: item.size || '',
+      imageUrl: item.imageUrl || '',
+      quantity: Number(item.quantity || 1),
+      unitPriceCents: Number(item.unitPriceCents || 0)
+    }))
+  };
+}
+
+function emptyItem() {
+  return {
+    productId: '',
+    variantId: '',
+    sku: '',
+    slug: '',
+    productName: '',
+    size: '',
+    imageUrl: '',
+    quantity: 1,
+    unitPriceCents: 0
+  };
+}
+
+function pesoInputValue(cents) {
+  return (Number(cents || 0) / 100).toFixed(2);
+}
+
 export default function OrderDetail() {
   const { orderNumber } = useParams();
   const [order, setOrder] = useState(null);
@@ -36,15 +82,7 @@ export default function OrderDetail() {
     adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}`)
       .then((body) => {
         setOrder(body.order);
-        setForm({
-          status: body.order.status,
-          fulfillmentStatus: body.order.fulfillmentStatus,
-          paymentStatus: body.order.paymentStatus,
-          codConfirmationStatus: body.order.codConfirmationStatus,
-          deliveryStatus: body.order.deliveryStatus,
-          trackingNumber: body.order.trackingNumber || '',
-          notes: body.order.notes || ''
-        });
+        setForm(orderForm(body.order));
       })
       .catch((err) => setMessage(err.message));
   }, [orderNumber]);
@@ -75,9 +113,72 @@ export default function OrderDetail() {
     return <p className="text-sm text-clay">{message || 'Loading order…'}</p>;
   }
 
+  function updateCustomer(field, value) {
+    setForm((previous) => ({
+      ...previous,
+      customer: { ...previous.customer, [field]: value }
+    }));
+  }
+
+  function updateItem(index, field, value) {
+    setForm((previous) => ({
+      ...previous,
+      items: previous.items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)
+    }));
+  }
+
+  function removeItem(index) {
+    setForm((previous) => ({
+      ...previous,
+      items: previous.items.filter((_item, itemIndex) => itemIndex !== index)
+    }));
+  }
+
+  function addItem() {
+    setForm((previous) => ({
+      ...previous,
+      items: [...previous.items, emptyItem()]
+    }));
+  }
+
+  async function startAddressEdit() {
+    const loadedProvinces = provinces.length ? provinces : await loadProvinces();
+    const province = loadedProvinces.find((item) => item.name === String(order.address?.province || '').toUpperCase());
+    let loadedCities = [];
+    let city = null;
+    let loadedBarangays = [];
+    let barangay = null;
+
+    if (province) {
+      loadedCities = await loadCities(province.code);
+      city = loadedCities.find((item) => item.name === String(order.address?.city || '').toUpperCase());
+    }
+    if (city) {
+      loadedBarangays = await loadBarangays(city.code);
+      barangay = loadedBarangays.find((item) => item.name === String(order.address?.barangay || '').toUpperCase());
+    }
+
+    setProvinces(loadedProvinces);
+    setCities(loadedCities);
+    setBarangays(loadedBarangays);
+    setAddressDraft({
+      house: order.address?.houseAddress || '',
+      provinceCode: province?.code || '',
+      cityCode: city?.code || '',
+      barangayCode: barangay?.code || ''
+    });
+    setEditAddress(true);
+  }
+
   async function save() {
     setMessage('');
     const changes = { ...form };
+    changes.customer = form.customer;
+    changes.items = form.items.map((item) => ({
+      ...item,
+      quantity: Number(item.quantity || 0),
+      unitPriceCents: Number(item.unitPriceCents || 0)
+    }));
     if (editAddress) {
       const province = provinces.find((item) => item.code === addressDraft.provinceCode);
       const city = cities.find((item) => item.code === addressDraft.cityCode);
@@ -99,6 +200,7 @@ export default function OrderDetail() {
     try {
       const body = await adminSend('PATCH', `/api/admin/orders/${encodeURIComponent(orderNumber)}`, changes);
       setOrder(body.order);
+      setForm(orderForm(body.order));
       setEditAddress(false);
       setMessage('Changes saved successfully.');
     } catch (error) {
@@ -145,9 +247,20 @@ export default function OrderDetail() {
         <div className="space-y-6">
           <section className="border border-line bg-paper p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Customer</h2>
-            <p className="mt-3 text-sm font-semibold">{order.customer?.fullName}</p>
-            <p className="text-sm text-ink-soft">{order.customer?.phone}</p>
-            {order.customer?.email && <p className="text-sm text-ink-soft">{order.customer.email}</p>}
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="eyebrow">Full name</span>
+                <input className="field mt-1" value={form.customer.fullName} onChange={(e) => updateCustomer('fullName', e.target.value)} />
+              </label>
+              <label className="block">
+                <span className="eyebrow">Contact number</span>
+                <input className="field mt-1" value={form.customer.phone} onChange={(e) => updateCustomer('phone', e.target.value)} />
+              </label>
+              <label className="block">
+                <span className="eyebrow">Email</span>
+                <input className="field mt-1" type="email" value={form.customer.email} onChange={(e) => updateCustomer('email', e.target.value)} />
+              </label>
+            </div>
             {history && (
               <p className={`mt-2 inline-block px-2 py-1 text-xs font-semibold ${
                 history.cancelledCount === 0 && history.unreachableCount === 0 && history.deliveredCount > 0
@@ -163,15 +276,23 @@ export default function OrderDetail() {
             <div className="mt-4 border-t border-line pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Shipping address</h3>
-                <button type="button" className="text-xs text-accent underline" onClick={() => setEditAddress((value) => !value)}>
+                <button type="button" className="text-xs text-accent underline" onClick={() => editAddress ? setEditAddress(false) : startAddressEdit()}>
                   {editAddress ? 'Cancel edit' : 'Edit'}
                 </button>
               </div>
               {!editAddress ? (
-                <p className="mt-2 text-sm text-ink-soft">{order.address?.addressLine}</p>
+                <dl className="mt-3 grid gap-2 text-sm">
+                  <div><dt className="eyebrow">House / Street</dt><dd className="text-ink-soft">{order.address?.houseAddress || '-'}</dd></div>
+                  <div><dt className="eyebrow">Barangay</dt><dd className="text-ink-soft">{order.address?.barangay || '-'}</dd></div>
+                  <div><dt className="eyebrow">City / Municipality</dt><dd className="text-ink-soft">{order.address?.city || '-'}</dd></div>
+                  <div><dt className="eyebrow">Province</dt><dd className="text-ink-soft">{order.address?.province || '-'}</dd></div>
+                </dl>
               ) : (
                 <div className="mt-3 space-y-3">
-                  <input className="field" placeholder="House / street / unit" value={addressDraft.house} onChange={(e) => setAddressDraft((d) => ({ ...d, house: e.target.value }))} />
+                  <label className="block">
+                    <span className="eyebrow">House / Street</span>
+                    <input className="field mt-1" placeholder="House / street / unit" value={addressDraft.house} onChange={(e) => setAddressDraft((d) => ({ ...d, house: e.target.value }))} />
+                  </label>
                   <select className="field" value={addressDraft.provinceCode} onChange={(e) => setAddressDraft((d) => ({ ...d, provinceCode: e.target.value, cityCode: '', barangayCode: '' }))}>
                     <option value="">Select province</option>
                     {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
@@ -191,14 +312,35 @@ export default function OrderDetail() {
 
           <section className="border border-line bg-paper p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Items</h2>
-            <ul className="mt-3 divide-y divide-line/60">
-              {(order.items || []).map((item, index) => (
-                <li key={index} className="flex items-center justify-between gap-4 py-3 text-sm">
-                  <span>{item.productName} <span className="text-clay">· {item.size} × {item.quantity}</span></span>
-                  <strong>{formatMoney(Number(item.unitPriceCents) * Number(item.quantity))}</strong>
-                </li>
+            <div className="mt-3 space-y-4">
+              {form.items.map((item, index) => (
+                <div key={index} className="border border-line/70 p-3">
+                  <label className="block">
+                    <span className="eyebrow">Product name</span>
+                    <input className="field mt-1" value={item.productName} onChange={(e) => updateItem(index, 'productName', e.target.value)} />
+                  </label>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <label className="block">
+                      <span className="eyebrow">Size</span>
+                      <input className="field mt-1" value={item.size} onChange={(e) => updateItem(index, 'size', e.target.value)} />
+                    </label>
+                    <label className="block">
+                      <span className="eyebrow">Quantity</span>
+                      <input className="field mt-1" type="number" min="1" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))} />
+                    </label>
+                    <label className="block">
+                      <span className="eyebrow">Unit price</span>
+                      <input className="field mt-1" type="number" min="0" step="0.01" value={pesoInputValue(item.unitPriceCents)} onChange={(e) => updateItem(index, 'unitPriceCents', Math.round(Number(e.target.value || 0) * 100))} />
+                    </label>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                    <span className="text-clay">Line total {formatMoney(Number(item.unitPriceCents || 0) * Number(item.quantity || 0))}</span>
+                    <button type="button" className="text-xs text-accent underline" onClick={() => removeItem(index)} disabled={form.items.length <= 1}>Remove item</button>
+                  </div>
+                </div>
               ))}
-            </ul>
+              <button type="button" className="btn-ghost !py-2" onClick={addItem}>Add item</button>
+            </div>
             <dl className="mt-4 space-y-1 border-t border-line pt-3 text-sm">
               <div className="flex justify-between"><dt className="text-clay">Subtotal</dt><dd>{formatMoney(order.subtotalCents)}</dd></div>
               <div className="flex justify-between"><dt className="text-clay">Shipping</dt><dd>{order.shippingFeeCents ? formatMoney(order.shippingFeeCents) : 'Free'}</dd></div>

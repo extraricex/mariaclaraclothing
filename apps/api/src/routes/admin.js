@@ -5,6 +5,7 @@ const multer = require('multer');
 const { findOrderByNumber, listOrders, updateOrder } = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
+const { cartSessionSummary, listCartSessions } = require('../cartSessions/cartSessionRepository');
 const {
   deleteDiscount,
   findDiscountByCode,
@@ -400,12 +401,24 @@ router.get('/orders', async (req, res, next) => {
   try {
     const status = String(req.query.status || '').trim();
     const query = String(req.query.q || '').trim().toLowerCase();
+    const dateFilter = orderDateFilter(req.query);
     const orders = (await listOrders())
       .filter((order) => !status || order.status === status)
       .filter((order) => !query || orderSearchText(order).includes(query))
+      .filter((order) => matchesOrderDateFilter(order, dateFilter))
       .map(orderSummary);
 
     return res.json({ orders });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/cart-sessions', async (req, res, next) => {
+  try {
+    const status = String(req.query.status || '').trim();
+    const sessions = await listCartSessions(status);
+    return res.json({ sessions: sessions.map(cartSessionSummary) });
   } catch (error) {
     return next(error);
   }
@@ -464,8 +477,15 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
 
 router.patch('/orders/:orderNumber', async (req, res, next) => {
   try {
-    const changes = normalizeOrderUpdate(req.body || {});
-    const order = await updateOrder(String(req.params.orderNumber || '').trim(), changes);
+    const orderNumber = String(req.params.orderNumber || '').trim();
+    const existingOrder = await findOrderByNumber(orderNumber);
+
+    if (!existingOrder) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const changes = normalizeOrderUpdate(req.body || {}, existingOrder);
+    const order = await updateOrder(orderNumber, changes);
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -716,7 +736,7 @@ function adminToken() {
   return process.env.ADMIN_TOKEN || 'local-admin-token';
 }
 
-function normalizeOrderUpdate(body) {
+function normalizeOrderUpdate(body, existingOrder = {}) {
   const changes = {};
 
   if (body.customer !== undefined) {
@@ -751,6 +771,32 @@ function normalizeOrderUpdate(body) {
   }
   if (body.notes !== undefined) {
     changes.notes = String(body.notes || '').trim();
+  }
+  if (body.items !== undefined) {
+    const items = normalizeOrderItemsUpdate(body.items);
+    const subtotalCents = items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
+    const discountTotalCents = Math.min(
+      Math.max(0, Number(existingOrder.discountTotalCents || 0)),
+      subtotalCents
+    );
+    const shippingFeeCents = Math.max(0, Number(existingOrder.shippingFeeCents || 0));
+    const totalCents = subtotalCents - discountTotalCents + shippingFeeCents;
+
+    changes.items = items;
+    changes.subtotalCents = subtotalCents;
+    changes.discountTotalCents = discountTotalCents;
+    changes.totalCents = totalCents;
+    changes.cartSnapshot = items.map((item) => ({ ...item }));
+    changes.adminEditableTotals = {
+      ...(existingOrder.adminEditableTotals || {}),
+      subtotalCents,
+      discountTotalCents,
+      shippingFeeCents,
+      shippingRegion: existingOrder.shippingRegion || '',
+      shippingRegionLabel: existingOrder.shippingRegionLabel || '',
+      freeShippingUnlocked: Boolean(existingOrder.freeShippingUnlocked),
+      totalCents
+    };
   }
 
   return changes;
@@ -802,6 +848,39 @@ function normalizeOrderAddressUpdate(address) {
     country: String(address?.country || 'Philippines').trim(),
     postalCode: address?.postalCode ? String(address.postalCode).trim() : ''
   };
+}
+
+function normalizeOrderItemsUpdate(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    const error = new Error('At least one ordered item is required');
+    error.status = 400;
+    throw error;
+  }
+
+  return items.map((item) => {
+    const productName = String(item?.productName || '').trim();
+    const size = String(item?.size || '').trim();
+    const quantity = Number(item?.quantity);
+    const unitPriceCents = Number(item?.unitPriceCents);
+
+    if (!productName || !size || !Number.isInteger(quantity) || quantity <= 0 || !Number.isInteger(unitPriceCents) || unitPriceCents < 0) {
+      const error = new Error('Ordered item name, size, quantity, and unit price are required');
+      error.status = 400;
+      throw error;
+    }
+
+    return {
+      productId: String(item?.productId || '').trim(),
+      variantId: String(item?.variantId || '').trim(),
+      sku: String(item?.sku || '').trim(),
+      slug: String(item?.slug || '').trim(),
+      productName,
+      size,
+      imageUrl: String(item?.imageUrl || '').trim(),
+      unitPriceCents,
+      quantity
+    };
+  });
 }
 
 function normalizeTags(value) {
@@ -866,6 +945,70 @@ function orderSearchText(order) {
     order.customer?.phone,
     order.address?.addressLine
   ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function orderDateFilter(query) {
+  const range = String(query.dateRange || '').trim();
+  if (!range) return null;
+
+  const now = new Date();
+  const todayStart = startOfUtcDay(now);
+  const todayEnd = endOfUtcDay(now);
+
+  if (range === 'today') {
+    return { from: todayStart, to: todayEnd };
+  }
+
+  if (range === 'yesterday') {
+    const yesterday = new Date(todayStart);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    return { from: startOfUtcDay(yesterday), to: endOfUtcDay(yesterday) };
+  }
+
+  if (range === 'last_7_days') {
+    const from = new Date(todayStart);
+    from.setUTCDate(from.getUTCDate() - 6);
+    return { from, to: todayEnd };
+  }
+
+  if (range === 'last_30_days') {
+    const from = new Date(todayStart);
+    from.setUTCDate(from.getUTCDate() - 29);
+    return { from, to: todayEnd };
+  }
+
+  if (range === 'custom') {
+    const from = query.dateFrom ? startOfUtcDay(new Date(String(query.dateFrom))) : null;
+    const to = query.dateTo ? endOfUtcDay(new Date(String(query.dateTo))) : null;
+    return { from: validDateOrNull(from), to: validDateOrNull(to) };
+  }
+
+  return null;
+}
+
+function matchesOrderDateFilter(order, filter) {
+  if (!filter || (!filter.from && !filter.to)) return true;
+  const placedAt = new Date(order.placedAt || 0);
+  if (Number.isNaN(placedAt.getTime())) return false;
+  if (filter.from && placedAt < filter.from) return false;
+  if (filter.to && placedAt > filter.to) return false;
+  return true;
+}
+
+function startOfUtcDay(date) {
+  const copy = new Date(date);
+  copy.setUTCHours(0, 0, 0, 0);
+  return copy;
+}
+
+function endOfUtcDay(date) {
+  const copy = new Date(date);
+  copy.setUTCHours(23, 59, 59, 999);
+  return copy;
+}
+
+function validDateOrNull(date) {
+  return date && !Number.isNaN(date.getTime()) ? date : null;
 }
 
 

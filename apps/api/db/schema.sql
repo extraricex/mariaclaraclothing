@@ -105,3 +105,20 @@ CREATE TABLE IF NOT EXISTS discount_codes (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS cart_sessions (
+  session_id text PRIMARY KEY,
+  status text NOT NULL DEFAULT 'draft',
+  customer jsonb NOT NULL DEFAULT '{}'::jsonb,
+  address jsonb NOT NULL DEFAULT '{}'::jsonb,
+  items jsonb NOT NULL DEFAULT '[]'::jsonb,
+  item_count integer NOT NULL DEFAULT 0,
+  subtotal_cents integer NOT NULL DEFAULT 0,
+  checkout_started_at timestamptz,
+  converted_order_number text NOT NULL DEFAULT '',
+  last_activity_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS cart_sessions_status_idx ON cart_sessions(status);
+CREATE INDEX IF NOT EXISTS cart_sessions_last_activity_idx ON cart_sessions(last_activity_at DESC);

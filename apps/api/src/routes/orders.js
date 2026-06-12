@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { findOrderByNumber, saveOrder } = require('../orders/orderRepository');
+const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
 const {
   computeDiscountCents,
   discountValidationError,
@@ -43,6 +44,7 @@ router.post('/', async (req, res, next) => {
       placedAt: new Date().toISOString()
     };
     await saveOrder(persistedOrder);
+    await markCartSessionConverted(req.body?.cartSessionId, orderNumber);
 
     if (persistedOrder.discountCode) {
       await incrementDiscountUsage(persistedOrder.discountCode);
