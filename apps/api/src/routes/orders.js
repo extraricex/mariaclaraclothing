@@ -2,6 +2,12 @@ const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { findOrderByNumber, saveOrder } = require('../orders/orderRepository');
+const {
+  computeDiscountCents,
+  discountValidationError,
+  findDiscountByCode,
+  incrementDiscountUsage
+} = require('../discounts/discountRepository');
 
 const router = express.Router();
 
@@ -37,6 +43,10 @@ router.post('/', async (req, res, next) => {
       placedAt: new Date().toISOString()
     };
     await saveOrder(persistedOrder);
+
+    if (persistedOrder.discountCode) {
+      await incrementDiscountUsage(persistedOrder.discountCode);
+    }
 
     res.status(201).json({
       orderNumber,
@@ -77,6 +87,7 @@ function orderConfirmationPayload(order) {
     address: order.address,
     items: order.items,
     subtotalCents: order.subtotalCents,
+    discountCode: order.discountCode || '',
     discountTotalCents: order.discountTotalCents,
     cartSnapshot: order.cartSnapshot,
     checkoutChannel: order.checkoutChannel,
@@ -113,7 +124,7 @@ async function normalizeCheckout(body) {
 
   const items = await Promise.all(body.items.map(normalizeCheckoutItem));
   const subtotalCents = items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
-  const discountTotalCents = Math.max(0, Number(body.discountTotalCents || 0));
+  const { discountCode, discountTotalCents } = await resolveCheckoutDiscount(body, subtotalCents);
   const shippingFeeCents = Math.max(0, Number(body.shippingFeeCents || 0));
   const totalCents = subtotalCents - discountTotalCents + shippingFeeCents;
   const checkoutChannel = ['storefront_cart', 'storefront_checkout'].includes(body.checkoutChannel)
@@ -142,6 +153,7 @@ async function normalizeCheckout(body) {
     },
     items,
     subtotalCents,
+    discountCode,
     discountTotalCents,
     shippingFeeCents,
     shippingRegion,
@@ -164,6 +176,29 @@ async function normalizeCheckout(body) {
     status: 'received',
     fulfillmentStatus: 'unfulfilled',
     paymentStatus: 'cod_pending'
+  };
+}
+
+async function resolveCheckoutDiscount(body, subtotalCents) {
+  const code = String(body.discountCode || '').trim();
+
+  if (!code) {
+    // No code: keep legacy behavior (client-sent value, admin-editable totals).
+    return { discountCode: '', discountTotalCents: Math.max(0, Number(body.discountTotalCents || 0)) };
+  }
+
+  const discount = await findDiscountByCode(code);
+  const validationError = discountValidationError(discount, subtotalCents);
+
+  if (validationError) {
+    const error = new Error(validationError);
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    discountCode: discount.code,
+    discountTotalCents: computeDiscountCents(discount, subtotalCents)
   };
 }
 

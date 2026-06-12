@@ -4,6 +4,14 @@ const path = require('node:path');
 const multer = require('multer');
 const { findOrderByNumber, listOrders, updateOrder } = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
+const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
+const {
+  deleteDiscount,
+  findDiscountByCode,
+  listDiscounts,
+  normalizeDiscountCode,
+  saveDiscount
+} = require('../discounts/discountRepository');
 const {
   appendHomepageBanners,
   getSiteContent,
@@ -810,5 +818,103 @@ function orderSearchText(order) {
     order.address?.addressLine
   ].filter(Boolean).join(' ').toLowerCase();
 }
+
+
+router.get('/customers', async (req, res, next) => {
+  try {
+    const orders = await listOrders();
+    const q = String(req.query.q || '').trim().toLowerCase();
+    let customers = aggregateCustomers(orders);
+
+    if (q) {
+      customers = customers.filter((customer) =>
+        customer.fullName.toLowerCase().includes(q) ||
+        customer.phone.toLowerCase().includes(q) ||
+        customer.email.toLowerCase().includes(q));
+    }
+
+    return res.json({ customers });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/customers/:phone', async (req, res, next) => {
+  try {
+    const orders = await listOrders();
+    const customerOrders = findCustomerOrders(orders, req.params.phone);
+
+    if (!customerOrders.length) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    const customer = aggregateCustomers(customerOrders)[0];
+    return res.json({ customer, orders: customerOrders.map(orderSummary) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/discounts', async (_req, res, next) => {
+  try {
+    const discounts = await listDiscounts();
+    return res.json({ discounts });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/discounts', async (req, res, next) => {
+  try {
+    const code = normalizeDiscountCode(req.body?.code);
+    const existing = await findDiscountByCode(code);
+
+    if (existing) {
+      const error = new Error('Discount code already exists');
+      error.status = 400;
+      throw error;
+    }
+
+    const discount = await saveDiscount({ ...req.body, code, usageCount: 0 });
+    return res.status(201).json({ discount });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch('/discounts/:code', async (req, res, next) => {
+  try {
+    const existing = await findDiscountByCode(req.params.code);
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Discount not found' });
+    }
+
+    const discount = await saveDiscount({
+      ...existing,
+      ...req.body,
+      code: existing.code,
+      usageCount: existing.usageCount,
+      createdAt: existing.createdAt
+    });
+    return res.json({ discount });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete('/discounts/:code', async (req, res, next) => {
+  try {
+    const discount = await deleteDiscount(req.params.code);
+
+    if (!discount) {
+      return res.status(404).json({ error: 'Discount not found' });
+    }
+
+    return res.json({ discount });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 module.exports = { adminRouter: router };

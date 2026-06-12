@@ -2,20 +2,18 @@
   "area": "discounts",
   "managedFields": [
     "code",
-    "name",
     "type",
     "value",
-    "startsAt",
+    "status",
     "endsAt",
     "usageLimit",
-    "minimumSubtotalCents",
-    "eligibleCollections"
+    "usageCount",
+    "minimumSubtotalCents"
   ],
   "futureAdminActions": [
-    "create promo code",
-    "edit discount",
-    "disable discount",
-    "configure free shipping",
-    "review usage"
+    "configure free shipping promos",
+    "eligible collections targeting",
+    "scheduled start dates (startsAt)",
+    "per-customer usage limits"
   ]
 }

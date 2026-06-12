@@ -3,12 +3,12 @@ const WORKING_NOW = [
   'Order review, status management, and J&T Excel export',
   'Product editor with variants, pricing, and image manager',
   'Storefront collections manager',
-  'Homepage banner editor'
+  'Homepage banner editor',
+  'Customer profiles with COD trust history',
+  'Discount codes (server-validated at checkout)'
 ];
 
 const COMING_NEXT = [
-  'Customer profiles (repeat-buyer history for COD trust)',
-  'Discount rules and promo codes',
   'Shipping settings editor (fees and regions)',
   'Order status SMS notifications',
   'Inventory movement history'

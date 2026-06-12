@@ -30,6 +30,7 @@ export default function OrderDetail() {
   const [cities, setCities] = useState([]);
   const [barangays, setBarangays] = useState([]);
   const [addressDraft, setAddressDraft] = useState({ house: '', provinceCode: '', cityCode: '', barangayCode: '' });
+  const [history, setHistory] = useState(null);
 
   useEffect(() => {
     adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}`)
@@ -47,6 +48,14 @@ export default function OrderDetail() {
       })
       .catch((err) => setMessage(err.message));
   }, [orderNumber]);
+
+  useEffect(() => {
+    const phone = order?.customer?.phone;
+    if (!phone) return;
+    adminJson(`/api/admin/customers/${encodeURIComponent(phone)}`)
+      .then((body) => setHistory(body.customer))
+      .catch(() => setHistory(null));
+  }, [order?.customer?.phone]);
 
   useEffect(() => {
     if (editAddress && !provinces.length) loadProvinces().then(setProvinces);
@@ -139,6 +148,18 @@ export default function OrderDetail() {
             <p className="mt-3 text-sm font-semibold">{order.customer?.fullName}</p>
             <p className="text-sm text-ink-soft">{order.customer?.phone}</p>
             {order.customer?.email && <p className="text-sm text-ink-soft">{order.customer.email}</p>}
+            {history && (
+              <p className={`mt-2 inline-block px-2 py-1 text-xs font-semibold ${
+                history.cancelledCount === 0 && history.unreachableCount === 0 && history.deliveredCount > 0
+                  ? 'bg-[#2f7d32]/10 text-[#2f7d32]'
+                  : history.cancelledCount > 0 || history.unreachableCount > 0
+                    ? 'bg-[#b8860b]/10 text-[#8a6508]'
+                    : 'bg-cream text-ink-soft'
+              }`}>
+                COD history: {history.ordersCount} order{history.ordersCount === 1 ? '' : 's'} ·{' '}
+                {history.deliveredCount} delivered · {history.cancelledCount} cancelled · {history.unreachableCount} unreachable
+              </p>
+            )}
             <div className="mt-4 border-t border-line pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Shipping address</h3>

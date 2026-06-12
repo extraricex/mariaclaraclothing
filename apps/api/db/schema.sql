@@ -90,3 +90,18 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS jnt_exported_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS orders_placed_at_idx ON orders(placed_at DESC);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code text NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS discount_codes (
+  code text PRIMARY KEY,
+  type text NOT NULL DEFAULT 'percentage',
+  value integer NOT NULL CHECK (value >= 0),
+  status text NOT NULL DEFAULT 'active',
+  ends_at timestamptz,
+  usage_limit integer,
+  usage_count integer NOT NULL DEFAULT 0,
+  minimum_subtotal_cents integer,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);

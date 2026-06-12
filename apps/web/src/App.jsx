@@ -14,6 +14,8 @@ import OrderDetail from './admin/OrderDetail.jsx';
 import Products from './admin/Products.jsx';
 import ProductEditor from './admin/ProductEditor.jsx';
 import Collections from './admin/Collections.jsx';
+import Customers from './admin/Customers.jsx';
+import Discounts from './admin/Discounts.jsx';
 import Banners from './admin/Banners.jsx';
 import Settings from './admin/Settings.jsx';
 
@@ -38,6 +40,8 @@ export default function App() {
         <Route path="products" element={<Products />} />
         <Route path="products/:slug" element={<ProductEditor />} />
         <Route path="collections" element={<Collections />} />
+        <Route path="customers" element={<Customers />} />
+        <Route path="discounts" element={<Discounts />} />
         <Route path="banners" element={<Banners />} />
         <Route path="settings" element={<Settings />} />
       </Route>

@@ -25,7 +25,8 @@
     "adminEditableTotals",
     "status",
     "notes",
-    "tags"
+    "tags",
+    "discountCode"
   ],
   "futureAdminActions": [
     "view order",

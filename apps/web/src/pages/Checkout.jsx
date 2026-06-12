@@ -13,17 +13,18 @@ import {
   regionLabel
 } from '../lib/addressGuide.js';
 
-function checkoutTotals(items, region) {
+function checkoutTotals(items, region, discountTotalCents = 0) {
   const subtotal = subtotalCents(items);
   const freeShippingUnlocked = cartQuantity(items) >= 2;
   const shippingFeeCents = items.length && !freeShippingUnlocked && region !== 'pending_address'
     ? feeForRegion(region)
     : 0;
+  const discount = Math.min(discountTotalCents, subtotal);
   return {
     subtotalCents: subtotal,
     shippingFeeCents,
-    discountTotalCents: 0,
-    totalCents: subtotal + shippingFeeCents,
+    discountTotalCents: discount,
+    totalCents: subtotal - discount + shippingFeeCents,
     shippingRegion: region,
     shippingRegionLabel: regionLabel(region),
     freeShippingUnlocked
@@ -74,6 +75,9 @@ export default function Checkout() {
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState({ tone: 'neutral', message: '' });
   const [pending, setPending] = useState(false);
+  const [discountInput, setDiscountInput] = useState('');
+  const [discount, setDiscount] = useState(null);
+  const [discountError, setDiscountError] = useState('');
 
   useEffect(() => {
     loadProvinces().then(setProvinces);
@@ -98,8 +102,31 @@ export default function Checkout() {
   const barangay = barangays.find((item) => item.code === barangayCode) || null;
   const addressReady = Boolean(house.trim() && provinceCode && cityCode && barangayCode);
   const region = addressReady ? regionForProvince(province) : 'pending_address';
-  const totals = useMemo(() => checkoutTotals(items, region), [items, region]);
+  const discountCents = discount?.discountTotalCents || 0;
+  const totals = useMemo(() => checkoutTotals(items, region, discountCents), [items, region, discountCents]);
   const doorToDoorWarning = Boolean(barangay) && String(barangay.doorToDoor || '').toUpperCase() !== 'YES';
+
+  async function applyDiscount() {
+    const code = discountInput.trim();
+    setDiscountError('');
+    if (!code) {
+      setDiscount(null);
+      return;
+    }
+    try {
+      const response = await fetch('/api/discounts/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, subtotalCents: subtotalCents(items) })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Discount code is invalid');
+      setDiscount(body.discount);
+    } catch (error) {
+      setDiscount(null);
+      setDiscountError(error.message);
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -120,7 +147,7 @@ export default function Checkout() {
     setStatus({ tone: 'neutral', message: 'Placing your order...' });
     setPending(true);
 
-    const submitTotals = checkoutTotals(items, regionForProvince(province));
+    const submitTotals = checkoutTotals(items, regionForProvince(province), discountCents);
     const addressLine = `${house.trim()}, ${barangay.name}, ${city.name}, ${province.name}, Philippines`;
     const payload = {
       customer: { fullName: fullName.trim(), phone: phone.trim(), email: email.trim() },
@@ -137,6 +164,7 @@ export default function Checkout() {
       shippingRegionLabel: submitTotals.shippingRegionLabel,
       freeShippingUnlocked: submitTotals.freeShippingUnlocked,
       shippingFeeCents: submitTotals.shippingFeeCents,
+      discountCode: discount?.code || '',
       discountTotalCents: submitTotals.discountTotalCents,
       notes: notes.trim(),
       items,
@@ -251,8 +279,29 @@ export default function Checkout() {
                   </article>
                 ))}
               </div>
-              <dl className="mt-8 space-y-2 border-t border-line pt-4 text-sm">
+              <div className="mt-8 border-t border-line pt-4">
+                <div className="flex gap-2">
+                  <input
+                    className="field flex-1 uppercase"
+                    placeholder="Discount code"
+                    value={discountInput}
+                    onChange={(e) => setDiscountInput(e.target.value)}
+                  />
+                  <button type="button" className="btn-ghost !px-4" onClick={applyDiscount}>Apply</button>
+                </div>
+                {discountError && <p className="mt-2 text-xs text-accent-deep" role="alert">{discountError}</p>}
+                {discount && (
+                  <p className="mt-2 text-xs text-[#2f7d32]">
+                    Code {discount.code} applied — you save {formatMoney(discount.discountTotalCents)}.{' '}
+                    <button type="button" className="underline" onClick={() => { setDiscount(null); setDiscountInput(''); }}>Remove</button>
+                  </p>
+                )}
+              </div>
+              <dl className="mt-4 space-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(totals.subtotalCents)}</dd></div>
+                {totals.discountTotalCents > 0 && (
+                  <div className="flex justify-between text-[#2f7d32]"><dt>Discount{discount ? ` (${discount.code})` : ''}</dt><dd>−{formatMoney(totals.discountTotalCents)}</dd></div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-ink-soft">Shipping</dt>
                   <dd>{addressReady ? (totals.shippingFeeCents ? formatMoney(totals.shippingFeeCents) : 'Free') : 'Calculated after address'}</dd>

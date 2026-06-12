@@ -27,13 +27,13 @@ each and I'll act on the approved ones.
 
 ## High value, medium effort
 
-6. **Real customer records.** `src/customers/` is a placeholder. Derive customers from
+6. ✅ **(IMPLEMENTED 2026-06-12)** **Real customer records.** `src/customers/` is a placeholder. Derive customers from
    orders (phone as natural key), show repeat-buyer history in admin order detail —
    COD trust scoring ("3 delivered, 0 refused") changes how you confirm orders.
 7. **Inventory movements ledger.** Stock is a mutable integer today. An
    `inventory_movements` table (order placed, cancelled, manual adjustment, restock)
    gives you auditability and makes the Grafana low-stock panel trustworthy.
-8. **Discount codes.** `src/discounts/` placeholder + admin contract already exist.
+8. ✅ **(IMPLEMENTED 2026-06-12)** **Discount codes.** `src/discounts/` placeholder + admin contract already exist.
    Percentage/fixed codes with expiry and usage caps, validated server-side at
    checkout. Pairs with Meta ads (`MARIA10` etc.).
 9. **E2E tests with Playwright.** It's already a devDependency. A 6-scenario suite
