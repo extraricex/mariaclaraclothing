@@ -105,3 +105,17 @@ CREATE TABLE IF NOT EXISTS discount_codes (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_account_id text NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS customer_accounts (
+  id text PRIMARY KEY,
+  email text NOT NULL UNIQUE,
+  password_hash text NOT NULL,
+  password_salt text NOT NULL,
+  full_name text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  saved_address jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);

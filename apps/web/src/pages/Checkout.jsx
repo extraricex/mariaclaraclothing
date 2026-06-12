@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createOrder } from '../lib/api.js';
+import { customerJson, getCustomerToken, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { cartQuantity, clearCart, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import {
@@ -78,10 +79,35 @@ export default function Checkout() {
   const [discountInput, setDiscountInput] = useState('');
   const [discount, setDiscount] = useState(null);
   const [discountError, setDiscountError] = useState('');
+  const loggedIn = useCustomerLoggedIn();
+  const [prefillAddress, setPrefillAddress] = useState(null);
+  const [saveAddress, setSaveAddress] = useState(true);
 
   useEffect(() => {
     loadProvinces().then(setProvinces);
   }, []);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    customerJson('/api/customer/me')
+      .then(({ customer }) => {
+        setFullName((value) => value || customer.fullName);
+        setPhone((value) => value || customer.phone);
+        setEmail((value) => value || customer.email);
+        if (customer.savedAddress) {
+          setHouse((value) => value || customer.savedAddress.houseAddress);
+          setPrefillAddress(customer.savedAddress);
+        }
+      })
+      .catch(() => {});
+  }, [loggedIn]);
+
+  // cascade the saved address through the dependent selects as each level loads
+  useEffect(() => {
+    if (!prefillAddress || !provinces.length) return;
+    const match = provinces.find((item) => item.name === String(prefillAddress.province).toUpperCase());
+    if (match) setProvinceCode(match.code);
+  }, [prefillAddress, provinces]);
 
   useEffect(() => {
     setCities([]);
@@ -92,10 +118,25 @@ export default function Checkout() {
   }, [provinceCode]);
 
   useEffect(() => {
+    if (!prefillAddress || !cities.length) return;
+    const match = cities.find((item) => item.name === String(prefillAddress.city).toUpperCase());
+    if (match) setCityCode(match.code);
+  }, [prefillAddress, cities]);
+
+  useEffect(() => {
     setBarangays([]);
     setBarangayCode('');
     if (cityCode) loadBarangays(cityCode).then(setBarangays);
   }, [cityCode]);
+
+  useEffect(() => {
+    if (!prefillAddress || !barangays.length) return;
+    const match = barangays.find((item) => item.name === String(prefillAddress.barangay).toUpperCase());
+    if (match) {
+      setBarangayCode(match.code);
+      setPrefillAddress(null);
+    }
+  }, [prefillAddress, barangays]);
 
   const province = provinces.find((item) => item.code === provinceCode) || null;
   const city = cities.find((item) => item.code === cityCode) || null;
@@ -172,7 +213,20 @@ export default function Checkout() {
     };
 
     try {
-      const result = await createOrder(payload);
+      const token = loggedIn ? getCustomerToken() : '';
+      const result = await createOrder(payload, token ? { Authorization: `Bearer ${token}` } : {});
+      if (loggedIn && saveAddress) {
+        customerJson('/api/customer/me', {
+          method: 'PUT',
+          body: JSON.stringify({ savedAddress: {
+            houseAddress: payload.address.houseAddress,
+            barangay: payload.address.barangay,
+            city: payload.address.city,
+            province: payload.address.province,
+            postalCode: ''
+          } })
+        }).catch(() => {});
+      }
       sessionStorage.setItem('maria-clara-last-order', JSON.stringify({
         orderNumber: result.orderNumber,
         customerName: payload.customer.fullName,
@@ -205,6 +259,12 @@ export default function Checkout() {
         <form onSubmit={handleSubmit} noValidate={false}>
           <p className="eyebrow">Checkout · Cash on Delivery</p>
           <h1 className="display mt-2 text-3xl sm:text-4xl">Where do we send it?</h1>
+          {!loggedIn && (
+            <p className="mt-3 text-sm text-ink-soft">
+              <Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to
+              prefill your saved address — or continue as guest below.
+            </p>
+          )}
 
           <fieldset className="mt-8 space-y-4">
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
@@ -234,6 +294,12 @@ export default function Checkout() {
               </p>
             )}
             <textarea className="field" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            {loggedIn && (
+              <label className="flex items-center gap-2 text-sm text-ink-soft">
+                <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} />
+                Save this address to my account
+              </label>
+            )}
           </fieldset>
 
           <p className="mt-6 text-sm text-ink-soft">{addressReady ? deliveryEstimate(region) : 'Complete your address to see estimated delivery time.'}</p>
