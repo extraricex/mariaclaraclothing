@@ -124,6 +124,58 @@ function writeEditableProducts(products, filePath = activeProductsPath()) {
   fs.writeFileSync(filePath, `${JSON.stringify(products, null, 2)}\n`);
 }
 
+function deductionSoldOutError(item) {
+  const error = new Error(`${item.size} is sold out for ${item.productName || item.slug}`);
+  error.status = 409;
+  return error;
+}
+
+function deductVariantStock(items) {
+  const deductions = (Array.isArray(items) ? items : []).map((item) => ({
+    slug: String(item.slug || '').trim(),
+    size: String(item.size || '').trim(),
+    quantity: Number(item.quantity),
+    productName: String(item.productName || '').trim()
+  }));
+
+  if (usePostgresProducts()) {
+    return deductPostgresVariantStock(deductions);
+  }
+  return deductJsonVariantStock(deductions);
+}
+
+function deductJsonVariantStock(items) {
+  const products = loadEditableProducts();
+  const targets = items.map((item) => {
+    const product = products.find((candidate) => candidate.slug === item.slug);
+    const variant = product?.variants.find((candidate) => candidate.size === item.size);
+    if (!variant || Number(variant.stockQuantity) < item.quantity) {
+      throw deductionSoldOutError(item);
+    }
+    return variant;
+  });
+  targets.forEach((variant, index) => {
+    variant.stockQuantity = Number(variant.stockQuantity) - items[index].quantity;
+  });
+  writeEditableProducts(products);
+}
+
+function deductPostgresVariantStock(items) {
+  return transaction(async (client) => {
+    for (const item of items) {
+      const result = await client.query(
+        `UPDATE product_variants
+            SET stock_quantity = stock_quantity - $1
+          WHERE product_slug = $2 AND size = $3 AND stock_quantity >= $1`,
+        [item.quantity, item.slug, item.size]
+      );
+      if (result.rowCount === 0) {
+        throw deductionSoldOutError(item);
+      }
+    }
+  });
+}
+
 function isPromise(value) {
   return value && typeof value.then === 'function';
 }
@@ -575,6 +627,7 @@ function requireNonNegativeNumber(value, field) {
 module.exports = {
   catalogProducts,
   editableProducts,
+  deductVariantStock,
   deleteEditableProduct,
   findCatalogProductBySlug,
   findEditableProductBySlug,
