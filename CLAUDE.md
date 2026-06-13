@@ -189,7 +189,8 @@ src/                      Backend (CommonJS, require/module.exports)
     catalogPresenter.js   Maps repository records → storefront product shape (adds ids, etc).
     catalogSeed.js        (empty placeholder file)
   orders/orderRepository.js   Order persistence (JSON file OR Postgres).
-  siteContent/siteContentRepository.js   Homepage banners (JSON file only — no Postgres table).
+  siteContent/siteContentRepository.js   Homepage banners + logo (dual: JSON file or the
+                          store_settings 'siteContent' key when DATABASE_URL is set).
   jnt/jntExport.js        Builds the J&T Excel workbook from orders; validates required fields.
   admin/ analytics/ customers/ discounts/ marketing/ settings/
                           README-only placeholder modules. Tests REQUIRE these READMEs and the
@@ -275,8 +276,9 @@ Key boundary rules:
 
 ## Persistence: the dual JSON/PostgreSQL pattern
 
-This is the most important backend pattern. Three stores follow it (products, orders) or a
-JSON-only variant (site content):
+This is the most important backend pattern. Three stores follow it (products, orders, and
+site content — the last reusing the `store_settings` key/value table rather than a dedicated
+one):
 
 ```js
 // products (src/products/catalogRepository.js)
@@ -319,9 +321,12 @@ Rules:
      required (tests set it at the top of the file or use `createFreshApp()` cache-busting).
    - Prefer `listEditableProducts()` / `listCatalogProducts()` over the static snapshot exports
      in new code.
-6. **Site content is JSON-only** (`data/site-content.json`, override `SITE_CONTENT_FILE`).
-   There is no `site_content` table; if it ever moves to Postgres, follow the products/orders
-   pattern.
+6. **Site content is dual-persistence too**, but reuses the generic `store_settings`
+   key/value table instead of a dedicated table. `siteContentRepository.js` reads/writes the
+   row keyed `siteContent` when `DATABASE_URL` is set, and falls back to
+   `data/site-content.json` (override `SITE_CONTENT_FILE`) otherwise — same
+   `usePostgresSiteContent()` switch as products/orders. An absent Postgres key resolves to
+   `defaultSiteContent()` (logo + two default banners). There is **no** `site_content` table.
 
 `db/schema.sql` is **idempotent** — `CREATE TABLE IF NOT EXISTS` plus `ALTER TABLE ... ADD COLUMN
 IF NOT EXISTS` for columns added later. When adding a column: add it to the `CREATE TABLE` *and*
@@ -507,7 +512,7 @@ Order record shape: see `normalizeCheckout` in `src/routes/orders.js` plus admin
 
 | Export | Notes |
 |---|---|
-| `getSiteContent()` | `{ homepageBanners: [{ url, altText, sortOrder }] }`; falls back to two `/brand/` hero defaults when the file is missing. |
+| `getSiteContent()` | `{ logo, homepageBanners: [{ url, altText, sortOrder }] }`; falls back to `defaultSiteContent()` (logo + two `/brand/` hero defaults) when the file/Postgres key is missing. Returns a Promise in Postgres mode (callers `await`). |
 | `updateHomepageBanners(banners)` | Replaces the list (normalized, re-sorted, sortOrder reindexed 0..n). |
 | `appendHomepageBanners(banners)` | Append (used by upload endpoint). |
 | `saveSiteContent(content)` / `normalizeBanners(banners)` | Lower-level helpers. |
@@ -653,7 +658,7 @@ Order record shape: see `normalizeCheckout` in `src/routes/orders.js` plus admin
 | `META_PIXEL_ID` | no | — | **Not read by server code.** The pixel id is set client-side in `public/js/meta-pixel-config.js` (`window.MARIA_CLARA_META_PIXEL_ID = ''`) or `<html data-meta-pixel-id>`. See `docs/meta-pixel-setup.md`. |
 | `PRODUCTS_DATA_FILE` | tests | `data/products.json` | Forces JSON product store at this path (disables PG for products). |
 | `ORDERS_DATA_FILE` | tests | `data/orders.json` | Same for orders. |
-| `SITE_CONTENT_FILE` | tests | `data/site-content.json` | Same for site content. |
+| `SITE_CONTENT_FILE` | tests | `data/site-content.json` | Forces JSON site-content store at this path (disables PG for site content; otherwise stored in the `store_settings` `siteContent` key). |
 | `PRODUCT_UPLOAD_DIR` | tests | `public/uploads/products` | Multer destination for product images. |
 | `BANNER_UPLOAD_DIR` | tests | `public/uploads/banners` | Multer destination for banner images. |
 | `JNT_DEFAULT_EXPRESS_TYPE` | no | `EZ` | Express Type column in J&T export. |
