@@ -1,0 +1,47 @@
+name: CI
+
+# Runs the test suites and web build on every PR and on pushes to main.
+# To also validate branch pushes that don't yet have a PR, add the branch
+# (or `'**'`) under `push.branches`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs for the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Empty DATABASE_URL / ADMIN_TOKEN force the JSON persistence mode and the
+      # default admin token the api tests expect, regardless of any environment.
+      - name: API tests
+        run: npm test
+        env:
+          DATABASE_URL: ''
+          ADMIN_TOKEN: ''
+
+      - name: Web tests
+        run: node --test apps/web/test/*.test.js
+
+      - name: Web build
+        run: npm run build:web
