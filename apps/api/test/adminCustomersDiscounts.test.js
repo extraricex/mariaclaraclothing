@@ -4,6 +4,19 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 
+// Isolate the catalog so order-creation stock deduction never mutates the committed fixture.
+const nodeFsForProducts = require('node:fs');
+const nodeOsForProducts = require('node:os');
+const nodePathForProducts = require('node:path');
+process.env.PRODUCTS_DATA_FILE = nodePathForProducts.join(
+  nodeFsForProducts.mkdtempSync(nodePathForProducts.join(nodeOsForProducts.tmpdir(), 'mc-products-')),
+  'products.json'
+);
+nodeFsForProducts.copyFileSync(
+  nodePathForProducts.join(__dirname, '..', 'data', 'products.json'),
+  process.env.PRODUCTS_DATA_FILE
+);
+
 const ADMIN_TOKEN = 'local-admin-token';
 
 function restoreEnv(name, value) {
