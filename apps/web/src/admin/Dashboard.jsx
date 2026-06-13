@@ -377,18 +377,18 @@ export default function Dashboard() {
                 <li key={product.slug}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-4 py-2.5 text-left text-sm hover:bg-cream/60"
+                    className="flex w-full items-center gap-4 py-2.5 text-left text-sm hover:bg-cream/60"
                     onClick={() => navigate(`/admin/products/${encodeURIComponent(product.slug)}`)}
                   >
-                    <span>
+                    <span className="min-w-0 flex-1">
                       <strong className="block">{product.name}</strong>
                       <small className="text-clay">{product.category || product.collections?.[0] || 'Uncategorized'}</small>
                     </span>
-                    <span className="text-right">
+                    <span className="w-28 shrink-0 text-right">
                       <strong className="block">{Number(product.inventoryQuantity || 0)} in stock</strong>
                       <small className="text-clay">{product.status || 'draft'}</small>
                     </span>
-                    <span className={`px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                    <span className={`w-28 shrink-0 text-center px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
                       product.stockStatus === 'sold_out' || Number(product.inventoryQuantity || 0) <= 0
                         ? 'bg-[#c01818]/10 text-[#c01818]'
                         : product.stockStatus === 'low_stock'
