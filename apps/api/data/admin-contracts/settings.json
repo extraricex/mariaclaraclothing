@@ -15,13 +15,13 @@
     "infoPages",
     "seoDefaults",
     "maintenanceMode",
+    "lowStockThreshold",
     "policyLinks"
   ],
   "futureAdminActions": [
     "configure notifications",
     "edit message templates",
     "configure checkout settings",
-    "configure inventory settings",
     "configure export settings"
   ]
 }
