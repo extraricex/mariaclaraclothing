@@ -50,6 +50,7 @@ router.post('/', async (req, res, next) => {
     };
     await deductVariantStock(order.items.map((item) => ({
       slug: String(item.productId).replace(/^catalog-/, ''),
+      sku: item.sku,
       size: item.size,
       quantity: item.quantity,
       productName: item.productName
@@ -248,6 +249,7 @@ async function normalizeCheckoutItem(item) {
     variantId: variant.id,
     productName: product.name,
     size: variant.size,
+    sku: variant.sku,
     quantity,
     unitPriceCents: product.priceCents
   };

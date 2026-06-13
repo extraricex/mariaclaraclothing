@@ -131,8 +131,12 @@ function deductionSoldOutError(item) {
 }
 
 function deductVariantStock(items) {
+  // Match on sku (stored verbatim and unique), NOT size: the storefront/presenter
+  // abbreviates size (Large -> l) while product_variants.size keeps the full label, so
+  // size cannot be matched against the stored row. `size` is kept only for the error copy.
   const deductions = (Array.isArray(items) ? items : []).map((item) => ({
     slug: String(item.slug || '').trim(),
+    sku: String(item.sku || '').trim(),
     size: String(item.size || '').trim(),
     quantity: Number(item.quantity),
     productName: String(item.productName || '').trim()
@@ -148,7 +152,7 @@ function deductJsonVariantStock(items) {
   const products = loadEditableProducts();
   const targets = items.map((item) => {
     const product = products.find((candidate) => candidate.slug === item.slug);
-    const variant = product?.variants.find((candidate) => candidate.size === item.size);
+    const variant = product?.variants.find((candidate) => candidate.sku === item.sku);
     if (!variant || Number(variant.stockQuantity) < item.quantity) {
       throw deductionSoldOutError(item);
     }
@@ -166,8 +170,8 @@ function deductPostgresVariantStock(items) {
       const result = await client.query(
         `UPDATE product_variants
             SET stock_quantity = stock_quantity - $1
-          WHERE product_slug = $2 AND size = $3 AND stock_quantity >= $1`,
-        [item.quantity, item.slug, item.size]
+          WHERE sku = $2 AND stock_quantity >= $1`,
+        [item.quantity, item.sku]
       );
       if (result.rowCount === 0) {
         throw deductionSoldOutError(item);
