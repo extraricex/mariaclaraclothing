@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { cartQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { fetchSiteContent } from '../lib/api.js';
-import { loadStorefrontSettings } from '../lib/storeSettings.js';
+import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -19,8 +19,8 @@ const NAV_LINKS = [
   { to: '/terms', label: 'Terms' }
 ];
 
-function Ticker() {
-  const sequence = [...TICKER_ITEMS, ...TICKER_ITEMS, ...TICKER_ITEMS];
+function Ticker({ items }) {
+  const sequence = [...items, ...items, ...items];
   return (
     <div className="overflow-hidden bg-ink py-2 text-paper">
       <div className="ticker-track flex w-max gap-10">
@@ -65,6 +65,10 @@ export default function Shell() {
     loadStorefrontSettings().then(setStoreInfo);
   }, []);
 
+  useEffect(() => {
+    applySeoTags(storeInfo?.seo);
+  }, [storeInfo]);
+
   const logoMarkup = logo?.url ? (
     <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing'} className="h-[65px] max-w-[205px] object-contain lg:h-[73px] lg:max-w-[230px]" />
   ) : (
@@ -75,7 +79,7 @@ export default function Shell() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <Ticker />
+      <Ticker items={storeInfo?.ticker || TICKER_ITEMS} />
       <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 lg:px-8">
           <button

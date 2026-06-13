@@ -40,3 +40,20 @@ test('storefront footer shows contact info from store settings', async () => {
   assert.match(source, /contactNumber/);
   assert.match(source, /socialLinks/);
 });
+
+test('store settings lib carries website defaults and an SEO applier', async () => {
+  const source = await readFile(path.join(root, 'lib', 'storeSettings.js'), 'utf8');
+
+  assert.match(source, /ticker:/);
+  assert.match(source, /DEFAULT_INFO_PAGES/);
+  assert.match(source, /maintenanceMode: false/);
+  assert.match(source, /export function applySeoTags/);
+});
+
+test('shell renders the ticker and SEO tags from settings', async () => {
+  const source = await readFile(path.join(root, 'components', 'Shell.jsx'), 'utf8');
+
+  assert.match(source, /applySeoTags/);
+  assert.match(source, /storeInfo\?\.ticker/);
+  assert.match(source, /function Ticker\(\{ items \}\)/);
+});
