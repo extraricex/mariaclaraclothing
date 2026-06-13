@@ -266,3 +266,36 @@ test('website settings flow through the admin and public endpoints', async () =>
     assert.ok(publicBody.settings.infoPages.faq[0].heading);
   });
 });
+
+test('low stock threshold drives product summaries and product settings', async () => {
+  await withSettingsServer(async (port) => {
+    const beforeResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products`, adminRequest());
+    const before = await beforeResponse.json();
+
+    const putResponse = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/inventory`,
+      adminRequest('PUT', { lowStockThreshold: 999 })
+    );
+    assert.equal(putResponse.status, 200);
+    assert.equal((await putResponse.json()).settings.inventory.lowStockThreshold, 999);
+
+    const productSettings = await (await fetch(`http://127.0.0.1:${port}/api/admin/products/settings`, adminRequest())).json();
+    assert.equal(productSettings.settings.lowStockThreshold, 999);
+
+    const after = await (await fetch(`http://127.0.0.1:${port}/api/admin/products`, adminRequest())).json();
+    assert.ok(after.summary.lowStock > before.summary.lowStock);
+    assert.equal(after.summary.lowStock + after.summary.soldOut, after.summary.total);
+    assert.ok(after.products.every((product) =>
+      product.inventoryQuantity === 0 ? product.stockStatus === 'sold_out' : product.stockStatus === 'low_stock'));
+
+    const publicBody = await (await fetch(`http://127.0.0.1:${port}/api/storefront-settings`)).json();
+    assert.equal(publicBody.settings.inventory.lowStockThreshold, 999);
+
+    const badPut = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/inventory`,
+      adminRequest('PUT', { lowStockThreshold: 0 })
+    );
+    assert.equal(badPut.status, 400);
+    assert.equal((await badPut.json()).error, 'Low stock threshold must be an integer between 1 and 999.');
+  });
+});

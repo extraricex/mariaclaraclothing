@@ -253,22 +253,28 @@ router.post('/products/import', async (req, res, next) => {
     }
 
     const products = await replaceEditableProducts(incomingProducts);
-    return res.json({ products, summary: productSummary(products) });
+    return res.json({ products, summary: productSummary(products, await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
 });
 
-router.get('/products/settings', (req, res) => res.json({
-  settings: {
-    statuses: ['active', 'draft', 'archived'],
-    defaultStatus: 'active',
-    lowStockThreshold: 12,
-    recommendedCollections: ['New Arrivals', 'Best Sellers', 'Maria Clara', 'Oversized Shirt', 'Sale'],
-    recommendedVariantSizes: ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'],
-    imageGuidance: 'Use square or 4:5 product photos with clear alt text.'
+router.get('/products/settings', async (req, res, next) => {
+  try {
+    return res.json({
+      settings: {
+        statuses: ['active', 'draft', 'archived'],
+        defaultStatus: 'active',
+        lowStockThreshold: await activeLowStockThreshold(),
+        recommendedCollections: ['New Arrivals', 'Best Sellers', 'Maria Clara', 'Oversized Shirt', 'Sale'],
+        recommendedVariantSizes: ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'],
+        imageGuidance: 'Use square or 4:5 product photos with clear alt text.'
+      }
+    });
+  } catch (error) {
+    return next(error);
   }
-}));
+});
 
 router.post('/products/:slug/images', upload.array('images', 8), async (req, res, next) => {
   try {
@@ -364,16 +370,17 @@ router.get('/products', async (req, res, next) => {
     const stock = String(req.query.stock || '').trim();
     const sort = String(req.query.sort || 'name_asc').trim();
     const allProducts = await listEditableProducts();
+    const lowStockThreshold = await activeLowStockThreshold();
     const products = sortProductRecords(allProducts
       .filter((product) => !status || productStatus(product) === status)
       .filter((product) => !collection || product.collections.some((item) => item.toLowerCase() === collection))
       .filter((product) => !query || productSearchText(product).includes(query))
-      .filter((product) => !stock || productStockFilter(product) === stock)
-      .map(productSummaryRecord), sort);
+      .filter((product) => !stock || productStockFilter(product, lowStockThreshold) === stock)
+      .map((product) => productSummaryRecord(product, lowStockThreshold)), sort);
 
     return res.json({
       products,
-      summary: productSummary(allProducts)
+      summary: productSummary(allProducts, lowStockThreshold)
     });
   } catch (error) {
     return next(error);
@@ -412,7 +419,7 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
       status: req.body?.status || 'draft'
     })));
 
-    return res.status(201).json({ product, summary: productSummary(await listEditableProducts()) });
+    return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -421,7 +428,7 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
 router.post('/products', async (req, res, next) => {
   try {
     const product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest(req.body || {})));
-    return res.status(201).json({ product, summary: productSummary(await listEditableProducts()) });
+    return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -441,7 +448,7 @@ router.put('/products/:slug', async (req, res, next) => {
       ...normalizeProductRequest(req.body || {}),
       productPage: req.body?.productPage || existingProduct.productPage
     }), slug);
-    return res.json({ product, summary: productSummary(await listEditableProducts()) });
+    return res.json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -455,7 +462,7 @@ router.delete('/products/:slug', async (req, res, next) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    return res.json({ product, deleted: true, summary: productSummary(await listEditableProducts()) });
+    return res.json({ product, deleted: true, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -700,18 +707,23 @@ function normalizeMetafields(metafields) {
   ]));
 }
 
-function productSummary(products) {
+async function activeLowStockThreshold() {
+  const settings = await getStoreSettings();
+  return settings.inventory.lowStockThreshold;
+}
+
+function productSummary(products, lowStockThreshold) {
   return {
     total: products.length,
     active: products.filter((product) => productStatus(product) === 'active').length,
     draft: products.filter((product) => productStatus(product) === 'draft').length,
     archived: products.filter((product) => productStatus(product) === 'archived').length,
-    lowStock: products.filter((product) => productInventory(product) > 0 && productInventory(product) <= 12).length,
+    lowStock: products.filter((product) => productInventory(product) > 0 && productInventory(product) <= lowStockThreshold).length,
     soldOut: products.filter((product) => productInventory(product) === 0).length
   };
 }
 
-function productSummaryRecord(product) {
+function productSummaryRecord(product, lowStockThreshold) {
   const category = product.collections?.[0] || 'Uncategorized';
   return {
     slug: product.slug,
@@ -727,7 +739,7 @@ function productSummaryRecord(product) {
     imageCount: Array.isArray(product.images) ? product.images.length : 0,
     variantCount: Array.isArray(product.variants) ? product.variants.length : 0,
     inventoryQuantity: productInventory(product),
-    stockStatus: productStockFilter(product),
+    stockStatus: productStockFilter(product, lowStockThreshold),
     category,
     channels: 'Online Store',
     productType: product.productType || inferProductType(product, category),
@@ -762,10 +774,10 @@ function productInventory(product) {
     : 0;
 }
 
-function productStockFilter(product) {
+function productStockFilter(product, lowStockThreshold) {
   const inventory = productInventory(product);
   if (inventory === 0) return 'sold_out';
-  if (inventory <= 12) return 'low_stock';
+  if (inventory <= lowStockThreshold) return 'low_stock';
   return 'in_stock';
 }
 

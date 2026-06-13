@@ -23,6 +23,7 @@ router.get('/', async (_req, res, next) => {
         seo: settings.website.seo,
         maintenanceMode: settings.website.maintenanceMode,
         infoPages: settings.website.infoPages,
+        inventory: settings.inventory,
         paymentMethods: settings.payments.methods
           .filter((method) => method.enabled)
           .map(({ id, label, instructions }) => ({ id, label, instructions }))
