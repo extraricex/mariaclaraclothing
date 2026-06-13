@@ -48,3 +48,95 @@ test('deductVariantStock blocks oversell and leaves stock unchanged', async () =
   const after = variantOf(loadEditableProducts(), target.slug, target.size);
   assert.equal(Number(after.stockQuantity), target.stock);
 });
+
+const ORDERS_DIR_BASE = nodePath.join(nodeOs.tmpdir(), 'mc-inv-orders-');
+
+function checkoutBody(item) {
+  return {
+    customer: { fullName: 'Juan Dela Cruz', phone: '09171234567', email: '' },
+    address: {
+      addressLine: '12 Sampaguita St, BUCANDALA IV, IMUS, CAVITE, Philippines',
+      houseAddress: '12 Sampaguita St',
+      barangay: 'BUCANDALA IV',
+      city: 'IMUS',
+      province: 'CAVITE',
+      country: 'Philippines',
+      postalCode: ''
+    },
+    items: [item],
+    shippingFeeCents: 8000,
+    paymentMethod: 'cash_on_delivery'
+  };
+}
+
+async function startServer() {
+  process.env.ORDERS_DATA_FILE = nodePath.join(nodeFs.mkdtempSync(ORDERS_DIR_BASE), 'orders.json');
+  delete require.cache[require.resolve('../src/app')];
+  delete require.cache[require.resolve('../src/routes/orders')];
+  delete require.cache[require.resolve('../src/orders/orderRepository')];
+  const app = require('../src/app').createApp();
+  const server = await new Promise((resolve) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+  });
+  return server;
+}
+
+async function firstInStock(port) {
+  const { products } = await (await fetch(`http://127.0.0.1:${port}/api/products`)).json();
+  for (const product of products) {
+    const variant = (product.variants || []).find((v) => Number(v.stockQuantity) > 0);
+    if (variant) {
+      return {
+        item: {
+          productId: product.id,
+          variantId: variant.id,
+          productName: product.name,
+          size: variant.size,
+          quantity: 1,
+          unitPriceCents: variant.priceCents ?? product.priceCents
+        },
+        slug: product.slug,
+        size: variant.size,
+        stock: Number(variant.stockQuantity)
+      };
+    }
+  }
+  throw new Error('No in-stock product');
+}
+
+test('creating an order deducts the ordered variant stock', async () => {
+  const server = await startServer();
+  const port = server.address().port;
+  try {
+    const picked = await firstInStock(port);
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(checkoutBody(picked.item))
+    });
+    assert.equal(response.status, 201);
+    const after = variantOf(loadEditableProducts(), picked.slug, picked.size);
+    assert.equal(Number(after.stockQuantity), picked.stock - 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('ordering more than available stock is rejected and stock is unchanged', async () => {
+  const server = await startServer();
+  const port = server.address().port;
+  try {
+    const picked = await firstInStock(port);
+    const oversized = { ...picked.item, quantity: picked.stock + 1 };
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(checkoutBody(oversized))
+    });
+    assert.equal(response.status, 400);
+    const after = variantOf(loadEditableProducts(), picked.slug, picked.size);
+    assert.equal(Number(after.stockQuantity), picked.stock);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
