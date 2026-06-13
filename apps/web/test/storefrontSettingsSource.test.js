@@ -57,3 +57,28 @@ test('shell renders the ticker and SEO tags from settings', async () => {
   assert.match(source, /storeInfo\?\.ticker/);
   assert.match(source, /function Ticker\(\{ items \}\)/);
 });
+
+test('maintenance gate wraps the storefront but not the admin', async () => {
+  const gate = await readFile(path.join(root, 'components', 'MaintenanceGate.jsx'), 'utf8');
+  assert.match(gate, /maintenanceMode/);
+  assert.match(gate, /We'll be right back/);
+
+  const app = await readFile(path.join(root, 'App.jsx'), 'utf8');
+  assert.match(app, /<MaintenanceGate><Shell \/><\/MaintenanceGate>/);
+  assert.match(app, /<MaintenanceGate><Checkout \/><\/MaintenanceGate>/);
+  assert.doesNotMatch(app, /<MaintenanceGate><AdminLayout/);
+});
+
+test('info pages render sections from settings by pageKey', async () => {
+  const source = await readFile(path.join(root, 'pages', 'InfoPage.jsx'), 'utf8');
+  assert.match(source, /pageKey/);
+  assert.match(source, /loadStorefrontSettings/);
+  assert.match(source, /section\.heading/);
+  assert.match(source, /section\.body/);
+  assert.doesNotMatch(source, /FAQ_SECTIONS/);
+
+  const app = await readFile(path.join(root, 'App.jsx'), 'utf8');
+  assert.match(app, /pageKey="faq"/);
+  assert.match(app, /pageKey="shippingReturns"/);
+  assert.match(app, /pageKey="terms"/);
+});
