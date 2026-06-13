@@ -4,11 +4,13 @@ import { fetchSiteContent } from '../lib/api.js';
 import { adminJson, clearAdminToken, getAdminToken } from '../lib/adminApi.js';
 
 const ORDER_SUBNAV = [
+  { to: '/admin/orders', label: 'All orders', end: true },
   { to: '/admin/orders/draft', label: 'Draft' },
   { to: '/admin/orders/abandoned-checkout', label: 'Abandoned Checkout' }
 ];
 
 const PRODUCT_SUBNAV = [
+  { to: '/admin/products', label: 'All products', end: true },
   { to: '/admin/collections', label: 'Collections' },
   { to: '/admin/inventory', label: 'Inventory' }
 ];
@@ -31,7 +33,7 @@ const MOBILE_NAV = [
 
 const topLinkClass = (active) =>
   `rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-    active ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-cream'
+    active ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-line/40'
   }`;
 
 const subLinkClass = (isActive) =>
@@ -116,27 +118,20 @@ export default function AdminLayout() {
           </NavLink>
 
           <div>
-            <div className={`flex items-stretch rounded-[var(--radius-admin)] transition-colors ${ordersActive ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-cream'}`}>
-              <NavLink
-                to="/admin/orders"
-                className="flex-1 rounded-l-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em]"
-              >
-                Orders
-              </NavLink>
-              <button
-                type="button"
-                className="flex cursor-pointer items-center rounded-r-[var(--radius-admin)] px-2.5"
-                aria-label={ordersMenuOpen ? 'Collapse orders menu' : 'Expand orders menu'}
-                aria-expanded={ordersMenuOpen}
-                onClick={() => setOrdersMenuOpen((open) => !open)}
-              >
-                <Chevron open={ordersMenuOpen} />
-              </button>
-            </div>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${ordersActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
+              aria-label={ordersMenuOpen ? 'Collapse orders menu' : 'Expand orders menu'}
+              aria-expanded={ordersMenuOpen}
+              onClick={() => setOrdersMenuOpen((open) => !open)}
+            >
+              <span>Orders</span>
+              <Chevron open={ordersMenuOpen} />
+            </button>
             {ordersMenuOpen && (
               <div className="ml-3 mt-1 flex flex-col gap-0.5 border-l border-line pl-3">
                 {ORDER_SUBNAV.map((item) => (
-                  <NavLink key={item.label} to={item.to} className={({ isActive }) => subLinkClass(isActive)}>
+                  <NavLink key={item.label} to={item.to} end={item.end} className={({ isActive }) => subLinkClass(isActive)}>
                     {item.label}
                   </NavLink>
                 ))}
@@ -145,27 +140,20 @@ export default function AdminLayout() {
           </div>
 
           <div>
-            <div className={`flex items-stretch rounded-[var(--radius-admin)] transition-colors ${productsActive ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-cream'}`}>
-              <NavLink
-                to="/admin/products"
-                className="flex-1 rounded-l-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em]"
-              >
-                Products
-              </NavLink>
-              <button
-                type="button"
-                className="flex cursor-pointer items-center rounded-r-[var(--radius-admin)] px-2.5"
-                aria-label={productsMenuOpen ? 'Collapse products menu' : 'Expand products menu'}
-                aria-expanded={productsMenuOpen}
-                onClick={() => setProductsMenuOpen((open) => !open)}
-              >
-                <Chevron open={productsMenuOpen} />
-              </button>
-            </div>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${productsActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
+              aria-label={productsMenuOpen ? 'Collapse products menu' : 'Expand products menu'}
+              aria-expanded={productsMenuOpen}
+              onClick={() => setProductsMenuOpen((open) => !open)}
+            >
+              <span>Products</span>
+              <Chevron open={productsMenuOpen} />
+            </button>
             {productsMenuOpen && (
               <div className="ml-3 mt-1 flex flex-col gap-0.5 border-l border-line pl-3">
                 {PRODUCT_SUBNAV.map((subitem) => (
-                  <NavLink key={subitem.label} to={subitem.to} className={({ isActive }) => subLinkClass(isActive)}>
+                  <NavLink key={subitem.label} to={subitem.to} end={subitem.end} className={({ isActive }) => subLinkClass(isActive)}>
                     {subitem.label}
                   </NavLink>
                 ))}
