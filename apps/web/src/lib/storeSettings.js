@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 export const DEFAULT_INFO_PAGES = {
   faq: [
     { heading: 'How does Cash on Delivery work?', body: 'Place your order online — no payment needed. We text your mobile number to confirm, then ship via J&T Express. You pay the rider in cash when the parcel arrives.' },
@@ -51,7 +53,8 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     imageUrl: ''
   },
   maintenanceMode: false,
-  infoPages: DEFAULT_INFO_PAGES
+  infoPages: DEFAULT_INFO_PAGES,
+  inventory: { lowStockThreshold: 12 }
 };
 
 let settingsPromise = null;
@@ -111,4 +114,20 @@ export function applySeoTags(seo) {
   if (seo.title) document.title = seo.title;
   if (seo.description) upsertMetaTag('name', 'description', seo.description);
   if (seo.imageUrl) upsertMetaTag('property', 'og:image', seo.imageUrl);
+}
+
+export function useStorefrontSettings() {
+  const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
+
+  useEffect(() => {
+    let active = true;
+    loadStorefrontSettings().then((value) => {
+      if (active) setSettings(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return settings;
 }

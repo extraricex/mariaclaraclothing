@@ -4,10 +4,12 @@ import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import { sanitizeRichHtml } from '../lib/richText.js';
+import { useStorefrontSettings } from '../lib/storeSettings.js';
 import ProductCard from '../components/ProductCard.jsx';
 
 export default function Product() {
   const { slug } = useParams();
+  const settings = useStorefrontSettings();
   const [product, setProduct] = useState(null);
   const [error, setError] = useState('');
   const [activeImage, setActiveImage] = useState(0);
@@ -189,7 +191,7 @@ export default function Product() {
                 );
               })}
             </div>
-            {variant && Number(variant.stockQuantity) > 0 && Number(variant.stockQuantity) <= 12 && (
+            {variant && Number(variant.stockQuantity) > 0 && Number(variant.stockQuantity) <= settings.inventory.lowStockThreshold && (
               <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep">
                 Limited pieces — {variant.stockQuantity} left in {variant.size}
               </p>

@@ -1,16 +1,18 @@
 import { Link } from 'react-router-dom';
 import { formatMoney } from '../lib/money.js';
+import { useStorefrontSettings } from '../lib/storeSettings.js';
 
 export function totalStock(product) {
   return product.variants.reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
 }
 
 export default function ProductCard({ product, index }) {
+  const settings = useStorefrontSettings();
   const image = product.images[0];
   const hoverImage = product.images[1];
   const soldOut = product.merchandisingStatus === 'sold_out';
   const stock = totalStock(product);
-  const limited = !soldOut && stock > 0 && stock <= 12;
+  const limited = !soldOut && stock > 0 && stock <= settings.inventory.lowStockThreshold;
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
 
   return (
