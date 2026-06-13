@@ -37,6 +37,30 @@ All buttons, forms, filters, dropdowns, tables, exports, and save actions must b
 - Every new admin feature should define its database fields, API endpoints, UI behavior, validation rules, and customer website impact before implementation.
 - Any feature that changes checkout, orders, stock, discounts, or exports must include tests because those areas affect fulfillment and revenue.
 
+## Finished Work Log
+
+Finished as of June 12, 2026:
+
+- **Admin logo:** Admin login and admin layout use the uploaded website logo with text fallback.
+- **Orders sidebar dropdown:** Orders menu expands and shows clickable Draft and Abandoned Checkout links.
+- **Orders page operations:** Orders page has date filters, summary cards, richer order columns, selectable rows, and filtered/selected J&T export behavior.
+- **Draft page:** Draft shows active cart sessions with items where checkout has not started. Unknown/unregistered customers display as `Anonymous`.
+- **Abandoned Checkout page:** Abandoned Checkout shows checkout-started cart sessions that have not converted to an order.
+- **Cart session conversion:** Successful orders mark their cart session converted and hide it from Draft and Abandoned Checkout.
+- **Order editor contact fields:** Admin can edit customer full name, contact number, and email.
+- **Order editor address fields:** Admin can edit J&T-ready separated address fields: house/street, province, city/municipality, and barangay.
+- **Order editor item fields:** Admin can edit ordered item name, size, quantity, and unit price. The API recalculates subtotal and total after item edits.
+- **Order editor product picker:** Adding an order item now opens a searchable product picker. Admin can type to search catalog products and select a specific variant/size to append a populated item to the order.
+- **Shopify-inspired Order detail:** Order detail now uses a responsive Shopify-style layout with header status badges/actions, fulfillment item editor, payment summary/actions, timeline notes, customer/sidebar details, conversion summary, order risk, and J&T readiness.
+- **J&T export foundation:** J&T export validates customer/contact/address/order fields and writes province, city, barangay, parcel name, COD, and remarks into the provided Excel template.
+- **Product Admin Operations Phase 1:** Products sidebar dropdown is available with Products, Collections, and Inventory. Products list supports status, stock, collection, category, vendor, search, and sort controls. Product editor exposes category, product type, vendor, tags, theme template, per-variant price, and total inventory. Inventory page lists product stock health and links back to product editing.
+- **Shopify-inspired Products index:** Products page has saved-view tabs for All, Active, Draft, Archived, Low stock, and Sold out. The page includes Import, Export, More actions, and Add product controls, selectable product rows, selected-count bulk actions, product status badges, inventory badges, product organization details, sales channel visibility, and direct links to each product editor.
+- **Shopify-inspired Product editor:** Product editor now uses a responsive two-column layout with title/actions, status badge, main editing sections, and a right operations sidebar. Description editor buttons apply real text formatting. Media section supports adding photos and removing photos while enforcing the one-photo minimum required by the API.
+- **Admin responsive polish:** Admin shell has a responsive mobile top navigation with horizontal scrolling, constrained main content, overflow protection, shared small-radius buttons, a defined secondary button style, and rounded form fields.
+- **Rich product description editor:** Product description editor now uses a rich editable area instead of a plain textarea. Admin can apply functional font style, font size, font color, font weight, heading, paragraph, list, underline, italic, bold, and link formatting. Saved descriptions are sanitized HTML and keep only approved tags and safe inline font styles for storefront rendering.
+- **Shopify-inspired Discounts index:** Discounts page now has saved views, search, selectable rows, summary cards, export/create controls, status badges, and a Shopify-style create discount panel for checkout-validated percentage and fixed discount codes.
+- **Shopify-inspired Discount detail:** Discount codes now open into a responsive Shopify-style detail editor with editable value, eligibility, usage limit, end date, status actions, duplicate behavior, summary, performance, and tags placeholder.
+
 ---
 
 # Orders Section Enhancement
@@ -67,6 +91,15 @@ Exact current behavior:
 - If the customer completes an order, the cart session is marked converted and hidden from Draft and Abandoned Checkout lists.
 - After a successful order, the browser receives a new cart-session id for future carts.
 - Draft and Abandoned Checkout pages should show customer/contact details when available, item count, subtotal, cart contents, and last activity.
+- Order detail page uses a responsive Shopify-style layout with the order number, payment badge, fulfillment badge, order date, and channel context in the header.
+- Order detail header includes `Print`, `More actions`, `Edit`, and `Save changes` actions. `Edit` enables editable fields, and `Save changes` persists changes through the existing admin order update API.
+- Order fulfillment card shows all ordered items with image/name/variant context and editable product name, size, quantity, and unit price fields when edit mode is active.
+- `Add item` opens a catalog product picker instead of adding a blank row. The picker searches `/api/admin/products` while the admin types and shows product variants with size, SKU, stock, and price.
+- Selecting a product variant appends a populated editable order item with product id, variant id, SKU, slug, product name, size, image, quantity `1`, and price. `Remove item` removes an item from the order editor state. Saving recalculates subtotal and total through the API.
+- `Mark as fulfilled` sets the order to shipped/out-for-delivery behavior using the project's canonical status fields instead of adding a new custom status.
+- Payment card shows subtotal, shipping, total, paid amount, and balance. `Mark as paid` updates the payment status to `paid` in the editor state before save.
+- Timeline and Notes both use the order notes field so admin staff can keep an internal order comment attached to the order.
+- Customer sidebar shows editable contact fields, separated J&T-ready address fields, billing address summary, conversion summary, order risk, and J&T readiness.
 
 Future recommendation:
 
@@ -181,6 +214,22 @@ The admin should be able to:
 - Search products by title, SKU, category, collection, or status
 - View product status such as Active, Draft, or Archived
 - View product inventory availability
+
+Exact current behavior:
+
+- Products index reads from `/api/admin/products` and keeps the existing project product model as the source of truth.
+- Saved views are available for **All**, **Active**, **Draft**, **Archived**, **Low stock**, and **Sold out**. Selecting a saved view applies the matching status or stock filter.
+- Manual filters are available for product status, stock status, collection, category, vendor, sort order, and search.
+- Product rows can be selected individually or all visible rows can be selected from the table header.
+- When at least one visible product is selected, the page shows the selected count and bulk action controls.
+- Each product row shows product thumbnail, title, slug, status badge, inventory badge, product organization details, sales channel, and price.
+- Product organization currently displays category, vendor, and collections. Tags, created date, and updated date filters remain long-term roadmap items unless the API exposes those fields consistently.
+- Sales channel currently displays **Online Store** for listed products because this project does not yet have a multi-channel publishing model.
+- Import, Export, and More actions are present as Shopify-style top-level controls. Their backend workflows should be implemented separately before they perform data changes.
+- Product editor uses a responsive Shopify-inspired layout: title, description, media, pricing, and variants stay in the main column; status, publishing, sales summary, collections, product organization, and theme template stay in the sidebar on desktop and stack on mobile.
+- Description toolbar buttons are functional. They apply paragraph cleanup, heading, bold, italic, underline, bullet list, numbered list, and link formatting to the current selection or current line.
+- Rich description controls are functional for font style, font size, font color, and font weight. The editor stores sanitized HTML in `product.description`; the storefront product page renders approved inline styles through the existing rich description tab.
+- Product photos can be uploaded from the media section after the product has been saved. Existing photos can be removed from the media grid, but the UI and API keep at least one product photo.
 
 ## Product Filters
 
@@ -587,6 +636,23 @@ The discount system should support different types of discounts such as:
 - Product-based discount
 - Order total-based discount
 - Quantity-based discount
+
+Exact current behavior:
+
+- Discounts page reads from `/api/admin/discounts` and keeps the existing discount code model as the source of truth.
+- Saved views are available for **All**, **Active**, **Scheduled**, **Expired**, and **Disabled**. The **Scheduled** view is present as a Shopify-style view but remains empty until start-date scheduling is added to the API.
+- Search filters visible discount rows by code, type, value, status, and minimum subtotal.
+- Discount rows can be selected individually or all visible rows can be selected from the table header.
+- The table shows method/code, type/value, status, combinations, usage, start date, end date, and row actions.
+- `Create discount` opens an inline creation panel. Current creation supports **Discount code** method only, with percentage or fixed amount type, value, minimum subtotal, usage limit, and optional end date.
+- `Generate code` creates a local random code prefix using `MARIA`.
+- `Disable` and `Enable` update the existing discount status through the admin discount API. `Delete` removes the discount code after confirmation.
+- `Export` downloads the currently visible discounts as CSV. Selected bulk action currently supports disabling selected discounts. Automatic discounts, product-specific discounts, free shipping discounts, combinations, start-date scheduling, and duplicate/edit detail pages remain roadmap items until their backend and checkout behaviors are implemented.
+- Clicking a discount code opens `/admin/discounts/:code`.
+- Discount detail reads from the existing discounts API and edits the current discount through the existing admin discount endpoints.
+- Discount detail supports editing the code, type, value, minimum subtotal, usage limit, end date, and active/disabled status. If the code itself changes, the UI creates the replacement code and removes the previous code.
+- Detail actions support Save, Duplicate, Enable/Disable, Delete discount, and View all discounts.
+- The detail sidebar shows summary, usage performance, and a disabled Tags placeholder. Tags, product/collection targeting, combinations, start-date scheduling, and analytics reports remain roadmap items until the backend and checkout models support them.
 
 ## Create Discount
 

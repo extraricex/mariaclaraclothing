@@ -49,16 +49,20 @@ export default function Shell() {
   const items = useCart();
   const count = cartQuantity(items);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [logo, setLogo] = useState(null);
+  const [headerLogo, setHeaderLogo] = useState(null);
+  const [footerLogo, setFooterLogo] = useState(null);
 
   useEffect(() => {
     fetchSiteContent()
-      .then((body) => setLogo(body.siteContent?.logo || null))
+      .then((body) => {
+        setHeaderLogo(body.siteContent?.logo || null);
+        setFooterLogo(body.siteContent?.footerLogo || body.siteContent?.logo || null);
+      })
       .catch(() => {});
   }, []);
 
-  const logoMarkup = logo?.url ? (
-    <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing'} className="h-[65px] max-w-[205px] object-contain lg:h-[73px] lg:max-w-[230px]" />
+  const logoMarkup = headerLogo?.url ? (
+    <img src={headerLogo.url} alt={headerLogo.altText || 'Maria Clara Clothing'} className="h-[65px] max-w-[205px] object-contain lg:h-[73px] lg:max-w-[230px]" />
   ) : (
     <span className="display text-[45px] tracking-tight lg:text-[49px]">
       Maria<span className="text-accent">Clara</span>
@@ -124,9 +128,9 @@ export default function Shell() {
 
       <footer className="mt-24 bg-ink text-paper">
         <div className="mx-auto max-w-7xl px-5 py-14 lg:px-8">
-          {logo?.url ? (
-            <div className="inline-flex bg-paper p-3">
-              <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing'} className="max-h-20 max-w-64 object-contain" />
+          {footerLogo?.url ? (
+            <div className="inline-flex">
+              <img src={footerLogo.url} alt={footerLogo.altText || 'Maria Clara Clothing'} className="max-h-20 max-w-64 object-contain" />
             </div>
           ) : (
             <p className="display text-4xl leading-none sm:text-6xl lg:text-7xl">

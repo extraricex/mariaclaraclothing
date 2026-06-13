@@ -92,6 +92,7 @@ CREATE INDEX IF NOT EXISTS orders_placed_at_idx ON orders(placed_at DESC);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code text NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS discount_codes (
   code text PRIMARY KEY,
@@ -105,6 +106,15 @@ CREATE TABLE IF NOT EXISTS discount_codes (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS method text NOT NULL DEFAULT 'code';
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS starts_at timestamptz;
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS minimum_quantity integer;
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS banner_text text NOT NULL DEFAULT '';
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS terms text NOT NULL DEFAULT '';
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS rules jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS cart_sessions (
   session_id text PRIMARY KEY,

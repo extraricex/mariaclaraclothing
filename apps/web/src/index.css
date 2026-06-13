@@ -9,6 +9,7 @@
   --color-line: #d9d2c7;
   --color-accent: #e8590c;
   --color-accent-deep: #b83d00;
+  --radius-admin: 6px;
 
   --font-display: "Clash Display", "Archivo Black", sans-serif;
   --font-body: "Switzer", "Helvetica Neue", sans-serif;
@@ -22,6 +23,10 @@
   ::selection {
     @apply bg-accent text-paper;
   }
+  button,
+  [role="button"] {
+    border-radius: var(--radius-admin);
+  }
 }
 
 @layer components {
@@ -33,13 +38,49 @@
     @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-clay;
   }
   .btn-ink {
-    @apply inline-flex items-center justify-center gap-2 bg-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-paper transition-colors duration-200 hover:bg-accent disabled:cursor-not-allowed disabled:bg-line disabled:text-clay;
+    @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] bg-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-paper transition-colors duration-200 hover:bg-accent disabled:cursor-not-allowed disabled:bg-line disabled:text-clay;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 border border-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:border-line disabled:text-clay;
+    @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] border border-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:border-line disabled:text-clay;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] border border-line bg-white px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:bg-cream disabled:text-clay;
   }
   .field {
-    @apply w-full border border-line bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-clay focus:border-ink disabled:bg-cream disabled:text-clay;
+    @apply w-full rounded-[var(--radius-admin)] border border-line bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-clay focus:border-ink disabled:bg-cream disabled:text-clay;
+  }
+  .admin-shell {
+    @apply flex min-h-screen overflow-x-hidden bg-cream;
+  }
+  .admin-main {
+    @apply min-w-0 flex-1 overflow-x-hidden;
+  }
+  .admin-mobile-nav {
+    @apply flex items-center gap-3 overflow-x-auto whitespace-nowrap border-b border-line bg-paper px-4 py-3 lg:hidden;
+    scrollbar-width: thin;
+  }
+  .admin-mobile-nav a {
+    @apply rounded-[var(--radius-admin)] px-2.5 py-2;
+  }
+  .product-view-tabs {
+    @apply flex gap-1 overflow-x-auto;
+    scrollbar-width: thin;
+  }
+  .product-filter-toolbar {
+    @apply grid gap-3 xl:grid-cols-[minmax(280px,1.15fr)_minmax(560px,2fr)] xl:items-center;
+  }
+  .product-search-field {
+    @apply flex min-h-12 w-full items-center gap-3 border border-line bg-white px-4 text-sm text-ink transition-colors focus-within:border-ink focus-within:shadow-sm;
+  }
+  .product-editor-shell {
+    @apply mx-auto w-full max-w-[1380px];
+  }
+  .product-editor-grid {
+    @apply grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start;
+  }
+  .description-toolbar {
+    @apply overflow-x-auto;
+    scrollbar-width: thin;
   }
   .hairline {
     @apply border-t border-line;

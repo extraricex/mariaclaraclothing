@@ -16,6 +16,7 @@ const {
 const {
   appendHomepageBanners,
   getSiteContent,
+  updateFooterLogo,
   updateLogo,
   updateHomepageBanners
 } = require('../siteContent/siteContentRepository');
@@ -180,6 +181,23 @@ router.post('/site-content/logo/image', logoUpload.single('image'), (req, res, n
   }
 });
 
+router.post('/site-content/footer-logo/image', logoUpload.single('image'), (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'A footer logo image is required' });
+    }
+
+    const siteContent = updateFooterLogo({
+      url: logoUploadUrl(req.file.filename),
+      altText: 'Maria Clara Clothing footer logo'
+    });
+
+    return res.status(201).json({ siteContent, footerLogo: siteContent.footerLogo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post('/products/import', async (req, res, next) => {
   try {
     const incomingProducts = Array.isArray(req.body?.products) ? req.body.products : null;
@@ -296,6 +314,8 @@ router.get('/products', async (req, res, next) => {
   try {
     const status = String(req.query.status || '').trim();
     const collection = String(req.query.collection || '').trim().toLowerCase();
+    const category = String(req.query.category || '').trim().toLowerCase();
+    const vendor = String(req.query.vendor || '').trim().toLowerCase();
     const query = String(req.query.q || '').trim().toLowerCase();
     const stock = String(req.query.stock || '').trim();
     const sort = String(req.query.sort || 'name_asc').trim();
@@ -303,6 +323,8 @@ router.get('/products', async (req, res, next) => {
     const products = sortProductRecords(allProducts
       .filter((product) => !status || productStatus(product) === status)
       .filter((product) => !collection || product.collections.some((item) => item.toLowerCase() === collection))
+      .filter((product) => !category || String(product.category || '').trim().toLowerCase() === category)
+      .filter((product) => !vendor || String(product.vendor || '').trim().toLowerCase() === vendor)
       .filter((product) => !query || productSearchText(product).includes(query))
       .filter((product) => !stock || productStockFilter(product) === stock)
       .map(productSummaryRecord), sort);
@@ -661,8 +683,9 @@ function productSummary(products) {
 }
 
 function productSummaryRecord(product) {
-  const category = product.collections?.[0] || 'Uncategorized';
+  const category = product.category || product.collections?.[0] || 'Uncategorized';
   return {
+    id: product.id || product.slug,
     slug: product.slug,
     name: product.name,
     description: product.description,
@@ -675,6 +698,15 @@ function productSummaryRecord(product) {
     image: product.images?.[0]?.url || '',
     imageCount: Array.isArray(product.images) ? product.images.length : 0,
     variantCount: Array.isArray(product.variants) ? product.variants.length : 0,
+    variants: Array.isArray(product.variants)
+      ? product.variants.map((variant, index) => ({
+        id: variant.id || `${product.slug}-${index}`,
+        size: variant.size,
+        sku: variant.sku,
+        priceCents: variant.priceCents || product.priceCents,
+        stockQuantity: Number(variant.stockQuantity || 0)
+      }))
+      : [],
     inventoryQuantity: productInventory(product),
     stockStatus: productStockFilter(product),
     category,
@@ -723,6 +755,10 @@ function productSearchText(product) {
     product.slug,
     product.name,
     product.description,
+    product.category,
+    product.productType,
+    product.vendor,
+    productStatus(product),
     ...(product.collections || []),
     ...(product.variants || []).map((variant) => variant.sku)
   ].filter(Boolean).join(' ').toLowerCase();

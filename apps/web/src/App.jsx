@@ -15,8 +15,10 @@ import CartSessions from './admin/CartSessions.jsx';
 import Products from './admin/Products.jsx';
 import ProductEditor from './admin/ProductEditor.jsx';
 import Collections from './admin/Collections.jsx';
+import Inventory from './admin/Inventory.jsx';
 import Customers from './admin/Customers.jsx';
 import Discounts from './admin/Discounts.jsx';
+import DiscountDetail from './admin/DiscountDetail.jsx';
 import Banners from './admin/Banners.jsx';
 import Settings from './admin/Settings.jsx';
 
@@ -43,8 +45,10 @@ export default function App() {
         <Route path="products" element={<Products />} />
         <Route path="products/:slug" element={<ProductEditor />} />
         <Route path="collections" element={<Collections />} />
+        <Route path="inventory" element={<Inventory />} />
         <Route path="customers" element={<Customers />} />
         <Route path="discounts" element={<Discounts />} />
+        <Route path="discounts/:code" element={<DiscountDetail />} />
         <Route path="banners" element={<Banners />} />
         <Route path="settings" element={<Settings />} />
       </Route>

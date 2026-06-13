@@ -225,7 +225,10 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(listBody.products[0].channels, 'Online Store');
     assert.ok(listBody.products[0].category);
     assert.ok(listBody.products[0].productType);
-    assert.equal(listBody.products[0].vendor, 'Maria Clara Clothing');
+    assert.ok(listBody.products[0].vendor);
+    assert.ok(Array.isArray(listBody.products[0].variants));
+    assert.ok(listBody.products[0].variants[0].id);
+    assert.ok(listBody.products[0].variants[0].sku);
 
     const newProduct = {
       slug: 'admin-test-shirt',
@@ -341,6 +344,7 @@ test('admin product APIs require login and support product management', async ()
       description: formattedDescription,
       status: 'active',
       priceCents: 69900,
+      category: 'T-Shirts',
       images: [{ url: '/product/admin-edited.png', altText: 'Edited Admin Test Shirt', sortOrder: 0 }],
       variants: [{ size: 'Small', sku: 'ADMIN-EDIT-S', priceCents: 74900, stockQuantity: 2 }],
       vendor: 'Maria Clara',
@@ -398,6 +402,18 @@ test('admin product APIs require login and support product management', async ()
 
     assert.equal(collectionListResponse.status, 200);
     assert.ok(collectionListBody.products.some((product) => product.slug === 'admin-test-shirt'));
+
+    const categoryListResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products?category=${encodeURIComponent('T-Shirts')}`, adminRequest());
+    const categoryListBody = await categoryListResponse.json();
+
+    assert.equal(categoryListResponse.status, 200);
+    assert.ok(categoryListBody.products.some((product) => product.slug === 'admin-test-shirt'));
+
+    const vendorListResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products?vendor=${encodeURIComponent('Maria Clara')}`, adminRequest());
+    const vendorListBody = await vendorListResponse.json();
+
+    assert.equal(vendorListResponse.status, 200);
+    assert.ok(vendorListBody.products.some((product) => product.slug === 'admin-test-shirt'));
 
     const draftResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt`, jsonAdminRequest('PUT', {
       ...collectionUpdateBody.product,

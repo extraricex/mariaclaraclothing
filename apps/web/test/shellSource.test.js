@@ -20,3 +20,12 @@ test('shell renders the header logo about 15px larger', async () => {
   assert.match(source, /lg:h-\[73px\]/);
   assert.match(source, /max-w-\[205px\]/);
 });
+
+test('shell uses separate header and footer logos from site content', async () => {
+  const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'components', 'Shell.jsx'), 'utf8');
+
+  assert.match(source, /setHeaderLogo\(body\.siteContent\?\.logo/);
+  assert.match(source, /setFooterLogo\(body\.siteContent\?\.footerLogo/);
+  assert.match(source, /footerLogo\?\.url/);
+  assert.match(source, /headerLogo\?\.url/);
+});

@@ -3,6 +3,7 @@ import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
 
 export default function Banners() {
   const [logo, setLogo] = useState(null);
+  const [footerLogo, setFooterLogo] = useState(null);
   const [banners, setBanners] = useState([]);
   const [message, setMessage] = useState('');
 
@@ -10,6 +11,7 @@ export default function Banners() {
     adminJson('/api/admin/site-content')
       .then((body) => {
         setLogo(body.siteContent?.logo || null);
+        setFooterLogo(body.siteContent?.footerLogo || body.siteContent?.logo || null);
         setBanners(body.siteContent?.homepageBanners || []);
       })
       .catch((err) => setMessage(err.message));
@@ -80,6 +82,24 @@ export default function Banners() {
     }
   }
 
+  async function uploadFooterLogo(files) {
+    if (!files.length) return;
+    const formData = new FormData();
+    formData.append('image', files[0]);
+    try {
+      const response = await adminFetch('/api/admin/site-content/footer-logo/image', {
+        method: 'POST',
+        body: formData
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Upload failed.');
+      setFooterLogo(body.siteContent?.footerLogo || null);
+      setMessage('Footer logo uploaded.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   return (
     <div className="max-w-3xl">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -100,22 +120,45 @@ export default function Banners() {
       <section className="mt-8 border border-line bg-paper p-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="eyebrow">Logo</p>
-            <p className="mt-1 text-sm text-ink-soft">Used in the website header and footer.</p>
+            <p className="eyebrow">Header logo</p>
+            <p className="mt-1 text-sm text-ink-soft">Used in the customer website header and admin brand areas.</p>
           </div>
           <label className="btn-ghost cursor-pointer">
-            Upload logo
+            Upload header logo
             <input type="file" accept="image/*" hidden onChange={(e) => uploadLogo(e.target.files)} />
           </label>
         </div>
         <div className="mt-4 flex items-center gap-4 border border-line p-4">
           {logo?.url ? (
-            <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing logo'} className="max-h-16 max-w-48 object-contain" />
+            <img src={logo.url} alt={logo.altText || 'Maria Clara Clothing logo'} className="max-h-20 max-w-64 object-contain" />
           ) : (
             <p className="text-sm text-clay">No logo uploaded yet.</p>
           )}
           <div className="text-xs text-clay">
             <p>{logo?.url || '/brand/logo.png'}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-4 border border-line bg-paper p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="eyebrow">Footer logo</p>
+            <p className="mt-1 text-sm text-ink-soft">Used only in the customer website footer.</p>
+          </div>
+          <label className="btn-ghost cursor-pointer">
+            Upload footer logo
+            <input type="file" accept="image/*" hidden onChange={(e) => uploadFooterLogo(e.target.files)} />
+          </label>
+        </div>
+        <div className="mt-4 flex items-center gap-4 border border-line p-4">
+          {footerLogo?.url ? (
+            <img src={footerLogo.url} alt={footerLogo.altText || 'Maria Clara Clothing footer logo'} className="max-h-20 max-w-64 object-contain" />
+          ) : (
+            <p className="text-sm text-clay">No footer logo uploaded yet.</p>
+          )}
+          <div className="text-xs text-clay">
+            <p>{footerLogo?.url || logo?.url || '/brand/logo.png'}</p>
           </div>
         </div>
       </section>
