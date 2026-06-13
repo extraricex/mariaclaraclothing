@@ -21,7 +21,7 @@ function pickInStock(products) {
   for (const product of products) {
     for (const variant of product.variants) {
       if (Number(variant.stockQuantity) > 0) {
-        return { slug: product.slug, size: variant.size, name: product.name, stock: Number(variant.stockQuantity) };
+        return { slug: product.slug, size: variant.size, sku: variant.sku, name: product.name, stock: Number(variant.stockQuantity) };
       }
     }
   }
@@ -34,7 +34,7 @@ function variantOf(products, slug, size) {
 
 test('deductVariantStock reduces the ordered variant stock', async () => {
   const target = pickInStock(loadEditableProducts());
-  await deductVariantStock([{ slug: target.slug, size: target.size, quantity: 1, productName: target.name }]);
+  await deductVariantStock([{ slug: target.slug, sku: target.sku, size: target.size, quantity: 1, productName: target.name }]);
   const after = variantOf(loadEditableProducts(), target.slug, target.size);
   assert.equal(Number(after.stockQuantity), target.stock - 1);
 });
@@ -42,7 +42,7 @@ test('deductVariantStock reduces the ordered variant stock', async () => {
 test('deductVariantStock blocks oversell and leaves stock unchanged', async () => {
   const target = pickInStock(loadEditableProducts());
   await assert.rejects(
-    async () => deductVariantStock([{ slug: target.slug, size: target.size, quantity: target.stock + 1, productName: target.name }]),
+    async () => deductVariantStock([{ slug: target.slug, sku: target.sku, size: target.size, quantity: target.stock + 1, productName: target.name }]),
     (err) => err.status === 409 && err.message === `${target.size} is sold out for ${target.name}`
   );
   const after = variantOf(loadEditableProducts(), target.slug, target.size);
