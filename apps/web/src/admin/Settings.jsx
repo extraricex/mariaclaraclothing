@@ -282,6 +282,43 @@ function SecurityCard() {
   );
 }
 
+function InventoryCard({ initial }) {
+  const [threshold, setThreshold] = useState(String(initial.lowStockThreshold));
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/inventory', { lowStockThreshold: Number(threshold) });
+      setThreshold(String(body.settings.inventory.lowStockThreshold));
+      setStatus({ tone: 'ok', message: 'Changes saved successfully.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Inventory" hint="Stock thresholds used across the store.">
+      <div className="mt-4">
+        <Field label="Low stock threshold">
+          <input className="field mt-1 max-w-32" inputMode="numeric" value={threshold} onChange={(e) => setThreshold(e.target.value)} />
+        </Field>
+        <p className="mt-2 text-xs text-clay">
+          Products at or below this stock count show "Limited pieces" on the storefront and count as low stock in the admin.
+        </p>
+      </div>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save inventory settings'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
 function SeoCard({ initial }) {
   const [form, setForm] = useState(initial);
   const [status, setStatus] = useState(null);
@@ -381,6 +418,7 @@ export default function Settings() {
         <GeneralCard initial={settings.general} />
         <ShippingCard initial={settings.shipping} />
         <PaymentsCard initial={settings.payments} />
+        <InventoryCard initial={settings.inventory} />
         <SeoCard initial={settings.website.seo} />
         <MaintenanceCard initial={settings.website.maintenanceMode} />
         <SecurityCard />

@@ -35,3 +35,10 @@ test('settings page includes SEO and maintenance cards', async () => {
   assert.match(source, /maintenanceMode/);
   assert.match(source, /checkout is disabled/);
 });
+
+test('settings page includes the inventory card', async () => {
+  const source = await readFile(settingsPath, 'utf8');
+
+  assert.match(source, /\/api\/admin\/settings\/inventory/);
+  assert.match(source, /Low stock threshold/);
+});
