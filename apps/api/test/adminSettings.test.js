@@ -229,3 +229,40 @@ test('public storefront settings expose only the safe subset', async () => {
     assert.equal(raw.includes('"token"'), false);
   });
 });
+
+test('website settings flow through the admin and public endpoints', async () => {
+  await withSettingsServer(async (port) => {
+    const tickerPut = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/website`,
+      adminRequest('PUT', { ticker: ['Big drop Friday'] })
+    );
+    assert.equal(tickerPut.status, 200);
+    const afterTicker = await tickerPut.json();
+    assert.deepEqual(afterTicker.settings.website.ticker, ['Big drop Friday']);
+    assert.equal(afterTicker.settings.website.maintenanceMode, false);
+
+    const seoPut = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/website`,
+      adminRequest('PUT', { seo: { title: 'MC Streetwear', description: 'Heavyweight tees.' } })
+    );
+    assert.equal(seoPut.status, 200);
+    const afterSeo = await seoPut.json();
+    assert.equal(afterSeo.settings.website.seo.title, 'MC Streetwear');
+    assert.deepEqual(afterSeo.settings.website.ticker, ['Big drop Friday']);
+
+    const badTicker = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/website`,
+      adminRequest('PUT', { ticker: [] })
+    );
+    assert.equal(badTicker.status, 400);
+    assert.equal((await badTicker.json()).error, 'Ticker must have 1 to 8 items.');
+
+    const publicResponse = await fetch(`http://127.0.0.1:${port}/api/storefront-settings`);
+    const publicBody = await publicResponse.json();
+    assert.deepEqual(publicBody.settings.ticker, ['Big drop Friday']);
+    assert.equal(publicBody.settings.seo.title, 'MC Streetwear');
+    assert.equal(publicBody.settings.maintenanceMode, false);
+    assert.ok(Array.isArray(publicBody.settings.infoPages.faq));
+    assert.ok(publicBody.settings.infoPages.faq[0].heading);
+  });
+});

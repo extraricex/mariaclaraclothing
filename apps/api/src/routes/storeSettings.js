@@ -19,6 +19,10 @@ router.get('/', async (_req, res, next) => {
         storeAddress: settings.general.storeAddress,
         socialLinks: settings.general.socialLinks,
         shipping: settings.shipping,
+        ticker: settings.website.ticker,
+        seo: settings.website.seo,
+        maintenanceMode: settings.website.maintenanceMode,
+        infoPages: settings.website.infoPages,
         paymentMethods: settings.payments.methods
           .filter((method) => method.enabled)
           .map(({ id, label, instructions }) => ({ id, label, instructions }))
