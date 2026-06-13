@@ -11,14 +11,17 @@
     "paymentMethods",
     "adminPassword",
     "adminToken",
-    "policyLinks",
-    "seoDefaults"
+    "announcementTicker",
+    "infoPages",
+    "seoDefaults",
+    "maintenanceMode",
+    "policyLinks"
   ],
   "futureAdminActions": [
-    "edit policy links",
-    "edit SEO defaults",
     "configure notifications",
     "edit message templates",
-    "configure maintenance mode"
+    "configure checkout settings",
+    "configure inventory settings",
+    "configure export settings"
   ]
 }
