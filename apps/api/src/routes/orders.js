@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
+const { deductVariantStock } = require('../products/catalogRepository');
 const { findOrderByNumber, saveOrder } = require('../orders/orderRepository');
 const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
 const { incrementDiscountUsage } = require('../discounts/discountRepository');
@@ -47,6 +48,12 @@ router.post('/', async (req, res, next) => {
       customerAccountId,
       placedAt: new Date().toISOString()
     };
+    await deductVariantStock(order.items.map((item) => ({
+      slug: String(item.productId).replace(/^catalog-/, ''),
+      size: item.size,
+      quantity: item.quantity,
+      productName: item.productName
+    })));
     await saveOrder(persistedOrder);
     await markCartSessionConverted(req.body?.cartSessionId, orderNumber);
 

@@ -28,6 +28,8 @@ test('PostgreSQL persistence layer has schema migration seed and package wiring'
   assert.match(postgresDb, /DATABASE_URL/);
   assert.match(postgresDb, /new Pool/);
   assert.match(productRepository, /usePostgresProducts/);
+  assert.match(productRepository, /stock_quantity = stock_quantity - \$1/);
+  assert.match(productRepository, /stock_quantity >= \$1/);
   assert.match(orderRepository, /usePostgresOrders/);
   assert.match(siteContentRepository, /usePostgresSiteContent/);
   assert.match(siteContentRepository, /store_settings/);
