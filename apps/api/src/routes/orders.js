@@ -9,7 +9,7 @@ const {
   incrementDiscountUsage
 } = require('../discounts/discountRepository');
 const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
-const { listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
+const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
 
 const router = express.Router();
 
@@ -30,6 +30,10 @@ router.get('/:orderNumber', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
+    const storeSettings = await getStoreSettings();
+    if (storeSettings.website.maintenanceMode) {
+      return res.status(503).json({ error: 'Store is under maintenance.' });
+    }
     const order = await normalizeCheckout(req.body);
     const orderNumber = createOrderNumber();
     const customerAccountId = await resolveCustomerAccountId(req);
