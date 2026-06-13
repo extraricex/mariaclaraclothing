@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-se
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
 const SETTINGS_KEY = 'storeSettings';
 const CREDENTIALS_KEY = 'adminCredentials';
-const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website'];
+const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory'];
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
@@ -100,6 +100,9 @@ function defaultStoreSettings() {
           { heading: 'Contact', body: 'Questions about these terms? Reach us through our social channels or the contact details on your order confirmation text.' }
         ]
       }
+    },
+    inventory: {
+      lowStockThreshold: 12
     }
   };
 }
@@ -251,13 +254,26 @@ function normalizeWebsite(website, current = defaultStoreSettings().website) {
   };
 }
 
+function normalizeInventory(inventory) {
+  const value = inventory && typeof inventory === 'object' ? inventory : {};
+  const defaults = defaultStoreSettings().inventory;
+  const lowStockThreshold = value.lowStockThreshold === undefined
+    ? defaults.lowStockThreshold
+    : Number(value.lowStockThreshold);
+  if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 1 || lowStockThreshold > 999) {
+    throw badRequest('Low stock threshold must be an integer between 1 and 999.');
+  }
+  return { lowStockThreshold };
+}
+
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
   return {
     general: normalizeGeneral(value.general),
     shipping: normalizeShipping(value.shipping),
     payments: normalizePayments(value.payments),
-    website: normalizeWebsite(value.website)
+    website: normalizeWebsite(value.website),
+    inventory: normalizeInventory(value.inventory)
   };
 }
 
@@ -300,6 +316,7 @@ function normalizeSectionValue(section, value, current) {
   if (section === 'general') return normalizeGeneral(value);
   if (section === 'shipping') return normalizeShipping(value);
   if (section === 'payments') return normalizePayments(value);
+  if (section === 'inventory') return normalizeInventory(value);
   return normalizeWebsite(value, current.website);
 }
 

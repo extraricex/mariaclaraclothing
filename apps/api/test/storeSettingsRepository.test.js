@@ -145,3 +145,29 @@ test('website settings merge partial updates over the stored section', async () 
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test('inventory settings store the low stock threshold', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-inventory-'));
+  const previousSettingsFile = process.env.STORE_SETTINGS_FILE;
+  process.env.STORE_SETTINGS_FILE = path.join(tempDir, 'store-settings.json');
+
+  try {
+    const repository = freshRepository();
+
+    assert.equal(repository.getStoreSettings().inventory.lowStockThreshold, 12);
+
+    const updated = repository.updateSettingsSection('inventory', { lowStockThreshold: 30 });
+    assert.equal(updated.inventory.lowStockThreshold, 30);
+    assert.equal(repository.getStoreSettings().inventory.lowStockThreshold, 30);
+
+    assert.throws(() => repository.updateSettingsSection('inventory', { lowStockThreshold: 0 }),
+      /Low stock threshold must be an integer between 1 and 999\./);
+    assert.throws(() => repository.updateSettingsSection('inventory', { lowStockThreshold: 1000 }),
+      /Low stock threshold must be an integer between 1 and 999\./);
+    assert.throws(() => repository.updateSettingsSection('inventory', { lowStockThreshold: 12.5 }),
+      /Low stock threshold must be an integer between 1 and 999\./);
+  } finally {
+    restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
