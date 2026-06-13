@@ -887,6 +887,16 @@ If logic is testable, export it and gate CLI behavior behind `if (require.main =
   client sends — server does **not** recompute shipping, by design for admin-editable totals).
 - **Server-side checkout validation** does recompute/verify: variant existence, stock
   sufficiency, and unit price equality against the catalog.
+- **Stock deduction on order creation**: `POST /api/orders` atomically deducts each ordered
+  variant's stock (by product slug + size) **before** saving the order, via
+  `catalogRepository.deductVariantStock`. It is the authoritative gate — it cannot oversell:
+  in PostgreSQL it is one transaction of guarded `UPDATE ... SET stock_quantity =
+  stock_quantity - $qty WHERE ... AND stock_quantity >= $qty` (any row's `rowCount === 0` →
+  rollback + 409 `'<Size> is sold out for <Name>'`); in JSON mode it verifies all items then
+  subtracts and rewrites `data/products.json`. The read-only pre-check in
+  `normalizeCheckoutItem` still returns its 400 `'... is sold out ...'` first for already-known
+  shortfalls. Restock-on-cancel and an inventory-movements ledger are intentionally not yet
+  implemented.
 - **Low stock threshold = 12** (storefront “Limited pieces” label, admin lowStock summary,
   `/products/settings`). Inventory = sum of variant `stockQuantity`.
 - **Storefront visibility**: only `status: 'active'` products; `merchandisingStatus: 'sold_out'`
