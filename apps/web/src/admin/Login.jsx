@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { fetchSiteContent } from '../lib/api.js';
 import { adminLogin } from '../lib/adminApi.js';
 
 export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const [adminLogo, setAdminLogo] = useState(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchSiteContent()
+      .then((body) => setAdminLogo(body.siteContent?.logo || null))
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -22,10 +30,16 @@ export default function Login() {
     }
   }
 
+  const brandMarkup = adminLogo?.url ? (
+    <img src={adminLogo.url} alt={adminLogo.altText || 'Maria Clara Clothing'} className="max-h-16 max-w-48 object-contain" />
+  ) : (
+    <p className="display text-2xl">Maria<span className="text-accent">Clara</span></p>
+  );
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink px-5">
       <form onSubmit={handleSubmit} className="w-full max-w-sm border border-paper/15 bg-paper p-8">
-        <p className="display text-2xl">Maria<span className="text-accent">Clara</span></p>
+        {brandMarkup}
         <p className="eyebrow mt-1">Admin workspace</p>
         <label className="mt-8 block text-sm font-semibold" htmlFor="admin-password">Password</label>
         <input

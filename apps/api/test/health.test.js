@@ -164,7 +164,7 @@ test('orders reject sold out product variants from the shared catalog', async ()
     const body = await response.json();
 
     assert.equal(response.status, 400);
-    assert.equal(body.error, 's is sold out for MARIACLARA ORANGE — CROP BOX 240 GSM Shirt');
+    assert.equal(body.error, 'Small is sold out for MARIACLARA ORANGE — CROP BOX 240 GSM Shirt');
   } finally {
     server.close();
   }

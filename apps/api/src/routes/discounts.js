@@ -4,6 +4,7 @@ const {
   discountValidationError,
   findDiscountByCode
 } = require('../discounts/discountRepository');
+const { quoteCart } = require('../promos/promoEngine');
 
 const router = express.Router();
 
@@ -35,6 +36,15 @@ router.post('/validate', async (req, res, next) => {
         discountTotalCents: computeDiscountCents(discount, subtotalCents)
       }
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/quote', async (req, res, next) => {
+  try {
+    const quote = await quoteCart(req.body || {});
+    return res.json({ quote });
   } catch (error) {
     return next(error);
   }

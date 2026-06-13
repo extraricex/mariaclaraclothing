@@ -3,6 +3,7 @@ const path = require('node:path');
 const { adminRouter } = require('./routes/admin');
 const { productRouter } = require('./routes/products');
 const { orderRouter } = require('./routes/orders');
+const { cartSessionRouter } = require('./routes/cartSessions');
 const { siteContentRouter } = require('./routes/siteContent');
 const { discountRouter } = require('./routes/discounts');
 const { customerRouter } = require('./routes/customer');
@@ -25,6 +26,7 @@ function createApp() {
   app.use('/api/products', productRouter);
   app.use('/api/site-content', siteContentRouter);
   app.use('/api/orders', orderRouter);
+  app.use('/api/cart-sessions', cartSessionRouter);
   app.use('/api/discounts', discountRouter);
   app.use('/api/customer', customerRouter);
   app.use('/api/storefront-settings', storeSettingsRouter);

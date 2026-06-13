@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+test('admin order detail editor exposes contact, separated address, and item editing fields', async () => {
+  const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'OrderDetail.jsx'), 'utf8');
+
+  assert.match(source, /customer:\s*\{/);
+  assert.match(source, /fullName:\s*order\.customer\?\.fullName/);
+  assert.match(source, /phone:\s*order\.customer\?\.phone/);
+  assert.match(source, /email:\s*order\.customer\?\.email/);
+  assert.match(source, /items:\s*\(order\.items/);
+  assert.match(source, /changes\.customer\s*=\s*form\.customer/);
+  assert.match(source, /changes\.items\s*=\s*form\.items/);
+  assert.match(source, /House \/ Street/);
+  assert.match(source, /City \/ Municipality/);
+  assert.match(source, /Barangay/);
+  assert.match(source, /Province/);
+  assert.match(source, /Product name/);
+  assert.match(source, /Unit price/);
+  assert.match(source, /updateItem/);
+  assert.match(source, /removeItem/);
+  assert.match(source, /addItem/);
+  assert.match(source, /order-detail-shell/);
+  assert.match(source, /order-detail-grid/);
+  assert.match(source, /order-status-badge/);
+  assert.match(source, /Payment pending/);
+  assert.match(source, /Unfulfilled/);
+  assert.match(source, /Mark as fulfilled/);
+  assert.match(source, /Mark as paid/);
+  assert.match(source, /Timeline/);
+  assert.match(source, /Leave a comment/);
+  assert.match(source, /Conversion summary/);
+  assert.match(source, /Order risk/);
+  assert.match(source, /J&T readiness/);
+  assert.match(source, /Notes/);
+  assert.match(source, /Customer/);
+  assert.match(source, /Billing address/);
+  assert.match(source, /Print/);
+  assert.match(source, /More actions/);
+  assert.match(source, /productSearchQuery/);
+  assert.match(source, /\/api\/admin\/products\?\$\{params\}/);
+  assert.match(source, /Search products to add/);
+  assert.match(source, /selectCatalogVariant/);
+  assert.match(source, /variant\.sku/);
+});

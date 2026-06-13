@@ -1,11 +1,45 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { cartQuantity, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
+import { fetchProducts } from '../lib/api.js';
+import { addToCart, cartQuantity, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
+
+function firstAvailableVariant(product) {
+  return (product.variants || []).find((variant) => Number(variant.stockQuantity || 0) > 0) || null;
+}
 
 export default function Cart() {
   const items = useCart();
+  const [products, setProducts] = useState([]);
   const quantity = cartQuantity(items);
   const subtotal = subtotalCents(items);
+  const cartUpsells = useMemo(() => products
+    .filter((product) => firstAvailableVariant(product))
+    .filter((product) => !items.some((item) => item.slug === product.slug || item.productId === product.id))
+    .slice(0, 3), [items, products]);
+
+  useEffect(() => {
+    fetchProducts()
+      .then((body) => setProducts(body.products || []))
+      .catch(() => setProducts([]));
+  }, []);
+
+  function addUpsell(product) {
+    const variant = firstAvailableVariant(product);
+    if (!variant) return;
+    addToCart({
+      productId: product.id,
+      slug: product.slug,
+      variantId: variant.id,
+      productName: product.name,
+      size: variant.size,
+      quantity: 1,
+      unitPriceCents: product.priceCents,
+      imageUrl: product.images?.[0]?.url || '',
+      externalPosProductId: product.externalPosProductId || '',
+      externalPosVariantId: variant.externalPosVariantId || ''
+    });
+  }
 
   if (!items.length) {
     return (
@@ -60,6 +94,39 @@ export default function Cart() {
         <p className="text-xs text-clay">Shipping calculated at checkout · COD nationwide</p>
         <Link to="/checkout" className="btn-ink mt-3 w-full sm:w-auto">Check out — Cash on Delivery</Link>
       </div>
+
+      {cartUpsells.length > 0 && (
+        <section className="mt-14 border-t border-line pt-8">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="eyebrow">Recommended</p>
+              <h2 className="display mt-2 text-3xl">Complete the fit</h2>
+            </div>
+            <p className="max-w-xs text-sm text-ink-soft">Add another piece before checkout and keep everything in one COD delivery.</p>
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            {cartUpsells.map((product) => {
+              const variant = firstAvailableVariant(product);
+              const image = product.images?.[0];
+              return (
+                <article key={product.id} className="border border-line bg-paper p-3">
+                  <Link to={`/product/${encodeURIComponent(product.slug)}`} className="block aspect-[4/5] overflow-hidden bg-cream">
+                    {image && <img src={image.url} alt={image.altText || product.name} className="h-full w-full object-contain" loading="lazy" />}
+                  </Link>
+                  <div className="mt-3">
+                    <h3 className="min-h-10 text-sm font-semibold leading-snug">{product.name}</h3>
+                    <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">Size {variant.size}</p>
+                    <p className="mt-2 text-sm font-semibold">{formatMoney(product.priceCents)}</p>
+                    <button type="button" className="btn-ghost mt-3 w-full !py-2 text-xs" onClick={() => addUpsell(product)}>
+                      Add to cart
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

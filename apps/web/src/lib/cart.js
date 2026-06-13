@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 const CART_KEY = 'maria-clara-cart';
 const CART_EVENT = 'maria-clara-cart-changed';
+const CART_SESSION_KEY = 'maria-clara-cart-session-id';
 
 export function getCart() {
   try {
@@ -15,6 +16,31 @@ export function getCart() {
 function saveCart(items) {
   localStorage.setItem(CART_KEY, JSON.stringify(items));
   window.dispatchEvent(new Event(CART_EVENT));
+  syncCartSession({ items });
+}
+
+export function getCartSessionId() {
+  let sessionId = localStorage.getItem(CART_SESSION_KEY);
+  if (!sessionId) {
+    sessionId = `cart-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(CART_SESSION_KEY, sessionId);
+  }
+  return sessionId;
+}
+
+export function resetCartSessionId() {
+  localStorage.removeItem(CART_SESSION_KEY);
+}
+
+export function syncCartSession(payload = {}) {
+  if (typeof window === 'undefined') return Promise.resolve();
+  const sessionId = getCartSessionId();
+  const items = Array.isArray(payload.items) ? payload.items : getCart();
+  return fetch(`/api/cart-sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, items })
+  }).catch(() => {});
 }
 
 export function addToCart(item) {

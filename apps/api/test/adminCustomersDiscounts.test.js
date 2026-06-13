@@ -22,6 +22,11 @@ function createFreshApp() {
   delete require.cache[require.resolve('../src/orders/orderRepository')];
   delete require.cache[require.resolve('../src/discounts/discountRepository')];
   delete require.cache[require.resolve('../src/customers/customerAggregator')];
+  try {
+    delete require.cache[require.resolve('../src/promos/promoEngine')];
+  } catch (_error) {
+    // The promo engine is created by the Phase 1 implementation.
+  }
   return require('../src/app').createApp();
 }
 
@@ -146,6 +151,91 @@ test('discounts: admin CRUD, public validation, checkout application and usage c
     assert.equal(deleteResponse.status, 200);
     const emptyList = await adminRequest(port, '/api/admin/discounts').then((r) => r.json());
     assert.equal(emptyList.discounts.length, 0);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreEnv('ORDERS_DATA_FILE', previousOrdersFile);
+    restoreEnv('DISCOUNTS_DATA_FILE', previousDiscountsFile);
+  }
+});
+
+test('promos: quote and checkout apply automatic buy more save more snapshots', async () => {
+  const previousOrdersFile = process.env.ORDERS_DATA_FILE;
+  const previousDiscountsFile = process.env.DISCOUNTS_DATA_FILE;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-promos-'));
+  process.env.ORDERS_DATA_FILE = path.join(tempDir, 'orders.json');
+  process.env.DISCOUNTS_DATA_FILE = path.join(tempDir, 'discounts.json');
+
+  const app = createFreshApp();
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  const { port } = server.address();
+
+  const promoItems = [{ ...ORDER_ITEM, quantity: 2 }];
+
+  try {
+    const createResponse = await adminRequest(port, '/api/admin/discounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: 'BMSM2026',
+        name: 'Buy More Save More Promo',
+        description: 'Save more when buying multiple items.',
+        method: 'automatic',
+        type: 'buy_more_save_more',
+        status: 'active',
+        minimumQuantity: 2,
+        bannerText: 'Buy More Save More Promo',
+        terms: 'Buy at least 2 items to save ₱100 and unlock free shipping.',
+        rules: [
+          {
+            minimumQuantity: 2,
+            discountType: 'fixed',
+            discountValueCents: 10000,
+            freeShipping: true
+          }
+        ]
+      })
+    });
+    assert.equal(createResponse.status, 201);
+
+    const quoteResponse = await fetch(`http://127.0.0.1:${port}/api/discounts/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: promoItems, shippingFeeCents: 8000 })
+    });
+    assert.equal(quoteResponse.status, 200);
+    const { quote } = await quoteResponse.json();
+    assert.equal(quote.subtotalCents, 129800);
+    assert.equal(quote.discountTotalCents, 10000);
+    assert.equal(quote.shippingFeeCents, 0);
+    assert.equal(quote.freeShippingUnlocked, true);
+    assert.equal(quote.totalCents, 119800);
+    assert.equal(quote.discountSnapshot.name, 'Buy More Save More Promo');
+    assert.equal(quote.discountSnapshot.type, 'buy_more_save_more');
+    assert.equal(quote.discountSnapshot.discountAmountCents, 10000);
+    assert.equal(quote.discountSnapshot.freeShippingApplied, true);
+
+    const orderResponse = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(checkoutPayload({
+        items: promoItems,
+        shippingFeeCents: 8000,
+        freeShippingUnlocked: false,
+        discountTotalCents: 0
+      }))
+    });
+    assert.equal(orderResponse.status, 201);
+    const { orderNumber } = await orderResponse.json();
+
+    const confirmation = await fetch(`http://127.0.0.1:${port}/api/orders/${orderNumber}`).then((r) => r.json());
+    assert.equal(confirmation.order.discountCode, 'BMSM2026');
+    assert.equal(confirmation.order.discountTotalCents, 10000);
+    assert.equal(confirmation.order.shippingFeeCents, 0);
+    assert.equal(confirmation.order.freeShippingUnlocked, true);
+    assert.equal(confirmation.order.totalCents, 119800);
+    assert.equal(confirmation.order.discountSnapshot.name, 'Buy More Save More Promo');
+    assert.equal(confirmation.order.discountSnapshot.type, 'buy_more_save_more');
+    assert.equal(confirmation.order.discountSnapshot.freeShippingApplied, true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('ORDERS_DATA_FILE', previousOrdersFile);
