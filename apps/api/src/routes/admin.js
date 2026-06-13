@@ -144,33 +144,37 @@ router.get('/products/export', async (req, res, next) => {
   }
 });
 
-router.get('/site-content', (_req, res) => {
-  res.json({ siteContent: getSiteContent() });
+router.get('/site-content', async (_req, res, next) => {
+  try {
+    return res.json({ siteContent: await getSiteContent() });
+  } catch (error) {
+    return next(error);
+  }
 });
 
-router.put('/site-content/homepage-banners', (req, res, next) => {
+router.put('/site-content/homepage-banners', async (req, res, next) => {
   try {
-    const siteContent = updateHomepageBanners(req.body?.banners);
+    const siteContent = await updateHomepageBanners(req.body?.banners);
     return res.json({ siteContent, banners: siteContent.homepageBanners });
   } catch (error) {
     return next(error);
   }
 });
 
-router.post('/site-content/homepage-banners/images', bannerUpload.array('images', 6), (req, res, next) => {
+router.post('/site-content/homepage-banners/images', bannerUpload.array('images', 6), async (req, res, next) => {
   try {
     const files = Array.isArray(req.files) ? req.files : [];
     if (!files.length) {
       return res.status(400).json({ error: 'At least one banner image is required' });
     }
 
-    const currentBanners = getSiteContent().homepageBanners;
+    const { homepageBanners: currentBanners } = await getSiteContent();
     const uploadedBanners = files.map((file, index) => ({
       url: bannerUploadUrl(file.filename),
       altText: 'Homepage banner',
       sortOrder: currentBanners.length + index
     }));
-    const siteContent = appendHomepageBanners(uploadedBanners);
+    const siteContent = await appendHomepageBanners(uploadedBanners);
 
     return res.status(201).json({ siteContent, banners: siteContent.homepageBanners, uploadedBanners });
   } catch (error) {
@@ -178,13 +182,13 @@ router.post('/site-content/homepage-banners/images', bannerUpload.array('images'
   }
 });
 
-router.post('/site-content/logo/image', logoUpload.single('image'), (req, res, next) => {
+router.post('/site-content/logo/image', logoUpload.single('image'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'A logo image is required' });
     }
 
-    const siteContent = updateLogo({
+    const siteContent = await updateLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing logo'
     });
