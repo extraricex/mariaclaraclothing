@@ -95,3 +95,53 @@ test('admin credentials hash passwords and rotate tokens', async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test('website settings merge partial updates over the stored section', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-website-'));
+  const previousSettingsFile = process.env.STORE_SETTINGS_FILE;
+  process.env.STORE_SETTINGS_FILE = path.join(tempDir, 'store-settings.json');
+
+  try {
+    const repository = freshRepository();
+
+    const defaults = repository.getStoreSettings();
+    assert.equal(defaults.website.maintenanceMode, false);
+    assert.equal(defaults.website.ticker.length, 4);
+    assert.equal(defaults.website.seo.title, 'Maria Clara Clothing — Premium Philippine Streetwear');
+    assert.ok(defaults.website.infoPages.faq.length >= 3);
+    assert.ok(defaults.website.infoPages.shippingReturns.length >= 3);
+    assert.ok(defaults.website.infoPages.terms.length >= 3);
+    assert.ok(defaults.website.infoPages.faq[0].heading);
+    assert.ok(defaults.website.infoPages.faq[0].body);
+
+    const afterTicker = repository.updateSettingsSection('website', { ticker: ['Big drop Friday'] });
+    assert.deepEqual(afterTicker.website.ticker, ['Big drop Friday']);
+    assert.equal(afterTicker.website.seo.title, defaults.website.seo.title);
+    assert.deepEqual(afterTicker.website.infoPages.terms, defaults.website.infoPages.terms);
+
+    const afterFaq = repository.updateSettingsSection('website', {
+      infoPages: { faq: [{ heading: 'New question', body: 'New answer.' }] }
+    });
+    assert.deepEqual(afterFaq.website.infoPages.faq, [{ heading: 'New question', body: 'New answer.' }]);
+    assert.deepEqual(afterFaq.website.infoPages.shippingReturns, defaults.website.infoPages.shippingReturns);
+    assert.deepEqual(afterFaq.website.ticker, ['Big drop Friday']);
+
+    const afterMaintenance = repository.updateSettingsSection('website', { maintenanceMode: true });
+    assert.equal(afterMaintenance.website.maintenanceMode, true);
+    assert.deepEqual(afterMaintenance.website.infoPages.faq, [{ heading: 'New question', body: 'New answer.' }]);
+
+    assert.throws(() => repository.updateSettingsSection('website', { ticker: [] }),
+      /Ticker must have 1 to 8 items\./);
+    assert.throws(() => repository.updateSettingsSection('website', { ticker: ['ok', '  '] }),
+      /Ticker items must be non-empty text\./);
+    assert.throws(() => repository.updateSettingsSection('website', { infoPages: { blog: [] } }),
+      /Info page is invalid\./);
+    assert.throws(() => repository.updateSettingsSection('website', { infoPages: { faq: [{ heading: '', body: 'x' }] } }),
+      /Info page sections need a heading and body\./);
+    assert.throws(() => repository.updateSettingsSection('website', { infoPages: { faq: [] } }),
+      /Info pages must have 1 to 30 sections\./);
+  } finally {
+    restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});

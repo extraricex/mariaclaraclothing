@@ -7,7 +7,8 @@ const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-se
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
 const SETTINGS_KEY = 'storeSettings';
 const CREDENTIALS_KEY = 'adminCredentials';
-const SETTINGS_SECTIONS = ['general', 'shipping', 'payments'];
+const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website'];
+const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
 
@@ -63,6 +64,42 @@ function defaultStoreSettings() {
         { id: 'gcash', label: 'GCash', enabled: false, instructions: '' },
         { id: 'bank_transfer', label: 'Bank Transfer', enabled: false, instructions: '' }
       ]
+    },
+    website: {
+      ticker: [
+        'Free shipping on 2+ items',
+        'Cash on delivery nationwide',
+        '240 GSM premium cotton',
+        'Ships via J&T Express'
+      ],
+      seo: {
+        title: 'Maria Clara Clothing — Premium Philippine Streetwear',
+        description: 'Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items.',
+        imageUrl: ''
+      },
+      maintenanceMode: false,
+      infoPages: {
+        faq: [
+          { heading: 'How does Cash on Delivery work?', body: 'Place your order online — no payment needed. We text your mobile number to confirm, then ship via J&T Express. You pay the rider in cash when the parcel arrives.' },
+          { heading: 'How long is delivery?', body: 'Metro Manila and Cavite: 2–4 days. Other Luzon provinces: 3–6 days. Visayas and Mindanao: 5–8 days. We confirm by text before shipping.' },
+          { heading: 'How much is shipping?', body: 'Metro Manila & Cavite ₱80, Luzon ₱120, Visayas/Mindanao ₱180. Order any 2 items and shipping is free.' },
+          { heading: 'What if my size is sold out?', body: 'Drops are limited runs. Follow our socials for restocks — once a run sells through, it usually does not return.' },
+          { heading: 'What is 240 GSM cotton?', body: 'GSM is fabric weight. 240 GSM is heavyweight tee territory: structured, opaque, and it keeps its shape after repeated washing.' }
+        ],
+        shippingReturns: [
+          { heading: 'Shipping coverage', body: 'We ship nationwide via J&T Express with structured Philippine addresses (province, city/municipality, barangay). Some barangays are not confirmed for door-to-door delivery; we review those orders before shipping and coordinate by text.' },
+          { heading: 'Shipping rates', body: 'Metro Manila & Cavite ₱80 · Luzon ₱120 · Visayas/Mindanao ₱180. Free shipping on any order of 2 or more items.' },
+          { heading: 'Order confirmation', body: 'Every COD order is confirmed by text message before it ships. Unreachable numbers may cause the order to be cancelled.' },
+          { heading: 'Returns & exchanges', body: 'Wrong or damaged item? Message us within 7 days of delivery with photos and we will arrange a replacement. Items must be unworn and unwashed. Size exchanges are subject to stock availability; buyer shoulders return shipping for size exchanges.' }
+        ],
+        terms: [
+          { heading: 'Orders', body: 'All orders are Cash on Delivery and are confirmed via text message before fulfillment. We reserve the right to cancel orders we cannot confirm.' },
+          { heading: 'Pricing', body: 'Prices are in Philippine pesos and may change without notice. The price at the time of your order is what you pay.' },
+          { heading: 'Product', body: 'Colors may vary slightly from photos due to screen settings and photography lighting. Measurements in size charts have a ±2cm tolerance.' },
+          { heading: 'Privacy', body: 'Your name, mobile number, and address are used only to fulfill and deliver your order. We never sell your information.' },
+          { heading: 'Contact', body: 'Questions about these terms? Reach us through our social channels or the contact details on your order confirmation text.' }
+        ]
+      }
     }
   };
 }
@@ -154,12 +191,73 @@ function normalizePayments(payments) {
   return { methods };
 }
 
+function normalizeTicker(ticker) {
+  if (!Array.isArray(ticker) || ticker.length < 1 || ticker.length > 8) {
+    throw badRequest('Ticker must have 1 to 8 items.');
+  }
+  return ticker.map((item) => {
+    const text = String(item || '').trim();
+    if (!text) {
+      throw badRequest('Ticker items must be non-empty text.');
+    }
+    return text;
+  });
+}
+
+function normalizeSeo(seo, current) {
+  const value = seo && typeof seo === 'object' ? seo : {};
+  return {
+    title: String(value.title || '').trim() || current.title,
+    description: String(value.description || '').trim() || current.description,
+    imageUrl: String(value.imageUrl || '').trim()
+  };
+}
+
+function normalizeInfoPages(infoPages, current) {
+  const value = infoPages && typeof infoPages === 'object' ? infoPages : {};
+  const unknownPage = Object.keys(value).find((key) => !WEBSITE_INFO_PAGE_KEYS.includes(key));
+  if (unknownPage) {
+    throw badRequest('Info page is invalid.');
+  }
+  const result = {};
+  for (const key of WEBSITE_INFO_PAGE_KEYS) {
+    if (value[key] === undefined) {
+      result[key] = current[key];
+      continue;
+    }
+    const rows = Array.isArray(value[key]) ? value[key] : null;
+    if (!rows || rows.length < 1 || rows.length > 30) {
+      throw badRequest('Info pages must have 1 to 30 sections.');
+    }
+    result[key] = rows.map((row) => {
+      const heading = String(row?.heading || '').trim();
+      const body = String(row?.body || '').trim();
+      if (!heading || !body) {
+        throw badRequest('Info page sections need a heading and body.');
+      }
+      return { heading, body };
+    });
+  }
+  return result;
+}
+
+function normalizeWebsite(website, current = defaultStoreSettings().website) {
+  const value = website && typeof website === 'object' ? website : {};
+  return {
+    ticker: value.ticker === undefined ? current.ticker : normalizeTicker(value.ticker),
+    seo: value.seo === undefined ? current.seo : normalizeSeo(value.seo, current.seo),
+    maintenanceMode: value.maintenanceMode === undefined ? current.maintenanceMode : Boolean(value.maintenanceMode),
+    infoPages: value.infoPages === undefined ? current.infoPages : normalizeInfoPages(value.infoPages, current.infoPages)
+  };
+}
+
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
   return {
     general: normalizeGeneral(value.general),
     shipping: normalizeShipping(value.shipping),
-    payments: normalizePayments(value.payments)
+    payments: normalizePayments(value.payments),
+    website: normalizeWebsite(value.website)
   };
 }
 
@@ -198,22 +296,29 @@ function getStoreSettings() {
   return normalizeStoreSettings(readJsonFile(settingsDataFile()) || {});
 }
 
+function normalizeSectionValue(section, value, current) {
+  if (section === 'general') return normalizeGeneral(value);
+  if (section === 'shipping') return normalizeShipping(value);
+  if (section === 'payments') return normalizePayments(value);
+  return normalizeWebsite(value, current.website);
+}
+
 function updateSettingsSection(section, value) {
   if (!SETTINGS_SECTIONS.includes(section)) {
     throw badRequest('Settings section is invalid.');
   }
-  const normalizers = { general: normalizeGeneral, shipping: normalizeShipping, payments: normalizePayments };
-  const normalized = normalizers[section](value);
 
   if (usePostgresSettings()) {
     return readPostgresValue(SETTINGS_KEY).then(async (stored) => {
-      const next = { ...normalizeStoreSettings(stored || {}), [section]: normalized };
+      const current = normalizeStoreSettings(stored || {});
+      const next = { ...current, [section]: normalizeSectionValue(section, value, current) };
       await writePostgresValue(SETTINGS_KEY, next);
       return next;
     });
   }
 
-  const next = { ...normalizeStoreSettings(readJsonFile(settingsDataFile()) || {}), [section]: normalized };
+  const current = normalizeStoreSettings(readJsonFile(settingsDataFile()) || {});
+  const next = { ...current, [section]: normalizeSectionValue(section, value, current) };
   writeJsonFile(settingsDataFile(), next);
   return next;
 }
