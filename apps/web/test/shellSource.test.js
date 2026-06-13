@@ -29,3 +29,12 @@ test('shell uses separate header and footer logos from site content', async () =
   assert.match(source, /footerLogo\?\.url/);
   assert.match(source, /headerLogo\?\.url/);
 });
+
+test('shell refreshes changed site content and renders footer logo white', async () => {
+  const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'components', 'Shell.jsx'), 'utf8');
+
+  assert.match(source, /maria-clara-site-content-changed/);
+  assert.match(source, /window\.addEventListener\('maria-clara-site-content-changed'/);
+  assert.match(source, /window\.removeEventListener\('maria-clara-site-content-changed'/);
+  assert.match(source, /brightness-0 invert/);
+});

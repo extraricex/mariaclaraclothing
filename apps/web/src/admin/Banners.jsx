@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
 
+function notifySiteContentChanged() {
+  window.dispatchEvent(new Event('maria-clara-site-content-changed'));
+}
+
 export default function Banners() {
   const [logo, setLogo] = useState(null);
   const [footerLogo, setFooterLogo] = useState(null);
@@ -58,6 +62,7 @@ export default function Banners() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Upload failed.');
       setBanners(body.siteContent?.homepageBanners || []);
+      notifySiteContentChanged();
       setMessage('Banner uploaded.');
     } catch (error) {
       setMessage(error.message);
@@ -76,6 +81,7 @@ export default function Banners() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Upload failed.');
       setLogo(body.siteContent?.logo || null);
+      notifySiteContentChanged();
       setMessage('Logo uploaded.');
     } catch (error) {
       setMessage(error.message);
@@ -94,6 +100,7 @@ export default function Banners() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Upload failed.');
       setFooterLogo(body.siteContent?.footerLogo || null);
+      notifySiteContentChanged();
       setMessage('Footer logo uploaded.');
     } catch (error) {
       setMessage(error.message);

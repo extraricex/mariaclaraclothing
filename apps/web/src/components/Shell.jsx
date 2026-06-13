@@ -53,12 +53,18 @@ export default function Shell() {
   const [footerLogo, setFooterLogo] = useState(null);
 
   useEffect(() => {
-    fetchSiteContent()
-      .then((body) => {
-        setHeaderLogo(body.siteContent?.logo || null);
-        setFooterLogo(body.siteContent?.footerLogo || body.siteContent?.logo || null);
-      })
-      .catch(() => {});
+    function loadSiteContent() {
+      fetchSiteContent()
+        .then((body) => {
+          setHeaderLogo(body.siteContent?.logo || null);
+          setFooterLogo(body.siteContent?.footerLogo || body.siteContent?.logo || null);
+        })
+        .catch(() => {});
+    }
+
+    loadSiteContent();
+    window.addEventListener('maria-clara-site-content-changed', loadSiteContent);
+    return () => window.removeEventListener('maria-clara-site-content-changed', loadSiteContent);
   }, []);
 
   const logoMarkup = headerLogo?.url ? (
@@ -130,7 +136,7 @@ export default function Shell() {
         <div className="mx-auto max-w-7xl px-5 py-14 lg:px-8">
           {footerLogo?.url ? (
             <div className="inline-flex">
-              <img src={footerLogo.url} alt={footerLogo.altText || 'Maria Clara Clothing'} className="max-h-20 max-w-64 object-contain" />
+              <img src={footerLogo.url} alt={footerLogo.altText || 'Maria Clara Clothing'} className="max-h-20 max-w-64 object-contain brightness-0 invert" />
             </div>
           ) : (
             <p className="display text-4xl leading-none sm:text-6xl lg:text-7xl">
