@@ -26,3 +26,12 @@ test('admin settings page edits all four sections against the settings API', asy
   assert.doesNotMatch(source, /WORKING_NOW/);
   assert.doesNotMatch(source, /Coming next/);
 });
+
+test('settings page includes SEO and maintenance cards', async () => {
+  const source = await readFile(settingsPath, 'utf8');
+
+  assert.match(source, /\/api\/admin\/settings\/website/);
+  assert.match(source, /Share image URL/);
+  assert.match(source, /maintenanceMode/);
+  assert.match(source, /checkout is disabled/);
+});

@@ -282,6 +282,81 @@ function SecurityCard() {
   );
 }
 
+function SeoCard({ initial }) {
+  const [form, setForm] = useState(initial);
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function set(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      await adminSend('PUT', '/api/admin/settings/website', { seo: form });
+      setStatus({ tone: 'ok', message: 'Changes saved successfully.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard title="SEO" hint="Browser title, search description, and social share image.">
+      <div className="mt-4 space-y-3">
+        <Field label="Site title"><input className="field mt-1" value={form.title} onChange={(e) => set('title', e.target.value)} /></Field>
+        <Field label="Meta description"><textarea className="field mt-1" rows="3" value={form.description} onChange={(e) => set('description', e.target.value)} /></Field>
+        <Field label="Share image URL"><input className="field mt-1" placeholder="https://… or /uploads/…" value={form.imageUrl} onChange={(e) => set('imageUrl', e.target.value)} /></Field>
+      </div>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save SEO settings'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
+function MaintenanceCard({ initial }) {
+  const [enabled, setEnabled] = useState(initial);
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/website', { maintenanceMode: enabled });
+      setEnabled(body.settings.website.maintenanceMode);
+      setStatus({ tone: 'ok', message: body.settings.website.maintenanceMode ? 'Maintenance mode is ON — the storefront is hidden.' : 'Maintenance mode is off. The storefront is live.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Maintenance" hint="Take the storefront offline while you make changes.">
+      <label className="mt-4 flex items-start gap-3 text-sm">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        <span>
+          <span className="font-semibold">Enable maintenance mode</span>
+          <span className="mt-1 block text-xs text-clay">
+            Customers see a "be right back" screen and checkout is disabled. The admin dashboard stays available, so you can turn this off any time.
+          </span>
+        </span>
+      </label>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save maintenance setting'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
 export default function Settings() {
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState('');
@@ -306,6 +381,8 @@ export default function Settings() {
         <GeneralCard initial={settings.general} />
         <ShippingCard initial={settings.shipping} />
         <PaymentsCard initial={settings.payments} />
+        <SeoCard initial={settings.website.seo} />
+        <MaintenanceCard initial={settings.website.maintenanceMode} />
         <SecurityCard />
       </div>
     </div>
