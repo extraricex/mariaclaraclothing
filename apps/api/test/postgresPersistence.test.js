@@ -12,6 +12,7 @@ test('PostgreSQL persistence layer has schema migration seed and package wiring'
   const postgresDb = await fs.readFile(path.join(root, 'src', 'db', 'postgres.js'), 'utf8');
   const productRepository = await fs.readFile(path.join(root, 'src', 'products', 'catalogRepository.js'), 'utf8');
   const orderRepository = await fs.readFile(path.join(root, 'src', 'orders', 'orderRepository.js'), 'utf8');
+  const siteContentRepository = await fs.readFile(path.join(root, 'src', 'siteContent', 'siteContentRepository.js'), 'utf8');
 
   assert.match(packageJson.dependencies.pg, /^\^8\./);
   assert.equal(packageJson.scripts['db:migrate'], 'node scripts/db-migrate.js');
@@ -28,4 +29,6 @@ test('PostgreSQL persistence layer has schema migration seed and package wiring'
   assert.match(postgresDb, /new Pool/);
   assert.match(productRepository, /usePostgresProducts/);
   assert.match(orderRepository, /usePostgresOrders/);
+  assert.match(siteContentRepository, /usePostgresSiteContent/);
+  assert.match(siteContentRepository, /store_settings/);
 });
