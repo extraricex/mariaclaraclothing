@@ -201,13 +201,13 @@ router.post('/site-content/logo/image', logoUpload.single('image'), async (req, 
   }
 });
 
-router.post('/site-content/footer-logo/image', logoUpload.single('image'), (req, res, next) => {
+router.post('/site-content/footer-logo/image', logoUpload.single('image'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'A footer logo image is required' });
     }
 
-    const siteContent = updateFooterLogo({
+    const siteContent = await updateFooterLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing footer logo'
     });

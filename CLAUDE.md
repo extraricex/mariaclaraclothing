@@ -512,7 +512,7 @@ Order record shape: see `normalizeCheckout` in `src/routes/orders.js` plus admin
 
 | Export | Notes |
 |---|---|
-| `getSiteContent()` | `{ logo, homepageBanners: [{ url, altText, sortOrder }] }`; falls back to `defaultSiteContent()` (logo + two `/brand/` hero defaults) when the file/Postgres key is missing. Returns a Promise in Postgres mode (callers `await`). |
+| `getSiteContent()` | `{ logo, footerLogo, homepageBanners: [{ url, altText, sortOrder }] }`; falls back to `defaultSiteContent()` (logo + footerLogo + two `/brand/` hero defaults) when the file/Postgres key is missing. Returns a Promise in Postgres mode (callers `await`). |
 | `updateHomepageBanners(banners)` | Replaces the list (normalized, re-sorted, sortOrder reindexed 0..n). |
 | `appendHomepageBanners(banners)` | Append (used by upload endpoint). |
 | `saveSiteContent(content)` / `normalizeBanners(banners)` | Lower-level helpers. |

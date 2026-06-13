@@ -101,6 +101,11 @@ function updateLogo(logo) {
 
 function updateFooterLogo(footerLogo) {
   const content = getSiteContent();
+  if (isPromise(content)) {
+    return content.then((current) =>
+      saveSiteContent({ ...current, footerLogo: normalizeLogo(footerLogo, 'Maria Clara Clothing footer logo') })
+    );
+  }
   return saveSiteContent({
     ...content,
     footerLogo: normalizeLogo(footerLogo, 'Maria Clara Clothing footer logo')
