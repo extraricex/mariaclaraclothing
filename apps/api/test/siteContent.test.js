@@ -35,6 +35,7 @@ test('site content APIs expose and update homepage banners', async () => {
 
   await fs.writeFile(siteContentFile, JSON.stringify({
     logo: { url: '/brand/logo.png', altText: 'Current logo' },
+    footerLogo: { url: '/brand/footer-logo.png', altText: 'Current footer logo' },
     homepageBanners: [
       { url: '/brand/hero1v2.jpg', altText: 'Current banner', sortOrder: 0 }
     ]
@@ -53,6 +54,7 @@ test('site content APIs expose and update homepage banners', async () => {
 
     assert.equal(publicResponse.status, 200);
     assert.equal(publicBody.siteContent.logo.url, '/brand/logo.png');
+    assert.equal(publicBody.siteContent.footerLogo.url, '/brand/footer-logo.png');
     assert.equal(publicBody.siteContent.homepageBanners[0].url, '/brand/hero1v2.jpg');
 
     const blockedResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content`);
@@ -99,6 +101,23 @@ test('site content APIs expose and update homepage banners', async () => {
 
     const savedLogoContent = JSON.parse(await fs.readFile(siteContentFile, 'utf8'));
     assert.match(savedLogoContent.logo.url, /^\/uploads\/logos\/site-logo-/);
+
+    const footerLogoBody = new FormData();
+    footerLogoBody.append('image', new Blob([Buffer.from('footer logo bytes')], { type: 'image/png' }), 'footer-logo.png');
+    const footerLogoResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/footer-logo/image`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      body: footerLogoBody
+    });
+    const footerLogoJson = await footerLogoResponse.json();
+
+    assert.equal(footerLogoResponse.status, 201);
+    assert.match(footerLogoJson.siteContent.footerLogo.url, /^\/uploads\/logos\/site-logo-/);
+    assert.equal(footerLogoJson.siteContent.logo.url, savedLogoContent.logo.url);
+
+    const savedFooterLogoContent = JSON.parse(await fs.readFile(siteContentFile, 'utf8'));
+    assert.match(savedFooterLogoContent.footerLogo.url, /^\/uploads\/logos\/site-logo-/);
+    assert.match(savedFooterLogoContent.logo.url, /^\/uploads\/logos\/site-logo-/);
   } finally {
     server.close();
     if (previousSiteContentFile === undefined) delete process.env.SITE_CONTENT_FILE;

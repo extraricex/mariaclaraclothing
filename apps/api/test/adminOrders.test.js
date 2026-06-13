@@ -362,7 +362,25 @@ test('admin order APIs require login and support list detail and status updates'
           city: 'IMUS',
           province: 'CAVITE',
           addressLine: '99 Edited Street, BUCANDALA IV, IMUS, CAVITE, Philippines'
-        }
+        },
+        items: [
+          {
+            productId: ORDER_ITEM.productId,
+            variantId: ORDER_ITEM.variantId,
+            productName: 'Edited CURIOSITY OFFWHITE Shirt',
+            size: 'Medium',
+            quantity: 2,
+            unitPriceCents: 70000
+          },
+          {
+            productId: 'manual-added-item',
+            variantId: 'manual-added-item-large',
+            productName: 'Manual Admin Added Item',
+            size: 'Large',
+            quantity: 1,
+            unitPriceCents: 50000
+          }
+        ]
       })
     });
     const updateBody = await updateResponse.json();
@@ -384,6 +402,16 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(updateBody.order.address.city, 'IMUS');
     assert.equal(updateBody.order.address.province, 'CAVITE');
     assert.equal(updateBody.order.address.addressLine, '99 Edited Street, BUCANDALA IV, IMUS, CAVITE, Philippines');
+    assert.equal(updateBody.order.items.length, 2);
+    assert.equal(updateBody.order.items[0].productName, 'Edited CURIOSITY OFFWHITE Shirt');
+    assert.equal(updateBody.order.items[0].size, 'Medium');
+    assert.equal(updateBody.order.items[0].quantity, 2);
+    assert.equal(updateBody.order.items[0].unitPriceCents, 70000);
+    assert.equal(updateBody.order.subtotalCents, 190000);
+    assert.equal(updateBody.order.totalCents, 198000);
+    assert.equal(updateBody.order.adminEditableTotals.subtotalCents, 190000);
+    assert.equal(updateBody.order.adminEditableTotals.totalCents, 198000);
+    assert.equal(updateBody.order.cartSnapshot.length, 2);
 
     const filteredResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders?status=confirmed`, adminRequest(loginBody.token));
     const filteredBody = await filteredResponse.json();
@@ -391,6 +419,76 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(filteredResponse.status, 200);
     assert.equal(filteredBody.orders.length, 1);
     assert.equal(filteredBody.orders[0].status, 'confirmed');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);
+    restoreEnv('ADMIN_PASSWORD', previousAdminPassword);
+  }
+});
+
+test('admin order list supports date range filters', async () => {
+  const previousOrdersDataFile = process.env.ORDERS_DATA_FILE;
+  const previousAdminPassword = process.env.ADMIN_PASSWORD;
+  process.env.ORDERS_DATA_FILE = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-admin-order-dates-')), 'orders.json');
+  process.env.ADMIN_PASSWORD = 'admin-test-password';
+
+  const app = createFreshApp();
+  const { updateOrder } = require('../src/orders/orderRepository');
+  const server = await new Promise((resolve, reject) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+    listener.on('error', reject);
+  });
+  const { port } = server.address();
+
+  try {
+    const todayOrder = await createOrder(port, {
+      fullName: 'Today Customer',
+      phone: '09170000011',
+      houseAddress: '11 Date Street',
+      barangay: 'Bucandala IV',
+      city: 'Imus City',
+      province: 'Cavite',
+      shippingFeeCents: 8000
+    });
+    const recentOrder = await createOrder(port, {
+      fullName: 'Recent Customer',
+      phone: '09170000012',
+      houseAddress: '12 Date Street',
+      barangay: 'Bucandala IV',
+      city: 'Imus City',
+      province: 'Cavite',
+      shippingFeeCents: 8000
+    });
+    const oldOrder = await createOrder(port, {
+      fullName: 'Old Customer',
+      phone: '09170000013',
+      houseAddress: '13 Date Street',
+      barangay: 'Bucandala IV',
+      city: 'Imus City',
+      province: 'Cavite',
+      shippingFeeCents: 8000
+    });
+
+    const now = new Date();
+    const todayIso = now.toISOString();
+    const recentIso = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const oldIso = new Date(now.getTime() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    await updateOrder(todayOrder, { placedAt: todayIso });
+    await updateOrder(recentOrder, { placedAt: recentIso });
+    await updateOrder(oldOrder, { placedAt: oldIso });
+
+    const recentResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders?dateRange=last_7_days`, adminRequest('local-admin-token'));
+    const recentBody = await recentResponse.json();
+
+    assert.equal(recentResponse.status, 200);
+    assert.deepEqual(recentBody.orders.map((order) => order.orderNumber).sort(), [recentOrder, todayOrder].sort());
+
+    const recentDate = recentIso.slice(0, 10);
+    const customResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders?dateRange=custom&dateFrom=${recentDate}&dateTo=${recentDate}`, adminRequest('local-admin-token'));
+    const customBody = await customResponse.json();
+
+    assert.equal(customResponse.status, 200);
+    assert.deepEqual(customBody.orders.map((order) => order.orderNumber), [recentOrder]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);

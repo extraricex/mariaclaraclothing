@@ -1,4 +1,33 @@
 const ALLOWED_TAGS = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'A', 'UL', 'OL', 'LI', 'SPAN']);
+const ALLOWED_STYLES = new Set(['color', 'font-size', 'font-weight', 'font-style', 'text-decoration']);
+
+function safeStyleValue(property, value) {
+  const candidate = String(value || '').trim();
+  if (!candidate) return '';
+  if (property === 'color') {
+    return /^#[0-9a-f]{3,6}$/i.test(candidate) || /^rgb(a)?\([\d\s,%.]+\)$/i.test(candidate) ? candidate : '';
+  }
+  if (property === 'font-size') {
+    return /^(13|16|20|28)px$/.test(candidate) ? candidate : '';
+  }
+  if (property === 'font-weight') {
+    return /^(400|500|700|bold|normal)$/.test(candidate) ? candidate : '';
+  }
+  if (property === 'font-style') {
+    return /^(normal|italic)$/.test(candidate) ? candidate : '';
+  }
+  if (property === 'text-decoration') {
+    return /^(none|underline)$/.test(candidate) ? candidate : '';
+  }
+  return '';
+}
+
+function copySafeStyles(source, target) {
+  ALLOWED_STYLES.forEach((property) => {
+    const value = safeStyleValue(property, source.style.getPropertyValue(property));
+    if (value) target.style.setProperty(property, value);
+  });
+}
 
 function sanitizeNode(node, doc) {
   if (node.nodeType === Node.TEXT_NODE) {
@@ -17,6 +46,9 @@ function sanitizeNode(node, doc) {
   }
 
   const element = doc.createElement(tag.toLowerCase());
+  if (tag === 'SPAN') {
+    copySafeStyles(node, element);
+  }
   if (tag === 'A') {
     const href = String(node.getAttribute('href') || '');
     if (/^(https?:|\/)/i.test(href)) {

@@ -20,6 +20,7 @@ function isPromise(value) {
 function defaultSiteContent() {
   return {
     logo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing logo' },
+    footerLogo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing footer logo' },
     homepageBanners: [
       { url: '/brand/hero1v2.jpg', altText: 'Maria Clara campaign', sortOrder: 0 },
       { url: '/brand/hero2-web.jpg', altText: 'Maria Clara streetwear editorial', sortOrder: 1 }
@@ -98,19 +99,29 @@ function updateLogo(logo) {
   return saveSiteContent({ ...content, logo: normalizeLogo(logo) });
 }
 
+function updateFooterLogo(footerLogo) {
+  const content = getSiteContent();
+  return saveSiteContent({
+    ...content,
+    footerLogo: normalizeLogo(footerLogo, 'Maria Clara Clothing footer logo')
+  });
+}
+
 function normalizeSiteContent(content) {
+  const logo = normalizeLogo(content?.logo);
   return {
-    logo: normalizeLogo(content?.logo),
+    logo,
+    footerLogo: normalizeLogo(content?.footerLogo || logo, 'Maria Clara Clothing footer logo'),
     homepageBanners: normalizeBanners(content?.homepageBanners)
   };
 }
 
-function normalizeLogo(logo) {
+function normalizeLogo(logo, defaultAltText = 'Maria Clara Clothing logo') {
   const url = String(logo?.url || '').trim();
-  const altText = String(logo?.altText || 'Maria Clara Clothing logo').trim();
+  const altText = String(logo?.altText || defaultAltText).trim();
   return {
     url: url || '/brand/logo.png',
-    altText: altText || 'Maria Clara Clothing logo'
+    altText: altText || defaultAltText
   };
 }
 
@@ -132,6 +143,7 @@ module.exports = {
   getSiteContent,
   normalizeLogo,
   saveSiteContent,
+  updateFooterLogo,
   updateLogo,
   updateHomepageBanners,
   normalizeBanners

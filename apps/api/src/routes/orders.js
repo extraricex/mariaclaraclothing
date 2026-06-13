@@ -2,12 +2,9 @@ const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { findOrderByNumber, saveOrder } = require('../orders/orderRepository');
-const {
-  computeDiscountCents,
-  discountValidationError,
-  findDiscountByCode,
-  incrementDiscountUsage
-} = require('../discounts/discountRepository');
+const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
+const { incrementDiscountUsage } = require('../discounts/discountRepository');
+const { quoteCart } = require('../promos/promoEngine');
 const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
 const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
 
@@ -51,6 +48,7 @@ router.post('/', async (req, res, next) => {
       placedAt: new Date().toISOString()
     };
     await saveOrder(persistedOrder);
+    await markCartSessionConverted(req.body?.cartSessionId, orderNumber);
 
     if (persistedOrder.discountCode) {
       await incrementDiscountUsage(persistedOrder.discountCode);
@@ -97,6 +95,7 @@ function orderConfirmationPayload(order) {
     subtotalCents: order.subtotalCents,
     discountCode: order.discountCode || '',
     discountTotalCents: order.discountTotalCents,
+    discountSnapshot: order.discountSnapshot || {},
     cartSnapshot: order.cartSnapshot,
     checkoutChannel: order.checkoutChannel,
     shippingRegion: order.shippingRegion,
@@ -131,10 +130,11 @@ async function normalizeCheckout(body) {
   }
 
   const items = await Promise.all(body.items.map(normalizeCheckoutItem));
-  const subtotalCents = items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
-  const { discountCode, discountTotalCents } = await resolveCheckoutDiscount(body, subtotalCents);
-  const shippingFeeCents = Math.max(0, Number(body.shippingFeeCents || 0));
-  const totalCents = subtotalCents - discountTotalCents + shippingFeeCents;
+  const quote = await quoteCart({
+    items,
+    discountCode: body.discountCode,
+    shippingFeeCents: body.shippingFeeCents
+  });
   const checkoutChannel = ['storefront_cart', 'storefront_checkout'].includes(body.checkoutChannel)
     ? body.checkoutChannel
     : 'storefront_checkout';
@@ -147,7 +147,7 @@ async function normalizeCheckout(body) {
   }
   const shippingRegion = body.shippingRegion ? String(body.shippingRegion).trim() : '';
   const shippingRegionLabel = body.shippingRegionLabel ? String(body.shippingRegionLabel).trim() : '';
-  const freeShippingUnlocked = Boolean(body.freeShippingUnlocked);
+  const freeShippingUnlocked = quote.freeShippingUnlocked || Boolean(body.freeShippingUnlocked);
   const notes = body.notes ? String(body.notes).trim() : '';
 
   return {
@@ -166,25 +166,26 @@ async function normalizeCheckout(body) {
       postalCode: String(body.address.postalCode || '').trim()
     },
     items,
-    subtotalCents,
-    discountCode,
-    discountTotalCents,
-    shippingFeeCents,
+    subtotalCents: quote.subtotalCents,
+    discountCode: quote.discountCode,
+    discountTotalCents: quote.discountTotalCents,
+    discountSnapshot: quote.discountSnapshot,
+    shippingFeeCents: quote.shippingFeeCents,
     shippingRegion,
     shippingRegionLabel,
     freeShippingUnlocked,
-    totalCents,
+    totalCents: quote.totalCents,
     cartSnapshot: items.map((item) => ({ ...item })),
     checkoutChannel,
     paymentMethod,
     adminEditableTotals: {
-      subtotalCents,
-      discountTotalCents,
-      shippingFeeCents,
+      subtotalCents: quote.subtotalCents,
+      discountTotalCents: quote.discountTotalCents,
+      shippingFeeCents: quote.shippingFeeCents,
       shippingRegion,
       shippingRegionLabel,
       freeShippingUnlocked,
-      totalCents
+      totalCents: quote.totalCents
     },
     notes,
     status: 'received',
@@ -200,29 +201,6 @@ async function resolveCustomerAccountId(req) {
   if (!accountId) return '';
   const account = await findAccountById(accountId);
   return account ? account.id : '';
-}
-
-async function resolveCheckoutDiscount(body, subtotalCents) {
-  const code = String(body.discountCode || '').trim();
-
-  if (!code) {
-    // No code: keep legacy behavior (client-sent value, admin-editable totals).
-    return { discountCode: '', discountTotalCents: Math.max(0, Number(body.discountTotalCents || 0)) };
-  }
-
-  const discount = await findDiscountByCode(code);
-  const validationError = discountValidationError(discount, subtotalCents);
-
-  if (validationError) {
-    const error = new Error(validationError);
-    error.status = 400;
-    throw error;
-  }
-
-  return {
-    discountCode: discount.code,
-    discountTotalCents: computeDiscountCents(discount, subtotalCents)
-  };
 }
 
 async function normalizeCheckoutItem(item) {
@@ -246,7 +224,8 @@ async function normalizeCheckoutItem(item) {
   }
 
   if (Number(variant.stockQuantity) < quantity) {
-    const error = new Error(`${variant.size} is sold out for ${product.name}`);
+    const requestedSize = String(item.size || variant.size || '').trim();
+    const error = new Error(`${requestedSize} is sold out for ${product.name}`);
     error.status = 400;
     throw error;
   }
