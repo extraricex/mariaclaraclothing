@@ -22,9 +22,8 @@ New top-level pieces:
   (tests pin it; it is the fallback UI).
 - **`docker-compose.yml`** — full stack: `postgres:16` + `api` (auto-migrates, seeds only
   when the products table is empty — see `apps/api/docker-entrypoint.sh`) + `web`
-  (nginx serving the built React app on :8081) + `grafana` (:3001, provisioned from
-  `infra/grafana/` with the "Maria Clara — Store Overview" dashboard, uid
-  `maria-clara-overview`).
+  (nginx serving the built React app on :8081). Store analytics live in the in-app admin
+  Dashboard (`apps/web/src/admin/Dashboard.jsx`), not Grafana.
 - **Root `package.json`** — workspace proxy scripts: `npm test`, `npm run dev:api`,
   `npm run dev:web`, `npm run build:web`, `npm run db:*` all work from the repo root.
 - One test was path-adjusted for the move: `apps/api/test/adminReadiness.test.js` reads
