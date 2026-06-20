@@ -24,6 +24,10 @@ function restoreEnv(name, value) {
   }
 }
 
+// The rate limiter keeps an in-memory bucket Map per process. Each test below
+// uses a fresh app (cache-busted) so buckets reset between tests. A future test
+// that issues many requests in one file can also call
+// require('../src/middleware/rateLimit').resetRateLimits() to clear them.
 function createFreshApp() {
   delete require.cache[require.resolve('../src/app')];
   delete require.cache[require.resolve('../src/routes/admin')];

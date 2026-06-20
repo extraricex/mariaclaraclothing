@@ -39,8 +39,12 @@ function createApp() {
   // and bare deployments are not spoofable via X-Forwarded-For.
   const trustProxy = process.env.TRUST_PROXY;
   if (trustProxy) {
-    const numeric = Number(trustProxy);
-    app.set('trust proxy', Number.isFinite(numeric) && String(numeric) === trustProxy ? numeric : trustProxy);
+    if (trustProxy === 'true' || trustProxy === 'false') {
+      app.set('trust proxy', trustProxy === 'true');
+    } else {
+      const numeric = Number(trustProxy);
+      app.set('trust proxy', Number.isFinite(numeric) && String(numeric) === trustProxy ? numeric : trustProxy);
+    }
   }
 
   app.use(express.json({ limit: '1mb' }));
