@@ -2,11 +2,10 @@
 #   docker compose up --build
 # Storefront/admin (React):  http://localhost:8081   (admin at /admin)
 # API + legacy static site:  http://localhost:3000
-# Grafana dashboards:        http://localhost:3001
 #
-# SECURITY: the defaults below (postgres password, admin token/password,
-# anonymous Grafana viewers) are for LOCAL USE ONLY. Override via environment
-# variables or an .env file next to this compose file before deploying.
+# SECURITY: the defaults below (postgres password, admin token/password) are for
+# LOCAL USE ONLY. Override via environment variables or an .env file next to this
+# compose file before deploying.
 
 services:
   postgres:
@@ -45,25 +44,6 @@ services:
     depends_on:
       - api
 
-  grafana:
-    image: grafana/grafana-oss:11.4.0
-    ports:
-      - "3001:3000"
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED:-true}
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_SECURITY_ALLOW_EMBEDDING: "true"
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    volumes:
-      - ./infra/grafana/provisioning:/etc/grafana/provisioning
-      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
-      - grafana-data:/var/lib/grafana
-    depends_on:
-      postgres:
-        condition: service_healthy
-
 volumes:
   pgdata:
   uploads:
-  grafana-data:

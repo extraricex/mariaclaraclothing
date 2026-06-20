@@ -1,28 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-<<<<<<< Updated upstream
-import { createOrder } from '../lib/api.js';
-=======
 import { createOrder, quoteCart } from '../lib/api.js';
 import { customerJson, getCustomerToken, useCustomerLoggedIn } from '../lib/customerAuth.js';
->>>>>>> Stashed changes
 import { cartQuantity, clearCart, getCartSessionId, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import {
-  deliveryEstimate,
-  feeForRegion,
   loadBarangays,
   loadCities,
   loadProvinces,
   regionForProvince,
   regionLabel
 } from '../lib/addressGuide.js';
+import {
+  DEFAULT_STOREFRONT_SETTINGS,
+  freeShippingHint,
+  isFreeShipping,
+  loadStorefrontSettings,
+  regionEstimate,
+  regionFee
+} from '../lib/storeSettings.js';
 
-function checkoutTotals(items, region, discountTotalCents = 0) {
+function checkoutTotals(items, region, discountTotalCents, settings) {
   const subtotal = subtotalCents(items);
-  const freeShippingUnlocked = cartQuantity(items) >= 2;
+  const freeShippingUnlocked = isFreeShipping(settings, cartQuantity(items));
   const shippingFeeCents = items.length && !freeShippingUnlocked && region !== 'pending_address'
-    ? feeForRegion(region)
+    ? regionFee(settings, region)
     : 0;
   const discount = Math.min(discountTotalCents, subtotal);
   return {
@@ -36,10 +38,10 @@ function checkoutTotals(items, region, discountTotalCents = 0) {
   };
 }
 
-function cartSnapshotFields(items, totals) {
+function cartSnapshotFields(items, totals, paymentMethod) {
   return {
     checkoutChannel: 'storefront_checkout',
-    paymentMethod: 'cash_on_delivery',
+    paymentMethod,
     shippingRegion: totals.shippingRegion,
     shippingRegionLabel: totals.shippingRegionLabel,
     freeShippingUnlocked: totals.freeShippingUnlocked,
@@ -95,8 +97,6 @@ export default function Checkout() {
   const [discountInput, setDiscountInput] = useState('');
   const [activeDiscountCode, setActiveDiscountCode] = useState('');
   const [discountError, setDiscountError] = useState('');
-<<<<<<< Updated upstream
-=======
   const [quote, setQuote] = useState(null);
   const [reviewQuote, setReviewQuote] = useState(null);
   const [step, setStep] = useState('details');
@@ -105,11 +105,43 @@ export default function Checkout() {
   const [saveAddress, setSaveAddress] = useState(true);
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
   const [paymentMethod, setPaymentMethod] = useState('cash_on_delivery');
->>>>>>> Stashed changes
 
   useEffect(() => {
     loadProvinces().then(setProvinces);
   }, []);
+
+  useEffect(() => {
+    loadStorefrontSettings().then(setSettings);
+  }, []);
+
+  // if an admin disables the chosen method between loads, fall back to COD
+  useEffect(() => {
+    if (!settings.paymentMethods.some((method) => method.id === paymentMethod)) {
+      setPaymentMethod('cash_on_delivery');
+    }
+  }, [settings, paymentMethod]);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    customerJson('/api/customer/me')
+      .then(({ customer }) => {
+        setFullName((value) => value || customer.fullName);
+        setPhone((value) => value || customer.phone);
+        setEmail((value) => value || customer.email);
+        if (customer.savedAddress) {
+          setHouse((value) => value || customer.savedAddress.houseAddress);
+          setPrefillAddress(customer.savedAddress);
+        }
+      })
+      .catch(() => {});
+  }, [loggedIn]);
+
+  // cascade the saved address through the dependent selects as each level loads
+  useEffect(() => {
+    if (!prefillAddress || !provinces.length) return;
+    const match = provinces.find((item) => item.name === String(prefillAddress.province).toUpperCase());
+    if (match) setProvinceCode(match.code);
+  }, [prefillAddress, provinces]);
 
   useEffect(() => {
     setCities([]);
@@ -120,23 +152,33 @@ export default function Checkout() {
   }, [provinceCode]);
 
   useEffect(() => {
+    if (!prefillAddress || !cities.length) return;
+    const match = cities.find((item) => item.name === String(prefillAddress.city).toUpperCase());
+    if (match) setCityCode(match.code);
+  }, [prefillAddress, cities]);
+
+  useEffect(() => {
     setBarangays([]);
     setBarangayCode('');
     if (cityCode) loadBarangays(cityCode).then(setBarangays);
   }, [cityCode]);
+
+  useEffect(() => {
+    if (!prefillAddress || !barangays.length) return;
+    const match = barangays.find((item) => item.name === String(prefillAddress.barangay).toUpperCase());
+    if (match) {
+      setBarangayCode(match.code);
+      setPrefillAddress(null);
+    }
+  }, [prefillAddress, barangays]);
 
   const province = provinces.find((item) => item.code === provinceCode) || null;
   const city = cities.find((item) => item.code === cityCode) || null;
   const barangay = barangays.find((item) => item.code === barangayCode) || null;
   const addressReady = Boolean(house.trim() && provinceCode && cityCode && barangayCode);
   const region = addressReady ? regionForProvince(province) : 'pending_address';
-<<<<<<< Updated upstream
-  const discountCents = discount?.discountTotalCents || 0;
-  const totals = useMemo(() => checkoutTotals(items, region, discountCents), [items, region, discountCents]);
-=======
   const fallbackTotals = useMemo(() => checkoutTotals(items, region, 0, settings), [items, region, settings]);
   const totals = quoteTotals(reviewQuote || quote, fallbackTotals);
->>>>>>> Stashed changes
   const doorToDoorWarning = Boolean(barangay) && String(barangay.doorToDoor || '').toUpperCase() !== 'YES';
 
   function quotePayload(discountCode = activeDiscountCode) {
@@ -257,9 +299,6 @@ export default function Checkout() {
     setStatus({ tone: 'neutral', message: 'Placing your order...' });
     setPending(true);
 
-<<<<<<< Updated upstream
-    const submitTotals = checkoutTotals(items, regionForProvince(province), discountCents);
-=======
     const latestQuote = await refreshQuote(discountInput.trim()).catch((error) => {
       setStatus({ tone: 'error', message: error.message });
       return null;
@@ -269,7 +308,6 @@ export default function Checkout() {
       return;
     }
     const submitTotals = quoteTotals(latestQuote, checkoutTotals(items, regionForProvince(province), 0, settings));
->>>>>>> Stashed changes
     const addressLine = `${house.trim()}, ${barangay.name}, ${city.name}, ${province.name}, Philippines`;
     const payload = {
       cartSessionId: getCartSessionId(),
@@ -291,15 +329,29 @@ export default function Checkout() {
       discountTotalCents: submitTotals.discountTotalCents,
       notes: notes.trim(),
       items,
-      ...cartSnapshotFields(items, submitTotals)
+      ...cartSnapshotFields(items, submitTotals, paymentMethod)
     };
 
     try {
-      const result = await createOrder(payload);
+      const token = loggedIn ? getCustomerToken() : '';
+      const result = await createOrder(payload, token ? { Authorization: `Bearer ${token}` } : {});
+      if (loggedIn && saveAddress) {
+        customerJson('/api/customer/me', {
+          method: 'PUT',
+          body: JSON.stringify({ savedAddress: {
+            houseAddress: payload.address.houseAddress,
+            barangay: payload.address.barangay,
+            city: payload.address.city,
+            province: payload.address.province,
+            postalCode: ''
+          } })
+        }).catch(() => {});
+      }
+      const methodLabel = settings.paymentMethods.find((method) => method.id === paymentMethod)?.label || 'Cash on Delivery';
       sessionStorage.setItem('maria-clara-last-order', JSON.stringify({
         orderNumber: result.orderNumber,
         customerName: payload.customer.fullName,
-        paymentMethod: 'Cash on Delivery',
+        paymentMethod: methodLabel,
         addressLine: payload.address.addressLine,
         shippingRegionLabel: submitTotals.shippingRegionLabel,
         shippingFeeCents: submitTotals.shippingFeeCents,
@@ -328,9 +380,6 @@ export default function Checkout() {
       <div className="mx-auto grid max-w-6xl gap-12 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
         <form onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate={false}>
           <p className="eyebrow">Checkout · Cash on Delivery</p>
-<<<<<<< Updated upstream
-          <h1 className="display mt-2 text-3xl sm:text-4xl">Where do we send it?</h1>
-=======
           <h1 className="display mt-2 text-3xl sm:text-4xl">{step === 'review' ? 'Review and place order' : 'Where do we send it?'}</h1>
           {!loggedIn && (
             <p className="mt-3 text-sm text-ink-soft">
@@ -338,7 +387,6 @@ export default function Checkout() {
               prefill your saved address — or continue as guest below.
             </p>
           )}
->>>>>>> Stashed changes
 
           <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
@@ -368,11 +416,14 @@ export default function Checkout() {
               </p>
             )}
             <textarea className="field" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            {loggedIn && (
+              <label className="flex items-center gap-2 text-sm text-ink-soft">
+                <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} />
+                Save this address to my account
+              </label>
+            )}
           </fieldset>
 
-<<<<<<< Updated upstream
-          <p className="mt-6 text-sm text-ink-soft">{addressReady ? deliveryEstimate(region) : 'Complete your address to see estimated delivery time.'}</p>
-=======
           <fieldset className="mt-8 space-y-3" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Payment</legend>
             {settings.paymentMethods.map((method) => (
@@ -395,7 +446,6 @@ export default function Checkout() {
           </fieldset>
 
           <p className="mt-6 text-sm text-ink-soft">{addressReady ? regionEstimate(settings, region) : 'Complete your address to see estimated delivery time.'}</p>
->>>>>>> Stashed changes
 
           {status.message && (
             <p className={`mt-4 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role="status">
@@ -420,17 +470,17 @@ export default function Checkout() {
             </button>
           )}
           <button type="submit" className="btn-ink mt-6 w-full" disabled={pending}>
-<<<<<<< Updated upstream
-            {pending ? 'Placing order...' : 'Place COD order'}
-=======
             {pending
               ? (step === 'review' ? 'Placing order...' : 'Preparing review...')
               : step === 'review'
                 ? (paymentMethod === 'cash_on_delivery' ? 'Place COD order' : 'Place order')
                 : 'Continue to review'}
->>>>>>> Stashed changes
           </button>
-          <p className="mt-3 text-xs text-clay">No payment now. We text you to confirm, then you pay cash on delivery.</p>
+          <p className="mt-3 text-xs text-clay">
+            {paymentMethod === 'cash_on_delivery'
+              ? 'No payment now. We text you to confirm, then you pay cash on delivery.'
+              : 'We text you to confirm your order and payment before shipping.'}
+          </p>
         </form>
 
         <aside className="lg:border-l lg:border-line lg:pl-12">
@@ -494,7 +544,7 @@ export default function Checkout() {
                 </div>
               </dl>
               <p className="mt-4 bg-cream px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">
-                {totals.freeShippingUnlocked ? 'Free shipping unlocked.' : 'Add 1 more item to unlock free shipping.'}
+                {totals.freeShippingUnlocked ? 'Free shipping unlocked.' : freeShippingHint(settings, cartQuantity(items))}
               </p>
             </>
           )}

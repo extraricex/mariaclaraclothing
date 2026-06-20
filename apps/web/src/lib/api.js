@@ -27,9 +27,6 @@ export function fetchOrder(orderNumber) {
   return request(`/api/orders/${encodeURIComponent(orderNumber)}`);
 }
 
-<<<<<<< Updated upstream
-export function createOrder(payload) {
-=======
 export function quoteCart(payload) {
   return request('/api/discounts/quote', {
     method: 'POST',
@@ -39,10 +36,9 @@ export function quoteCart(payload) {
 }
 
 export function createOrder(payload, headers = {}) {
->>>>>>> Stashed changes
   return request('/api/orders', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payload)
   });
 }

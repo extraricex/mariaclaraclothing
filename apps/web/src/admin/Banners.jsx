@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
+import TickerEditor from './TickerEditor.jsx';
+import InfoPagesEditor from './InfoPagesEditor.jsx';
 
 function notifySiteContentChanged() {
   window.dispatchEvent(new Event('maria-clara-site-content-changed'));
@@ -10,6 +12,7 @@ export default function Banners() {
   const [footerLogo, setFooterLogo] = useState(null);
   const [banners, setBanners] = useState([]);
   const [message, setMessage] = useState('');
+  const [website, setWebsite] = useState(null);
 
   function load() {
     adminJson('/api/admin/site-content')
@@ -22,6 +25,12 @@ export default function Banners() {
   }
 
   useEffect(load, []);
+
+  useEffect(() => {
+    adminJson('/api/admin/settings')
+      .then((body) => setWebsite(body.settings.website))
+      .catch((err) => setMessage(err.message));
+  }, []);
 
   function updateBanner(index, field, value) {
     setBanners((previous) => previous.map((banner, i) => i === index ? { ...banner, [field]: value } : banner));
@@ -112,7 +121,7 @@ export default function Banners() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Website content</p>
-          <h1 className="display mt-1 text-3xl">Logo & homepage banners</h1>
+          <h1 className="display mt-1 text-3xl">Logo, banners & website text</h1>
         </div>
         <div className="flex gap-2">
           <label className="btn-ghost cursor-pointer">
@@ -191,6 +200,9 @@ export default function Banners() {
         ))}
         {!banners.length && <p className="border border-line bg-paper p-6 text-sm text-clay">No banners yet. Upload one to get started.</p>}
       </div>
+
+      {website && <TickerEditor initial={website.ticker} />}
+      {website && <InfoPagesEditor initial={website.infoPages} />}
     </div>
   );
 }

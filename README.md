@@ -1,15 +1,14 @@
 # Maria Clara Clothing Webstore
 
 Monorepo for the Maria Clara Clothing webstore: an Express API with dual JSON/PostgreSQL
-persistence, a redesigned React + Tailwind storefront/admin, and a Grafana analytics
-dashboard, all runnable with Docker Compose.
+persistence and a redesigned React + Tailwind storefront/admin (with a built-in analytics
+dashboard), all runnable with Docker Compose.
 
 ## Layout
 
 ```
 apps/api    Express API + legacy static site (src/, test/, data/, db/, scripts/, public/)
 apps/web    React + Tailwind redesign (storefront at /, admin at /admin)
-infra       Grafana provisioning (Postgres datasource + store dashboard)
 docs        Specs, plans, and recommendations (see docs/ENHANCEMENT_PROPOSALS.md)
 ```
 
@@ -21,12 +20,11 @@ docker compose up --build
 
 - React storefront + admin: `http://localhost:8081` (admin at `/admin`)
 - API + legacy static site: `http://localhost:3000`
-- Grafana dashboards: `http://localhost:3001` (provisioned "Maria Clara — Store Overview")
+- Store analytics: the in-app admin Dashboard (`/admin`)
 - PostgreSQL is migrated and seeded automatically on first start.
 
-Default credentials are for local use only — override `ADMIN_TOKEN`, `ADMIN_PASSWORD`,
-`POSTGRES_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, and disable `GF_AUTH_ANONYMOUS_ENABLED`
-before deploying anywhere public.
+Default credentials are for local use only — override `ADMIN_TOKEN`, `ADMIN_PASSWORD`, and
+`POSTGRES_PASSWORD` before deploying anywhere public.
 
 ## Quick start (no Docker)
 

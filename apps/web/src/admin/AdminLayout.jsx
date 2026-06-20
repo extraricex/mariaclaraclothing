@@ -3,25 +3,62 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { fetchSiteContent } from '../lib/api.js';
 import { adminJson, clearAdminToken, getAdminToken } from '../lib/adminApi.js';
 
-const NAV = [
-  { to: '/admin', label: 'Dashboard', end: true },
-  { to: '/admin/products', label: 'Products' },
+const ORDER_SUBNAV = [
+  { to: '/admin/orders', label: 'All orders', end: true },
+  { to: '/admin/orders/draft', label: 'Draft' },
+  { to: '/admin/orders/abandoned-checkout', label: 'Abandoned Checkout' }
+];
+
+const PRODUCT_SUBNAV = [
+  { to: '/admin/products', label: 'All products', end: true },
+  { to: '/admin/collections', label: 'Collections' },
+  { to: '/admin/inventory', label: 'Inventory' }
+];
+
+// Items below the two collapsible sections, in display order.
+const SECONDARY_NAV = [
   { to: '/admin/customers', label: 'Customers' },
   { to: '/admin/discounts', label: 'Discounts' },
   { to: '/admin/banners', label: 'Website content' },
   { to: '/admin/settings', label: 'Settings' }
 ];
 
-const ORDER_SUBNAV = [
-  { to: '/admin/orders/draft', label: 'Draft' },
-  { to: '/admin/orders/abandoned-checkout', label: 'Abandoned Checkout' }
+// Flat list for the mobile bar — identical order to the desktop sidebar.
+const MOBILE_NAV = [
+  { to: '/admin', label: 'Dashboard', end: true },
+  { to: '/admin/orders', label: 'Orders' },
+  { to: '/admin/products', label: 'Products' },
+  ...SECONDARY_NAV
 ];
 
-const PRODUCT_SUBNAV = [
-  { to: '/admin/products', label: 'Products' },
-  { to: '/admin/collections', label: 'Collections' },
-  { to: '/admin/inventory', label: 'Inventory' }
-];
+const topLinkClass = (active) =>
+  `rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+    active ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-line/40'
+  }`;
+
+const subLinkClass = (isActive) =>
+  `block cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-[12px] font-medium uppercase tracking-[0.08em] transition-colors hover:border-accent ${
+    isActive
+      ? 'border-accent text-accent-deep'
+      : 'border-transparent text-clay hover:text-ink'
+  }`;
+
+function Chevron({ open }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -30,6 +67,12 @@ export default function AdminLayout() {
   const [adminLogo, setAdminLogo] = useState(null);
   const [ordersMenuOpen, setOrdersMenuOpen] = useState(false);
   const [productsMenuOpen, setProductsMenuOpen] = useState(false);
+
+  const ordersActive = location.pathname.startsWith('/admin/orders');
+  const productsActive =
+    location.pathname.startsWith('/admin/products') ||
+    location.pathname.startsWith('/admin/collections') ||
+    location.pathname.startsWith('/admin/inventory');
 
   useEffect(() => {
     if (!getAdminToken()) {
@@ -47,6 +90,13 @@ export default function AdminLayout() {
       .catch(() => {});
   }, []);
 
+  // Auto-expand the section that matches the current route so the active
+  // sub-page is always visible without an extra click.
+  useEffect(() => {
+    if (ordersActive) setOrdersMenuOpen(true);
+    if (productsActive) setProductsMenuOpen(true);
+  }, [ordersActive, productsActive]);
+
   if (!ready) {
     return <div className="p-10 text-sm text-clay">Checking session…</div>;
   }
@@ -63,109 +113,58 @@ export default function AdminLayout() {
         <Link to="/admin" className="flex min-h-14 items-center">{brandMarkup}</Link>
         <p className="eyebrow mt-1">Admin</p>
         <nav className="mt-10 flex flex-col gap-1">
+          <NavLink to="/admin" end className={({ isActive }) => topLinkClass(isActive)}>
+            Dashboard
+          </NavLink>
+
           <div>
-            <div className="flex items-stretch">
-              <NavLink
-                to="/admin/orders"
-                className={({ isActive }) =>
-                  `flex-1 rounded-l-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                    isActive || location.pathname.startsWith('/admin/orders') ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-cream'
-                  }`}
-              >
-                Orders
-              </NavLink>
-              <button
-                type="button"
-                className={`rounded-r-[var(--radius-admin)] border-l border-paper/20 px-3 text-[13px] font-semibold transition-colors ${
-                  location.pathname.startsWith('/admin/orders') ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-cream'
-                }`}
-                aria-label={ordersMenuOpen ? 'Collapse orders menu' : 'Expand orders menu'}
-                aria-expanded={ordersMenuOpen}
-                onClick={() => setOrdersMenuOpen((open) => !open)}
-              >
-                {ordersMenuOpen ? '-' : '+'}
-              </button>
-            </div>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${ordersActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
+              aria-label={ordersMenuOpen ? 'Collapse orders menu' : 'Expand orders menu'}
+              aria-expanded={ordersMenuOpen}
+              onClick={() => setOrdersMenuOpen((open) => !open)}
+            >
+              <span>Orders</span>
+              <Chevron open={ordersMenuOpen} />
+            </button>
             {ordersMenuOpen && (
-              <div className="ml-4 flex flex-col gap-1 border-l border-line py-2 pl-2">
+              <div className="ml-3 mt-1 flex flex-col gap-0.5 border-l border-line pl-3">
                 {ORDER_SUBNAV.map((item) => (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `block cursor-pointer rounded-md border px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                        isActive
-                          ? 'border-accent bg-accent text-paper shadow-sm'
-                          : 'border-line bg-paper text-ink-soft hover:border-accent hover:bg-cream hover:text-accent-deep'
-                      }`}
-                  >
+                  <NavLink key={item.label} to={item.to} end={item.end} className={({ isActive }) => subLinkClass(isActive)}>
                     {item.label}
                   </NavLink>
                 ))}
               </div>
             )}
           </div>
-          {NAV.map((item) => (
-            item.to === '/admin/products' ? (
-              <div key={item.to}>
-                <div className="flex items-stretch">
-                  <NavLink
-                    to="/admin/products"
-                    className={({ isActive }) =>
-                      `flex-1 rounded-l-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                        isActive || location.pathname.startsWith('/admin/products') || location.pathname.startsWith('/admin/collections') || location.pathname.startsWith('/admin/inventory')
-                          ? 'bg-ink text-paper'
-                          : 'text-ink-soft hover:bg-cream'
-                      }`}
-                  >
-                    Products
+
+          <div>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${productsActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
+              aria-label={productsMenuOpen ? 'Collapse products menu' : 'Expand products menu'}
+              aria-expanded={productsMenuOpen}
+              onClick={() => setProductsMenuOpen((open) => !open)}
+            >
+              <span>Products</span>
+              <Chevron open={productsMenuOpen} />
+            </button>
+            {productsMenuOpen && (
+              <div className="ml-3 mt-1 flex flex-col gap-0.5 border-l border-line pl-3">
+                {PRODUCT_SUBNAV.map((subitem) => (
+                  <NavLink key={subitem.label} to={subitem.to} end={subitem.end} className={({ isActive }) => subLinkClass(isActive)}>
+                    {subitem.label}
                   </NavLink>
-                  <button
-                    type="button"
-                    className={`rounded-r-[var(--radius-admin)] border-l border-paper/20 px-3 text-[13px] font-semibold transition-colors ${
-                      location.pathname.startsWith('/admin/products') || location.pathname.startsWith('/admin/collections') || location.pathname.startsWith('/admin/inventory')
-                        ? 'bg-ink text-paper'
-                        : 'text-ink-soft hover:bg-cream'
-                    }`}
-                    aria-label={productsMenuOpen ? 'Collapse products menu' : 'Expand products menu'}
-                    aria-expanded={productsMenuOpen}
-                    onClick={() => setProductsMenuOpen((open) => !open)}
-                  >
-                    {productsMenuOpen ? '-' : '+'}
-                  </button>
-                </div>
-                {productsMenuOpen && (
-                  <div className="ml-4 flex flex-col gap-1 border-l border-line py-2 pl-2">
-                    {PRODUCT_SUBNAV.map((subitem) => (
-                      <NavLink
-                        key={subitem.label}
-                        to={subitem.to}
-                        className={({ isActive }) =>
-                          `block cursor-pointer rounded-md border px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                            isActive
-                              ? 'border-accent bg-accent text-paper shadow-sm'
-                              : 'border-line bg-paper text-ink-soft hover:border-accent hover:bg-cream hover:text-accent-deep'
-                          }`}
-                      >
-                        {subitem.label}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
+                ))}
               </div>
-            ) : (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  `rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                    isActive ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-cream'
-                  }`}
-              >
-                {item.label}
-              </NavLink>
-            )
+            )}
+          </div>
+
+          {SECONDARY_NAV.map((item) => (
+            <NavLink key={item.to} to={item.to} className={({ isActive }) => topLinkClass(isActive)}>
+              {item.label}
+            </NavLink>
           ))}
         </nav>
         <div className="mt-auto space-y-3 pt-10">
@@ -181,16 +180,13 @@ export default function AdminLayout() {
       </aside>
       <div className="admin-main">
         <div className="admin-mobile-nav">
-          {NAV.slice(0, 1).map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-accent' : 'text-ink-soft'}`}>
-              {item.label}
-            </NavLink>
-          ))}
-          <NavLink to="/admin/orders" className={({ isActive }) => `text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-accent' : 'text-ink-soft'}`}>
-            Orders
-          </NavLink>
-          {NAV.slice(1).map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-accent' : 'text-ink-soft'}`}>
+          {MOBILE_NAV.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) => `whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-accent' : 'text-ink-soft'}`}
+            >
               {item.label}
             </NavLink>
           ))}

@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-<<<<<<< Updated upstream
-import { cartQuantity, useCart } from '../lib/cart.js';
-import { fetchSiteContent } from '../lib/api.js';
-=======
 import { CART_DRAWER_EVENT, cartQuantity, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { fetchActivePromoNotification, fetchSiteContent, quoteCart } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
->>>>>>> Stashed changes
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -25,8 +20,8 @@ const NAV_LINKS = [
   { to: '/terms', label: 'Terms' }
 ];
 
-function Ticker() {
-  const sequence = [...TICKER_ITEMS, ...TICKER_ITEMS, ...TICKER_ITEMS];
+function Ticker({ items }) {
+  const sequence = [...items, ...items, ...items];
   return (
     <div className="overflow-hidden bg-ink py-2 text-paper">
       <div className="ticker-track flex w-max gap-10">
@@ -165,17 +160,15 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
 export default function Shell() {
   const items = useCart();
   const count = cartQuantity(items);
+  const loggedIn = useCustomerLoggedIn();
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState('');
   const [headerLogo, setHeaderLogo] = useState(null);
   const [footerLogo, setFooterLogo] = useState(null);
-<<<<<<< Updated upstream
-=======
   const [storeInfo, setStoreInfo] = useState(null);
   const [promoNotification, setPromoNotification] = useState(null);
->>>>>>> Stashed changes
 
   useEffect(() => {
     function loadSiteContent() {
@@ -192,8 +185,6 @@ export default function Shell() {
     return () => window.removeEventListener('maria-clara-site-content-changed', loadSiteContent);
   }, []);
 
-<<<<<<< Updated upstream
-=======
   useEffect(() => {
     loadStorefrontSettings().then(setStoreInfo);
   }, []);
@@ -256,7 +247,6 @@ export default function Shell() {
     };
   }, [cartDrawerOpen, items]);
 
->>>>>>> Stashed changes
   const logoMarkup = headerLogo?.url ? (
     <img src={headerLogo.url} alt={headerLogo.altText || 'Maria Clara Clothing'} className="h-[65px] max-w-[205px] object-contain lg:h-[73px] lg:max-w-[230px]" />
   ) : (
@@ -274,12 +264,8 @@ export default function Shell() {
 
   return (
     <div className="flex min-h-screen flex-col">
-<<<<<<< Updated upstream
-      <Ticker />
-=======
       <Ticker items={storeInfo?.ticker || TICKER_ITEMS} />
       <PromoNotification notification={promoNotification} onClose={closePromoNotification} />
->>>>>>> Stashed changes
       <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 lg:px-8">
           <button
@@ -305,6 +291,10 @@ export default function Shell() {
               </NavLink>
             ))}
           </nav>
+          <div className="flex items-center gap-6">
+          <Link to={loggedIn ? '/account' : '/login'} className="hidden text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent sm:block">
+            {loggedIn ? 'Account' : 'Log in'}
+          </Link>
           <Link to="/cart" className="relative flex h-9 w-9 items-center justify-center hover:text-accent" aria-label="Cart">
             <CartIcon />
             {count > 0 && (
@@ -313,6 +303,7 @@ export default function Shell() {
               </span>
             )}
           </Link>
+          </div>
         </div>
         {menuOpen && (
           <nav className="flex flex-col border-t border-line lg:hidden">
@@ -326,6 +317,13 @@ export default function Shell() {
                 {link.label}
               </NavLink>
             ))}
+            <NavLink
+              to={loggedIn ? '/account' : '/login'}
+              onClick={() => setMenuOpen(false)}
+              className="border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em] text-accent"
+            >
+              {loggedIn ? 'My account' : 'Log in / Register'}
+            </NavLink>
           </nav>
         )}
       </header>
@@ -375,6 +373,23 @@ export default function Shell() {
                 Premium 240 GSM cotton, cut oversized. Cash on delivery anywhere in the Philippines —
                 we text before we ship.
               </p>
+              {storeInfo && (storeInfo.contactEmail || storeInfo.contactNumber) && (
+                <ul className="mt-4 space-y-1 text-sm text-paper/80">
+                  {storeInfo.contactEmail && (
+                    <li><a className="hover:text-accent" href={`mailto:${storeInfo.contactEmail}`}>{storeInfo.contactEmail}</a></li>
+                  )}
+                  {storeInfo.contactNumber && <li>{storeInfo.contactNumber}</li>}
+                </ul>
+              )}
+              {storeInfo && Object.values(storeInfo.socialLinks || {}).some(Boolean) && (
+                <ul className="mt-3 flex gap-4 text-sm text-paper/80">
+                  {Object.entries(storeInfo.socialLinks).filter(([, url]) => url).map(([name, url]) => (
+                    <li key={name}>
+                      <a className="capitalize hover:text-accent" href={url} target="_blank" rel="noreferrer">{name}</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
           <p className="mt-12 border-t border-paper/20 pt-6 text-xs uppercase tracking-[0.18em] text-paper/50">

@@ -27,6 +27,14 @@ const {
   updateHomepageBanners
 } = require('../siteContent/siteContentRepository');
 const {
+  getAdminCredentials,
+  getStoreSettings,
+  rotateAdminToken,
+  setAdminPassword,
+  updateSettingsSection,
+  verifyAdminPassword
+} = require('../settings/storeSettingsRepository');
+const {
   deleteEditableProduct,
   findEditableProductBySlug,
   listEditableProducts,
@@ -119,14 +127,22 @@ const logoUpload = multer({
   }
 });
 
-router.post('/login', (req, res) => {
-  const password = String(req.body?.password || '');
+router.post('/login', async (req, res, next) => {
+  try {
+    const password = String(req.body?.password || '');
+    const credentials = await getAdminCredentials();
+    const valid = credentials?.passwordHash
+      ? Boolean(password) && verifyAdminPassword(password, credentials)
+      : Boolean(password) && password === adminPassword();
 
-  if (!password || password !== adminPassword()) {
-    return res.status(401).json({ error: 'Admin password is invalid' });
+    if (!valid) {
+      return res.status(401).json({ error: 'Admin password is invalid' });
+    }
+
+    return res.json({ token: credentials?.token || adminToken() });
+  } catch (error) {
+    return next(error);
   }
-
-  return res.json({ token: adminToken() });
 });
 
 router.use(requireAdmin);
@@ -165,33 +181,37 @@ router.get('/products/export', async (req, res, next) => {
   }
 });
 
-router.get('/site-content', (_req, res) => {
-  res.json({ siteContent: getSiteContent() });
+router.get('/site-content', async (_req, res, next) => {
+  try {
+    return res.json({ siteContent: await getSiteContent() });
+  } catch (error) {
+    return next(error);
+  }
 });
 
-router.put('/site-content/homepage-banners', (req, res, next) => {
+router.put('/site-content/homepage-banners', async (req, res, next) => {
   try {
-    const siteContent = updateHomepageBanners(req.body?.banners);
+    const siteContent = await updateHomepageBanners(req.body?.banners);
     return res.json({ siteContent, banners: siteContent.homepageBanners });
   } catch (error) {
     return next(error);
   }
 });
 
-router.post('/site-content/homepage-banners/images', bannerUpload.array('images', 6), (req, res, next) => {
+router.post('/site-content/homepage-banners/images', bannerUpload.array('images', 6), async (req, res, next) => {
   try {
     const files = Array.isArray(req.files) ? req.files : [];
     if (!files.length) {
       return res.status(400).json({ error: 'At least one banner image is required' });
     }
 
-    const currentBanners = getSiteContent().homepageBanners;
+    const { homepageBanners: currentBanners } = await getSiteContent();
     const uploadedBanners = files.map((file, index) => ({
       url: bannerUploadUrl(file.filename),
       altText: 'Homepage banner',
       sortOrder: currentBanners.length + index
     }));
-    const siteContent = appendHomepageBanners(uploadedBanners);
+    const siteContent = await appendHomepageBanners(uploadedBanners);
 
     return res.status(201).json({ siteContent, banners: siteContent.homepageBanners, uploadedBanners });
   } catch (error) {
@@ -199,13 +219,13 @@ router.post('/site-content/homepage-banners/images', bannerUpload.array('images'
   }
 });
 
-router.post('/site-content/logo/image', logoUpload.single('image'), (req, res, next) => {
+router.post('/site-content/logo/image', logoUpload.single('image'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'A logo image is required' });
     }
 
-    const siteContent = updateLogo({
+    const siteContent = await updateLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing logo'
     });
@@ -216,18 +236,67 @@ router.post('/site-content/logo/image', logoUpload.single('image'), (req, res, n
   }
 });
 
-router.post('/site-content/footer-logo/image', logoUpload.single('image'), (req, res, next) => {
+router.post('/site-content/footer-logo/image', logoUpload.single('image'), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'A footer logo image is required' });
     }
 
-    const siteContent = updateFooterLogo({
+    const siteContent = await updateFooterLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing footer logo'
     });
 
     return res.status(201).json({ siteContent, footerLogo: siteContent.footerLogo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/settings', async (_req, res, next) => {
+  try {
+    return res.json({ settings: await getStoreSettings() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/settings/security/password', async (req, res, next) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    const credentials = await getAdminCredentials();
+    const currentValid = credentials?.passwordHash
+      ? Boolean(currentPassword) && verifyAdminPassword(currentPassword, credentials)
+      : Boolean(currentPassword) && currentPassword === adminPassword();
+
+    if (!currentValid) {
+      return res.status(401).json({ error: 'Current password is invalid' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    }
+
+    const record = await setAdminPassword(newPassword);
+    return res.json({ token: record.token });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/settings/security/rotate-token', async (req, res, next) => {
+  try {
+    const record = await rotateAdminToken();
+    return res.json({ token: record.token });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put('/settings/:section', async (req, res, next) => {
+  try {
+    const settings = await updateSettingsSection(req.params.section, req.body || {});
+    return res.json({ settings });
   } catch (error) {
     return next(error);
   }
@@ -242,22 +311,28 @@ router.post('/products/import', async (req, res, next) => {
     }
 
     const products = await replaceEditableProducts(incomingProducts);
-    return res.json({ products, summary: productSummary(products) });
+    return res.json({ products, summary: productSummary(products, await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
 });
 
-router.get('/products/settings', (req, res) => res.json({
-  settings: {
-    statuses: ['active', 'draft', 'archived'],
-    defaultStatus: 'active',
-    lowStockThreshold: 12,
-    recommendedCollections: ['New Arrivals', 'Best Sellers', 'Maria Clara', 'Oversized Shirt', 'Sale'],
-    recommendedVariantSizes: ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'],
-    imageGuidance: 'Use square or 4:5 product photos with clear alt text.'
+router.get('/products/settings', async (req, res, next) => {
+  try {
+    return res.json({
+      settings: {
+        statuses: ['active', 'draft', 'archived'],
+        defaultStatus: 'active',
+        lowStockThreshold: await activeLowStockThreshold(),
+        recommendedCollections: ['New Arrivals', 'Best Sellers', 'Maria Clara', 'Oversized Shirt', 'Sale'],
+        recommendedVariantSizes: ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'],
+        imageGuidance: 'Use square or 4:5 product photos with clear alt text.'
+      }
+    });
+  } catch (error) {
+    return next(error);
   }
-}));
+});
 
 router.post('/products/:slug/images', upload.array('images', 8), async (req, res, next) => {
   try {
@@ -355,18 +430,19 @@ router.get('/products', async (req, res, next) => {
     const stock = String(req.query.stock || '').trim();
     const sort = String(req.query.sort || 'name_asc').trim();
     const allProducts = await listEditableProducts();
+    const lowStockThreshold = await activeLowStockThreshold();
     const products = sortProductRecords(allProducts
       .filter((product) => !status || productStatus(product) === status)
       .filter((product) => !collection || product.collections.some((item) => item.toLowerCase() === collection))
       .filter((product) => !category || String(product.category || '').trim().toLowerCase() === category)
       .filter((product) => !vendor || String(product.vendor || '').trim().toLowerCase() === vendor)
       .filter((product) => !query || productSearchText(product).includes(query))
-      .filter((product) => !stock || productStockFilter(product) === stock)
-      .map(productSummaryRecord), sort);
+      .filter((product) => !stock || productStockFilter(product, lowStockThreshold) === stock)
+      .map((product) => productSummaryRecord(product, lowStockThreshold)), sort);
 
     return res.json({
       products,
-      summary: productSummary(allProducts)
+      summary: productSummary(allProducts, lowStockThreshold)
     });
   } catch (error) {
     return next(error);
@@ -405,7 +481,7 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
       status: req.body?.status || 'draft'
     })));
 
-    return res.status(201).json({ product, summary: productSummary(await listEditableProducts()) });
+    return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -414,7 +490,7 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
 router.post('/products', async (req, res, next) => {
   try {
     const product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest(req.body || {})));
-    return res.status(201).json({ product, summary: productSummary(await listEditableProducts()) });
+    return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -434,12 +510,8 @@ router.put('/products/:slug', async (req, res, next) => {
       ...normalizeProductRequest(req.body || {}),
       productPage: req.body?.productPage || existingProduct.productPage
     }), slug);
-<<<<<<< Updated upstream
-    return res.json({ product, summary: productSummary(await listEditableProducts()) });
-=======
     await appendInventoryMovements(stockCorrectionMovements(existingProduct, product));
     return res.json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
->>>>>>> Stashed changes
   } catch (error) {
     return next(error);
   }
@@ -453,7 +525,7 @@ router.delete('/products/:slug', async (req, res, next) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    return res.json({ product, deleted: true, summary: productSummary(await listEditableProducts()) });
+    return res.json({ product, deleted: true, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -597,11 +669,6 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
   }
 });
 
-<<<<<<< Updated upstream
-function requireAdmin(req, res, next) {
-  const header = String(req.headers.authorization || '');
-  const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
-=======
 async function restoreCancelledOrderStock(previousOrder, nextOrder) {
   if (!previousOrder || !nextOrder) return;
   if (previousOrder.status === 'cancelled' || nextOrder.status !== 'cancelled') return;
@@ -701,13 +768,14 @@ async function requireAdmin(req, res, next) {
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
     const credentials = await getAdminCredentials();
     const activeToken = credentials?.token || adminToken();
->>>>>>> Stashed changes
+    if (!token || token !== activeToken) {
+      return res.status(401).json({ error: 'Admin authentication is required' });
+    }
 
-  if (token !== adminToken()) {
-    return res.status(401).json({ error: 'Admin authentication is required' });
+    return next();
+  } catch (error) {
+    return next(error);
   }
-
-  return next();
 }
 
 function productUploadDir() {
@@ -874,18 +942,23 @@ function normalizeMetafields(metafields) {
   ]));
 }
 
-function productSummary(products) {
+async function activeLowStockThreshold() {
+  const settings = await getStoreSettings();
+  return settings.inventory.lowStockThreshold;
+}
+
+function productSummary(products, lowStockThreshold) {
   return {
     total: products.length,
     active: products.filter((product) => productStatus(product) === 'active').length,
     draft: products.filter((product) => productStatus(product) === 'draft').length,
     archived: products.filter((product) => productStatus(product) === 'archived').length,
-    lowStock: products.filter((product) => productInventory(product) > 0 && productInventory(product) <= 12).length,
+    lowStock: products.filter((product) => productInventory(product) > 0 && productInventory(product) <= lowStockThreshold).length,
     soldOut: products.filter((product) => productInventory(product) === 0).length
   };
 }
 
-function productSummaryRecord(product) {
+function productSummaryRecord(product, lowStockThreshold) {
   const category = product.category || product.collections?.[0] || 'Uncategorized';
   return {
     id: product.id || product.slug,
@@ -911,7 +984,7 @@ function productSummaryRecord(product) {
       }))
       : [],
     inventoryQuantity: productInventory(product),
-    stockStatus: productStockFilter(product),
+    stockStatus: productStockFilter(product, lowStockThreshold),
     category,
     channels: 'Online Store',
     productType: product.productType || inferProductType(product, category),
@@ -946,10 +1019,10 @@ function productInventory(product) {
     : 0;
 }
 
-function productStockFilter(product) {
+function productStockFilter(product, lowStockThreshold) {
   const inventory = productInventory(product);
   if (inventory === 0) return 'sold_out';
-  if (inventory <= 12) return 'low_stock';
+  if (inventory <= lowStockThreshold) return 'low_stock';
   return 'in_stock';
 }
 

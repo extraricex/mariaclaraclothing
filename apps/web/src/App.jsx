@@ -1,11 +1,15 @@
 import { Route, Routes } from 'react-router-dom';
 import Shell from './components/Shell.jsx';
+import MaintenanceGate from './components/MaintenanceGate.jsx';
 import Home from './pages/Home.jsx';
 import Product from './pages/Product.jsx';
 import Cart from './pages/Cart.jsx';
 import Checkout from './pages/Checkout.jsx';
 import ThankYou from './pages/ThankYou.jsx';
-import InfoPage, { FAQ_SECTIONS, SHIPPING_SECTIONS, TERMS_SECTIONS } from './pages/InfoPage.jsx';
+import InfoPage from './pages/InfoPage.jsx';
+import { CustomerLogin, CustomerRegister } from './pages/CustomerAuth.jsx';
+import Account from './pages/Account.jsx';
+import AccountSettings from './pages/AccountSettings.jsx';
 import Login from './admin/Login.jsx';
 import AdminLayout from './admin/AdminLayout.jsx';
 import Dashboard from './admin/Dashboard.jsx';
@@ -25,16 +29,20 @@ import Settings from './admin/Settings.jsx';
 export default function App() {
   return (
     <Routes>
-      <Route element={<Shell />}>
+      <Route element={<MaintenanceGate><Shell /></MaintenanceGate>}>
         <Route path="/" element={<Home />} />
         <Route path="/product/:slug" element={<Product />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/thank-you" element={<ThankYou />} />
-        <Route path="/faq" element={<InfoPage title="Frequently asked questions" sections={FAQ_SECTIONS} />} />
-        <Route path="/shipping-returns" element={<InfoPage title="Shipping & returns" sections={SHIPPING_SECTIONS} />} />
-        <Route path="/terms" element={<InfoPage title="Terms of service" sections={TERMS_SECTIONS} />} />
+        <Route path="/login" element={<CustomerLogin />} />
+        <Route path="/register" element={<CustomerRegister />} />
+        <Route path="/account" element={<Account />} />
+        <Route path="/account/settings" element={<AccountSettings />} />
+        <Route path="/faq" element={<InfoPage title="Frequently asked questions" pageKey="faq" />} />
+        <Route path="/shipping-returns" element={<InfoPage title="Shipping & returns" pageKey="shippingReturns" />} />
+        <Route path="/terms" element={<InfoPage title="Terms of service" pageKey="terms" />} />
       </Route>
-      <Route path="/checkout" element={<Checkout />} />
+      <Route path="/checkout" element={<MaintenanceGate><Checkout /></MaintenanceGate>} />
       <Route path="/admin/login" element={<Login />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />
@@ -52,7 +60,7 @@ export default function App() {
         <Route path="banners" element={<Banners />} />
         <Route path="settings" element={<Settings />} />
       </Route>
-      <Route path="*" element={<Shell />} />
+      <Route path="*" element={<MaintenanceGate><Shell /></MaintenanceGate>} />
     </Routes>
   );
 }

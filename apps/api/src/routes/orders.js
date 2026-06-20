@@ -1,11 +1,14 @@
 const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
+const { deductVariantStock } = require('../products/catalogRepository');
 const { findOrderByNumber, saveOrder } = require('../orders/orderRepository');
 const { appendInventoryMovements } = require('../inventory/inventoryMovementRepository');
 const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
 const { incrementDiscountUsage } = require('../discounts/discountRepository');
 const { quoteCart } = require('../promos/promoEngine');
+const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
+const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
 
 const router = express.Router();
 
@@ -26,8 +29,13 @@ router.get('/:orderNumber', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
+    const storeSettings = await getStoreSettings();
+    if (storeSettings.website.maintenanceMode) {
+      return res.status(503).json({ error: 'Store is under maintenance.' });
+    }
     const order = await normalizeCheckout(req.body);
     const orderNumber = createOrderNumber();
+    const customerAccountId = await resolveCustomerAccountId(req);
     const persistedOrder = {
       ...order,
       orderNumber,
@@ -38,8 +46,16 @@ router.post('/', async (req, res, next) => {
       trackingNumber: '',
       tags: [],
       notes: order.notes || '',
+      customerAccountId,
       placedAt: new Date().toISOString()
     };
+    await deductVariantStock(order.items.map((item) => ({
+      slug: String(item.productId).replace(/^catalog-/, ''),
+      sku: item.sku,
+      size: item.size,
+      quantity: item.quantity,
+      productName: item.productName
+    })));
     await saveOrder(persistedOrder);
     await appendInventoryMovements(order.items.map((item) => ({
       orderNumber,
@@ -142,6 +158,12 @@ async function normalizeCheckout(body) {
     ? body.checkoutChannel
     : 'storefront_checkout';
   const paymentMethod = body.paymentMethod ? String(body.paymentMethod).trim() : 'cash_on_delivery';
+  const enabledPaymentMethods = await listEnabledPaymentMethodIds();
+  if (!enabledPaymentMethods.includes(paymentMethod)) {
+    const error = new Error('Payment method is not available.');
+    error.status = 400;
+    throw error;
+  }
   const shippingRegion = body.shippingRegion ? String(body.shippingRegion).trim() : '';
   const shippingRegionLabel = body.shippingRegionLabel ? String(body.shippingRegionLabel).trim() : '';
   const freeShippingUnlocked = quote.freeShippingUnlocked || Boolean(body.freeShippingUnlocked);
@@ -191,6 +213,15 @@ async function normalizeCheckout(body) {
   };
 }
 
+async function resolveCustomerAccountId(req) {
+  const header = String(req.headers.authorization || '');
+  if (!header.startsWith('Bearer ')) return '';
+  const accountId = verifyCustomerToken(header.slice(7));
+  if (!accountId) return '';
+  const account = await findAccountById(accountId);
+  return account ? account.id : '';
+}
+
 async function normalizeCheckoutItem(item) {
   const quantity = Number(item.quantity);
   const unitPriceCents = Number(item.unitPriceCents);
@@ -229,6 +260,7 @@ async function normalizeCheckoutItem(item) {
     variantId: variant.id,
     productName: product.name,
     size: variant.size,
+    sku: variant.sku,
     quantity,
     unitPriceCents: product.priceCents
   };

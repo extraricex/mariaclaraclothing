@@ -124,8 +124,6 @@ function writeEditableProducts(products, filePath = activeProductsPath()) {
   fs.writeFileSync(filePath, `${JSON.stringify(products, null, 2)}\n`);
 }
 
-<<<<<<< Updated upstream
-=======
 function deductionSoldOutError(item) {
   const error = new Error(`${item.size} is sold out for ${item.productName || item.slug}`);
   error.status = 409;
@@ -220,7 +218,6 @@ function restockPostgresVariantStock(items) {
   });
 }
 
->>>>>>> Stashed changes
 function isPromise(value) {
   return value && typeof value.then === 'function';
 }
@@ -699,6 +696,7 @@ function requireNonNegativeNumber(value, field) {
 module.exports = {
   catalogProducts,
   editableProducts,
+  deductVariantStock,
   deleteEditableProduct,
   findCatalogProductBySlug,
   findEditableProductBySlug,

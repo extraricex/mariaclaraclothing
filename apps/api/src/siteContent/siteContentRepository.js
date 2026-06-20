@@ -1,10 +1,20 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { hasDatabaseUrl, query } = require('../db/postgres');
 
 const siteContentPath = path.join(__dirname, '..', '..', 'data', 'site-content.json');
+const SITE_CONTENT_KEY = 'siteContent';
 
 function activeSiteContentPath() {
   return process.env.SITE_CONTENT_FILE || siteContentPath;
+}
+
+function usePostgresSiteContent() {
+  return hasDatabaseUrl() && !process.env.SITE_CONTENT_FILE;
+}
+
+function isPromise(value) {
+  return Boolean(value) && typeof value.then === 'function';
 }
 
 function defaultSiteContent() {
@@ -18,7 +28,21 @@ function defaultSiteContent() {
   };
 }
 
-function getSiteContent() {
+async function readPostgresValue(key) {
+  const result = await query('SELECT value FROM store_settings WHERE key = $1', [key]);
+  return result.rows[0]?.value || null;
+}
+
+async function writePostgresValue(key, value) {
+  await query(
+    `INSERT INTO store_settings (key, value, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [key, JSON.stringify(value)]
+  );
+}
+
+function readJsonSiteContent() {
   try {
     return normalizeSiteContent(JSON.parse(fs.readFileSync(activeSiteContentPath(), 'utf8')));
   } catch (error) {
@@ -27,8 +51,20 @@ function getSiteContent() {
   }
 }
 
+function getSiteContent() {
+  if (usePostgresSiteContent()) {
+    return readPostgresValue(SITE_CONTENT_KEY).then((stored) =>
+      (stored ? normalizeSiteContent(stored) : defaultSiteContent())
+    );
+  }
+  return readJsonSiteContent();
+}
+
 function saveSiteContent(content) {
   const normalized = normalizeSiteContent(content);
+  if (usePostgresSiteContent()) {
+    return writePostgresValue(SITE_CONTENT_KEY, normalized).then(() => normalized);
+  }
   const filePath = activeSiteContentPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(normalized, null, 2)}\n`);
@@ -37,30 +73,39 @@ function saveSiteContent(content) {
 
 function updateHomepageBanners(banners) {
   const content = getSiteContent();
-  return saveSiteContent({
-    ...content,
-    homepageBanners: normalizeBanners(banners)
-  });
+  if (isPromise(content)) {
+    return content.then((current) =>
+      saveSiteContent({ ...current, homepageBanners: normalizeBanners(banners) })
+    );
+  }
+  return saveSiteContent({ ...content, homepageBanners: normalizeBanners(banners) });
 }
 
 function appendHomepageBanners(banners) {
   const content = getSiteContent();
-  return updateHomepageBanners([
-    ...content.homepageBanners,
-    ...banners
-  ]);
+  if (isPromise(content)) {
+    return content.then((current) =>
+      updateHomepageBanners([...current.homepageBanners, ...banners])
+    );
+  }
+  return updateHomepageBanners([...content.homepageBanners, ...banners]);
 }
 
 function updateLogo(logo) {
   const content = getSiteContent();
-  return saveSiteContent({
-    ...content,
-    logo: normalizeLogo(logo)
-  });
+  if (isPromise(content)) {
+    return content.then((current) => saveSiteContent({ ...current, logo: normalizeLogo(logo) }));
+  }
+  return saveSiteContent({ ...content, logo: normalizeLogo(logo) });
 }
 
 function updateFooterLogo(footerLogo) {
   const content = getSiteContent();
+  if (isPromise(content)) {
+    return content.then((current) =>
+      saveSiteContent({ ...current, footerLogo: normalizeLogo(footerLogo, 'Maria Clara Clothing footer logo') })
+    );
+  }
   return saveSiteContent({
     ...content,
     footerLogo: normalizeLogo(footerLogo, 'Maria Clara Clothing footer logo')
