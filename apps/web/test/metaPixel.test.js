@@ -6,7 +6,8 @@ import {
   facebookMoneyValue,
   initializeFacebookMetaPixel,
   metaPixelConfig,
-  purchaseEventId
+  purchaseEventId,
+  shouldTrackFacebookPath
 } from '../src/lib/metaPixel.js';
 
 test('Facebook money values convert cents to decimal PHP', () => {
@@ -69,4 +70,13 @@ test('Pixel initializes once on customer paths and never on admin paths', () => 
   assert.equal(inserted.length, 1);
   assert.equal(customerWindow.fbq.queue.length, 1);
   assert.equal(customerWindow.fbq.queue[0][0], 'init');
+});
+
+test('SPA page views skip repeated and admin paths', () => {
+  assert.equal(shouldTrackFacebookPath('', '/'), true);
+  assert.equal(shouldTrackFacebookPath('/', '/product/example'), true);
+  assert.equal(shouldTrackFacebookPath('/product/example', '/product/example'), false);
+  assert.equal(shouldTrackFacebookPath('/', '/admin'), false);
+  assert.equal(shouldTrackFacebookPath('/', '/admin/login'), false);
+  assert.equal(shouldTrackFacebookPath('/', '/admin/orders/MCC-1'), false);
 });

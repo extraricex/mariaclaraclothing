@@ -1,5 +1,6 @@
 const CURRENCY = 'PHP';
 const META_SCRIPT_URL = 'https://connect.facebook.net/en_US/fbevents.js';
+let lastTrackedPagePath = '';
 
 export function metaPixelConfig(source = {}) {
   const pixelId = String(source.VITE_FACEBOOK_META_PIXEL_ID || '').trim();
@@ -11,6 +12,11 @@ export function metaPixelConfig(source = {}) {
 
 export function isFacebookAdminPath(path) {
   return String(path || '').startsWith('/admin');
+}
+
+export function shouldTrackFacebookPath(previousPath, nextPath) {
+  const normalized = String(nextPath || '');
+  return Boolean(normalized) && normalized !== previousPath && !isFacebookAdminPath(normalized);
 }
 
 export function initializeFacebookMetaPixel(options = {}) {
@@ -97,4 +103,24 @@ export function buildFacebookPurchase(order = {}, items = []) {
       value: facebookMoneyValue(order.totalCents)
     }
   };
+}
+
+export function trackFacebookEvent(eventName, payload = {}, options = {}) {
+  const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
+  const path = options.path ?? windowRef?.location?.pathname ?? '';
+  if (!windowRef?.fbq || isFacebookAdminPath(path)) return false;
+
+  if (options.eventId) {
+    windowRef.fbq('track', eventName, payload, { eventID: options.eventId });
+  } else {
+    windowRef.fbq('track', eventName, payload);
+  }
+  return true;
+}
+
+export function trackFacebookPageView(path, options = {}) {
+  if (!shouldTrackFacebookPath(lastTrackedPagePath, path)) return false;
+  const tracked = trackFacebookEvent('PageView', {}, { ...options, path });
+  if (tracked) lastTrackedPagePath = path;
+  return tracked;
 }
