@@ -1,6 +1,7 @@
 const CURRENCY = 'PHP';
 const META_SCRIPT_URL = 'https://connect.facebook.net/en_US/fbevents.js';
 let lastTrackedPagePath = '';
+let lastCheckoutEventId = '';
 
 export function metaPixelConfig(source = {}) {
   const pixelId = String(source.VITE_FACEBOOK_META_PIXEL_ID || '').trim();
@@ -105,6 +106,41 @@ export function buildFacebookPurchase(order = {}, items = []) {
   };
 }
 
+export function buildFacebookViewContent(product = {}) {
+  const contentId = facebookContentId(product);
+  return {
+    content_ids: contentId ? [contentId] : [],
+    content_name: String(product.name || ''),
+    content_type: 'product',
+    currency: CURRENCY,
+    value: facebookMoneyValue(product.priceCents)
+  };
+}
+
+export function buildFacebookAddToCart(item = {}) {
+  const contents = facebookContents([item]);
+  return {
+    content_ids: contents.map((content) => content.id),
+    content_name: String(item.productName || item.name || ''),
+    content_type: 'product',
+    contents,
+    currency: CURRENCY,
+    value: facebookMoneyValue(Number(item.unitPriceCents || item.priceCents || 0) * Number(item.quantity || 1))
+  };
+}
+
+export function buildFacebookInitiateCheckout(items = [], totals = {}) {
+  const contents = facebookContents(items);
+  return {
+    content_ids: contents.map((content) => content.id),
+    content_type: 'product',
+    contents,
+    currency: CURRENCY,
+    num_items: contents.reduce((sum, content) => sum + content.quantity, 0),
+    value: facebookMoneyValue(totals.totalCents ?? totals.subtotalCents)
+  };
+}
+
 export function trackFacebookEvent(eventName, payload = {}, options = {}) {
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
   const path = options.path ?? windowRef?.location?.pathname ?? '';
@@ -122,5 +158,26 @@ export function trackFacebookPageView(path, options = {}) {
   if (!shouldTrackFacebookPath(lastTrackedPagePath, path)) return false;
   const tracked = trackFacebookEvent('PageView', {}, { ...options, path });
   if (tracked) lastTrackedPagePath = path;
+  return tracked;
+}
+
+export function trackFacebookViewContent(product, options = {}) {
+  const payload = buildFacebookViewContent(product);
+  if (!payload.content_ids.length) return false;
+  return trackFacebookEvent('ViewContent', payload, options);
+}
+
+export function trackFacebookAddToCart(item, options = {}) {
+  const payload = buildFacebookAddToCart(item);
+  if (!payload.content_ids.length) return false;
+  return trackFacebookEvent('AddToCart', payload, options);
+}
+
+export function trackFacebookInitiateCheckout(items, totals, eventId, options = {}) {
+  if (!eventId || lastCheckoutEventId === eventId) return false;
+  const payload = buildFacebookInitiateCheckout(items, totals);
+  if (!payload.content_ids.length) return false;
+  const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId });
+  if (tracked) lastCheckoutEventId = eventId;
   return tracked;
 }

@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildFacebookAddToCart,
+  buildFacebookInitiateCheckout,
   buildFacebookPurchase,
+  buildFacebookViewContent,
   facebookContentId,
   facebookMoneyValue,
   initializeFacebookMetaPixel,
@@ -79,4 +82,37 @@ test('SPA page views skip repeated and admin paths', () => {
   assert.equal(shouldTrackFacebookPath('/', '/admin'), false);
   assert.equal(shouldTrackFacebookPath('/', '/admin/login'), false);
   assert.equal(shouldTrackFacebookPath('/', '/admin/orders/MCC-1'), false);
+});
+
+test('ViewContent uses the product ID and PHP price', () => {
+  assert.deepEqual(buildFacebookViewContent({
+    id: 'P-1',
+    name: 'Maria Clara Shirt',
+    priceCents: 79900
+  }), {
+    content_ids: ['P-1'],
+    content_name: 'Maria Clara Shirt',
+    content_type: 'product',
+    currency: 'PHP',
+    value: 799
+  });
+});
+
+test('AddToCart and InitiateCheckout normalize variant contents', () => {
+  const item = {
+    externalPosVariantId: 'POS-1',
+    variantId: 'V-1',
+    productName: 'Maria Clara Shirt',
+    quantity: 2,
+    unitPriceCents: 79900
+  };
+  const add = buildFacebookAddToCart(item);
+  assert.deepEqual(add.content_ids, ['POS-1']);
+  assert.equal(add.value, 1598);
+  assert.equal(add.contents[0].quantity, 2);
+
+  const checkout = buildFacebookInitiateCheckout([item, { productId: '', quantity: 1 }], { totalCents: 159800 });
+  assert.deepEqual(checkout.content_ids, ['POS-1']);
+  assert.equal(checkout.num_items, 2);
+  assert.equal(checkout.value, 1598);
 });

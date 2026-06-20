@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import { CART_DRAWER_EVENT, cartQuantity, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
+import { CART_DRAWER_EVENT, cartQuantity, getCartSessionId, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { fetchActivePromoNotification, fetchSiteContent, quoteCart } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
+import { trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
 
 const TICKER_ITEMS = [
@@ -80,6 +81,15 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
   const displayShipping = quote?.shippingFeeCents ?? 0;
   const displayTotal = quote?.totalCents ?? Math.max(0, displaySubtotal - displayDiscount + displayShipping);
 
+  function checkout() {
+    trackFacebookInitiateCheckout(
+      items,
+      quote || { subtotalCents: displaySubtotal, totalCents: displayTotal },
+      `checkout:${getCartSessionId()}`
+    );
+    onClose();
+  }
+
   return (
     <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`} aria-hidden={!open}>
       <button
@@ -146,7 +156,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                 <div className="flex justify-between border-t border-line pt-3 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(displayTotal)}</dd></div>
               </dl>
               <div className="mt-5 grid gap-2">
-                <Link to="/checkout" className="btn-ink text-center" onClick={onClose}>Checkout</Link>
+                <Link to="/checkout" className="btn-ink text-center" onClick={checkout}>Checkout</Link>
                 <Link to="/cart" className="btn-ghost text-center" onClick={onClose}>View cart</Link>
               </div>
             </div>

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart, openCartDrawer } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
+import { trackFacebookAddToCart, trackFacebookViewContent } from '../lib/metaPixel.js';
 import { sanitizeRichHtml } from '../lib/richText.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
 import ProductCard from '../components/ProductCard.jsx';
@@ -37,6 +38,10 @@ export default function Product() {
       .then((body) => setRecommendations(body.products || []))
       .catch(() => setRecommendations([]));
   }, [slug]);
+
+  useEffect(() => {
+    if (product) trackFacebookViewContent(product);
+  }, [product?.id]);
 
   const descriptionHtml = useMemo(
     () => sanitizeRichHtml(product?.productPage?.intro || product?.description || ''),
@@ -110,7 +115,7 @@ export default function Product() {
 
   function handleAdd() {
     if (!variant || soldOut) return;
-    addToCart({
+    const cartItem = {
       productId: product.id,
       slug: product.slug,
       variantId: variant.id,
@@ -121,8 +126,10 @@ export default function Product() {
       imageUrl: product.images[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''
-    });
+    };
+    addToCart({ ...cartItem });
     openCartDrawer();
+    trackFacebookAddToCart(cartItem);
     setAdded(true);
     setTimeout(() => setAdded(false), 2500);
   }

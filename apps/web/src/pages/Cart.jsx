@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchProducts, quoteCart } from '../lib/api.js';
-import { addToCart, cartQuantity, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
+import { addToCart, cartQuantity, getCartSessionId, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
+import { trackFacebookAddToCart, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 
 function firstAvailableVariant(product) {
   return (product.variants || []).find((variant) => Number(variant.stockQuantity || 0) > 0) || null;
@@ -56,7 +57,7 @@ export default function Cart() {
   function addUpsell(product) {
     const variant = firstAvailableVariant(product);
     if (!variant) return;
-    addToCart({
+    const cartItem = {
       productId: product.id,
       slug: product.slug,
       variantId: variant.id,
@@ -67,7 +68,17 @@ export default function Cart() {
       imageUrl: product.images?.[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''
-    });
+    };
+    addToCart(cartItem);
+    trackFacebookAddToCart(cartItem);
+  }
+
+  function trackCheckout() {
+    trackFacebookInitiateCheckout(
+      items,
+      quote || { subtotalCents: subtotal, totalCents: displayTotal },
+      `checkout:${getCartSessionId()}`
+    );
   }
 
   if (!items.length) {
@@ -127,7 +138,7 @@ export default function Cart() {
         <p className="text-sm text-ink-soft">Shipping <span className="ml-4 text-base font-semibold text-ink">{quote?.freeShippingUnlocked ? 'Free' : formatMoney(displayShipping)}</span></p>
         <p className="text-base font-semibold">Total <span className="ml-4 text-lg">{formatMoney(displayTotal)}</span></p>
         <p className="text-xs text-clay">Final delivery fee is confirmed after your address · COD nationwide</p>
-        <Link to="/checkout" className="btn-ink mt-3 w-full sm:w-auto">Check out — Cash on Delivery</Link>
+        <Link to="/checkout" className="btn-ink mt-3 w-full sm:w-auto" onClick={trackCheckout}>Check out — Cash on Delivery</Link>
       </div>
 
       {cartUpsells.length > 0 && (
