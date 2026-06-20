@@ -9,6 +9,16 @@
 
 const buckets = new Map();
 
+// Soft cap before an opportunistic sweep of expired buckets, so a flood from
+// many distinct IPs cannot grow the Map without bound (memory exhaustion).
+const SWEEP_THRESHOLD = 5000;
+
+function sweepExpired(now) {
+  for (const [key, bucket] of buckets) {
+    if (now - bucket.start >= bucket.windowMs) buckets.delete(key);
+  }
+}
+
 function positiveIntEnv(name, fallback) {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -38,7 +48,8 @@ function rateLimit({ keyPrefix, maxEnv, windowEnv, defaultMax, defaultWindowMs, 
     const bucket = buckets.get(key);
 
     if (!bucket || now - bucket.start >= windowMs) {
-      buckets.set(key, { start: now, count: 1 });
+      if (buckets.size >= SWEEP_THRESHOLD) sweepExpired(now);
+      buckets.set(key, { start: now, count: 1, windowMs });
       return next();
     }
 
