@@ -26,6 +26,24 @@ function optionalText(value, maxLength) {
   return String(value || '').trim().slice(0, maxLength);
 }
 
+function parseMetaCookies(header) {
+  const cookies = Object.fromEntries(String(header || '').split(';').map((part) => {
+    const index = part.indexOf('=');
+    if (index < 0) return ['', ''];
+    const name = part.slice(0, index).trim();
+    const raw = part.slice(index + 1).trim();
+    try {
+      return [name, decodeURIComponent(raw)];
+    } catch (_error) {
+      return [name, raw];
+    }
+  }).filter(([name]) => name));
+  return {
+    fbp: optionalText(cookies._fbp, 255),
+    fbc: optionalText(cookies._fbc, 255)
+  };
+}
+
 function buildMetaPurchaseEvent({ order, requestContext = {} }) {
   const items = (Array.isArray(order?.items) ? order.items : [])
     .map((item) => ({
@@ -73,5 +91,6 @@ module.exports = {
   buildMetaPurchaseEvent,
   normalizeEmailForMeta,
   normalizePhoneForMeta,
+  parseMetaCookies,
   sha256
 };

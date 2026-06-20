@@ -238,10 +238,11 @@ function deleteDiscount(code) {
   return deleted;
 }
 
-function incrementDiscountUsage(code) {
+function incrementDiscountUsage(code, options = {}) {
   const normalized = normalizeDiscountCode(code);
   if (usePostgresDiscounts()) {
-    return query(
+    const executor = options.client || { query };
+    return executor.query(
       'UPDATE discount_codes SET usage_count = usage_count + 1, updated_at = now() WHERE code = $1',
       [normalized]
     ).then(() => undefined);

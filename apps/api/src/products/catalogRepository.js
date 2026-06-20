@@ -130,7 +130,7 @@ function deductionSoldOutError(item) {
   return error;
 }
 
-function deductVariantStock(items) {
+function deductVariantStock(items, options = {}) {
   // Match on sku (stored verbatim and unique), NOT size: the storefront/presenter
   // abbreviates size (Large -> l) while product_variants.size keeps the full label, so
   // size cannot be matched against the stored row. `size` is kept only for the error copy.
@@ -143,7 +143,7 @@ function deductVariantStock(items) {
   }));
 
   if (usePostgresProducts()) {
-    return deductPostgresVariantStock(deductions);
+    return deductPostgresVariantStock(deductions, options.client);
   }
   return deductJsonVariantStock(deductions);
 }
@@ -189,8 +189,8 @@ function restockJsonVariantStock(items) {
   writeEditableProducts(products);
 }
 
-function deductPostgresVariantStock(items) {
-  return transaction(async (client) => {
+function deductPostgresVariantStock(items, transactionClient) {
+  const deduct = async (client) => {
     for (const item of items) {
       const result = await client.query(
         `UPDATE product_variants
@@ -202,7 +202,8 @@ function deductPostgresVariantStock(items) {
         throw deductionSoldOutError(item);
       }
     }
-  });
+  };
+  return transactionClient ? deduct(transactionClient) : transaction(deduct);
 }
 
 function restockPostgresVariantStock(items) {

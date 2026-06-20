@@ -105,13 +105,14 @@ async function listCartSessions(status) {
     .sort((a, b) => String(b.lastActivityAt || '').localeCompare(String(a.lastActivityAt || '')));
 }
 
-async function markCartSessionConverted(sessionId, orderNumber) {
+async function markCartSessionConverted(sessionId, orderNumber, options = {}) {
   const id = String(sessionId || '').trim();
   if (!id) return null;
   const convertedAt = new Date().toISOString();
 
   if (usePostgresCartSessions()) {
-    const result = await query(
+    const executor = options.client || { query };
+    const result = await executor.query(
       `UPDATE cart_sessions
        SET status = 'converted',
            converted_order_number = $2,

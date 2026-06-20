@@ -35,13 +35,14 @@ async function writeMovementStore(store) {
   await fs.writeFile(filePath, `${JSON.stringify({ movements: store.movements || [] }, null, 2)}\n`);
 }
 
-async function appendInventoryMovements(movements) {
+async function appendInventoryMovements(movements, options = {}) {
   const normalized = (Array.isArray(movements) ? movements : [movements]).map(normalizeMovement);
   if (!normalized.length) return [];
 
   if (usePostgresMovements()) {
+    const executor = options.client || { query };
     for (const movement of normalized) {
-      await query(
+      await executor.query(
         `INSERT INTO inventory_movements (
           id, order_number, source, reason, product_slug, product_name, sku,
           size, quantity_change, created_at

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { metaConfig } = require('../src/config/env');
-const { buildMetaPurchaseEvent, sha256 } = require('../src/marketing/metaEvent');
+const { buildMetaPurchaseEvent, parseMetaCookies, sha256 } = require('../src/marketing/metaEvent');
 
 test('Meta CAPI is disabled by default', () => {
   assert.deepEqual(metaConfig({}), { enabled: false });
@@ -80,4 +80,12 @@ test('Meta Purchase omits empty optional matching values', () => {
     requestContext: {}
   });
   assert.deepEqual(event.user_data, {});
+});
+
+test('Meta browser cookies are parsed and length-limited', () => {
+  assert.deepEqual(parseMetaCookies('_fbp=fb.1.123.456; _fbc=fb.1.123.click; other=value'), {
+    fbp: 'fb.1.123.456',
+    fbc: 'fb.1.123.click'
+  });
+  assert.deepEqual(parseMetaCookies(''), { fbp: '', fbc: '' });
 });
