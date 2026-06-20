@@ -19,8 +19,9 @@ function fixture() {
   };
 }
 
-test('Postgres checkout uses one client for every commerce write and Meta outbox insert', async () => {
-  const client = { id: 'client-1' };
+test('Postgres checkout serializes the idempotency key and uses one client for every commerce write', async () => {
+  const sqlCalls = [];
+  const client = { id: 'client-1', query: async (sql, values) => sqlCalls.push({ sql, values }) };
   const calls = [];
   const deps = {
     transaction: async (callback) => callback(client),
@@ -37,6 +38,8 @@ test('Postgres checkout uses one client for every commerce write and Meta outbox
 
   const result = await persistPostgresCheckout(fixture(), deps);
   assert.equal(result.orderNumber, 'MCC-1');
+  assert.match(sqlCalls[0].sql, /pg_advisory_xact_lock/);
+  assert.deepEqual(sqlCalls[0].values, ['cart-1']);
   assert.deepEqual(calls.map(([name]) => name), ['stock', 'order', 'movements', 'cart', 'discount', 'outbox']);
   assert.equal(calls.every(([, usedClient]) => usedClient === client), true);
 });
@@ -45,7 +48,7 @@ test('Postgres checkout returns the existing idempotent order without writes', a
   const existing = { orderNumber: 'MCC-existing' };
   let writes = 0;
   const deps = {
-    transaction: async (callback) => callback({}),
+    transaction: async (callback) => callback({ query: async () => {} }),
     findByIdempotencyKey: async () => existing,
     deductStock: async () => { writes += 1; },
     saveOrder: async () => { writes += 1; },

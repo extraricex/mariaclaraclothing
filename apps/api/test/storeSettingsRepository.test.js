@@ -111,6 +111,9 @@ test('website settings merge partial updates over the stored section', async () 
     assert.ok(defaults.website.infoPages.faq.length >= 3);
     assert.ok(defaults.website.infoPages.shippingReturns.length >= 3);
     assert.ok(defaults.website.infoPages.terms.length >= 3);
+    const privacy = defaults.website.infoPages.terms.find((section) => section.heading === 'Privacy');
+    assert.match(privacy.body, /Facebook Meta Pixel/);
+    assert.match(privacy.body, /hashed contact details/);
     assert.ok(defaults.website.infoPages.faq[0].heading);
     assert.ok(defaults.website.infoPages.faq[0].body);
 

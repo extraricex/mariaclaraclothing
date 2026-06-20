@@ -46,6 +46,8 @@ test('store settings lib carries website defaults and an SEO applier', async () 
 
   assert.match(source, /ticker:/);
   assert.match(source, /DEFAULT_INFO_PAGES/);
+  assert.match(source, /Facebook Meta Pixel/);
+  assert.match(source, /hashed contact details/);
   assert.match(source, /maintenanceMode: false/);
   assert.match(source, /export function applySeoTags/);
 });

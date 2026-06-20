@@ -7,6 +7,7 @@ async function persistPostgresCheckout(input, deps) {
   }
 
   return deps.transaction(async (client) => {
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [idempotencyKey]);
     const existing = await deps.findByIdempotencyKey(idempotencyKey, { client });
     if (existing) return existing;
 
