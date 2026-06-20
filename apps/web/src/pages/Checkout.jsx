@@ -4,6 +4,7 @@ import { createOrder, quoteCart } from '../lib/api.js';
 import { customerJson, getCustomerToken, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { cartQuantity, clearCart, getCartSessionId, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
+import { trackFacebookPurchase } from '../lib/metaPixel.js';
 import {
   loadBarangays,
   loadCities,
@@ -335,6 +336,7 @@ export default function Checkout() {
     try {
       const token = loggedIn ? getCustomerToken() : '';
       const result = await createOrder(payload, token ? { Authorization: `Bearer ${token}` } : {});
+      trackFacebookPurchase(result, result.items, result.trackingEventId);
       if (loggedIn && saveAddress) {
         customerJson('/api/customer/me', {
           method: 'PUT',

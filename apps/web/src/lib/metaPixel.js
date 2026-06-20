@@ -181,3 +181,20 @@ export function trackFacebookInitiateCheckout(items, totals, eventId, options = 
   if (tracked) lastCheckoutEventId = eventId;
   return tracked;
 }
+
+export function trackFacebookPurchase(order, items, eventId, options = {}) {
+  const normalizedEventId = String(eventId || '').trim();
+  if (!normalizedEventId || !order?.orderNumber) return false;
+
+  const storage = options.storage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+  const storageKey = `maria-clara-facebook-${normalizedEventId}`;
+  if (storage?.getItem(storageKey)) return false;
+
+  const event = buildFacebookPurchase(order, items);
+  const tracked = trackFacebookEvent('Purchase', event.payload, {
+    ...options,
+    eventId: normalizedEventId
+  });
+  if (tracked) storage?.setItem(storageKey, 'tracked');
+  return tracked;
+}

@@ -75,6 +75,15 @@ router.post('/', async (req, res, next) => {
 
     res.status(201).json({
       orderNumber,
+      trackingEventId: `purchase:${orderNumber}`,
+      currency: 'PHP',
+      totalCents: persistedOrder.totalCents,
+      items: persistedOrder.items.map((item) => ({
+        variantId: item.variantId,
+        externalPosVariantId: item.externalPosVariantId || '',
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents
+      })),
       syncStatus: 'frontend_only',
       checkoutChannel: order.checkoutChannel,
       paymentMethod: order.paymentMethod,
@@ -261,6 +270,7 @@ async function normalizeCheckoutItem(item) {
     productName: product.name,
     size: variant.size,
     sku: variant.sku,
+    externalPosVariantId: variant.externalPosVariantId || '',
     quantity,
     unitPriceCents: product.priceCents
   };

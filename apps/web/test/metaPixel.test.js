@@ -10,7 +10,8 @@ import {
   initializeFacebookMetaPixel,
   metaPixelConfig,
   purchaseEventId,
-  shouldTrackFacebookPath
+  shouldTrackFacebookPath,
+  trackFacebookPurchase
 } from '../src/lib/metaPixel.js';
 
 test('Facebook money values convert cents to decimal PHP', () => {
@@ -115,4 +116,21 @@ test('AddToCart and InitiateCheckout normalize variant contents', () => {
   assert.deepEqual(checkout.content_ids, ['POS-1']);
   assert.equal(checkout.num_items, 2);
   assert.equal(checkout.value, 1598);
+});
+
+test('Purchase dispatches once with the server event ID', () => {
+  const calls = [];
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value)
+  };
+  const windowRef = { fbq: (...args) => calls.push(args) };
+  const order = { orderNumber: 'MCC-1', totalCents: 79900 };
+  const items = [{ variantId: 'V-1', quantity: 1, unitPriceCents: 79900 }];
+
+  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout' }), true);
+  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout' }), false);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][3], { eventID: 'purchase:MCC-1' });
 });

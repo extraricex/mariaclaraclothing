@@ -93,7 +93,8 @@ async function firstInStock(port) {
           productName: product.name,
           size: variant.size,
           quantity: 1,
-          unitPriceCents: variant.priceCents ?? product.priceCents
+          unitPriceCents: variant.priceCents ?? product.priceCents,
+          externalPosVariantId: variant.externalPosVariantId || ''
         },
         slug: product.slug,
         size: variant.size,
@@ -115,6 +116,16 @@ test('creating an order deducts the ordered variant stock', async () => {
       body: JSON.stringify(checkoutBody(picked.item))
     });
     assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.currency, 'PHP');
+    assert.equal(body.totalCents, picked.item.unitPriceCents + 8000);
+    assert.equal(body.trackingEventId, `purchase:${body.orderNumber}`);
+    assert.deepEqual(body.items, [{
+      variantId: picked.item.variantId,
+      externalPosVariantId: picked.item.externalPosVariantId,
+      quantity: 1,
+      unitPriceCents: picked.item.unitPriceCents
+    }]);
     const after = variantOf(loadEditableProducts(), picked.slug, picked.size);
     assert.equal(Number(after.stockQuantity), picked.stock - 1);
   } finally {
