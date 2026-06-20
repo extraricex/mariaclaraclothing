@@ -2,7 +2,13 @@ const express = require('express');
 const fs = require('node:fs');
 const path = require('node:path');
 const multer = require('multer');
-const { findOrderByNumber, listOrders, updateOrder } = require('../orders/orderRepository');
+const {
+  appendOrderStatusEvent,
+  appendOrderTrackingNotification,
+  findOrderByNumber,
+  listOrders,
+  updateOrder
+} = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
 const { cartSessionSummary, listCartSessions } = require('../cartSessions/cartSessionRepository');
@@ -25,8 +31,13 @@ const {
   findEditableProductBySlug,
   listEditableProducts,
   replaceEditableProducts,
+  restockVariantStock,
   saveEditableProduct
 } = require('../products/catalogRepository');
+const {
+  appendInventoryMovements,
+  queryInventoryMovements
+} = require('../inventory/inventoryMovementRepository');
 
 const router = express.Router();
 
@@ -36,6 +47,7 @@ const VALID_PAYMENT_STATUSES = new Set(['cod_pending', 'paid', 'cancelled', 'ref
 const VALID_COD_CONFIRMATION_STATUSES = new Set(['pending', 'confirmed', 'unreachable', 'cancelled']);
 const VALID_DELIVERY_STATUSES = new Set(['pending', 'ready', 'out_for_delivery', 'delivered', 'returned', 'cancelled']);
 const VALID_PRODUCT_STATUSES = new Set(['active', 'draft', 'archived']);
+const ORDER_STATUS_EVENT_FIELDS = ['status', 'fulfillmentStatus', 'paymentStatus', 'codConfirmationStatus', 'deliveryStatus'];
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, callback) => {
@@ -120,6 +132,29 @@ router.post('/login', (req, res) => {
 router.use(requireAdmin);
 
 router.get('/session', (req, res) => res.json({ authenticated: true }));
+
+router.get('/inventory-movements', async (req, res, next) => {
+  try {
+    const filters = inventoryMovementFilters(req.query, true);
+    return res.json(await queryInventoryMovements(filters));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/inventory-movements/export', async (req, res, next) => {
+  try {
+    const filters = inventoryMovementFilters(req.body, false);
+    const result = await queryInventoryMovements(filters, { paginate: false });
+    const filenameDate = new Date().toISOString().slice(0, 10);
+
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader('content-disposition', `attachment; filename="inventory-movements-${filenameDate}.csv"`);
+    return res.send(inventoryMovementsCsv(result.movements));
+  } catch (error) {
+    return next(error);
+  }
+});
 
 router.get('/products/export', async (req, res, next) => {
   try {
@@ -399,7 +434,12 @@ router.put('/products/:slug', async (req, res, next) => {
       ...normalizeProductRequest(req.body || {}),
       productPage: req.body?.productPage || existingProduct.productPage
     }), slug);
+<<<<<<< Updated upstream
     return res.json({ product, summary: productSummary(await listEditableProducts()) });
+=======
+    await appendInventoryMovements(stockCorrectionMovements(existingProduct, product));
+    return res.json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
+>>>>>>> Stashed changes
   } catch (error) {
     return next(error);
   }
@@ -470,10 +510,18 @@ router.post('/orders/export/jnt', async (req, res, next) => {
 
     const exportedAt = new Date().toISOString();
     const buffer = writeJntExportBuffer(orders);
-    await Promise.all(orders.map((order) => updateOrder(order.orderNumber, {
-      exportedToJnt: true,
-      jntExportedAt: exportedAt
-    })));
+    await Promise.all(orders.map(async (order) => {
+      const updatedOrder = await updateOrder(order.orderNumber, {
+        exportedToJnt: true,
+        jntExportedAt: exportedAt,
+        status: 'shipped',
+        fulfillmentStatus: 'shipped',
+        deliveryStatus: order.deliveryStatus === 'delivered' || order.deliveryStatus === 'cancelled'
+          ? order.deliveryStatus
+          : 'out_for_delivery'
+      });
+      await appendStatusEventIfChanged(order, updatedOrder, 'jnt_export', 'J&T export marked this order as shipped.');
+    }));
 
     res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('content-disposition', `attachment; filename="JNT_Orders_${exportedAt.slice(0, 10)}.xlsx"`);
@@ -497,6 +545,34 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
   }
 });
 
+router.post('/orders/:orderNumber/tracking-notification', async (req, res, next) => {
+  try {
+    const orderNumber = String(req.params.orderNumber || '').trim();
+    const order = await findOrderByNumber(orderNumber);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    if (!canRecordTrackingNotification(order)) {
+      return res.status(400).json({ error: 'Tracking notifications require a shipped or J&T-exported order' });
+    }
+
+    const notification = await appendOrderTrackingNotification(order.orderNumber, {
+      channel: normalizeTrackingNotificationChannel(req.body?.channel),
+      status: 'recorded',
+      source: 'admin',
+      recipient: order.customer?.phone || order.customer?.email || '',
+      trackingNumber: order.trackingNumber || '',
+      message: trackingNotificationMessage(order)
+    });
+    const updatedOrder = await findOrderByNumber(order.orderNumber);
+
+    return res.json({ order: updatedOrder, notification });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.patch('/orders/:orderNumber', async (req, res, next) => {
   try {
     const orderNumber = String(req.params.orderNumber || '').trim();
@@ -513,15 +589,119 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    return res.json({ order });
+    await restoreCancelledOrderStock(existingOrder, order);
+    await appendStatusEventIfChanged(existingOrder, order, 'admin');
+    return res.json({ order: await findOrderByNumber(orderNumber) });
   } catch (error) {
     return next(error);
   }
 });
 
+<<<<<<< Updated upstream
 function requireAdmin(req, res, next) {
   const header = String(req.headers.authorization || '');
   const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+=======
+async function restoreCancelledOrderStock(previousOrder, nextOrder) {
+  if (!previousOrder || !nextOrder) return;
+  if (previousOrder.status === 'cancelled' || nextOrder.status !== 'cancelled') return;
+
+  const restockItems = (Array.isArray(nextOrder.items) ? nextOrder.items : [])
+    .map((item) => ({
+      slug: String(item.slug || item.productId || '').replace(/^catalog-/, ''),
+      sku: item.sku || '',
+      size: item.size || '',
+      quantity: Math.abs(Number(item.quantity || 0)),
+      productName: item.productName || ''
+    }))
+    .filter((item) => item.sku && item.quantity > 0);
+
+  if (!restockItems.length) return;
+
+  await restockVariantStock(restockItems);
+  await appendInventoryMovements(restockItems.map((item) => ({
+    orderNumber: nextOrder.orderNumber,
+    source: 'admin',
+    reason: 'order_cancelled',
+    productSlug: item.slug,
+    productName: item.productName,
+    sku: item.sku,
+    size: item.size,
+    quantityChange: item.quantity
+  })));
+}
+
+function stockCorrectionMovements(previousProduct, nextProduct) {
+  const previousBySku = new Map((previousProduct?.variants || []).map((variant) => [variant.sku, variant]));
+  return (nextProduct?.variants || [])
+    .map((variant) => {
+      const previousVariant = previousBySku.get(variant.sku);
+      if (!previousVariant) return null;
+      const quantityChange = Number(variant.stockQuantity || 0) - Number(previousVariant.stockQuantity || 0);
+      if (quantityChange === 0) return null;
+      return {
+        orderNumber: '',
+        source: 'admin',
+        reason: 'admin_stock_correction',
+        productSlug: nextProduct.slug,
+        productName: nextProduct.name,
+        sku: variant.sku,
+        size: variant.size,
+        quantityChange
+      };
+    })
+    .filter(Boolean);
+}
+
+function inventoryMovementFilters(input, includePagination) {
+  const source = input && typeof input === 'object' ? input : {};
+  const names = ['q', 'reason', 'range', 'dateFrom', 'dateTo', 'sort'];
+  if (includePagination) names.push('page', 'pageSize');
+  return Object.fromEntries(names
+    .filter((name) => source[name] !== undefined)
+    .map((name) => [name, source[name]]));
+}
+
+function inventoryMovementsCsv(movements) {
+  const header = [
+    'Date',
+    'Product',
+    'Product Slug',
+    'SKU',
+    'Size',
+    'Reason',
+    'Source',
+    'Order Number',
+    'Quantity Change'
+  ];
+  const rows = (movements || []).map((movement) => [
+    movement.createdAt,
+    movement.productName,
+    movement.productSlug,
+    movement.sku,
+    movement.size,
+    movement.reason,
+    movement.source,
+    movement.orderNumber,
+    movement.quantityChange
+  ].map((value, index) => csvValue(value, index !== 8)).join(','));
+
+  return [header.join(','), ...rows].join('\n');
+}
+
+function csvValue(value, protectFormula) {
+  let text = value === null || value === undefined ? '' : String(value);
+  if (protectFormula && /^[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+async function requireAdmin(req, res, next) {
+  try {
+    const header = String(req.headers.authorization || '');
+    const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+    const credentials = await getAdminCredentials();
+    const activeToken = credentials?.token || adminToken();
+>>>>>>> Stashed changes
 
   if (token !== adminToken()) {
     return res.status(401).json({ error: 'Admin authentication is required' });
@@ -590,12 +770,27 @@ function withSyncedStorefrontProductPage(product) {
   const productPage = product.productPage && typeof product.productPage === 'object' ? product.productPage : {};
   const description = String(product.description || '');
   const name = String(product.name || '').trim();
+  const detailsText = String(productPage.detailsText || '').trim();
+  const shippingText = String(productPage.shippingText || '').trim();
+  const sizeChartRows = Array.isArray(productPage.sizeChart) ? productPage.sizeChart : [];
+  const sizeChartItems = sizeChartRows.map(formatSizeChartSectionItem).filter(Boolean);
   const fallbackSections = [
     {
       title: 'Product details',
       items: ['Comfortable fit', 'Easy to style', 'Ready for everyday wear']
     }
   ];
+  const sourceSections = Array.isArray(productPage.sections) ? productPage.sections : [];
+  const syncedSections = [
+    detailsText && { title: 'Product details', body: detailsText },
+    sizeChartItems.length && { title: 'Size Chart', items: sizeChartItems },
+    shippingText && { title: 'Shipping', body: shippingText }
+  ].filter(Boolean);
+  const syncedTitles = new Set(syncedSections.map((section) => section.title.toLowerCase()));
+  const remainingSections = sourceSections.filter((section) => !syncedTitles.has(String(section?.title || '').trim().toLowerCase()));
+  const sections = syncedSections.length || remainingSections.length
+    ? [...syncedSections, ...remainingSections]
+    : fallbackSections;
 
   return {
     ...product,
@@ -603,11 +798,19 @@ function withSyncedStorefrontProductPage(product) {
       ...productPage,
       heading: name || String(productPage.heading || 'Product details').trim(),
       intro: description || String(productPage.intro || 'Premium Maria Clara Clothing piece with everyday comfort and clean styling.').trim(),
-      sections: Array.isArray(productPage.sections) && productPage.sections.length
-        ? productPage.sections
-        : fallbackSections
+      sections
     }
   };
+}
+
+function formatSizeChartSectionItem(row) {
+  const size = String(row?.size || '').trim();
+  const width = String(row?.width || '').trim();
+  const length = String(row?.length || '').trim();
+  const sleeveLength = String(row?.sleeveLength || '').trim();
+  const shoulderDropLength = String(row?.shoulderDropLength || '').trim();
+  if (!size || !width || !length || !sleeveLength || !shoulderDropLength) return '';
+  return `${size}: Width ${width}, Length ${length}, Sleeve length ${sleeveLength}, Shoulder drop length ${shoulderDropLength}`;
 }
 
 function normalizeInteger(value, message) {
@@ -838,6 +1041,26 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
   return changes;
 }
 
+async function appendStatusEventIfChanged(previousOrder, nextOrder, source, note = '') {
+  if (!previousOrder || !nextOrder) return null;
+  const changes = {};
+
+  ORDER_STATUS_EVENT_FIELDS.forEach((field) => {
+    const from = previousOrder[field] || '';
+    const to = nextOrder[field] || '';
+    if (from !== to) {
+      changes[field] = { from, to };
+    }
+  });
+
+  if (!Object.keys(changes).length) return null;
+  return appendOrderStatusEvent(nextOrder.orderNumber || previousOrder.orderNumber, {
+    source,
+    changes,
+    note
+  });
+}
+
 function normalizeOrderCustomerUpdate(customer) {
   const fullName = String(customer?.fullName || '').trim();
   const phone = String(customer?.phone || '').trim();
@@ -945,6 +1168,9 @@ function orderSummary(order) {
     phone: order.customer?.phone || '',
     channel: order.channel || 'Online Store',
     totalCents: order.totalCents,
+    discountCode: order.discountCode || '',
+    discountTotalCents: order.discountTotalCents,
+    discountSnapshot: order.discountSnapshot || {},
     shippingFeeCents: order.shippingFeeCents,
     shippingRegionLabel: order.shippingRegionLabel,
     status: order.status,
@@ -972,6 +1198,28 @@ function jntExportSummary(order) {
     status: exportedToJnt ? 'exported' : missingFields.length ? 'missing_fields' : 'ready',
     missingFields
   };
+}
+
+function canRecordTrackingNotification(order) {
+  return Boolean(order?.exportedToJnt)
+    || order?.status === 'shipped'
+    || order?.fulfillmentStatus === 'shipped'
+    || order?.deliveryStatus === 'out_for_delivery';
+}
+
+function normalizeTrackingNotificationChannel(channel) {
+  const normalized = String(channel || 'sms').trim().toLowerCase();
+  return ['sms', 'email', 'manual'].includes(normalized) ? normalized : 'sms';
+}
+
+function trackingNotificationMessage(order) {
+  const parts = [
+    `Your Maria Clara Clothing order ${order.orderNumber} has been shipped`,
+    order.deliveryMethod ? `via ${order.deliveryMethod}` : '',
+    order.trackingNumber ? `Tracking number: ${order.trackingNumber}` : '',
+    'Please keep your phone reachable for delivery updates.'
+  ].filter(Boolean);
+  return parts.join('. ');
 }
 
 function orderSearchText(order) {

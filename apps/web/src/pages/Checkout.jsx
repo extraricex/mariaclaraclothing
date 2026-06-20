@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+<<<<<<< Updated upstream
 import { createOrder } from '../lib/api.js';
+=======
+import { createOrder, quoteCart } from '../lib/api.js';
+import { customerJson, getCustomerToken, useCustomerLoggedIn } from '../lib/customerAuth.js';
+>>>>>>> Stashed changes
 import { cartQuantity, clearCart, getCartSessionId, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import {
@@ -58,6 +63,18 @@ function cartSnapshotFields(items, totals) {
   };
 }
 
+function quoteTotals(quote, fallbackTotals) {
+  if (!quote) return fallbackTotals;
+  return {
+    ...fallbackTotals,
+    subtotalCents: quote.subtotalCents,
+    shippingFeeCents: quote.shippingFeeCents,
+    discountTotalCents: quote.discountTotalCents,
+    totalCents: quote.totalCents,
+    freeShippingUnlocked: quote.freeShippingUnlocked
+  };
+}
+
 export default function Checkout() {
   const items = useCart();
   const navigate = useNavigate();
@@ -76,8 +93,19 @@ export default function Checkout() {
   const [status, setStatus] = useState({ tone: 'neutral', message: '' });
   const [pending, setPending] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
-  const [discount, setDiscount] = useState(null);
+  const [activeDiscountCode, setActiveDiscountCode] = useState('');
   const [discountError, setDiscountError] = useState('');
+<<<<<<< Updated upstream
+=======
+  const [quote, setQuote] = useState(null);
+  const [reviewQuote, setReviewQuote] = useState(null);
+  const [step, setStep] = useState('details');
+  const loggedIn = useCustomerLoggedIn();
+  const [prefillAddress, setPrefillAddress] = useState(null);
+  const [saveAddress, setSaveAddress] = useState(true);
+  const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
+  const [paymentMethod, setPaymentMethod] = useState('cash_on_delivery');
+>>>>>>> Stashed changes
 
   useEffect(() => {
     loadProvinces().then(setProvinces);
@@ -102,9 +130,29 @@ export default function Checkout() {
   const barangay = barangays.find((item) => item.code === barangayCode) || null;
   const addressReady = Boolean(house.trim() && provinceCode && cityCode && barangayCode);
   const region = addressReady ? regionForProvince(province) : 'pending_address';
+<<<<<<< Updated upstream
   const discountCents = discount?.discountTotalCents || 0;
   const totals = useMemo(() => checkoutTotals(items, region, discountCents), [items, region, discountCents]);
+=======
+  const fallbackTotals = useMemo(() => checkoutTotals(items, region, 0, settings), [items, region, settings]);
+  const totals = quoteTotals(reviewQuote || quote, fallbackTotals);
+>>>>>>> Stashed changes
   const doorToDoorWarning = Boolean(barangay) && String(barangay.doorToDoor || '').toUpperCase() !== 'YES';
+
+  function quotePayload(discountCode = activeDiscountCode) {
+    const shippingRegion = addressReady ? regionForProvince(province) : 'pending_address';
+    return {
+      items,
+      discountCode,
+      shippingFeeCents: items.length && shippingRegion !== 'pending_address' ? regionFee(settings, shippingRegion) : 0
+    };
+  }
+
+  async function refreshQuote(discountCode = activeDiscountCode) {
+    const body = await quoteCart(quotePayload(discountCode));
+    setQuote(body.quote || null);
+    return body.quote || null;
+  }
 
   useEffect(() => {
     if (!items.length) return;
@@ -121,48 +169,107 @@ export default function Checkout() {
     });
   }, [items, fullName, phone, email, house, province, city, barangay]);
 
+  useEffect(() => {
+    setReviewQuote(null);
+    setStep('details');
+  }, [items, provinceCode, cityCode, barangayCode, house, activeDiscountCode]);
+
+  useEffect(() => {
+    if (!items.length) {
+      setQuote(null);
+      return;
+    }
+    let cancelled = false;
+    quoteCart(quotePayload(activeDiscountCode))
+      .then((body) => {
+        if (!cancelled) setQuote(body.quote || null);
+      })
+      .catch(() => {
+        if (!cancelled) setQuote(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [items, region, activeDiscountCode, settings]);
+
   async function applyDiscount() {
     const code = discountInput.trim();
     setDiscountError('');
     if (!code) {
-      setDiscount(null);
+      setActiveDiscountCode('');
+      setReviewQuote(null);
+      refreshQuote('').catch(() => {});
       return;
     }
     try {
-      const response = await fetch('/api/discounts/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, subtotalCents: subtotalCents(items) })
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'Discount code is invalid');
-      setDiscount(body.discount);
+      const nextQuote = await refreshQuote(code);
+      setActiveDiscountCode(nextQuote?.discountCode || code);
+      setReviewQuote(null);
     } catch (error) {
-      setDiscount(null);
+      setActiveDiscountCode('');
       setDiscountError(error.message);
     }
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  function validateDetails() {
     if (!items.length) {
       setStatus({ tone: 'error', message: 'Your cart is empty. Add an item before placing an order.' });
-      return;
+      return false;
     }
     const missing = [];
+    if (!fullName.trim()) missing.push('Full name');
+    if (!phone.trim()) missing.push('Mobile number');
     if (!house.trim()) missing.push('House Number / Street / Building / Unit');
     if (!barangay) missing.push('Barangay');
     if (!province) missing.push('Province');
     if (!city) missing.push('City / Municipality');
     if (missing.length) {
-      setStatus({ tone: 'error', message: `Complete your shipping address: ${missing.join(', ')}.` });
-      return;
+      setStatus({ tone: 'error', message: `Complete your checkout details: ${missing.join(', ')}.` });
+      return false;
     }
+    return true;
+  }
+
+  async function handleReview(event) {
+    event.preventDefault();
+    setDiscountError('');
+    if (!validateDetails()) return;
+
+    setStatus({ tone: 'neutral', message: 'Reviewing current prices and promos...' });
+    setPending(true);
+    try {
+      const nextQuote = await refreshQuote(discountInput.trim());
+      setReviewQuote(nextQuote);
+      setActiveDiscountCode(nextQuote?.discountCode || discountInput.trim());
+      setStep('review');
+      setStatus({ tone: 'neutral', message: '' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!validateDetails()) return;
 
     setStatus({ tone: 'neutral', message: 'Placing your order...' });
     setPending(true);
 
+<<<<<<< Updated upstream
     const submitTotals = checkoutTotals(items, regionForProvince(province), discountCents);
+=======
+    const latestQuote = await refreshQuote(discountInput.trim()).catch((error) => {
+      setStatus({ tone: 'error', message: error.message });
+      return null;
+    });
+    if (!latestQuote) {
+      setPending(false);
+      return;
+    }
+    const submitTotals = quoteTotals(latestQuote, checkoutTotals(items, regionForProvince(province), 0, settings));
+>>>>>>> Stashed changes
     const addressLine = `${house.trim()}, ${barangay.name}, ${city.name}, ${province.name}, Philippines`;
     const payload = {
       cartSessionId: getCartSessionId(),
@@ -180,7 +287,7 @@ export default function Checkout() {
       shippingRegionLabel: submitTotals.shippingRegionLabel,
       freeShippingUnlocked: submitTotals.freeShippingUnlocked,
       shippingFeeCents: submitTotals.shippingFeeCents,
-      discountCode: discount?.code || '',
+      discountCode: discountInput.trim(),
       discountTotalCents: submitTotals.discountTotalCents,
       notes: notes.trim(),
       items,
@@ -219,18 +326,28 @@ export default function Checkout() {
       </header>
 
       <div className="mx-auto grid max-w-6xl gap-12 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
-        <form onSubmit={handleSubmit} noValidate={false}>
+        <form onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate={false}>
           <p className="eyebrow">Checkout · Cash on Delivery</p>
+<<<<<<< Updated upstream
           <h1 className="display mt-2 text-3xl sm:text-4xl">Where do we send it?</h1>
+=======
+          <h1 className="display mt-2 text-3xl sm:text-4xl">{step === 'review' ? 'Review and place order' : 'Where do we send it?'}</h1>
+          {!loggedIn && (
+            <p className="mt-3 text-sm text-ink-soft">
+              <Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to
+              prefill your saved address — or continue as guest below.
+            </p>
+          )}
+>>>>>>> Stashed changes
 
-          <fieldset className="mt-8 space-y-4">
+          <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
             <input className="field" required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
             <input className="field" required type="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
             <input className="field" type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </fieldset>
 
-          <fieldset className="mt-8 space-y-4">
+          <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Shipping address</legend>
             <input className="field" required placeholder="House no. / Street / Building / Unit" value={house} onChange={(e) => setHouse(e.target.value)} autoComplete="street-address" />
             <select className="field" required value={provinceCode} onChange={(e) => setProvinceCode(e.target.value)}>
@@ -253,7 +370,32 @@ export default function Checkout() {
             <textarea className="field" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </fieldset>
 
+<<<<<<< Updated upstream
           <p className="mt-6 text-sm text-ink-soft">{addressReady ? deliveryEstimate(region) : 'Complete your address to see estimated delivery time.'}</p>
+=======
+          <fieldset className="mt-8 space-y-3" disabled={step === 'review'}>
+            <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Payment</legend>
+            {settings.paymentMethods.map((method) => (
+              <label key={method.id} className="flex items-start gap-3 border border-line px-4 py-3 text-sm">
+                <input
+                  type="radio"
+                  name="payment-method"
+                  value={method.id}
+                  checked={paymentMethod === method.id}
+                  onChange={() => setPaymentMethod(method.id)}
+                />
+                <span>
+                  <span className="font-semibold">{method.label}</span>
+                  {paymentMethod === method.id && method.instructions && (
+                    <span className="mt-1 block text-xs text-ink-soft">{method.instructions}</span>
+                  )}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          <p className="mt-6 text-sm text-ink-soft">{addressReady ? regionEstimate(settings, region) : 'Complete your address to see estimated delivery time.'}</p>
+>>>>>>> Stashed changes
 
           {status.message && (
             <p className={`mt-4 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role="status">
@@ -261,8 +403,32 @@ export default function Checkout() {
             </p>
           )}
 
+          {step === 'review' && (
+            <section className="mt-6 border border-line bg-white p-4 text-sm">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Review</h2>
+              <dl className="mt-3 space-y-2">
+                <div><dt className="font-semibold">Customer</dt><dd>{fullName} · {phone}</dd></div>
+                <div><dt className="font-semibold">Delivery address</dt><dd>{house.trim()}, {barangay?.name}, {city?.name}, {province?.name}, Philippines</dd></div>
+                <div><dt className="font-semibold">Payment</dt><dd>{settings.paymentMethods.find((method) => method.id === paymentMethod)?.label || 'Cash on Delivery'}</dd></div>
+              </dl>
+            </section>
+          )}
+
+          {step === 'review' && (
+            <button type="button" className="btn-ghost mt-6 w-full" onClick={() => setStep('details')} disabled={pending}>
+              Back to details
+            </button>
+          )}
           <button type="submit" className="btn-ink mt-6 w-full" disabled={pending}>
+<<<<<<< Updated upstream
             {pending ? 'Placing order...' : 'Place COD order'}
+=======
+            {pending
+              ? (step === 'review' ? 'Placing order...' : 'Preparing review...')
+              : step === 'review'
+                ? (paymentMethod === 'cash_on_delivery' ? 'Place COD order' : 'Place order')
+                : 'Continue to review'}
+>>>>>>> Stashed changes
           </button>
           <p className="mt-3 text-xs text-clay">No payment now. We text you to confirm, then you pay cash on delivery.</p>
         </form>
@@ -307,17 +473,17 @@ export default function Checkout() {
                   <button type="button" className="btn-ghost !px-4" onClick={applyDiscount}>Apply</button>
                 </div>
                 {discountError && <p className="mt-2 text-xs text-accent-deep" role="alert">{discountError}</p>}
-                {discount && (
+                {activeDiscountCode && (
                   <p className="mt-2 text-xs text-[#2f7d32]">
-                    Code {discount.code} applied — you save {formatMoney(discount.discountTotalCents)}.{' '}
-                    <button type="button" className="underline" onClick={() => { setDiscount(null); setDiscountInput(''); }}>Remove</button>
+                    Code {activeDiscountCode} applied — you save {formatMoney(totals.discountTotalCents)}.{' '}
+                    <button type="button" className="underline" onClick={() => { setActiveDiscountCode(''); setDiscountInput(''); setReviewQuote(null); }}>Remove</button>
                   </p>
                 )}
               </div>
               <dl className="mt-4 space-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(totals.subtotalCents)}</dd></div>
                 {totals.discountTotalCents > 0 && (
-                  <div className="flex justify-between text-[#2f7d32]"><dt>Discount{discount ? ` (${discount.code})` : ''}</dt><dd>−{formatMoney(totals.discountTotalCents)}</dd></div>
+                  <div className="flex justify-between text-[#2f7d32]"><dt>Discount{activeDiscountCode ? ` (${activeDiscountCode})` : ''}</dt><dd>−{formatMoney(totals.discountTotalCents)}</dd></div>
                 )}
                 <div className="flex justify-between">
                   <dt className="text-ink-soft">Shipping</dt>

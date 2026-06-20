@@ -355,6 +355,27 @@ test('admin product APIs require login and support product management', async ()
         description: 'SEO description for edited admin product.',
         handle: 'edited-admin-test-shirt'
       },
+      productPage: {
+        heading: 'Edited Admin Test Shirt',
+        intro: formattedDescription,
+        detailsText: 'Edited product details for the product tab.',
+        shippingText: 'Ships via J&T with COD confirmation before shipping.',
+        sections: [
+          {
+            title: 'Product details',
+            items: ['Edited fit', 'Edited fabric']
+          }
+        ],
+        sizeChart: [
+          {
+            size: 'Small',
+            width: '20 in',
+            length: '27 in',
+            sleeveLength: '8 in',
+            shoulderDropLength: '18 in'
+          }
+        ]
+      },
       metafields: {
         color: ['Black'],
         fabric: ['Cotton'],
@@ -374,6 +395,24 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(editBody.product.productType, 'Tshirt');
     assert.deepEqual(editBody.product.tags, ['black', 'cotton']);
     assert.equal(editBody.product.seo.title, 'Edited Admin Test Shirt SEO');
+    assert.equal(editBody.product.productPage.detailsText, 'Edited product details for the product tab.');
+    assert.equal(editBody.product.productPage.shippingText, 'Ships via J&T with COD confirmation before shipping.');
+    assert.equal(editBody.product.productPage.sections[0].title, 'Product details');
+    assert.equal(editBody.product.productPage.sections[0].body, 'Edited product details for the product tab.');
+    assert.equal(editBody.product.productPage.sections[0].items, undefined);
+    assert.equal(editBody.product.productPage.sections[1].title, 'Size Chart');
+    assert.deepEqual(editBody.product.productPage.sections[1].items, [
+      'Small: Width 20 in, Length 27 in, Sleeve length 8 in, Shoulder drop length 18 in'
+    ]);
+    assert.equal(editBody.product.productPage.sections[2].title, 'Shipping');
+    assert.equal(editBody.product.productPage.sections[2].body, 'Ships via J&T with COD confirmation before shipping.');
+    assert.deepEqual(editBody.product.productPage.sizeChart[0], {
+      size: 'Small',
+      width: '20 in',
+      length: '27 in',
+      sleeveLength: '8 in',
+      shoulderDropLength: '18 in'
+    });
     assert.deepEqual(editBody.product.metafields.color, ['Black']);
 
     const storefrontEditResponse = await fetch(`http://127.0.0.1:${port}/api/products/admin-test-shirt`);
@@ -387,6 +426,15 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(storefrontEditBody.product.variants[0].priceCents, 74900);
     assert.equal(storefrontEditBody.product.productPage.heading, 'Edited Admin Test Shirt');
     assert.equal(storefrontEditBody.product.productPage.intro, formattedDescription);
+    assert.equal(storefrontEditBody.product.productPage.detailsText, 'Edited product details for the product tab.');
+    assert.equal(storefrontEditBody.product.productPage.shippingText, 'Ships via J&T with COD confirmation before shipping.');
+    assert.equal(storefrontEditBody.product.productPage.sections[0].body, 'Edited product details for the product tab.');
+    assert.equal(storefrontEditBody.product.productPage.sections[0].items, undefined);
+    assert.deepEqual(storefrontEditBody.product.productPage.sections[1].items, [
+      'Small: Width 20 in, Length 27 in, Sleeve length 8 in, Shoulder drop length 18 in'
+    ]);
+    assert.equal(storefrontEditBody.product.productPage.sections[2].body, 'Ships via J&T with COD confirmation before shipping.');
+    assert.equal(storefrontEditBody.product.productPage.sizeChart[0].shoulderDropLength, '18 in');
 
     const collectionUpdateResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt`, jsonAdminRequest('PUT', {
       ...editBody.product,
@@ -469,6 +517,62 @@ test('admin product APIs require login and support product management', async ()
   }
 });
 
+test('admin product stock edits record inventory correction movements', async () => {
+  const previousProductsDataFile = process.env.PRODUCTS_DATA_FILE;
+  const previousMovementsDataFile = process.env.INVENTORY_MOVEMENTS_DATA_FILE;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-admin-stock-correction-'));
+
+  process.env.PRODUCTS_DATA_FILE = path.join(tempDir, 'products.json');
+  process.env.INVENTORY_MOVEMENTS_DATA_FILE = path.join(tempDir, 'inventory-movements.json');
+  await fs.copyFile(path.join(__dirname, '..', 'data', 'products.json'), process.env.PRODUCTS_DATA_FILE);
+
+  const app = createFreshApp();
+  const { listInventoryMovements } = require('../src/inventory/inventoryMovementRepository');
+  const server = await new Promise((resolve, reject) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+    listener.on('error', reject);
+  });
+  const { port } = server.address();
+
+  const product = {
+    slug: 'stock-correction-shirt',
+    name: 'Stock Correction Shirt',
+    description: 'Temporary admin stock product.',
+    collections: ['Admin Tests'],
+    status: 'active',
+    priceCents: 79900,
+    images: [{ url: '/product/stock-correction-shirt.png', altText: 'Stock Correction Shirt', sortOrder: 0 }],
+    variants: [
+      { size: 'Small', sku: 'STOCK-CORRECT-S', stockQuantity: 4 },
+      { size: 'Medium', sku: 'STOCK-CORRECT-M', stockQuantity: 8 }
+    ]
+  };
+
+  try {
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products`, jsonAdminRequest('POST', product));
+    assert.equal(createResponse.status, 201);
+
+    const editResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/stock-correction-shirt`, jsonAdminRequest('PUT', {
+      ...product,
+      variants: [
+        { size: 'Small', sku: 'STOCK-CORRECT-S', stockQuantity: 7 },
+        { size: 'Medium', sku: 'STOCK-CORRECT-M', stockQuantity: 6 }
+      ]
+    }));
+    const editBody = await editResponse.json();
+    const movements = await listInventoryMovements();
+
+    assert.equal(editResponse.status, 200);
+    assert.equal(editBody.product.variants.find((variant) => variant.sku === 'STOCK-CORRECT-S').stockQuantity, 7);
+    assert.ok(movements.some((movement) => movement.reason === 'admin_stock_correction' && movement.sku === 'STOCK-CORRECT-S' && movement.quantityChange === 3));
+    assert.ok(movements.some((movement) => movement.reason === 'admin_stock_correction' && movement.sku === 'STOCK-CORRECT-M' && movement.quantityChange === -2));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreEnv('PRODUCTS_DATA_FILE', previousProductsDataFile);
+    restoreEnv('INVENTORY_MOVEMENTS_DATA_FILE', previousMovementsDataFile);
+  }
+});
+
 function adminRequest() {
   return {
     headers: {
@@ -494,6 +598,7 @@ function createFreshApp() {
   delete require.cache[require.resolve('../src/routes/products')];
   delete require.cache[require.resolve('../src/products/catalogRepository')];
   delete require.cache[require.resolve('../src/products/catalogPresenter')];
+  delete require.cache[require.resolve('../src/inventory/inventoryMovementRepository')];
   return require('../src/app').createApp();
 }
 

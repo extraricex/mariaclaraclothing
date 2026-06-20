@@ -1,6 +1,6 @@
 # Enhancement Data 2: Synchronized Promo, Cart, Checkout, Orders, and Inventory Roadmap
 
-Status: planning document only. No implementation has been applied from this file yet.
+Status: living roadmap. Phase 1 through Phase 7A are finished. The current flow is implemented and covered by connected API/source regressions; remaining work is operational hardening and optional admin UX polish.
 
 ## Goal
 
@@ -519,19 +519,28 @@ Deliverables:
 
 ### Phase 2: Checkout Review and Customer Cart Totals
 
+Status: Finished. Customer cart now requests backend quote totals through `POST /api/discounts/quote`, checkout uses the same quote helper for discount application, review, and final submit, and checkout now gates order placement behind a Details -> Review step. Focused source tests, backend promo/order/inventory tests, and the web production build passed.
+
 Files likely changed:
 
 - `apps/web/src/pages/Cart.jsx`
 - `apps/web/src/pages/Checkout.jsx`
 - `apps/web/src/lib/api.js`
 
+New test/plan files:
+
+- `apps/web/test/phase2CheckoutQuoteSource.test.js`
+- `docs/superpowers/plans/2026-06-19-phase-2-checkout-quote-review.md`
+
 Deliverables:
 
-- Cart uses backend quote totals.
-- Checkout adds Details and Review steps.
-- Final order submit uses backend-calculated totals.
+- Cart uses backend quote totals. Finished.
+- Checkout adds Details and Review steps. Finished.
+- Final order submit uses backend-calculated totals. Finished.
 
 ### Phase 3: Add to Cart Drawer
+
+Status: Finished. Product add-to-cart now opens a customer cart drawer from the global shell. The drawer reuses the existing cart helpers, supports quantity updates and remove actions, links to cart and checkout, and refreshes totals through the backend quote API.
 
 Files likely changed:
 
@@ -539,11 +548,16 @@ Files likely changed:
 - `apps/web/src/pages/Product.jsx`
 - `apps/web/src/lib/cart.js`
 
+New test/plan files:
+
+- `apps/web/test/phase3CartDrawerSource.test.js`
+- `docs/superpowers/plans/2026-06-19-phase-3-cart-drawer.md`
+
 Deliverables:
 
-- Add to Cart opens the cart immediately.
-- Drawer supports quantity update and remove.
-- Drawer displays promo/discount/shipping/final total.
+- Add to Cart opens the cart immediately. Finished.
+- Drawer supports quantity update and remove. Finished.
+- Drawer displays promo/discount/shipping/final total. Finished.
 
 ### Phase 4: Inventory Deduction
 
@@ -566,6 +580,8 @@ Deliverables:
 
 ### Phase 5: Admin Promos and Admin Order Promo Display
 
+Status: Finished. Admin Discounts can create and edit promo identity, method, type, Buy More Save More rules, minimums, schedule, banner text, and terms. Admin Orders now show saved promo data, admin order detail shows the saved promo snapshot, and the admin order list supports inline status updates.
+
 Files likely changed:
 
 - `apps/web/src/admin/Discounts.jsx`
@@ -574,14 +590,23 @@ Files likely changed:
 - `apps/web/src/admin/OrderDetail.jsx`
 - `apps/api/src/routes/admin.js`
 
+New test/plan files:
+
+- `apps/web/test/phase5aAdminPromoSource.test.js`
+- `apps/web/test/phase5bAdminOrdersSource.test.js`
+- `docs/superpowers/plans/2026-06-19-phase-5a-admin-promo-management.md`
+- `docs/superpowers/plans/2026-06-19-phase-5b-admin-order-promos-status.md`
+
 Deliverables:
 
-- Promo CRUD supports all required promo fields.
-- Buy More Save More rules can be edited.
-- Admin order list supports inline status changes.
-- Admin order detail shows promo snapshot.
+- Promo CRUD supports all required promo fields. Finished.
+- Buy More Save More rules can be edited. Finished.
+- Admin order list supports inline status changes. Finished.
+- Admin order detail shows promo snapshot. Finished.
 
 ### Phase 6: Promo Notification
+
+Status: Phase 6A is finished. The customer website now reads the active promo notification from `GET /api/discounts/active-notification`, shows only current active promos, hides disabled, expired, and future promos, and lets the customer close the banner for the current browser session.
 
 Files likely changed:
 
@@ -589,11 +614,176 @@ Files likely changed:
 - `apps/web/src/lib/api.js`
 - `apps/api/src/routes/discounts.js` or `apps/api/src/routes/siteContent.js`
 
+New test/plan files:
+
+- `apps/api/test/activePromoNotification.test.js`
+- `apps/web/test/phase6PromoNotificationSource.test.js`
+- `docs/superpowers/plans/2026-06-19-phase-6a-active-promo-notification.md`
+
 Deliverables:
 
-- Active promo notification appears on customer website.
-- Inactive, expired, and future promos do not show.
-- Notification can be closed for the current browser session.
+- Active promo notification appears on customer website. Finished.
+- Inactive, expired, and future promos do not show. Finished.
+- Notification can be closed for the current browser session. Finished.
+
+### Phase 7A: Full Flow Hardening
+
+Status: Finished. The connected promo, quote, checkout, order, admin order, and J&T export flow is covered by automated regressions. The default local fallback discount data includes `BUY2FREESHIP`, and the running Docker API has the same live promo configured.
+
+New test/plan files:
+
+- `apps/api/test/promoFullFlow.test.js`
+- `apps/api/test/defaultDiscounts.test.js`
+- `apps/web/test/phase7RoadmapSource.test.js`
+- `docs/superpowers/plans/2026-06-19-phase-7a-flow-hardening.md`
+
+Deliverables:
+
+- Active promo notification, quote, checkout, order snapshot, admin list/detail, and admin status update are checked in one connected flow. Finished.
+- Default Buy 2 Free Shipping promo exists for file-backed local fallback. Finished.
+- Successful J&T export marks selected orders as shipped, shipped fulfillment, and out for delivery. Finished.
+- Roadmap status and Packed status wording are aligned with the app. Finished.
+
+### Phase 8A: Order Status History
+
+Status: Finished. Order status history now records admin status changes and J&T export transitions, with JSON-file and Postgres persistence and admin order detail visibility.
+
+Files likely changed:
+
+- `apps/api/src/orders/orderRepository.js`
+- `apps/api/src/routes/admin.js`
+- `apps/api/db/schema.sql`
+- `apps/web/src/admin/OrderDetail.jsx`
+
+New test/plan files:
+
+- `apps/web/test/phase8aOrderStatusHistorySource.test.js`
+- `docs/superpowers/plans/2026-06-19-phase-8a-order-status-history.md`
+
+Deliverables:
+
+- Persist order status events for JSON-file and Postgres modes. Finished.
+- Record admin order status edits. Finished.
+- Record J&T export shipped transitions. Finished.
+- Show status history in admin order detail. Finished.
+
+### Phase 8B: Inventory Movement History
+
+Status: Finished. Successful customer orders now record inventory movement audit rows for stock deductions, with JSON-file and Postgres persistence.
+
+Files likely changed:
+
+- `apps/api/src/inventory/inventoryMovementRepository.js`
+- `apps/api/src/routes/orders.js`
+- `apps/api/db/schema.sql`
+
+New test/plan files:
+
+- `apps/api/test/inventoryMovements.test.js`
+- `docs/superpowers/plans/2026-06-19-phase-8b-inventory-movement-history.md`
+
+Deliverables:
+
+- Persist inventory movements for JSON-file and Postgres modes. Finished.
+- Record order-created stock deductions. Finished.
+- Avoid movement records for failed checkout attempts. Finished.
+
+### Phase 8C: Promo Notification Priority
+
+Status: Finished. Promo notification selection is now predictable when multiple active promos are eligible.
+
+Files likely changed:
+
+- `apps/api/src/discounts/discountRepository.js`
+- `apps/api/src/routes/discounts.js`
+- `apps/api/db/schema.sql`
+- `apps/web/src/admin/Discounts.jsx`
+- `apps/web/src/admin/DiscountDetail.jsx`
+
+New test/plan files:
+
+- `docs/superpowers/plans/2026-06-19-phase-8c-promo-notification-priority.md`
+
+Deliverables:
+
+- Persist promo notification priority. Finished.
+- Select the highest-priority eligible promo notification. Finished.
+- Add admin controls for priority. Finished.
+
+### Phase 8D: Tracking Notification Action
+
+Status: Finished. Admins can now record a manual tracking notification send/resend action after an order is shipped or exported to J&T.
+
+Files likely changed:
+
+- `apps/api/src/orders/orderRepository.js`
+- `apps/api/src/routes/admin.js`
+- `apps/api/db/schema.sql`
+- `apps/web/src/admin/OrderDetail.jsx`
+
+New test/plan files:
+
+- `docs/superpowers/plans/2026-06-20-phase-8d-tracking-notification-action.md`
+
+Deliverables:
+
+- Persist order tracking notification audit records. Finished.
+- Add admin API action for tracking notification recording. Finished.
+- Show send/resend action and notification log in admin order detail. Finished.
+
+### Phase 8E: Inventory Restock and Correction Movements
+
+Status: Finished. Cancelled orders now restore stock with positive inventory movement audit rows, and admin stock edits record correction deltas.
+
+Files likely changed:
+
+- `apps/api/src/products/catalogRepository.js`
+- `apps/api/src/routes/admin.js`
+
+New test/plan files:
+
+- `docs/superpowers/plans/2026-06-20-phase-8e-inventory-restock-corrections.md`
+
+Deliverables:
+
+- Restore variant stock on first transition into cancelled order status. Finished.
+- Record `order_cancelled` inventory movement rows. Finished.
+- Record `admin_stock_correction` movement rows for admin product stock edits. Finished.
+
+## Current Whole Flow Audit
+
+Verified on June 20, 2026:
+
+- Customer promo notification reads the active promo from `GET /api/discounts/active-notification`.
+- Default/live promo `BUY2FREESHIP` is active and unlocks free shipping at two or more cart items.
+- Cart drawer, cart page, checkout review, and order creation use the backend quote flow.
+- Orders save the applied promo snapshot so admin views do not depend on future promo edits.
+- Admin Discounts can manage promo metadata, schedule, banner text, terms, and Buy More Save More rules.
+- Admin Orders show promo data in list/detail views and support inline status updates.
+- J&T export validates required export fields before writing the spreadsheet.
+- Successful selected-order J&T export marks exported orders as shipped.
+- Admins can record tracking notification send/resend actions for shipped or J&T-exported orders.
+- Inventory deduction, cancelled-order restock, and admin stock corrections now record stock movement audit entries.
+
+Verification commands used for the current audit:
+
+- `node --test apps/api/test/promoFullFlow.test.js apps/api/test/defaultDiscounts.test.js apps/api/test/adminJntExport.test.js apps/api/test/adminOrders.test.js apps/api/test/adminCustomersDiscounts.test.js apps/api/test/activePromoNotification.test.js apps/web/test/phase7RoadmapSource.test.js apps/web/test/phase6PromoNotificationSource.test.js apps/web/test/phase5bAdminOrdersSource.test.js`
+- `node --test apps/api/test/adminJntExport.test.js apps/web/test/phase8aOrderStatusHistorySource.test.js`
+- `node --test apps/api/test/adminOrders.test.js apps/api/test/adminProducts.test.js apps/api/test/inventoryMovements.test.js`
+- `npm run build:web`
+- `git diff --check`
+- `docker compose up --build -d`
+- `curl -I http://127.0.0.1:8081`
+- `curl -s http://127.0.0.1:3000/api/health`
+
+## Current Recommendations
+
+Recommended next work, in priority order:
+
+1. Connect tracking notifications to a real SMS/email provider when credentials and provider choice are ready. The current phase records the action and message, but does not send externally.
+2. Add promotion analytics for notification views, promo applications, and order conversions. Priority now controls which banner appears, but there is no visibility yet into campaign performance.
+3. Add an inventory movement admin view with filters by SKU, product, order number, and reason. Movement data now exists, but staff need a direct screen to investigate stock history.
+4. Keep the default `BUY2FREESHIP` promo active only for local/dev or intentional production campaigns. In production, confirm campaign dates and terms before long-running use.
 
 ## Expected API Changes
 
@@ -654,7 +844,7 @@ No Dockerfile or docker-compose changes are expected.
 20. Confirm the new order appears.
 21. Open admin Order Detail.
 22. Confirm customer details, address, items, promo snapshot, discount amount, shipping, final total, and status are visible.
-23. Change status to Packing and confirm it saves.
+23. Change status to Packed and confirm it saves.
 24. Change status to Shipped and confirm it saves.
 25. Change status to Delivered and confirm it saves.
 26. Change status to Cancelled or Returned and confirm it saves according to the chosen status mapping.

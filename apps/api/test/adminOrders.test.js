@@ -412,6 +412,18 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(updateBody.order.adminEditableTotals.subtotalCents, 190000);
     assert.equal(updateBody.order.adminEditableTotals.totalCents, 198000);
     assert.equal(updateBody.order.cartSnapshot.length, 2);
+    assert.equal(updateBody.order.statusEvents.length, 1);
+    assert.equal(updateBody.order.statusEvents[0].orderNumber, orderNumber);
+    assert.equal(updateBody.order.statusEvents[0].source, 'admin');
+    assert.equal(updateBody.order.statusEvents[0].changes.status.from, 'received');
+    assert.equal(updateBody.order.statusEvents[0].changes.status.to, 'confirmed');
+    assert.equal(updateBody.order.statusEvents[0].changes.fulfillmentStatus.from, 'unfulfilled');
+    assert.equal(updateBody.order.statusEvents[0].changes.fulfillmentStatus.to, 'packed');
+    assert.equal(updateBody.order.statusEvents[0].changes.codConfirmationStatus.from, 'pending');
+    assert.equal(updateBody.order.statusEvents[0].changes.codConfirmationStatus.to, 'confirmed');
+    assert.equal(updateBody.order.statusEvents[0].changes.deliveryStatus.from, 'pending');
+    assert.equal(updateBody.order.statusEvents[0].changes.deliveryStatus.to, 'ready');
+    assert.match(updateBody.order.statusEvents[0].createdAt, /^\d{4}-\d{2}-\d{2}T/);
 
     const filteredResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders?status=confirmed`, adminRequest(loginBody.token));
     const filteredBody = await filteredResponse.json();
@@ -493,6 +505,71 @@ test('admin order list supports date range filters', async () => {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);
     restoreEnv('ADMIN_PASSWORD', previousAdminPassword);
+  }
+});
+
+test('admin cancellation restores order stock and records restock movement', async () => {
+  const previousProductsDataFile = process.env.PRODUCTS_DATA_FILE;
+  const previousOrdersDataFile = process.env.ORDERS_DATA_FILE;
+  const previousMovementsDataFile = process.env.INVENTORY_MOVEMENTS_DATA_FILE;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-admin-cancel-restock-'));
+
+  process.env.PRODUCTS_DATA_FILE = path.join(tempDir, 'products.json');
+  process.env.ORDERS_DATA_FILE = path.join(tempDir, 'orders.json');
+  process.env.INVENTORY_MOVEMENTS_DATA_FILE = path.join(tempDir, 'inventory-movements.json');
+  await fs.copyFile(path.join(__dirname, '..', 'data', 'products.json'), process.env.PRODUCTS_DATA_FILE);
+
+  const app = createFreshApp();
+  const { findEditableProductBySlug } = require('../src/products/catalogRepository');
+  const { listInventoryMovements } = require('../src/inventory/inventoryMovementRepository');
+  const server = await new Promise((resolve, reject) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+    listener.on('error', reject);
+  });
+  const { port } = server.address();
+
+  try {
+    const orderNumber = await createOrder(port, {
+      fullName: 'Cancel Restock Customer',
+      phone: '09170000999',
+      houseAddress: '9 Restock Street',
+      barangay: 'BUCANDALA IV',
+      city: 'IMUS',
+      province: 'CAVITE',
+      shippingFeeCents: 8000
+    });
+    const slug = String(ORDER_ITEM.productId).replace(/^catalog-/, '');
+    const afterOrderProduct = await findEditableProductBySlug(slug);
+    const afterOrderStock = Number(afterOrderProduct.variants.find((variant) => variant.sku === 'CURIOSITYOFF-S').stockQuantity);
+
+    const cancelResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
+      method: 'PATCH',
+      ...adminRequest('local-admin-token'),
+      headers: {
+        ...adminRequest('local-admin-token').headers,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        status: 'cancelled',
+        fulfillmentStatus: 'cancelled',
+        deliveryStatus: 'cancelled'
+      })
+    });
+    const cancelBody = await cancelResponse.json();
+    const afterCancelProduct = await findEditableProductBySlug(slug);
+    const afterCancelStock = Number(afterCancelProduct.variants.find((variant) => variant.sku === 'CURIOSITYOFF-S').stockQuantity);
+    const movements = await listInventoryMovements({ orderNumber });
+
+    assert.equal(cancelResponse.status, 200);
+    assert.equal(cancelBody.order.status, 'cancelled');
+    assert.equal(afterCancelStock, afterOrderStock + ORDER_ITEM.quantity);
+    assert.ok(movements.some((movement) => movement.reason === 'order_created' && movement.quantityChange === -ORDER_ITEM.quantity));
+    assert.ok(movements.some((movement) => movement.reason === 'order_cancelled' && movement.quantityChange === ORDER_ITEM.quantity));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreEnv('PRODUCTS_DATA_FILE', previousProductsDataFile);
+    restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);
+    restoreEnv('INVENTORY_MOVEMENTS_DATA_FILE', previousMovementsDataFile);
   }
 });
 
@@ -584,6 +661,9 @@ function createFreshApp() {
   delete require.cache[require.resolve('../src/routes/admin')];
   delete require.cache[require.resolve('../src/routes/orders')];
   delete require.cache[require.resolve('../src/orders/orderRepository')];
+  delete require.cache[require.resolve('../src/products/catalogRepository')];
+  delete require.cache[require.resolve('../src/products/catalogPresenter')];
+  delete require.cache[require.resolve('../src/inventory/inventoryMovementRepository')];
   return require('../src/app').createApp();
 }
 

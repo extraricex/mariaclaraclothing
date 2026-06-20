@@ -124,6 +124,103 @@ function writeEditableProducts(products, filePath = activeProductsPath()) {
   fs.writeFileSync(filePath, `${JSON.stringify(products, null, 2)}\n`);
 }
 
+<<<<<<< Updated upstream
+=======
+function deductionSoldOutError(item) {
+  const error = new Error(`${item.size} is sold out for ${item.productName || item.slug}`);
+  error.status = 409;
+  return error;
+}
+
+function deductVariantStock(items) {
+  // Match on sku (stored verbatim and unique), NOT size: the storefront/presenter
+  // abbreviates size (Large -> l) while product_variants.size keeps the full label, so
+  // size cannot be matched against the stored row. `size` is kept only for the error copy.
+  const deductions = (Array.isArray(items) ? items : []).map((item) => ({
+    slug: String(item.slug || '').trim(),
+    sku: String(item.sku || '').trim(),
+    size: String(item.size || '').trim(),
+    quantity: Number(item.quantity),
+    productName: String(item.productName || '').trim()
+  }));
+
+  if (usePostgresProducts()) {
+    return deductPostgresVariantStock(deductions);
+  }
+  return deductJsonVariantStock(deductions);
+}
+
+function restockVariantStock(items) {
+  const restocks = (Array.isArray(items) ? items : []).map((item) => ({
+    slug: String(item.slug || '').trim(),
+    sku: String(item.sku || '').trim(),
+    quantity: Number(item.quantity)
+  })).filter((item) => item.sku && item.quantity > 0);
+
+  if (usePostgresProducts()) {
+    return restockPostgresVariantStock(restocks);
+  }
+  return restockJsonVariantStock(restocks);
+}
+
+function deductJsonVariantStock(items) {
+  const products = loadEditableProducts();
+  const targets = items.map((item) => {
+    const product = products.find((candidate) => candidate.slug === item.slug);
+    const variant = product?.variants.find((candidate) => candidate.sku === item.sku);
+    if (!variant || Number(variant.stockQuantity) < item.quantity) {
+      throw deductionSoldOutError(item);
+    }
+    return variant;
+  });
+  targets.forEach((variant, index) => {
+    variant.stockQuantity = Number(variant.stockQuantity) - items[index].quantity;
+  });
+  writeEditableProducts(products);
+}
+
+function restockJsonVariantStock(items) {
+  const products = loadEditableProducts();
+  items.forEach((item) => {
+    const product = products.find((candidate) => candidate.slug === item.slug);
+    const variant = product?.variants.find((candidate) => candidate.sku === item.sku);
+    if (variant) {
+      variant.stockQuantity = Number(variant.stockQuantity || 0) + item.quantity;
+    }
+  });
+  writeEditableProducts(products);
+}
+
+function deductPostgresVariantStock(items) {
+  return transaction(async (client) => {
+    for (const item of items) {
+      const result = await client.query(
+        `UPDATE product_variants
+            SET stock_quantity = stock_quantity - $1
+          WHERE sku = $2 AND stock_quantity >= $1`,
+        [item.quantity, item.sku]
+      );
+      if (result.rowCount === 0) {
+        throw deductionSoldOutError(item);
+      }
+    }
+  });
+}
+
+function restockPostgresVariantStock(items) {
+  return transaction(async (client) => {
+    for (const item of items) {
+      await client.query(
+        `UPDATE product_variants
+            SET stock_quantity = stock_quantity + $1
+          WHERE sku = $2`,
+        [item.quantity, item.sku]
+      );
+    }
+  });
+}
+
+>>>>>>> Stashed changes
 function isPromise(value) {
   return value && typeof value.then === 'function';
 }
@@ -545,6 +642,27 @@ function validateProductPage(productPage, field) {
     requireString(productPage.sizeChartImageUrl, `${field}.sizeChartImageUrl`);
   }
 
+  if (productPage.detailsText !== undefined) {
+    requireOptionalString(productPage.detailsText, `${field}.detailsText`);
+  }
+
+  if (productPage.shippingText !== undefined) {
+    requireOptionalString(productPage.shippingText, `${field}.shippingText`);
+  }
+
+  if (productPage.sizeChart !== undefined) {
+    if (!Array.isArray(productPage.sizeChart)) {
+      throw new Error(`${field}.sizeChart must be an array.`);
+    }
+    productPage.sizeChart.forEach((row, index) => {
+      requireString(row.size, `${field}.sizeChart[${index}].size`);
+      requireString(row.width, `${field}.sizeChart[${index}].width`);
+      requireString(row.length, `${field}.sizeChart[${index}].length`);
+      requireString(row.sleeveLength, `${field}.sizeChart[${index}].sleeveLength`);
+      requireString(row.shoulderDropLength, `${field}.sizeChart[${index}].shoulderDropLength`);
+    });
+  }
+
   if (productPage.mediaLimit !== undefined) {
     requirePositiveNumber(productPage.mediaLimit, `${field}.mediaLimit`);
   }
@@ -557,6 +675,12 @@ function validateProductPage(productPage, field) {
 function requireString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${field} must be a non-empty string.`);
+  }
+}
+
+function requireOptionalString(value, field) {
+  if (typeof value !== 'string') {
+    throw new Error(`${field} must be a string.`);
   }
 }
 
@@ -584,6 +708,7 @@ module.exports = {
   normalizeEditableProduct,
   productsPath,
   replaceEditableProducts,
+  restockVariantStock,
   saveEditableProduct,
   validateProducts
 };

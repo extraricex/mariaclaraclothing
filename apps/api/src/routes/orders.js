@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { findOrderByNumber, saveOrder } = require('../orders/orderRepository');
+const { appendInventoryMovements } = require('../inventory/inventoryMovementRepository');
 const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
 const { incrementDiscountUsage } = require('../discounts/discountRepository');
 const { quoteCart } = require('../promos/promoEngine');
@@ -40,6 +41,16 @@ router.post('/', async (req, res, next) => {
       placedAt: new Date().toISOString()
     };
     await saveOrder(persistedOrder);
+    await appendInventoryMovements(order.items.map((item) => ({
+      orderNumber,
+      source: 'order',
+      reason: 'order_created',
+      productSlug: String(item.productId).replace(/^catalog-/, ''),
+      productName: item.productName,
+      sku: item.sku,
+      size: item.size,
+      quantityChange: -Math.abs(Number(item.quantity || 0))
+    })));
     await markCartSessionConverted(req.body?.cartSessionId, orderNumber);
 
     if (persistedOrder.discountCode) {

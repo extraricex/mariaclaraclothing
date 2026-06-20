@@ -19,11 +19,27 @@ export function fetchSiteContent() {
   return request('/api/site-content');
 }
 
+export function fetchActivePromoNotification() {
+  return request('/api/discounts/active-notification');
+}
+
 export function fetchOrder(orderNumber) {
   return request(`/api/orders/${encodeURIComponent(orderNumber)}`);
 }
 
+<<<<<<< Updated upstream
 export function createOrder(payload) {
+=======
+export function quoteCart(payload) {
+  return request('/api/discounts/quote', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+export function createOrder(payload, headers = {}) {
+>>>>>>> Stashed changes
   return request('/api/orders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
