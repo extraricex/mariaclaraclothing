@@ -3,7 +3,28 @@ import { Link } from 'react-router-dom';
 import { adminJson, adminSend } from '../lib/adminApi.js';
 import { formatPeso, pesoToCents } from '../lib/money.js';
 
-const EMPTY_FORM = { code: '', type: 'percentage', value: '', endsAt: '', usageLimit: '', minimumPeso: '' };
+const EMPTY_FORM = {
+  code: '',
+  name: '',
+  description: '',
+  method: 'code',
+  type: 'percentage',
+  value: '',
+  status: 'active',
+  startsAt: '',
+  endsAt: '',
+  usageLimit: '',
+  priority: '0',
+  minimumPeso: '',
+  minimumQuantity: '',
+  bannerText: '',
+  terms: '',
+  ruleMinimumQuantity: '2',
+  ruleDiscountType: 'fixed',
+  ruleDiscountValue: '',
+  ruleDiscountPeso: '',
+  ruleFreeShipping: true
+};
 const DISCOUNT_VIEWS = [
   ['all', 'All'],
   ['active', 'Active'],
@@ -27,11 +48,28 @@ function randomDiscountCode() {
 }
 
 function valueLabel(discount) {
-  return discount.type === 'percentage' ? `${discount.value}% off` : `${formatPeso(discount.value)} off`;
+  if (discount.type === 'percentage') return `${discount.value}% off`;
+  if (discount.type === 'fixed') return `${formatPeso(discount.value)} off`;
+  if (discount.type === 'free_shipping') return 'Free shipping';
+  if (discount.type === 'buy_more_save_more') return 'Buy More Save More';
+  if (discount.type === 'bundle') return `Bundle discount ${discount.value ? formatPeso(discount.value) : ''}`.trim();
+  return discount.type;
+}
+
+function typeLabel(type) {
+  const labels = {
+    percentage: 'Percentage discount',
+    fixed: 'Fixed amount discount',
+    buy_more_save_more: 'Buy More Save More',
+    free_shipping: 'Free shipping',
+    bundle: 'Bundle discount'
+  };
+  return labels[type] || type;
 }
 
 function discountStatus(discount) {
   if (discount.status === 'disabled') return 'disabled';
+  if (discount.startsAt && new Date(discount.startsAt).getTime() > Date.now()) return 'scheduled';
   if (discount.endsAt && new Date(discount.endsAt).getTime() < Date.now()) return 'expired';
   return discount.status || 'active';
 }
@@ -45,8 +83,24 @@ function statusBadgeClass(status) {
 
 function viewCount(view, discounts) {
   if (view === 'all') return discounts.length;
-  if (view === 'scheduled') return 0;
   return discounts.filter((discount) => discountStatus(discount) === view).length;
+}
+
+function discountValueForPayload(form) {
+  if (form.type === 'fixed' || form.type === 'bundle') return pesoToCents(form.value);
+  if (form.type === 'free_shipping' || form.type === 'buy_more_save_more') return 0;
+  return Math.round(Number(form.value) || 0);
+}
+
+function buildRules(form) {
+  if (form.type !== 'buy_more_save_more') return [];
+  return [{
+    minimumQuantity: Number(form.ruleMinimumQuantity || form.minimumQuantity || 2),
+    discountType: form.ruleDiscountType,
+    discountValue: form.ruleDiscountType === 'percentage' ? Math.round(Number(form.ruleDiscountValue) || 0) : 0,
+    discountValueCents: form.ruleDiscountType === 'fixed' ? pesoToCents(form.ruleDiscountPeso) : 0,
+    freeShipping: Boolean(form.ruleFreeShipping)
+  }];
 }
 
 export default function Discounts() {
@@ -76,15 +130,25 @@ export default function Discounts() {
     try {
       await adminSend('POST', '/api/admin/discounts', {
         code: form.code,
+        name: form.name,
+        description: form.description,
+        method: form.method,
         type: form.type,
-        value: form.type === 'fixed' ? pesoToCents(form.value) : Math.round(Number(form.value) || 0),
+        value: discountValueForPayload(form),
+        status: form.status,
+        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
         endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
         usageLimit: form.usageLimit === '' ? null : Number(form.usageLimit),
-        minimumSubtotalCents: form.minimumPeso === '' ? null : pesoToCents(form.minimumPeso)
+        priority: Number(form.priority || 0),
+        minimumQuantity: form.minimumQuantity === '' ? null : Number(form.minimumQuantity),
+        minimumSubtotalCents: form.minimumPeso === '' ? null : pesoToCents(form.minimumPeso),
+        bannerText: form.bannerText,
+        terms: form.terms,
+        rules: buildRules(form)
       });
       setForm(EMPTY_FORM);
       setShowCreate(false);
-      setMessage('Discount code created.');
+      setMessage('Promo created.');
       load();
     } catch (error) {
       setMessage(error.message);
@@ -122,13 +186,13 @@ export default function Discounts() {
       ['Code', 'Type', 'Value', 'Status', 'Usage', 'Usage limit', 'Minimum subtotal', 'Start', 'End'],
       ...visibleDiscounts.map((discount) => [
         discount.code,
-        discount.type,
+        typeLabel(discount.type),
         valueLabel(discount),
         discountStatus(discount),
         discount.usageCount || 0,
         discount.usageLimit ?? '',
         discount.minimumSubtotalCents !== null ? formatPeso(discount.minimumSubtotalCents) : '',
-        discount.createdAt ? new Date(discount.createdAt).toLocaleDateString('en-PH') : '',
+        discount.startsAt ? new Date(discount.startsAt).toLocaleDateString('en-PH') : '',
         discount.endsAt ? new Date(discount.endsAt).toLocaleDateString('en-PH') : ''
       ])
     ];
@@ -174,13 +238,16 @@ export default function Discounts() {
   const visibleDiscounts = useMemo(() => {
     const search = query.trim().toLowerCase();
     return discounts
-      .filter((discount) => activeView === 'all' || (activeView === 'scheduled' ? false : discountStatus(discount) === activeView))
+      .filter((discount) => activeView === 'all' || discountStatus(discount) === activeView)
       .filter((discount) => {
         if (!search) return true;
         return [
           discount.code,
+          discount.name,
+          discount.method,
           discount.type,
           discount.status,
+          discount.bannerText,
           valueLabel(discount),
           discount.minimumSubtotalCents !== null ? formatPeso(discount.minimumSubtotalCents) : ''
         ].join(' ').toLowerCase().includes(search);
@@ -196,12 +263,12 @@ export default function Discounts() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="eyebrow">Discounts</p>
-          <h1 className="display mt-1 text-3xl">Discounts</h1>
-          <p className="mt-2 max-w-2xl text-sm text-clay">Create, search, and manage discount codes validated by checkout.</p>
+          <h1 className="display mt-1 text-3xl">Discounts and promos</h1>
+          <p className="mt-2 max-w-2xl text-sm text-clay">Create, search, and manage automatic promos and discount codes validated by checkout.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-secondary" onClick={exportDiscounts}>Export</button>
-          <button type="button" className="btn-ink" onClick={() => setShowCreate((value) => !value)}>Create discount</button>
+          <button type="button" className="btn-ink" onClick={() => setShowCreate((value) => !value)}>Create promo</button>
         </div>
       </div>
 
@@ -226,23 +293,32 @@ export default function Discounts() {
         <form onSubmit={createDiscount} className="mt-6 rounded-[var(--radius-admin)] border border-line bg-paper p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Create discount</h2>
-              <p className="mt-1 text-sm text-clay">This first phase supports checkout-validated discount codes.</p>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Create promo</h2>
+              <p className="mt-1 text-sm text-clay">Create automatic promos or checkout-validated discount codes.</p>
             </div>
             <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
           </div>
           <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <section className="rounded-[var(--radius-admin)] border border-line bg-white p-4">
               <label className="block">
-                <span className="eyebrow">Discount method</span>
-                <select className="field mt-1" value="code" disabled>
+                <span className="eyebrow">Promo method</span>
+                <select className="field mt-1" value={form.method} onChange={(e) => update('method', e.target.value)}>
+                  <option value="automatic">Automatic promo</option>
                   <option value="code">Discount code</option>
                 </select>
               </label>
+              <label className="mt-4 block">
+                <span className="eyebrow">Promo name</span>
+                <input className="field mt-1" required value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="Buy More Save More Promo" />
+              </label>
+              <label className="mt-4 block">
+                <span className="eyebrow">Promo description</span>
+                <textarea className="field mt-1" rows="2" value={form.description} onChange={(e) => update('description', e.target.value)} />
+              </label>
               <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <label className="block">
-                  <span className="eyebrow">Discount code</span>
-                  <input className="field mt-1 uppercase" required value={form.code} onChange={(e) => update('code', e.target.value)} placeholder="MARIA10" />
+                  <span className="eyebrow">{form.method === 'code' ? 'Discount code' : 'Promo ID'}</span>
+                  <input className="field mt-1 uppercase" required value={form.code} onChange={(e) => update('code', e.target.value)} placeholder={form.method === 'code' ? 'MARIA10' : 'BMSM2026'} />
                 </label>
                 <button type="button" className="btn-secondary" onClick={() => update('code', randomDiscountCode())}>Generate code</button>
               </div>
@@ -252,16 +328,58 @@ export default function Discounts() {
                   <select className="field mt-1" value={form.type} onChange={(e) => update('type', e.target.value)}>
                     <option value="percentage">Percentage off</option>
                     <option value="fixed">Fixed amount off</option>
+                    <option value="buy_more_save_more">Buy More Save More</option>
+                    <option value="free_shipping">Free shipping</option>
+                    <option value="bundle">Bundle discount</option>
                   </select>
                 </label>
+                {form.type !== 'free_shipping' && form.type !== 'buy_more_save_more' && (
                 <label className="block">
                   <span className="eyebrow">{form.type === 'percentage' ? 'Percent (1-100)' : 'Amount (PHP)'}</span>
                   <input className="field mt-1" required inputMode="decimal" value={form.value} onChange={(e) => update('value', e.target.value)} placeholder={form.type === 'percentage' ? '10' : '100.00'} />
                 </label>
+                )}
               </div>
+              {form.type === 'buy_more_save_more' && (
+                <div className="mt-4 rounded-[var(--radius-admin)] border border-line bg-cream p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Buy More Save More rule</h3>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="eyebrow">Minimum quantity</span>
+                      <input className="field mt-1" type="number" min="1" value={form.ruleMinimumQuantity} onChange={(e) => update('ruleMinimumQuantity', e.target.value)} />
+                    </label>
+                    <label className="block">
+                      <span className="eyebrow">Discount type</span>
+                      <select className="field mt-1" value={form.ruleDiscountType} onChange={(e) => update('ruleDiscountType', e.target.value)}>
+                        <option value="fixed">Fixed amount</option>
+                        <option value="percentage">Percentage</option>
+                      </select>
+                    </label>
+                    {form.ruleDiscountType === 'percentage' ? (
+                      <label className="block">
+                        <span className="eyebrow">Percent</span>
+                        <input className="field mt-1" inputMode="numeric" value={form.ruleDiscountValue} onChange={(e) => update('ruleDiscountValue', e.target.value)} />
+                      </label>
+                    ) : (
+                      <label className="block">
+                        <span className="eyebrow">Amount (PHP)</span>
+                        <input className="field mt-1" inputMode="decimal" value={form.ruleDiscountPeso} onChange={(e) => update('ruleDiscountPeso', e.target.value)} />
+                      </label>
+                    )}
+                    <label className="mt-6 flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={form.ruleFreeShipping} onChange={(e) => update('ruleFreeShipping', e.target.checked)} />
+                      Free shipping
+                    </label>
+                  </div>
+                </div>
+              )}
             </section>
             <section className="rounded-[var(--radius-admin)] border border-line bg-white p-4">
               <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Eligibility</h3>
+              <label className="mt-3 block">
+                <span className="eyebrow">Minimum quantity</span>
+                <input className="field mt-1" type="number" min="1" value={form.minimumQuantity} onChange={(e) => update('minimumQuantity', e.target.value)} placeholder="No minimum" />
+              </label>
               <label className="mt-3 block">
                 <span className="eyebrow">Minimum subtotal</span>
                 <input className="field mt-1" inputMode="decimal" value={form.minimumPeso} onChange={(e) => update('minimumPeso', e.target.value)} placeholder="No minimum" />
@@ -271,8 +389,24 @@ export default function Discounts() {
                 <input className="field mt-1" type="number" min="1" value={form.usageLimit} onChange={(e) => update('usageLimit', e.target.value)} placeholder="Unlimited" />
               </label>
               <label className="mt-3 block">
+                <span className="eyebrow">Start date</span>
+                <input className="field mt-1" type="date" value={form.startsAt} onChange={(e) => update('startsAt', e.target.value)} />
+              </label>
+              <label className="mt-3 block">
                 <span className="eyebrow">End date</span>
                 <input className="field mt-1" type="date" value={form.endsAt} onChange={(e) => update('endsAt', e.target.value)} />
+              </label>
+              <label className="mt-3 block">
+                <span className="eyebrow">Banner text</span>
+                <input className="field mt-1" value={form.bannerText} onChange={(e) => update('bannerText', e.target.value)} placeholder="Buy More Save More Promo" />
+              </label>
+              <label className="mt-3 block">
+                <span className="eyebrow">Notification priority</span>
+                <input className="field mt-1" type="number" min="0" value={form.priority} onChange={(e) => update('priority', e.target.value)} />
+              </label>
+              <label className="mt-3 block">
+                <span className="eyebrow">Terms or notes</span>
+                <textarea className="field mt-1" rows="2" value={form.terms} onChange={(e) => update('terms', e.target.value)} />
               </label>
             </section>
           </div>
@@ -330,10 +464,11 @@ export default function Discounts() {
                 <th className="w-10 p-3">
                   <input type="checkbox" aria-label="Select all discounts" checked={allVisibleSelected} onChange={toggleAllDiscounts} />
                 </th>
+                <th className="p-3">Promo</th>
                 <th className="p-3">Method</th>
                 <th className="p-3">Type</th>
                 <th className="p-3">Status</th>
-                <th className="p-3">Combinations</th>
+                <th className="p-3">Banner</th>
                 <th className="p-3">Used</th>
                 <th className="p-3">Start</th>
                 <th className="p-3">End</th>
@@ -354,14 +489,15 @@ export default function Discounts() {
                       />
                     </td>
                     <td className="p-3">
-                      <Link to={`/admin/discounts/${encodeURIComponent(discount.code)}`} className="font-semibold text-accent-deep underline">{discount.code}</Link>
-                      <p className="text-xs text-clay">Discount code</p>
+                      <Link to={`/admin/discounts/${encodeURIComponent(discount.code)}`} className="font-semibold text-accent-deep underline">{discount.name || discount.code}</Link>
+                      <p className="text-xs text-clay">{discount.code}</p>
                     </td>
-                    <td className="p-3">{valueLabel(discount)}</td>
+                    <td className="p-3 text-xs uppercase">{discount.method === 'automatic' ? 'Automatic promo' : 'Discount code'}</td>
+                    <td className="p-3">{typeLabel(discount.type)}<br /><span className="text-xs text-clay">{valueLabel(discount)}</span></td>
                     <td className="p-3">
                       <span className={`inline-flex rounded-[var(--radius-admin)] border px-2 py-1 text-[11px] font-bold uppercase ${statusBadgeClass(status)}`}>{status}</span>
                     </td>
-                    <td className="p-3 text-xs text-clay">Not combinable</td>
+                    <td className="p-3 text-xs text-clay">{discount.bannerText ? 'Ready' : 'No banner'}</td>
                     <td className="p-3">{discount.usageCount}{discount.usageLimit !== null ? ` / ${discount.usageLimit}` : ''}</td>
                     <td className="p-3 text-xs text-clay">{discount.createdAt ? new Date(discount.createdAt).toLocaleDateString('en-PH') : '-'}</td>
                     <td className="p-3 text-xs text-clay">{discount.endsAt ? new Date(discount.endsAt).toLocaleDateString('en-PH') : 'No end date'}</td>
@@ -377,7 +513,7 @@ export default function Discounts() {
                 );
               })}
               {!visibleDiscounts.length && (
-                <tr><td colSpan="9" className="p-8 text-center text-sm text-clay">No discounts match this view.</td></tr>
+                <tr><td colSpan="10" className="p-8 text-center text-sm text-clay">No discounts match this view.</td></tr>
               )}
             </tbody>
           </table>

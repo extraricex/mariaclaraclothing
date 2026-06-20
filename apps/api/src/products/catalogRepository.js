@@ -148,6 +148,19 @@ function deductVariantStock(items) {
   return deductJsonVariantStock(deductions);
 }
 
+function restockVariantStock(items) {
+  const restocks = (Array.isArray(items) ? items : []).map((item) => ({
+    slug: String(item.slug || '').trim(),
+    sku: String(item.sku || '').trim(),
+    quantity: Number(item.quantity)
+  })).filter((item) => item.sku && item.quantity > 0);
+
+  if (usePostgresProducts()) {
+    return restockPostgresVariantStock(restocks);
+  }
+  return restockJsonVariantStock(restocks);
+}
+
 function deductJsonVariantStock(items) {
   const products = loadEditableProducts();
   const targets = items.map((item) => {
@@ -164,6 +177,18 @@ function deductJsonVariantStock(items) {
   writeEditableProducts(products);
 }
 
+function restockJsonVariantStock(items) {
+  const products = loadEditableProducts();
+  items.forEach((item) => {
+    const product = products.find((candidate) => candidate.slug === item.slug);
+    const variant = product?.variants.find((candidate) => candidate.sku === item.sku);
+    if (variant) {
+      variant.stockQuantity = Number(variant.stockQuantity || 0) + item.quantity;
+    }
+  });
+  writeEditableProducts(products);
+}
+
 function deductPostgresVariantStock(items) {
   return transaction(async (client) => {
     for (const item of items) {
@@ -176,6 +201,19 @@ function deductPostgresVariantStock(items) {
       if (result.rowCount === 0) {
         throw deductionSoldOutError(item);
       }
+    }
+  });
+}
+
+function restockPostgresVariantStock(items) {
+  return transaction(async (client) => {
+    for (const item of items) {
+      await client.query(
+        `UPDATE product_variants
+            SET stock_quantity = stock_quantity + $1
+          WHERE sku = $2`,
+        [item.quantity, item.sku]
+      );
     }
   });
 }
@@ -601,6 +639,27 @@ function validateProductPage(productPage, field) {
     requireString(productPage.sizeChartImageUrl, `${field}.sizeChartImageUrl`);
   }
 
+  if (productPage.detailsText !== undefined) {
+    requireOptionalString(productPage.detailsText, `${field}.detailsText`);
+  }
+
+  if (productPage.shippingText !== undefined) {
+    requireOptionalString(productPage.shippingText, `${field}.shippingText`);
+  }
+
+  if (productPage.sizeChart !== undefined) {
+    if (!Array.isArray(productPage.sizeChart)) {
+      throw new Error(`${field}.sizeChart must be an array.`);
+    }
+    productPage.sizeChart.forEach((row, index) => {
+      requireString(row.size, `${field}.sizeChart[${index}].size`);
+      requireString(row.width, `${field}.sizeChart[${index}].width`);
+      requireString(row.length, `${field}.sizeChart[${index}].length`);
+      requireString(row.sleeveLength, `${field}.sizeChart[${index}].sleeveLength`);
+      requireString(row.shoulderDropLength, `${field}.sizeChart[${index}].shoulderDropLength`);
+    });
+  }
+
   if (productPage.mediaLimit !== undefined) {
     requirePositiveNumber(productPage.mediaLimit, `${field}.mediaLimit`);
   }
@@ -613,6 +672,12 @@ function validateProductPage(productPage, field) {
 function requireString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${field} must be a non-empty string.`);
+  }
+}
+
+function requireOptionalString(value, field) {
+  if (typeof value !== 'string') {
+    throw new Error(`${field} must be a string.`);
   }
 }
 
@@ -641,6 +706,7 @@ module.exports = {
   normalizeEditableProduct,
   productsPath,
   replaceEditableProducts,
+  restockVariantStock,
   saveEditableProduct,
   validateProducts
 };

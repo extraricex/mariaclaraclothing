@@ -38,8 +38,20 @@ const EMPTY_PRODUCT = {
   priceCents: 0,
   compareAtPriceCents: null,
   images: [],
-  variants: [{ size: 's', sku: '', priceCents: null, stockQuantity: 0 }]
+  variants: [{ size: 's', sku: '', priceCents: null, stockQuantity: 0 }],
+  productPage: {
+    detailsText: '',
+    shippingText: '',
+    sections: [
+      {
+        title: 'Product details',
+        items: ['Comfortable fit', 'Easy to style', 'Ready for everyday wear']
+      }
+    ],
+    sizeChart: []
+  }
 };
+const SIZE_CHART_FIELDS = ['size', 'width', 'length', 'sleeveLength', 'shoulderDropLength'];
 
 export default function ProductEditor() {
   const { slug } = useParams();
@@ -82,6 +94,69 @@ export default function ProductEditor() {
     }));
   }
 
+  function updateProductPage(field, value) {
+    setProduct((previous) => ({
+      ...previous,
+      productPage: {
+        ...(previous.productPage || {}),
+        [field]: value
+      }
+    }));
+  }
+
+  function updateSizeChartRow(index, field, value) {
+    setProduct((previous) => {
+      const previousProductPage = previous.productPage || {};
+      const previousRows = Array.isArray(previousProductPage.sizeChart) ? previousProductPage.sizeChart : [];
+      return {
+        ...previous,
+        productPage: {
+          ...previousProductPage,
+          sizeChart: previousRows.map((row, i) => i === index ? { ...row, [field]: value } : row)
+        }
+      };
+    });
+  }
+
+  function addSizeChartRow() {
+    setProduct((previous) => {
+      const previousProductPage = previous.productPage || {};
+      const previousRows = Array.isArray(previousProductPage.sizeChart) ? previousProductPage.sizeChart : [];
+      return {
+        ...previous,
+        productPage: {
+          ...previousProductPage,
+          sizeChart: [
+            ...previousRows,
+            { size: '', width: '', length: '', sleeveLength: '', shoulderDropLength: '' }
+          ]
+        }
+      };
+    });
+  }
+
+  function removeSizeChartRow(index) {
+    setProduct((previous) => {
+      const previousProductPage = previous.productPage || {};
+      const previousRows = Array.isArray(previousProductPage.sizeChart) ? previousProductPage.sizeChart : [];
+      return {
+        ...previous,
+        productPage: {
+          ...previousProductPage,
+          sizeChart: previousRows.filter((_, i) => i !== index)
+        }
+      };
+    });
+  }
+
+  function sizeChartRowHasValue(row) {
+    return SIZE_CHART_FIELDS.some((field) => String(row?.[field] || '').trim() !== '');
+  }
+
+  function sizeChartRowIsComplete(row) {
+    return SIZE_CHART_FIELDS.every((field) => String(row?.[field] || '').trim() !== '');
+  }
+
   function tagsText() {
     return (product.tags || []).join(', ');
   }
@@ -95,6 +170,8 @@ export default function ProductEditor() {
   const totalInventory = (product.variants || []).reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
   const statusLabel = product.status ? product.status[0].toUpperCase() + product.status.slice(1) : 'Draft';
   const imageCount = product.images?.length || 0;
+  const productPage = product.productPage || {};
+  const sizeChartRows = Array.isArray(productPage.sizeChart) ? productPage.sizeChart : [];
 
   function syncDescriptionFromEditor() {
     const html = sanitizeRichHtml(descriptionEditorRef.current?.innerHTML || '');
@@ -171,11 +248,29 @@ export default function ProductEditor() {
 
   async function save() {
     setMessage('');
+    const partialSizeChartRow = sizeChartRows.some((row) => sizeChartRowHasValue(row) && !sizeChartRowIsComplete(row));
+    if (partialSizeChartRow) {
+      setMessage('Complete every size chart field before saving, or remove the incomplete row.');
+      return;
+    }
+    const completeSizeChartRows = sizeChartRows
+      .filter(sizeChartRowIsComplete)
+      .map((row) => ({
+        size: String(row.size || '').trim(),
+        width: String(row.width || '').trim(),
+        length: String(row.length || '').trim(),
+        sleeveLength: String(row.sleeveLength || '').trim(),
+        shoulderDropLength: String(row.shoulderDropLength || '').trim()
+      }));
     const payload = {
       ...product,
       description: sanitizeRichHtml(descriptionEditorRef.current?.innerHTML || product.description || ''),
       priceCents: pesoToCents(pricePeso) ?? 0,
       compareAtPriceCents: comparePeso.trim() === '' ? null : pesoToCents(comparePeso),
+      productPage: {
+        ...(product.productPage || {}),
+        sizeChart: completeSizeChartRows
+      },
       variants: product.variants.map((variant) => ({
         ...variant,
         priceCents: pesoToCents(variantPricePeso(variant)),
@@ -326,6 +421,71 @@ export default function ProductEditor() {
                 onInput={syncDescriptionFromEditor}
                 onBlur={syncDescriptionFromEditor}
               />
+            </div>
+          </section>
+
+          <section className="border border-line bg-paper p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Product page content</h2>
+                <p className="mt-1 text-xs text-clay">Edit the product page tabs shown below the add-to-cart area.</p>
+              </div>
+              <button type="button" className="btn-ghost !px-4 !py-2 text-xs" onClick={addSizeChartRow}>Add size row</button>
+            </div>
+            <label className="mt-4 block">
+              <span className="eyebrow">Product details</span>
+              <textarea
+                className="field mt-1 min-h-28"
+                value={productPage.detailsText || ''}
+                onChange={(e) => updateProductPage('detailsText', e.target.value)}
+                placeholder="Fabric, fit, care, and other product notes"
+              />
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Shipping</span>
+              <textarea
+                className="field mt-1 min-h-24"
+                value={productPage.shippingText || ''}
+                onChange={(e) => updateProductPage('shippingText', e.target.value)}
+                placeholder="Shipping terms shown on this product page"
+              />
+            </label>
+            <div className="mt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink">Size Chart</h3>
+              {sizeChartRows.length > 0 ? (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead>
+                      <tr className="text-[11px] uppercase tracking-[0.12em] text-clay">
+                        <th className="py-2 pr-3">Size</th>
+                        <th className="py-2 pr-3">Width</th>
+                        <th className="py-2 pr-3">Length</th>
+                        <th className="py-2 pr-3">Sleeve length</th>
+                        <th className="py-2 pr-3">Shoulder drop length</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sizeChartRows.map((row, index) => (
+                        <tr key={index} className="border-t border-line/60">
+                          <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" value={row.size || ''} onChange={(e) => updateSizeChartRow(index, 'size', e.target.value)} /></td>
+                          <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" value={row.width || ''} onChange={(e) => updateSizeChartRow(index, 'width', e.target.value)} /></td>
+                          <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" value={row.length || ''} onChange={(e) => updateSizeChartRow(index, 'length', e.target.value)} /></td>
+                          <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" value={row.sleeveLength || ''} onChange={(e) => updateSizeChartRow(index, 'sleeveLength', e.target.value)} /></td>
+                          <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" value={row.shoulderDropLength || ''} onChange={(e) => updateSizeChartRow(index, 'shoulderDropLength', e.target.value)} /></td>
+                          <td className="py-2 pl-2">
+                            <button type="button" className="text-xs text-clay underline hover:text-accent" onClick={() => removeSizeChartRow(index)}>
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-clay">No size chart rows yet.</p>
+              )}
             </div>
           </section>
 

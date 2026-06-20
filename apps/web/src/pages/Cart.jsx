@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchProducts } from '../lib/api.js';
+import { fetchProducts, quoteCart } from '../lib/api.js';
 import { addToCart, cartQuantity, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 
@@ -11,8 +11,14 @@ function firstAvailableVariant(product) {
 export default function Cart() {
   const items = useCart();
   const [products, setProducts] = useState([]);
+  const [quote, setQuote] = useState(null);
+  const [quoteError, setQuoteError] = useState('');
   const quantity = cartQuantity(items);
   const subtotal = subtotalCents(items);
+  const displaySubtotal = quote?.subtotalCents ?? subtotal;
+  const displayDiscount = quote?.discountTotalCents ?? 0;
+  const displayShipping = quote?.shippingFeeCents ?? 0;
+  const displayTotal = quote?.totalCents ?? Math.max(0, subtotal - displayDiscount + displayShipping);
   const cartUpsells = useMemo(() => products
     .filter((product) => firstAvailableVariant(product))
     .filter((product) => !items.some((item) => item.slug === product.slug || item.productId === product.id))
@@ -23,6 +29,29 @@ export default function Cart() {
       .then((body) => setProducts(body.products || []))
       .catch(() => setProducts([]));
   }, []);
+
+  useEffect(() => {
+    if (!items.length) {
+      setQuote(null);
+      setQuoteError('');
+      return;
+    }
+    let cancelled = false;
+    quoteCart({ items, shippingFeeCents: 0 })
+      .then((body) => {
+        if (cancelled) return;
+        setQuote(body.quote || null);
+        setQuoteError('');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setQuote(null);
+        setQuoteError(error.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   function addUpsell(product) {
     const variant = firstAvailableVariant(product);
@@ -56,14 +85,15 @@ export default function Cart() {
       <p className="eyebrow">Cart / {quantity} item{quantity === 1 ? '' : 's'}</p>
       <h1 className="display mt-2 text-4xl sm:text-5xl">Your cart</h1>
       <p className="mt-4 inline-block bg-cream px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft">
-        {quantity >= 2 ? '✓ Free shipping unlocked' : 'Add 1 more item to unlock free shipping'}
+        {quote?.freeShippingUnlocked ? 'Free shipping unlocked' : 'Shipping and promos refresh before checkout'}
       </p>
+      {quoteError && <p className="mt-3 text-sm text-accent-deep" role="alert">{quoteError}</p>}
 
       <div className="mt-8 divide-y divide-line border-y border-line">
         {items.map((item) => (
           <article key={item.variantId} className="flex gap-5 py-6">
             <Link to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`} className="block h-32 w-24 shrink-0 overflow-hidden bg-cream">
-              {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-cover" loading="lazy" />}
+              {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-contain" loading="lazy" />}
             </Link>
             <div className="flex flex-1 flex-col">
               <div className="flex items-start justify-between gap-4">
@@ -90,8 +120,13 @@ export default function Cart() {
       </div>
 
       <div className="mt-8 flex flex-col items-end gap-2">
-        <p className="text-sm text-ink-soft">Subtotal <span className="ml-4 text-base font-semibold text-ink">{formatMoney(subtotal)}</span></p>
-        <p className="text-xs text-clay">Shipping calculated at checkout · COD nationwide</p>
+        <p className="text-sm text-ink-soft">Subtotal <span className="ml-4 text-base font-semibold text-ink">{formatMoney(displaySubtotal)}</span></p>
+        {displayDiscount > 0 && (
+          <p className="text-sm text-[#2f7d32]">Discount <span className="ml-4 text-base font-semibold">-{formatMoney(displayDiscount)}</span></p>
+        )}
+        <p className="text-sm text-ink-soft">Shipping <span className="ml-4 text-base font-semibold text-ink">{quote?.freeShippingUnlocked ? 'Free' : formatMoney(displayShipping)}</span></p>
+        <p className="text-base font-semibold">Total <span className="ml-4 text-lg">{formatMoney(displayTotal)}</span></p>
+        <p className="text-xs text-clay">Final delivery fee is confirmed after your address · COD nationwide</p>
         <Link to="/checkout" className="btn-ink mt-3 w-full sm:w-auto">Check out — Cash on Delivery</Link>
       </div>
 
@@ -100,7 +135,7 @@ export default function Cart() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="eyebrow">Recommended</p>
-              <h2 className="display mt-2 text-3xl">Complete the fit</h2>
+              <h2 className="display mt-2 text-3xl">You may also love this</h2>
             </div>
             <p className="max-w-xs text-sm text-ink-soft">Add another piece before checkout and keep everything in one COD delivery.</p>
           </div>
