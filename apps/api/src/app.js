@@ -8,9 +8,44 @@ const { siteContentRouter } = require('./routes/siteContent');
 const { discountRouter } = require('./routes/discounts');
 const { customerRouter } = require('./routes/customer');
 const { storeSettingsRouter } = require('./routes/storeSettings');
+const { postOnly, rateLimit } = require('./middleware/rateLimit');
+
+// Throttle credential-guessing on admin login and checkout abuse. Limits are
+// generous by default (read from env at request time) so a single shopper or
+// the admin is never blocked, while scripted floods are stopped.
+const loginRateLimit = rateLimit({
+  keyPrefix: 'admin-login',
+  maxEnv: 'ADMIN_LOGIN_RATE_LIMIT_MAX',
+  windowEnv: 'ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS',
+  defaultMax: 50,
+  defaultWindowMs: 15 * 60 * 1000,
+  message: 'Too many login attempts. Please try again later.'
+});
+
+const checkoutRateLimit = postOnly(rateLimit({
+  keyPrefix: 'checkout',
+  maxEnv: 'CHECKOUT_RATE_LIMIT_MAX',
+  windowEnv: 'CHECKOUT_RATE_LIMIT_WINDOW_MS',
+  defaultMax: 100,
+  defaultWindowMs: 10 * 60 * 1000,
+  message: 'Too many checkout attempts. Please slow down and try again shortly.'
+}));
 
 function createApp() {
   const app = express();
+
+  // Behind a reverse proxy (the Docker nginx) set TRUST_PROXY (e.g. `1`) so
+  // req.ip reflects the real client for rate limiting. Off by default so local
+  // and bare deployments are not spoofable via X-Forwarded-For.
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy) {
+    if (trustProxy === 'true' || trustProxy === 'false') {
+      app.set('trust proxy', trustProxy === 'true');
+    } else {
+      const numeric = Number(trustProxy);
+      app.set('trust proxy', Number.isFinite(numeric) && String(numeric) === trustProxy ? numeric : trustProxy);
+    }
+  }
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -23,6 +58,9 @@ function createApp() {
     res.json({ ok: true, service: 'maria-clara-clothing' });
   });
 
+  app.use('/api/admin/login', loginRateLimit);
+  app.use('/api/orders', checkoutRateLimit);
+
   app.use('/api/products', productRouter);
   app.use('/api/site-content', siteContentRouter);
   app.use('/api/orders', orderRouter);
@@ -32,11 +70,21 @@ function createApp() {
   app.use('/api/storefront-settings', storeSettingsRouter);
   app.use('/api/admin', adminRouter);
 
-  app.use((error, _req, res, _next) => {
-    if (!error.status || error.status >= 500) {
-      console.error(error);
+  app.use((error, req, res, _next) => {
+    const status = error.status || 500;
+    if (status >= 500) {
+      // Structured server-error log: greppable, no client PII beyond the path.
+      console.error(JSON.stringify({
+        level: 'error',
+        timestamp: new Date().toISOString(),
+        method: req.method,
+        path: req.originalUrl,
+        status,
+        message: error.message,
+        stack: error.stack
+      }));
     }
-    res.status(error.status || 500).json({ error: error.status ? error.message : 'Something went wrong' });
+    res.status(status).json({ error: error.status ? error.message : 'Something went wrong' });
   });
 
   return app;

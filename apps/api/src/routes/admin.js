@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const multer = require('multer');
 const { findOrderByNumber, listOrders, updateOrder } = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
@@ -602,7 +603,7 @@ async function requireAdmin(req, res, next) {
     const credentials = await getAdminCredentials();
     const activeToken = credentials?.token || adminToken();
 
-    if (!token || token !== activeToken) {
+    if (!token || !safeEqual(token, activeToken)) {
       return res.status(401).json({ error: 'Admin authentication is required' });
     }
 
@@ -610,6 +611,16 @@ async function requireAdmin(req, res, next) {
   } catch (error) {
     return next(error);
   }
+}
+
+// Constant-time string compare for the admin bearer token. Guards length first
+// (timingSafeEqual throws on length mismatch) so a wrong-length token cannot leak
+// timing and never crashes the request.
+function safeEqual(a, b) {
+  const bufferA = Buffer.from(String(a));
+  const bufferB = Buffer.from(String(b));
+  if (bufferA.length !== bufferB.length) return false;
+  return crypto.timingSafeEqual(bufferA, bufferB);
 }
 
 function productUploadDir() {
