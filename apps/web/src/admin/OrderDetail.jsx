@@ -70,6 +70,21 @@ function titleCase(value) {
   return String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function promoTypeLabel(value) {
+  return titleCase(value || 'promo');
+}
+
+function appliedRuleLabel(rule) {
+  if (!rule || typeof rule !== 'object') return 'No tier rule saved';
+  const parts = [];
+  if (rule.minimumQuantity) parts.push(`${rule.minimumQuantity}+ items`);
+  if (rule.discountType) parts.push(titleCase(rule.discountType));
+  if (rule.discountValue) parts.push(`${rule.discountValue}%`);
+  if (rule.discountValueCents) parts.push(formatMoney(rule.discountValueCents));
+  if (rule.freeShipping) parts.push('Free shipping');
+  return parts.join(' · ') || 'Tier rule saved';
+}
+
 function orderStatusBadge(value, tone = 'neutral') {
   const tones = {
     warning: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -313,9 +328,25 @@ export default function OrderDetail() {
     }
   }
 
+  async function sendTrackingNotification() {
+    setMessage('');
+    try {
+      const body = await adminSend('POST', `/api/admin/orders/${encodeURIComponent(orderNumber)}/tracking-notification`, {
+        channel: 'sms'
+      });
+      setOrder(body.order);
+      setForm(orderForm(body.order));
+      setMessage('Tracking notification recorded.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   const itemCount = form.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const subtotalCents = form.items.reduce((sum, item) => sum + Number(item.unitPriceCents || 0) * Number(item.quantity || 0), 0);
-  const totalCents = subtotalCents + Number(order.shippingFeeCents || 0);
+  const promoSnapshot = order.discountSnapshot || {};
+  const discountTotalCents = Math.min(subtotalCents, Math.max(0, Number(order.discountTotalCents || promoSnapshot.discountAmountCents || 0)));
+  const totalCents = Math.max(0, subtotalCents - discountTotalCents + Number(order.shippingFeeCents || 0));
   const paidCents = form.paymentStatus === 'paid' ? totalCents : 0;
   const balanceCents = Math.max(totalCents - paidCents, 0);
   const paymentPending = form.paymentStatus !== 'paid';
@@ -329,6 +360,12 @@ export default function OrderDetail() {
     order.address?.country || 'Philippines',
     form.customer.phone
   ].filter(Boolean);
+  const statusEvents = Array.isArray(order.statusEvents) ? order.statusEvents : [];
+  const trackingNotifications = Array.isArray(order.trackingNotifications) ? order.trackingNotifications : [];
+  const canSendTrackingNotification = Boolean(order.exportedToJnt)
+    || form.status === 'shipped'
+    || form.fulfillmentStatus === 'shipped'
+    || form.deliveryStatus === 'out_for_delivery';
 
   return (
     <div className="order-detail-shell mx-auto w-full max-w-[1380px]">
@@ -491,6 +528,7 @@ export default function OrderDetail() {
             </div>
             <dl className="mt-4 space-y-2 rounded-[var(--radius-admin)] border border-line bg-white p-4 text-sm">
               <div className="flex justify-between gap-4"><dt className="text-clay">Subtotal</dt><dd>{itemCount} item{itemCount === 1 ? '' : 's'} · {formatMoney(subtotalCents)}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-clay">Discount</dt><dd>{discountTotalCents ? `-${formatMoney(discountTotalCents)}` : formatMoney(0)}</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-clay">Shipping</dt><dd>{order.shippingFeeCents ? formatMoney(order.shippingFeeCents) : 'Free'}</dd></div>
               <div className="flex justify-between gap-4 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(totalCents)}</dd></div>
               <div className="border-t border-line pt-2">
@@ -507,6 +545,37 @@ export default function OrderDetail() {
               <textarea className="field mt-1" rows="3" placeholder="Leave a comment..." value={form.notes} disabled={!isEditing} onChange={(e) => setForm((previous) => ({ ...previous, notes: e.target.value }))} />
             </label>
             <p className="mt-3 text-xs text-clay">Only admin users can see timeline comments. Notes are saved to the order record.</p>
+          </section>
+
+          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Status history</h2>
+            {statusEvents.length ? (
+              <div className="mt-4 space-y-3">
+                {statusEvents.map((event) => (
+                  <article key={event.id || `${event.source}-${event.createdAt}`} className="rounded-[var(--radius-admin)] border border-line bg-white p-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-semibold text-ink">{titleCase(event.source || 'admin')}</p>
+                      <time className="text-xs text-clay" dateTime={event.createdAt || ''}>
+                        {event.createdAt ? new Date(event.createdAt).toLocaleString('en-PH') : 'Date unavailable'}
+                      </time>
+                    </div>
+                    <dl className="mt-3 space-y-2">
+                      {Object.entries(event.changes || {}).map(([field, change]) => (
+                        <div key={field} className="grid gap-1 sm:grid-cols-[140px_1fr]">
+                          <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-clay">{ENUM_LABELS[field] || titleCase(field)}</dt>
+                          <dd className="text-ink-soft">
+                            {titleCase(change.from || 'blank')} <span className="text-clay">to</span> {titleCase(change.to || 'blank')}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {event.note && <p className="mt-3 text-xs text-clay">{event.note}</p>}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-clay">No status changes recorded yet.</p>
+            )}
           </section>
         </div>
 
@@ -590,6 +659,23 @@ export default function OrderDetail() {
           </section>
 
           <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Promo snapshot</h2>
+            {promoSnapshot.promoId || order.discountCode || discountTotalCents ? (
+              <dl className="mt-4 space-y-2 text-sm">
+                <div className="flex justify-between gap-4"><dt className="text-clay">Name</dt><dd className="text-right font-semibold">{promoSnapshot.name || promoSnapshot.promoId || order.discountCode}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-clay">Code</dt><dd className="text-right">{promoSnapshot.promoId || order.discountCode || '-'}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-clay">Type</dt><dd className="text-right">{promoTypeLabel(promoSnapshot.type)}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-clay">Discount</dt><dd className="text-right">-{formatMoney(discountTotalCents)}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-clay">Free shipping</dt><dd className="text-right">{promoSnapshot.freeShippingApplied ? 'Applied' : 'Not applied'}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-clay">Savings</dt><dd className="text-right">{formatMoney(promoSnapshot.savingsCents || discountTotalCents)}</dd></div>
+                <div><dt className="text-clay">Applied rule</dt><dd className="mt-1 text-ink-soft">{appliedRuleLabel(promoSnapshot.appliedRule)}</dd></div>
+              </dl>
+            ) : (
+              <p className="mt-3 text-sm text-clay">No promo was applied to this order.</p>
+            )}
+          </section>
+
+          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Conversion summary</h2>
             <div className="mt-3 space-y-2 text-sm text-ink-soft">
               <p>This is their {history?.ordersCount ? `${history.ordersCount}${history.ordersCount === 1 ? 'st' : ' total'} order` : 'first known order'}.</p>
@@ -618,6 +704,33 @@ export default function OrderDetail() {
               <p className="mt-3 text-xs uppercase tracking-[0.1em] text-clay">
                 Exported to J&T {order.jntExportedAt ? new Date(order.jntExportedAt).toLocaleString('en-PH') : ''}
               </p>
+            )}
+            {canSendTrackingNotification && (
+              <button type="button" className="btn-ink mt-4 w-full !py-2" onClick={sendTrackingNotification}>
+                {trackingNotifications.length ? 'Resend tracking notification' : 'Send tracking notification'}
+              </button>
+            )}
+          </section>
+
+          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Tracking notifications</h2>
+            {trackingNotifications.length ? (
+              <div className="mt-4 space-y-3">
+                {trackingNotifications.map((notification) => (
+                  <article key={notification.id || notification.createdAt} className="rounded-[var(--radius-admin)] border border-line bg-white p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-semibold text-ink">{titleCase(notification.channel || 'sms')} · {titleCase(notification.status || 'recorded')}</p>
+                      <time className="text-xs text-clay" dateTime={notification.createdAt || ''}>
+                        {notification.createdAt ? new Date(notification.createdAt).toLocaleString('en-PH') : 'Date unavailable'}
+                      </time>
+                    </div>
+                    <p className="mt-2 text-ink-soft">{notification.message || 'Tracking notification recorded.'}</p>
+                    {notification.trackingNumber && <p className="mt-2 text-xs uppercase tracking-[0.1em] text-clay">Tracking {notification.trackingNumber}</p>}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-clay">No tracking notifications recorded yet.</p>
             )}
           </section>
         </div>

@@ -2,11 +2,40 @@ const express = require('express');
 const {
   computeDiscountCents,
   discountValidationError,
-  findDiscountByCode
+  findDiscountByCode,
+  listDiscounts
 } = require('../discounts/discountRepository');
 const { quoteCart } = require('../promos/promoEngine');
 
 const router = express.Router();
+
+function isNotificationPromoEligible(discount, now = new Date()) {
+  if (!discount || discount.status !== 'active') return false;
+  const currentTime = now.getTime();
+  if (discount.startsAt && new Date(discount.startsAt).getTime() > currentTime) return false;
+  if (discount.endsAt && new Date(discount.endsAt).getTime() < currentTime) return false;
+  if (discount.usageLimit !== null && discount.usageLimit !== undefined && Number(discount.usageCount || 0) >= Number(discount.usageLimit)) return false;
+  return true;
+}
+
+function notificationFromPromo(discount) {
+  if (!discount) return null;
+  return {
+    promoId: discount.code || '',
+    text: discount.bannerText || 'Buy More Save More Promo',
+    name: discount.name || discount.code || 'Promo',
+    type: discount.type || 'promotion',
+    method: discount.method || 'code'
+  };
+}
+
+function notificationPriority(discount) {
+  return Math.max(0, Math.round(Number(discount?.priority) || 0));
+}
+
+function notificationUpdatedAt(discount) {
+  return new Date(discount?.updatedAt || discount?.createdAt || 0).getTime() || 0;
+}
 
 router.post('/validate', async (req, res, next) => {
   try {
@@ -36,6 +65,23 @@ router.post('/validate', async (req, res, next) => {
         discountTotalCents: computeDiscountCents(discount, subtotalCents)
       }
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/active-notification', async (_req, res, next) => {
+  try {
+    const discounts = await listDiscounts();
+    const activePromo = (Array.isArray(discounts) ? discounts : [])
+      .filter((discount) => isNotificationPromoEligible(discount))
+      .sort((a, b) => {
+        const priorityDifference = notificationPriority(b) - notificationPriority(a);
+        if (priorityDifference !== 0) return priorityDifference;
+        return notificationUpdatedAt(b) - notificationUpdatedAt(a);
+      })[0];
+
+    return res.json({ notification: notificationFromPromo(activePromo) });
   } catch (error) {
     return next(error);
   }

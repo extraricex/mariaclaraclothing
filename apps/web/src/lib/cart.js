@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 const CART_KEY = 'maria-clara-cart';
 const CART_EVENT = 'maria-clara-cart-changed';
+export const CART_DRAWER_EVENT = 'maria-clara-cart-drawer-open';
 const CART_SESSION_KEY = 'maria-clara-cart-session-id';
 
 export function getCart() {
@@ -52,6 +53,11 @@ export function addToCart(item) {
     cart.push(item);
   }
   saveCart(cart);
+}
+
+export function openCartDrawer() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(CART_DRAWER_EVENT));
 }
 
 export function updateQuantity(variantId, quantity) {

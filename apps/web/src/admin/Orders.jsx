@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { adminDownload, adminJson } from '../lib/adminApi.js';
+import { adminDownload, adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
 
 const STATUS_OPTIONS = ['', 'received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'];
@@ -43,6 +43,11 @@ function jntStatusLabel(status) {
   return humanize(status);
 }
 
+function promoLabel(order) {
+  const snapshot = order.discountSnapshot || {};
+  return snapshot.name || snapshot.promoId || order.discountCode || '';
+}
+
 export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [status, setStatus] = useState('');
@@ -53,6 +58,7 @@ export default function Orders() {
   const [selected, setSelected] = useState(() => new Set());
   const [message, setMessage] = useState('');
   const [exportErrors, setExportErrors] = useState([]);
+  const [updatingStatus, setUpdatingStatus] = useState({});
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -123,6 +129,25 @@ export default function Orders() {
     }
   }
 
+  async function updateOrderStatus(order, nextStatus) {
+    if (!nextStatus || nextStatus === order.status) return;
+    setMessage('');
+    setUpdatingStatus((previous) => ({ ...previous, [order.orderNumber]: true }));
+    try {
+      const body = await adminSend('PATCH', `/api/admin/orders/${encodeURIComponent(order.orderNumber)}`, { status: nextStatus });
+      setOrders((previous) => previous.map((item) => item.orderNumber === order.orderNumber ? { ...item, ...body.order } : item));
+      setMessage(`${order.orderNumber} status updated to ${humanize(nextStatus)}.`);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setUpdatingStatus((previous) => {
+        const next = { ...previous };
+        delete next[order.orderNumber];
+        return next;
+      });
+    }
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -186,6 +211,7 @@ export default function Orders() {
               <th className="p-3">Order</th>
               <th className="p-3">Customer</th>
               <th className="p-3">Total</th>
+              <th className="p-3">Promo</th>
               <th className="p-3">Items</th>
               <th className="p-3">Order status</th>
               <th className="p-3">Payment</th>
@@ -214,8 +240,30 @@ export default function Orders() {
                 </td>
                 <td className="p-3">{order.customerName}<br /><span className="text-xs text-clay">{order.phone}</span></td>
                 <td className="p-3">{formatMoney(order.totalCents)}</td>
+                <td className="p-3">
+                  {promoLabel(order) ? (
+                    <>
+                      <span className="block text-xs font-semibold uppercase text-ink">{promoLabel(order)}</span>
+                      <span className="text-xs text-clay">-{formatMoney(order.discountTotalCents || 0)}</span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-clay">No promo</span>
+                  )}
+                </td>
                 <td className="p-3">{order.itemCount}</td>
-                <td className="p-3"><span className={`px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ${statusBadge(order.status)}`}>{humanize(order.status)}</span></td>
+                <td className="p-3">
+                  <select
+                    className={`field min-w-32 px-2 py-1 text-xs font-semibold uppercase tracking-[0.08em] ${statusBadge(order.status)}`}
+                    value={order.status || 'received'}
+                    disabled={Boolean(updatingStatus[order.orderNumber])}
+                    onChange={(event) => updateOrderStatus(order, event.target.value)}
+                    aria-label={`Update status for ${order.orderNumber}`}
+                  >
+                    {STATUS_OPTIONS.filter(Boolean).map((option) => (
+                      <option key={option} value={option}>{humanize(option)}</option>
+                    ))}
+                  </select>
+                </td>
                 <td className="p-3 text-xs uppercase">{paymentStatusLabel(order.paymentStatus)}</td>
                 <td className="p-3 text-xs uppercase">{fulfillmentStatusLabel(order.fulfillmentStatus)}</td>
                 <td className="p-3 text-xs uppercase">{humanize(order.codConfirmationStatus)}</td>
@@ -228,7 +276,7 @@ export default function Orders() {
               </tr>
             ))}
             {!orders.length && (
-              <tr><td colSpan="12" className="p-6 text-center text-sm text-clay">No orders match.</td></tr>
+              <tr><td colSpan="13" className="p-6 text-center text-sm text-clay">No orders match.</td></tr>
             )}
           </tbody>
         </table>

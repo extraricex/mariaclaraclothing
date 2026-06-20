@@ -94,6 +94,49 @@ CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code text NOT NULL DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb;
 
+CREATE TABLE IF NOT EXISTS order_status_events (
+  id text PRIMARY KEY,
+  order_number text NOT NULL REFERENCES orders(order_number) ON DELETE CASCADE,
+  source text NOT NULL DEFAULT 'admin',
+  changes jsonb NOT NULL DEFAULT '{}'::jsonb,
+  note text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS order_status_events_order_number_idx ON order_status_events(order_number, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS order_tracking_notifications (
+  id text PRIMARY KEY,
+  order_number text NOT NULL REFERENCES orders(order_number) ON DELETE CASCADE,
+  channel text NOT NULL DEFAULT 'sms',
+  status text NOT NULL DEFAULT 'recorded',
+  source text NOT NULL DEFAULT 'admin',
+  recipient text NOT NULL DEFAULT '',
+  tracking_number text NOT NULL DEFAULT '',
+  message text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS order_tracking_notifications_order_number_idx ON order_tracking_notifications(order_number, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id text PRIMARY KEY,
+  order_number text NOT NULL DEFAULT '',
+  source text NOT NULL DEFAULT 'order',
+  reason text NOT NULL DEFAULT 'order_created',
+  product_slug text NOT NULL DEFAULT '',
+  product_name text NOT NULL DEFAULT '',
+  sku text NOT NULL DEFAULT '',
+  size text NOT NULL DEFAULT '',
+  quantity_change integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS inventory_movements_order_number_idx ON inventory_movements(order_number, created_at DESC);
+CREATE INDEX IF NOT EXISTS inventory_movements_sku_idx ON inventory_movements(sku, created_at DESC);
+CREATE INDEX IF NOT EXISTS inventory_movements_created_at_idx ON inventory_movements(created_at DESC);
+CREATE INDEX IF NOT EXISTS inventory_movements_reason_created_at_idx ON inventory_movements(reason, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS discount_codes (
   code text PRIMARY KEY,
   type text NOT NULL DEFAULT 'percentage',
@@ -132,6 +175,7 @@ ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS description text NOT NULL DE
 ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS method text NOT NULL DEFAULT 'code';
 ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS starts_at timestamptz;
 ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS minimum_quantity integer;
+ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 0;
 ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS banner_text text NOT NULL DEFAULT '';
 ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS terms text NOT NULL DEFAULT '';
 ALTER TABLE discount_codes ADD COLUMN IF NOT EXISTS rules jsonb NOT NULL DEFAULT '[]'::jsonb;

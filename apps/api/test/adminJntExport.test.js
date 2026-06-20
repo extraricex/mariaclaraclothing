@@ -116,7 +116,82 @@ test('admin J&T export writes orders into template row 9 and validates missing f
     assert.notDeepEqual(readRow(list, 9, 13), ['xxx', '+631234567890', 'BaoAnQu']);
     assert.equal(exportedOrder.exportedToJnt, true);
     assert.ok(exportedOrder.jntExportedAt);
-    assert.equal(exportedOrder.fulfillmentStatus, 'unfulfilled');
+    assert.equal(exportedOrder.status, 'shipped');
+    assert.equal(exportedOrder.fulfillmentStatus, 'shipped');
+    assert.equal(exportedOrder.deliveryStatus, 'out_for_delivery');
+    assert.equal(exportedOrder.statusEvents.length, 1);
+    assert.equal(exportedOrder.statusEvents[0].source, 'jnt_export');
+    assert.equal(exportedOrder.statusEvents[0].changes.status.from, 'received');
+    assert.equal(exportedOrder.statusEvents[0].changes.status.to, 'shipped');
+    assert.equal(exportedOrder.statusEvents[0].changes.fulfillmentStatus.from, 'unfulfilled');
+    assert.equal(exportedOrder.statusEvents[0].changes.fulfillmentStatus.to, 'shipped');
+    assert.equal(exportedOrder.statusEvents[0].changes.deliveryStatus.from, 'pending');
+    assert.equal(exportedOrder.statusEvents[0].changes.deliveryStatus.to, 'out_for_delivery');
+    assert.match(exportedOrder.statusEvents[0].createdAt, /^\d{4}-\d{2}-\d{2}T/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);
+  }
+});
+
+test('admin can record tracking notification only after J&T export or shipment', async () => {
+  const previousOrdersDataFile = process.env.ORDERS_DATA_FILE;
+  process.env.ORDERS_DATA_FILE = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-tracking-notification-')), 'orders.json');
+  const app = createFreshApp();
+  const { saveOrder, findOrderByNumber } = require('../src/orders/orderRepository');
+  const server = await new Promise((resolve, reject) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+    listener.on('error', reject);
+  });
+  const { port } = server.address();
+
+  try {
+    await saveOrder(exampleOrder());
+    await saveOrder({
+      ...exampleOrder(),
+      orderNumber: 'MCC-SHIPPED',
+      exportedToJnt: true,
+      jntExportedAt: '2026-06-05T12:00:00.000Z',
+      status: 'shipped',
+      fulfillmentStatus: 'shipped',
+      deliveryStatus: 'out_for_delivery',
+      trackingNumber: 'JNT123456789'
+    });
+
+    const blockedResponse = await fetch(
+      `http://127.0.0.1:${port}/api/admin/orders/MCC-1001/tracking-notification`,
+      jsonAdminRequest('POST', {})
+    );
+    const blockedBody = await blockedResponse.json();
+
+    assert.equal(blockedResponse.status, 400);
+    assert.equal(blockedBody.error, 'Tracking notifications require a shipped or J&T-exported order');
+
+    const notificationResponse = await fetch(
+      `http://127.0.0.1:${port}/api/admin/orders/MCC-SHIPPED/tracking-notification`,
+      jsonAdminRequest('POST', { channel: 'sms' })
+    );
+    const notificationBody = await notificationResponse.json();
+    const savedOrder = await findOrderByNumber('MCC-SHIPPED');
+
+    assert.equal(notificationResponse.status, 200);
+    assert.equal(notificationBody.notification.orderNumber, 'MCC-SHIPPED');
+    assert.equal(notificationBody.notification.channel, 'sms');
+    assert.equal(notificationBody.notification.status, 'recorded');
+    assert.match(notificationBody.notification.message, /MCC-SHIPPED/);
+    assert.match(notificationBody.notification.message, /JNT123456789/);
+    assert.equal(notificationBody.order.trackingNotifications.length, 1);
+    assert.equal(savedOrder.trackingNotifications.length, 1);
+    assert.equal(savedOrder.trackingNotifications[0].source, 'admin');
+
+    const detailResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/MCC-SHIPPED`, {
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` }
+    });
+    const detailBody = await detailResponse.json();
+
+    assert.equal(detailResponse.status, 200);
+    assert.equal(detailBody.order.trackingNotifications.length, 1);
+    assert.equal(detailBody.order.trackingNotifications[0].trackingNumber, 'JNT123456789');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);

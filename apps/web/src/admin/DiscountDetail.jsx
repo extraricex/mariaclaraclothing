@@ -11,6 +11,19 @@ function dateInputValue(value) {
   return value ? new Date(value).toISOString().slice(0, 10) : '';
 }
 
+function normalizedRules(discount) {
+  const rules = Array.isArray(discount.rules) && discount.rules.length
+    ? discount.rules
+    : [{ minimumQuantity: 2, discountType: 'fixed', discountValue: 0, discountValueCents: 0, freeShipping: true }];
+  return rules.map((rule) => ({
+    minimumQuantity: String(rule.minimumQuantity || 2),
+    discountType: rule.discountType === 'percentage' ? 'percentage' : 'fixed',
+    discountValue: String(rule.discountValue || ''),
+    discountValueCents: centsToPeso(rule.discountValueCents || 0),
+    freeShipping: Boolean(rule.freeShipping)
+  }));
+}
+
 function discountStatus(discount) {
   if (discount.status === 'disabled') return 'disabled';
   if (discount.endsAt && new Date(discount.endsAt).getTime() < Date.now()) return 'expired';
@@ -27,17 +40,59 @@ function statusBadgeClass(status) {
 function formFromDiscount(discount) {
   return {
     code: discount.code || '',
+    name: discount.name || discount.code || '',
+    description: discount.description || '',
+    method: discount.method || 'code',
     type: discount.type || 'percentage',
-    value: discount.type === 'fixed' ? centsToPeso(discount.value) : String(discount.value || ''),
+    value: discount.type === 'fixed' || discount.type === 'bundle' ? centsToPeso(discount.value) : String(discount.value || ''),
     minimumPeso: centsToPeso(discount.minimumSubtotalCents),
+    minimumQuantity: discount.minimumQuantity === null || discount.minimumQuantity === undefined ? '' : String(discount.minimumQuantity),
     usageLimit: discount.usageLimit === null || discount.usageLimit === undefined ? '' : String(discount.usageLimit),
+    priority: discount.priority === null || discount.priority === undefined ? '0' : String(discount.priority),
+    startsAt: dateInputValue(discount.startsAt),
     endsAt: dateInputValue(discount.endsAt),
-    status: discount.status || 'active'
+    status: discount.status || 'active',
+    bannerText: discount.bannerText || '',
+    terms: discount.terms || '',
+    rules: normalizedRules(discount)
   };
 }
 
 function valueLabel(discount) {
-  return discount.type === 'percentage' ? `${discount.value}% off` : `${formatPeso(discount.value)} off`;
+  if (discount.type === 'percentage') return `${discount.value}% off`;
+  if (discount.type === 'fixed') return `${formatPeso(discount.value)} off`;
+  if (discount.type === 'free_shipping') return 'Free shipping';
+  if (discount.type === 'buy_more_save_more') return 'Buy More Save More';
+  if (discount.type === 'bundle') return `Bundle discount ${discount.value ? formatPeso(discount.value) : ''}`.trim();
+  return discount.type;
+}
+
+function typeLabel(type) {
+  const labels = {
+    percentage: 'Percentage discount',
+    fixed: 'Fixed amount discount',
+    buy_more_save_more: 'Buy More Save More',
+    free_shipping: 'Free shipping',
+    bundle: 'Bundle discount'
+  };
+  return labels[type] || type;
+}
+
+function valueForPayload(form) {
+  if (form.type === 'fixed' || form.type === 'bundle') return pesoToCents(form.value);
+  if (form.type === 'free_shipping' || form.type === 'buy_more_save_more') return 0;
+  return Math.round(Number(form.value) || 0);
+}
+
+function rulesForPayload(form) {
+  if (form.type !== 'buy_more_save_more') return [];
+  return form.rules.map((rule) => ({
+    minimumQuantity: Number(rule.minimumQuantity || 1),
+    discountType: rule.discountType,
+    discountValue: rule.discountType === 'percentage' ? Math.round(Number(rule.discountValue) || 0) : 0,
+    discountValueCents: rule.discountType === 'fixed' ? pesoToCents(rule.discountValueCents) : 0,
+    freeShipping: Boolean(rule.freeShipping)
+  }));
 }
 
 export default function DiscountDetail() {
@@ -66,15 +121,45 @@ export default function DiscountDetail() {
     setForm((previous) => ({ ...previous, [field]: value }));
   }
 
+  function updateRule(index, field, value) {
+    setForm((previous) => ({
+      ...previous,
+      rules: previous.rules.map((rule, i) => (i === index ? { ...rule, [field]: value } : rule))
+    }));
+  }
+
+  function addRule() {
+    setForm((previous) => ({
+      ...previous,
+      rules: [...previous.rules, { minimumQuantity: '3', discountType: 'fixed', discountValue: '', discountValueCents: '', freeShipping: false }]
+    }));
+  }
+
+  function removeRule(index) {
+    setForm((previous) => ({
+      ...previous,
+      rules: previous.rules.filter((_, i) => i !== index)
+    }));
+  }
+
   const payload = useMemo(() => {
     if (!form) return null;
     return {
+      name: form.name,
+      description: form.description,
+      method: form.method,
       type: form.type,
-      value: form.type === 'fixed' ? pesoToCents(form.value) : Math.round(Number(form.value) || 0),
+      value: valueForPayload(form),
       minimumSubtotalCents: form.minimumPeso === '' ? null : pesoToCents(form.minimumPeso),
+      minimumQuantity: form.minimumQuantity === '' ? null : Number(form.minimumQuantity),
       usageLimit: form.usageLimit === '' ? null : Number(form.usageLimit),
+      priority: Number(form.priority || 0),
+      startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
       endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
-      status: form.status
+      status: form.status,
+      bannerText: form.bannerText,
+      terms: form.terms,
+      rules: form.rules && rulesForPayload(form)
     };
   }, [form]);
 
@@ -146,7 +231,7 @@ export default function DiscountDetail() {
             <h1 className="display text-2xl sm:text-3xl">{form.code || discount.code}</h1>
             <span className={`inline-flex rounded-[var(--radius-admin)] border px-2.5 py-1 text-xs font-bold uppercase ${statusBadgeClass(status)}`}>{status}</span>
           </div>
-          <p className="mt-2 text-sm text-clay">Discount code editor for checkout-validated discounts.</p>
+          <p className="mt-2 text-sm text-clay">Promo editor for automatic promos and checkout-validated discount codes.</p>
         </div>
         <div className="relative flex flex-wrap gap-2">
           <button type="button" className="btn-secondary" onClick={duplicateDiscount}>Duplicate</button>
@@ -166,12 +251,26 @@ export default function DiscountDetail() {
       <div className="discount-detail-grid mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
         <div className="space-y-5">
           <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Amount off products</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Promo identity</h2>
+            <label className="mt-4 block">
+              <span className="eyebrow">Promo name</span>
+              <input className="field mt-1" value={form.name} onChange={(event) => update('name', event.target.value)} />
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Promo description</span>
+              <textarea className="field mt-1" rows="2" value={form.description} onChange={(event) => update('description', event.target.value)} />
+            </label>
             <label className="mt-4 block">
               <span className="eyebrow">Discount code</span>
               <input className="field mt-1 uppercase" value={form.code} onChange={(event) => update('code', event.target.value)} />
             </label>
-            <p className="mt-2 text-sm text-clay">Customers enter this code at checkout.</p>
+            <label className="mt-4 block">
+              <span className="eyebrow">Promo method</span>
+              <select className="field mt-1" value={form.method} onChange={(event) => update('method', event.target.value)}>
+                <option value="automatic">Automatic promo</option>
+                <option value="code">Discount code</option>
+              </select>
+            </label>
           </section>
 
           <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
@@ -182,23 +281,69 @@ export default function DiscountDetail() {
                 <select className="field mt-1" value={form.type} onChange={(event) => update('type', event.target.value)}>
                   <option value="percentage">Percentage off</option>
                   <option value="fixed">Fixed amount</option>
+                  <option value="buy_more_save_more">Buy More Save More</option>
+                  <option value="free_shipping">Free shipping</option>
+                  <option value="bundle">Bundle discount</option>
                 </select>
               </label>
+              {form.type !== 'free_shipping' && form.type !== 'buy_more_save_more' && (
               <label className="block">
                 <span className="eyebrow">{form.type === 'percentage' ? 'Percent' : 'Amount'}</span>
                 <input className="field mt-1" inputMode="decimal" value={form.value} onChange={(event) => update('value', event.target.value)} />
               </label>
+              )}
             </div>
-            <label className="mt-4 block">
-              <span className="eyebrow">Applies to</span>
-              <select className="field mt-1" value="all_orders" disabled>
-                <option value="all_orders">All eligible orders</option>
-              </select>
-            </label>
+            {form.type === 'buy_more_save_more' && (
+              <div className="mt-5 rounded-[var(--radius-admin)] border border-line bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Buy More Save More tiers</h3>
+                  <button type="button" className="btn-secondary !px-3 !py-1.5 text-xs" onClick={addRule}>Add tier</button>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {form.rules.map((rule, index) => (
+                    <div key={index} className="grid gap-3 border-t border-line pt-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="eyebrow">Minimum quantity</span>
+                        <input className="field mt-1" type="number" min="1" value={rule.minimumQuantity} onChange={(event) => updateRule(index, 'minimumQuantity', event.target.value)} />
+                      </label>
+                      <label className="block">
+                        <span className="eyebrow">Discount type</span>
+                        <select className="field mt-1" value={rule.discountType} onChange={(event) => updateRule(index, 'discountType', event.target.value)}>
+                          <option value="fixed">Fixed amount</option>
+                          <option value="percentage">Percentage</option>
+                        </select>
+                      </label>
+                      {rule.discountType === 'percentage' ? (
+                        <label className="block">
+                          <span className="eyebrow">Percent</span>
+                          <input className="field mt-1" inputMode="numeric" value={rule.discountValue} onChange={(event) => updateRule(index, 'discountValue', event.target.value)} />
+                        </label>
+                      ) : (
+                        <label className="block">
+                          <span className="eyebrow">Amount</span>
+                          <input className="field mt-1" inputMode="decimal" value={rule.discountValueCents} onChange={(event) => updateRule(index, 'discountValueCents', event.target.value)} />
+                        </label>
+                      )}
+                      <div className="flex items-end justify-between gap-3">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={rule.freeShipping} onChange={(event) => updateRule(index, 'freeShipping', event.target.checked)} />
+                          Free shipping
+                        </label>
+                        {form.rules.length > 1 && <button type="button" className="text-xs text-clay underline hover:text-accent" onClick={() => removeRule(index)}>Remove</button>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Eligibility</h2>
+            <label className="mt-4 block">
+              <span className="eyebrow">Minimum quantity</span>
+              <input className="field mt-1" type="number" min="1" value={form.minimumQuantity} placeholder="No minimum" onChange={(event) => update('minimumQuantity', event.target.value)} />
+            </label>
             <label className="mt-4 block">
               <span className="eyebrow">Minimum purchase</span>
               <input className="field mt-1" inputMode="decimal" value={form.minimumPeso} placeholder="No minimum" onChange={(event) => update('minimumPeso', event.target.value)} />
@@ -222,8 +367,28 @@ export default function DiscountDetail() {
           <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Active dates</h2>
             <label className="mt-4 block">
+              <span className="eyebrow">Start date</span>
+              <input className="field mt-1" type="date" value={form.startsAt} onChange={(event) => update('startsAt', event.target.value)} />
+            </label>
+            <label className="mt-4 block">
               <span className="eyebrow">End date</span>
               <input className="field mt-1" type="date" value={form.endsAt} onChange={(event) => update('endsAt', event.target.value)} />
+            </label>
+          </section>
+
+          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Promo banner</h2>
+            <label className="mt-4 block">
+              <span className="eyebrow">Banner text</span>
+              <input className="field mt-1" value={form.bannerText} onChange={(event) => update('bannerText', event.target.value)} />
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Notification priority</span>
+              <input className="field mt-1" type="number" min="0" value={form.priority} onChange={(event) => update('priority', event.target.value)} />
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Terms or notes</span>
+              <textarea className="field mt-1" rows="3" value={form.terms} onChange={(event) => update('terms', event.target.value)} />
             </label>
           </section>
         </div>
@@ -238,8 +403,10 @@ export default function DiscountDetail() {
               <span className={`inline-flex rounded-[var(--radius-admin)] border px-2 py-1 text-[11px] font-bold uppercase ${statusBadgeClass(status)}`}>{status}</span>
             </div>
             <dl className="mt-4 space-y-2 text-sm">
-              <div><dt className="eyebrow">Type</dt><dd>{form.type === 'percentage' ? 'Percentage discount' : 'Fixed amount discount'}</dd></div>
-              <div><dt className="eyebrow">Details</dt><dd>{form.type === 'percentage' ? `${form.value || 0}% off` : `${form.value || '0.00'} off`}</dd></div>
+              <div><dt className="eyebrow">Method</dt><dd>{form.method === 'automatic' ? 'Automatic promo' : 'Discount code'}</dd></div>
+              <div><dt className="eyebrow">Type</dt><dd>{typeLabel(form.type)}</dd></div>
+              <div><dt className="eyebrow">Details</dt><dd>{valueLabel({ type: form.type, value: payload.value })}</dd></div>
+              <div><dt className="eyebrow">Notification priority</dt><dd>{form.priority || 0}</dd></div>
               <div><dt className="eyebrow">Minimum purchase</dt><dd>{form.minimumPeso ? formatPeso(pesoToCents(form.minimumPeso)) : 'No minimum'}</dd></div>
               <div><dt className="eyebrow">Usage</dt><dd>{discount.usageCount || 0}{form.usageLimit ? ` / ${form.usageLimit}` : ''} used</dd></div>
             </dl>
