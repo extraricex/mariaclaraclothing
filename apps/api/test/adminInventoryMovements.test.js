@@ -76,12 +76,19 @@ test('list accepts explicit paired dates and rejects invalid filters with reposi
   });
 });
 
-test('exports all range-filtered movements as safely escaped CSV independent of pagination fields', async () => {
+test('exports all date-filtered movements as safely escaped CSV independent of pagination fields', async () => {
   await withAdminMovementApp(API_MOVEMENTS, async (port) => {
     const response = await adminFetch(port, '/api/admin/inventory-movements/export', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ reason: 'order_created', range: '7d', sort: 'oldest', page: 2, pageSize: 1 })
+      body: JSON.stringify({
+        reason: 'order_created',
+        dateFrom: '2026-06-14',
+        dateTo: '2026-06-16',
+        sort: 'oldest',
+        page: 2,
+        pageSize: 1
+      })
     });
     const csv = await response.text();
 
