@@ -96,6 +96,10 @@ test('product page renders the collection countdown between price and size', asy
     path.join(import.meta.dirname, '..', 'src', 'lib', 'storeSettings.js'),
     'utf8'
   );
+  const nginx = await readFile(
+    path.join(import.meta.dirname, '..', 'nginx.conf'),
+    'utf8'
+  );
 
   assert.match(component, /role="timer"/);
   assert.match(component, /resolveVisitorCountdown/);
@@ -106,6 +110,7 @@ test('product page renders the collection countdown between price and size', asy
   assert.match(product, /<CollectionCountdown/);
   assert.ok(product.indexOf('<CollectionCountdown') < product.indexOf('>Size</p>'));
   assert.match(settings, /collectionCountdowns:\s*\{\}/);
+  assert.doesNotMatch(nginx, /location \/product\/\s*\{[\s\S]*?proxy_pass/);
 });
 
 test('collections admin edits and restarts one collection countdown', async () => {
