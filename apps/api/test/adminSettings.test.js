@@ -299,3 +299,56 @@ test('low stock threshold drives product summaries and product settings', async 
     assert.equal((await badPut.json()).error, 'Low stock threshold must be an integer between 1 and 999.');
   });
 });
+
+test('admin saves revisioned collection countdowns and public settings expose them', async () => {
+  await withSettingsServer(async (port) => {
+    const countdownPath = '/api/admin/settings/collection-countdowns/New%20Arrivals';
+    const unauthenticated = await fetch(`http://127.0.0.1:${port}${countdownPath}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true, message: 'Soon', durationSeconds: 60 })
+    });
+    assert.equal(unauthenticated.status, 401);
+
+    const firstResponse = await fetch(
+      `http://127.0.0.1:${port}${countdownPath}`,
+      adminRequest('PUT', {
+        enabled: true,
+        message: 'Collection closes soon',
+        durationSeconds: 7200,
+        revision: 500
+      })
+    );
+    assert.equal(firstResponse.status, 200);
+    const first = await firstResponse.json();
+    assert.deepEqual(first.countdown, {
+      enabled: true,
+      message: 'Collection closes soon',
+      durationSeconds: 7200,
+      revision: 1
+    });
+
+    const secondResponse = await fetch(
+      `http://127.0.0.1:${port}${countdownPath}`,
+      adminRequest('PUT', {
+        enabled: true,
+        message: 'Collection closes soon',
+        durationSeconds: 7200
+      })
+    );
+    assert.equal(secondResponse.status, 200);
+    assert.equal((await secondResponse.json()).countdown.revision, 2);
+
+    const publicBody = await (await fetch(
+      `http://127.0.0.1:${port}/api/storefront-settings`
+    )).json();
+    assert.equal(publicBody.settings.collectionCountdowns['New Arrivals'].revision, 2);
+
+    const unknown = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/collection-countdowns/Unknown`,
+      adminRequest('PUT', { enabled: true, message: 'Soon', durationSeconds: 60 })
+    );
+    assert.equal(unknown.status, 400);
+    assert.equal((await unknown.json()).error, 'Collection is invalid.');
+  });
+});

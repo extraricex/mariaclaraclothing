@@ -31,6 +31,7 @@ const {
   getStoreSettings,
   rotateAdminToken,
   setAdminPassword,
+  updateCollectionCountdown,
   updateSettingsSection,
   verifyAdminPassword
 } = require('../settings/storeSettingsRepository');
@@ -288,6 +289,16 @@ router.post('/settings/security/rotate-token', async (req, res, next) => {
   try {
     const record = await rotateAdminToken();
     return res.json({ token: record.token });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.put('/settings/collection-countdowns/:collectionName', async (req, res, next) => {
+  try {
+    const collectionName = String(req.params.collectionName || '').trim();
+    const settings = await updateCollectionCountdown(collectionName, req.body || {});
+    return res.json({ countdown: settings.collectionCountdowns[collectionName] });
   } catch (error) {
     return next(error);
   }
