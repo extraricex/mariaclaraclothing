@@ -9,6 +9,16 @@ const { discountRouter } = require('./routes/discounts');
 const { customerRouter } = require('./routes/customer');
 const { storeSettingsRouter } = require('./routes/storeSettings');
 
+function errorHandler(error, _req, res, _next) {
+  if (!error.status || error.status >= 500) {
+    console.error(error);
+  }
+  const body = { error: error.status ? error.message : 'Something went wrong' };
+  if (error.code) body.code = error.code;
+  if (error.details !== undefined) body.details = error.details;
+  res.status(error.status || 500).json(body);
+}
+
 function createApp() {
   const app = express();
 
@@ -32,14 +42,9 @@ function createApp() {
   app.use('/api/storefront-settings', storeSettingsRouter);
   app.use('/api/admin', adminRouter);
 
-  app.use((error, _req, res, _next) => {
-    if (!error.status || error.status >= 500) {
-      console.error(error);
-    }
-    res.status(error.status || 500).json({ error: error.status ? error.message : 'Something went wrong' });
-  });
+  app.use(errorHandler);
 
   return app;
 }
 
-module.exports = { createApp };
+module.exports = { createApp, errorHandler };

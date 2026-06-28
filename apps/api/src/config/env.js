@@ -29,9 +29,25 @@ function metaConfig(source = process.env) {
   };
 }
 
+function checkoutConfig(source = process.env) {
+  const v2Required = source.CHECKOUT_V2_REQUIRED === 'true';
+  const confirmationSecret = String(source.ORDER_CONFIRMATION_SECRET || '');
+  if (v2Required && confirmationSecret.length < 32) {
+    throw new Error('ORDER_CONFIRMATION_SECRET must be at least 32 characters when checkout V2 is required');
+  }
+
+  return {
+    v2Required,
+    confirmationSecret,
+    quoteTtlMs: 15 * 60 * 1000,
+    idempotencyTtlMs: 24 * 60 * 60 * 1000
+  };
+}
+
 const env = {
   port: Number(optional('PORT', '3000')),
-  meta: metaConfig()
+  meta: metaConfig(),
+  checkout: checkoutConfig()
 };
 
-module.exports = { env, metaConfig };
+module.exports = { env, metaConfig, checkoutConfig };
