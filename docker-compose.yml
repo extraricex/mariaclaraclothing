@@ -29,6 +29,13 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/maria_clara
       ADMIN_TOKEN: ${ADMIN_TOKEN:-local-admin-token}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      CHECKOUT_V2_REQUIRED: ${CHECKOUT_V2_REQUIRED:-false}
+      ORDER_CONFIRMATION_SECRET: ${ORDER_CONFIRMATION_SECRET:-}
+      META_CONVERSIONS_API_ENABLED: ${META_CONVERSIONS_API_ENABLED:-false}
+      META_PIXEL_ID: ${META_PIXEL_ID:-595813035761213}
+      META_CONVERSIONS_API_ACCESS_TOKEN: ${META_CONVERSIONS_API_ACCESS_TOKEN:-}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-}
+      META_CONVERSIONS_API_TEST_EVENT_CODE: ${META_CONVERSIONS_API_TEST_EVENT_CODE:-}
     ports:
       - "3000:3000"
     volumes:
@@ -38,7 +45,11 @@ services:
         condition: service_healthy
 
   web:
-    build: ./apps/web
+    build:
+      context: ./apps/web
+      args:
+        VITE_FACEBOOK_META_PIXEL_ENABLED: ${VITE_FACEBOOK_META_PIXEL_ENABLED:-true}
+        VITE_FACEBOOK_META_PIXEL_ID: ${VITE_FACEBOOK_META_PIXEL_ID:-595813035761213}
     ports:
       - "8081:80"
     depends_on:

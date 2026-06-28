@@ -78,4 +78,34 @@ test('admin product editor exposes organization fields, variant price, and total
   assert.match(source, /Total inventory/);
   assert.match(source, /variantPricePeso/);
   assert.match(source, /priceCents:\s*pesoToCents\(variantPricePeso/);
+  assert.match(source, /Product page content/);
+  assert.match(source, /Product details/);
+  assert.match(source, /Shipping/);
+  assert.match(source, /Size Chart/);
+  assert.match(source, /Width/);
+  assert.match(source, /Length/);
+  assert.match(source, /Sleeve length/);
+  assert.match(source, /Shoulder drop length/);
+  assert.match(source, /updateProductPage/);
+  assert.match(source, /updateSizeChartRow/);
+  assert.match(source, /addSizeChartRow/);
+  assert.match(source, /removeSizeChartRow/);
+  assert.match(source, /sizeChartRowIsComplete/);
+  assert.match(source, /Complete every size chart field before saving/);
+});
+
+test('storefront product page renders editable product page content and size chart rows', async () => {
+  const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'Product.jsx'), 'utf8');
+
+  assert.match(source, /productPage\.detailsText/);
+  assert.match(source, /productPage\.shippingText/);
+  assert.match(source, /productPage\.sizeChart/);
+  assert.match(source, /sizeChartRows/);
+  assert.match(source, /Shoulder drop/);
+  assert.match(source, /sleeveLength/);
+  assert.match(source, /shoulderDropLength/);
+  assert.match(source, /visibleSections/);
+  assert.match(source, /sectionTitle === 'product details'/);
+  assert.match(source, /sectionTitle !== 'shipping'/);
+  assert.match(source, /sectionTitle !== 'size chart'/);
 });

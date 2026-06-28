@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
-import { addToCart } from '../lib/cart.js';
+import { addToCart, openCartDrawer } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
+import { trackFacebookAddToCart, trackFacebookViewContent } from '../lib/metaPixel.js';
 import { sanitizeRichHtml } from '../lib/richText.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
+import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
+import CollectionCountdown from '../components/CollectionCountdown.jsx';
 
 export default function Product() {
   const { slug } = useParams();
@@ -38,6 +41,10 @@ export default function Product() {
       .catch(() => setRecommendations([]));
   }, [slug]);
 
+  useEffect(() => {
+    if (product) trackFacebookViewContent(product);
+  }, [product?.id]);
+
   const descriptionHtml = useMemo(
     () => sanitizeRichHtml(product?.productPage?.intro || product?.description || ''),
     [product]
@@ -59,22 +66,39 @@ export default function Product() {
 
   const soldOut = product.merchandisingStatus === 'sold_out';
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
+  const countdown = selectProductCountdown(product, settings);
   const variant = product.variants.find((candidate) => candidate.id === variantId) || null;
   const image = product.images[activeImage] || product.images[0];
-  const page = product.productPage || {};
+  const productPage = product.productPage || {};
+  const page = productPage;
+  const sizeChartRows = Array.isArray(productPage.sizeChart)
+    ? productPage.sizeChart.filter((row) => row && Object.values(row).some((value) => String(value || '').trim() !== ''))
+    : [];
+  const visibleSections = (page.sections || [])
+    .filter((section) => {
+      const sectionTitle = String(section.title || '').trim().toLowerCase();
+      if (productPage.detailsText && sectionTitle === 'product details') return false;
+      if (productPage.shippingText && sectionTitle === 'shipping') return false;
+      if (sizeChartRows.length && sectionTitle === 'size chart') return false;
+      if (productPage.shippingText && sectionTitle !== 'shipping') return true;
+      if (sizeChartRows.length && sectionTitle !== 'size chart') return true;
+      return true;
+    });
   const detailTabs = [
     descriptionHtml && { title: 'Description', type: 'html', html: descriptionHtml },
-    ...(page.sections || []).map((section) => ({ title: section.title, type: 'section', section })),
+    productPage.detailsText && { title: 'Product details', type: 'text', body: productPage.detailsText },
+    ...visibleSections.map((section) => ({ title: section.title, type: 'section', section })),
     {
       title: 'Size Chart',
-      type: page.sizeChartImageUrl ? 'image' : 'text',
+      type: sizeChartRows.length ? 'size-chart' : page.sizeChartImageUrl ? 'image' : 'text',
+      rows: sizeChartRows,
       imageUrl: page.sizeChartImageUrl,
       body: 'Check the product measurements before ordering. Size exchanges are subject to stock availability.'
     },
     {
       title: 'Shipping',
       type: 'text',
-      body: 'Cash on delivery nationwide. Add 2 or more items and get free shipping.'
+      body: productPage.shippingText || 'Cash on delivery nationwide. Add 2 or more items and get free shipping.'
     }
   ].filter(Boolean);
   const activeTab = detailTabs[activeDetailTab] || detailTabs[0];
@@ -94,7 +118,7 @@ export default function Product() {
 
   function handleAdd() {
     if (!variant || soldOut) return;
-    addToCart({
+    const cartItem = {
       productId: product.id,
       slug: product.slug,
       variantId: variant.id,
@@ -105,7 +129,10 @@ export default function Product() {
       imageUrl: product.images[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''
-    });
+    };
+    addToCart({ ...cartItem });
+    openCartDrawer();
+    trackFacebookAddToCart(cartItem);
     setAdded(true);
     setTimeout(() => setAdded(false), 2500);
   }
@@ -169,6 +196,10 @@ export default function Product() {
             <p className={`text-2xl font-semibold ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>
+
+          {countdown && (
+            <CollectionCountdown collectionName={countdown.collectionName} config={countdown.config} />
+          )}
 
           <div className="mt-8">
             <p className="eyebrow">Size</p>
@@ -255,6 +286,32 @@ export default function Product() {
                 )}
                 {activeTab.type === 'image' && (
                   <img src={activeTab.imageUrl} alt={`${product.name} size chart`} className="w-full" loading="lazy" />
+                )}
+                {activeTab.type === 'size-chart' && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[620px] border-collapse text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-clay">
+                          <th className="py-2 pr-4">Size</th>
+                          <th className="py-2 pr-4">Width</th>
+                          <th className="py-2 pr-4">Length</th>
+                          <th className="py-2 pr-4">Sleeve length</th>
+                          <th className="py-2">Shoulder drop</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeTab.rows.map((row, index) => (
+                          <tr key={`${row.size || 'size'}-${index}`} className="border-b border-line/60">
+                            <td className="py-2 pr-4 font-semibold text-ink">{row.size}</td>
+                            <td className="py-2 pr-4">{row.width}</td>
+                            <td className="py-2 pr-4">{row.length}</td>
+                            <td className="py-2 pr-4">{row.sleeveLength}</td>
+                            <td className="py-2">{row.shoulderDropLength}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
                 {activeTab.type === 'text' && <p>{activeTab.body}</p>}
               </div>

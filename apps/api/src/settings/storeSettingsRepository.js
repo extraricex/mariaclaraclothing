@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { hasDatabaseUrl, query } = require('../db/postgres');
+const { hasDatabaseUrl, query, transaction } = require('../db/postgres');
 
 const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-settings.json');
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
@@ -11,6 +11,8 @@ const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'invent
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
+const STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
+const DEFAULT_COUNTDOWN_MESSAGE = 'Hurry! Limited time left';
 
 let postgresCredentialsCache = { loaded: false, value: null };
 
@@ -38,6 +40,15 @@ function badRequest(message) {
   const error = new Error(message);
   error.status = 400;
   return error;
+}
+
+function defaultCollectionCountdowns() {
+  return Object.fromEntries(STOREFRONT_COLLECTIONS.map((name) => [name, {
+    enabled: false,
+    message: DEFAULT_COUNTDOWN_MESSAGE,
+    durationSeconds: 2 * 60 * 60,
+    revision: 0
+  }]));
 }
 
 function defaultStoreSettings() {
@@ -96,15 +107,45 @@ function defaultStoreSettings() {
           { heading: 'Orders', body: 'All orders are Cash on Delivery and are confirmed via text message before fulfillment. We reserve the right to cancel orders we cannot confirm.' },
           { heading: 'Pricing', body: 'Prices are in Philippine pesos and may change without notice. The price at the time of your order is what you pay.' },
           { heading: 'Product', body: 'Colors may vary slightly from photos due to screen settings and photography lighting. Measurements in size charts have a ±2cm tolerance.' },
-          { heading: 'Privacy', body: 'Your name, mobile number, and address are used only to fulfill and deliver your order. We never sell your information.' },
+          { heading: 'Privacy', body: 'We use your name, mobile number, and address to fulfill and deliver orders. The customer website also uses the Facebook Meta Pixel to send page visits and shopping actions to Meta for advertising measurement. When an order is completed, our server may send purchase details and hashed contact details to Meta through the Conversions API to match the purchase without sending your delivery address or order notes. Meta handles this information under its own privacy policy. We do not sell your personal information.' },
           { heading: 'Contact', body: 'Questions about these terms? Reach us through our social channels or the contact details on your order confirmation text.' }
         ]
       }
     },
     inventory: {
       lowStockThreshold: 12
-    }
+    },
+    collectionCountdowns: defaultCollectionCountdowns()
   };
+}
+
+function normalizeCollectionCountdown(value, fallback) {
+  const input = value && typeof value === 'object' ? value : {};
+  const enabled = input.enabled === undefined ? fallback.enabled : Boolean(input.enabled);
+  const message = String(input.message === undefined ? fallback.message : input.message).trim();
+  const durationSeconds = Number(input.durationSeconds === undefined
+    ? fallback.durationSeconds
+    : input.durationSeconds);
+  const revision = Number(input.revision === undefined ? fallback.revision : input.revision);
+
+  if (message.length > 120) throw badRequest('Countdown message must be 120 characters or fewer.');
+  if (enabled && !message) throw badRequest('Countdown message is required when enabled.');
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 359999) {
+    throw badRequest('Countdown duration must be an integer between 1 and 359999 seconds.');
+  }
+  if (!Number.isInteger(revision) || revision < 0) {
+    throw badRequest('Countdown revision is invalid.');
+  }
+  return { enabled, message, durationSeconds, revision };
+}
+
+function normalizeCollectionCountdowns(value) {
+  const input = value && typeof value === 'object' ? value : {};
+  const defaults = defaultCollectionCountdowns();
+  return Object.fromEntries(STOREFRONT_COLLECTIONS.map((name) => [
+    name,
+    normalizeCollectionCountdown(input[name], defaults[name])
+  ]));
 }
 
 function normalizeGeneral(general) {
@@ -273,7 +314,8 @@ function normalizeStoreSettings(settings) {
     shipping: normalizeShipping(value.shipping),
     payments: normalizePayments(value.payments),
     website: normalizeWebsite(value.website),
-    inventory: normalizeInventory(value.inventory)
+    inventory: normalizeInventory(value.inventory),
+    collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns)
   };
 }
 
@@ -336,6 +378,55 @@ function updateSettingsSection(section, value) {
 
   const current = normalizeStoreSettings(readJsonFile(settingsDataFile()) || {});
   const next = { ...current, [section]: normalizeSectionValue(section, value, current) };
+  writeJsonFile(settingsDataFile(), next);
+  return next;
+}
+
+function nextCollectionCountdown(current, collectionName, input) {
+  if (!STOREFRONT_COLLECTIONS.includes(collectionName)) {
+    throw badRequest('Collection is invalid.');
+  }
+  const previous = current.collectionCountdowns[collectionName];
+  const normalized = normalizeCollectionCountdown({
+    ...input,
+    revision: previous.revision
+  }, previous);
+  return {
+    ...current,
+    collectionCountdowns: {
+      ...current.collectionCountdowns,
+      [collectionName]: { ...normalized, revision: previous.revision + 1 }
+    }
+  };
+}
+
+function updateCollectionCountdown(collectionName, input) {
+  if (usePostgresSettings()) {
+    return transaction(async (client) => {
+      await client.query(
+        `INSERT INTO store_settings (key, value, updated_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (key) DO NOTHING`,
+        [SETTINGS_KEY, JSON.stringify(defaultStoreSettings())]
+      );
+      const result = await client.query(
+        'SELECT value FROM store_settings WHERE key = $1 FOR UPDATE',
+        [SETTINGS_KEY]
+      );
+      const current = normalizeStoreSettings(result.rows[0]?.value || {});
+      const next = nextCollectionCountdown(current, collectionName, input);
+      await client.query(
+        `INSERT INTO store_settings (key, value, updated_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+        [SETTINGS_KEY, JSON.stringify(next)]
+      );
+      return next;
+    });
+  }
+
+  const current = normalizeStoreSettings(readJsonFile(settingsDataFile()) || {});
+  const next = nextCollectionCountdown(current, collectionName, input);
   writeJsonFile(settingsDataFile(), next);
   return next;
 }
@@ -419,6 +510,7 @@ module.exports = {
   resetStoreSettingsForTests,
   rotateAdminToken,
   setAdminPassword,
+  updateCollectionCountdown,
   updateSettingsSection,
   verifyAdminPassword
 };

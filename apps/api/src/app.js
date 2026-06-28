@@ -31,6 +31,26 @@ const checkoutRateLimit = postOnly(rateLimit({
   message: 'Too many checkout attempts. Please slow down and try again shortly.'
 }));
 
+function errorHandler(error, req, res, _next) {
+  const status = error.status || 500;
+  if (status >= 500) {
+    // Structured server-error log: greppable, without request bodies or customer PII.
+    console.error(JSON.stringify({
+      level: 'error',
+      timestamp: new Date().toISOString(),
+      method: req?.method || '',
+      path: req?.originalUrl || '',
+      status,
+      message: error.message,
+      stack: error.stack
+    }));
+  }
+  const body = { error: error.status ? error.message : 'Something went wrong' };
+  if (error.code) body.code = error.code;
+  if (error.details !== undefined) body.details = error.details;
+  res.status(status).json(body);
+}
+
 function createApp() {
   const app = express();
 
@@ -70,24 +90,9 @@ function createApp() {
   app.use('/api/storefront-settings', storeSettingsRouter);
   app.use('/api/admin', adminRouter);
 
-  app.use((error, req, res, _next) => {
-    const status = error.status || 500;
-    if (status >= 500) {
-      // Structured server-error log: greppable, no client PII beyond the path.
-      console.error(JSON.stringify({
-        level: 'error',
-        timestamp: new Date().toISOString(),
-        method: req.method,
-        path: req.originalUrl,
-        status,
-        message: error.message,
-        stack: error.stack
-      }));
-    }
-    res.status(status).json({ error: error.status ? error.message : 'Something went wrong' });
-  });
+  app.use(errorHandler);
 
   return app;
 }
 
-module.exports = { createApp };
+module.exports = { createApp, errorHandler };

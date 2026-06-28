@@ -24,6 +24,7 @@ router.get('/', async (_req, res, next) => {
         maintenanceMode: settings.website.maintenanceMode,
         infoPages: settings.website.infoPages,
         inventory: settings.inventory,
+        collectionCountdowns: settings.collectionCountdowns,
         paymentMethods: settings.payments.methods
           .filter((method) => method.enabled)
           .map(({ id, label, instructions }) => ({ id, label, instructions }))

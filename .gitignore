@@ -21,10 +21,10 @@ test-results/
 
 # Local agent/session artifacts
 .superpowers/
+.worktrees/
 
 # Root screenshots and visual references generated during local review
 /.admin-*.png
 /.product-editor-*.png
 /.products-*.png
 /.shopify-login-reference.png
-

@@ -17,7 +17,7 @@ export default function Collections() {
   function load() {
     adminJson('/api/admin/products?sort=name_asc')
       .then((body) => setProducts(body.products))
-      .catch((err) => setStatus(err.message));
+      .catch((error) => setStatus(error.message));
   }
 
   useEffect(load, []);

@@ -17,11 +17,13 @@ async function readOrderStore() {
     const raw = await fs.readFile(ordersDataFile(), 'utf8');
     const parsed = JSON.parse(raw);
     return {
-      orders: Array.isArray(parsed.orders) ? parsed.orders : []
+      orders: Array.isArray(parsed.orders) ? parsed.orders : [],
+      statusEvents: Array.isArray(parsed.statusEvents) ? parsed.statusEvents : [],
+      trackingNotifications: Array.isArray(parsed.trackingNotifications) ? parsed.trackingNotifications : []
     };
   } catch (error) {
     if (error.code === 'ENOENT') {
-      return { orders: [] };
+      return { orders: [], statusEvents: [], trackingNotifications: [] };
     }
     throw error;
   }
@@ -30,12 +32,16 @@ async function readOrderStore() {
 async function writeOrderStore(store) {
   const filePath = ordersDataFile();
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify({ orders: store.orders }, null, 2)}\n`);
+  await fs.writeFile(filePath, `${JSON.stringify({
+    orders: store.orders,
+    statusEvents: store.statusEvents || [],
+    trackingNotifications: store.trackingNotifications || []
+  }, null, 2)}\n`);
 }
 
-async function saveOrder(order) {
+async function saveOrder(order, options = {}) {
   if (usePostgresOrders()) {
-    await upsertPostgresOrder(order);
+    await upsertPostgresOrder(order, options.client);
     return order;
   }
 
@@ -52,26 +58,54 @@ async function saveOrder(order) {
   return order;
 }
 
+async function findOrderByIdempotencyKey(key, options = {}) {
+  const normalized = String(key || '').trim();
+  if (!normalized) return null;
+  if (usePostgresOrders()) {
+    const executor = options.client || { query };
+    const result = await executor.query('SELECT * FROM orders WHERE checkout_idempotency_key = $1', [normalized]);
+    return result.rows[0] ? fromPostgresOrder(result.rows[0]) : null;
+  }
+  const store = await readOrderStore();
+  return store.orders.find((order) => order.checkoutIdempotencyKey === normalized) || null;
+}
+
 async function listOrders() {
   if (usePostgresOrders()) {
     const result = await query('SELECT * FROM orders ORDER BY placed_at DESC');
-    return result.rows.map(fromPostgresOrder);
+    return result.rows.map((row) => ({ ...fromPostgresOrder(row), statusEvents: [] }));
   }
 
   const store = await readOrderStore();
   return store.orders
     .slice()
-    .sort((a, b) => String(b.placedAt || '').localeCompare(String(a.placedAt || '')));
+    .sort((a, b) => String(b.placedAt || '').localeCompare(String(a.placedAt || '')))
+    .map((order) => ({ ...order, statusEvents: [] }));
 }
 
 async function findOrderByNumber(orderNumber) {
   if (usePostgresOrders()) {
     const result = await query('SELECT * FROM orders WHERE order_number = $1', [orderNumber]);
-    return result.rows[0] ? fromPostgresOrder(result.rows[0]) : null;
+    if (!result.rows[0]) return null;
+    return {
+      ...fromPostgresOrder(result.rows[0]),
+      statusEvents: await listOrderStatusEvents(orderNumber),
+      trackingNotifications: await listOrderTrackingNotifications(orderNumber)
+    };
   }
 
   const store = await readOrderStore();
-  return store.orders.find((order) => order.orderNumber === orderNumber) || null;
+  const order = store.orders.find((item) => item.orderNumber === orderNumber);
+  if (!order) return null;
+  return {
+    ...order,
+    statusEvents: store.statusEvents
+      .filter((event) => event.orderNumber === orderNumber)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))),
+    trackingNotifications: store.trackingNotifications
+      .filter((notification) => notification.orderNumber === orderNumber)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+  };
 }
 
 async function updateOrder(orderNumber, changes) {
@@ -104,25 +138,118 @@ async function updateOrder(orderNumber, changes) {
 
 async function resetOrderRepositoryForTests() {
   if (usePostgresOrders()) {
+    await query('DELETE FROM order_status_events');
+    await query('DELETE FROM order_tracking_notifications');
     await query('DELETE FROM orders');
     return;
   }
-  await writeOrderStore({ orders: [] });
+  await writeOrderStore({ orders: [], statusEvents: [], trackingNotifications: [] });
 }
 
-async function upsertPostgresOrder(order) {
-  await query(
+async function appendOrderStatusEvent(orderNumber, event) {
+  const normalized = normalizeStatusEvent(orderNumber, event);
+
+  if (usePostgresOrders()) {
+    await query(
+      `INSERT INTO order_status_events (id, order_number, source, changes, note, created_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
+      [
+        normalized.id,
+        normalized.orderNumber,
+        normalized.source,
+        JSON.stringify(normalized.changes),
+        normalized.note,
+        normalized.createdAt
+      ]
+    );
+    return normalized;
+  }
+
+  const store = await readOrderStore();
+  store.statusEvents.push(normalized);
+  await writeOrderStore(store);
+  return normalized;
+}
+
+async function listOrderStatusEvents(orderNumber) {
+  if (usePostgresOrders()) {
+    const result = await query(
+      `SELECT * FROM order_status_events
+       WHERE order_number = $1
+       ORDER BY created_at DESC, id DESC`,
+      [orderNumber]
+    );
+    return result.rows.map(fromPostgresStatusEvent);
+  }
+
+  const store = await readOrderStore();
+  return store.statusEvents
+    .filter((event) => event.orderNumber === orderNumber)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+
+async function appendOrderTrackingNotification(orderNumber, notification) {
+  const normalized = normalizeTrackingNotification(orderNumber, notification);
+
+  if (usePostgresOrders()) {
+    await query(
+      `INSERT INTO order_tracking_notifications (
+         id, order_number, channel, status, source, recipient, tracking_number, message, created_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        normalized.id,
+        normalized.orderNumber,
+        normalized.channel,
+        normalized.status,
+        normalized.source,
+        normalized.recipient,
+        normalized.trackingNumber,
+        normalized.message,
+        normalized.createdAt
+      ]
+    );
+    return normalized;
+  }
+
+  const store = await readOrderStore();
+  store.trackingNotifications.push(normalized);
+  await writeOrderStore(store);
+  return normalized;
+}
+
+async function listOrderTrackingNotifications(orderNumber) {
+  if (usePostgresOrders()) {
+    const result = await query(
+      `SELECT * FROM order_tracking_notifications
+       WHERE order_number = $1
+       ORDER BY created_at DESC, id DESC`,
+      [orderNumber]
+    );
+    return result.rows.map(fromPostgresTrackingNotification);
+  }
+
+  const store = await readOrderStore();
+  return store.trackingNotifications
+    .filter((notification) => notification.orderNumber === orderNumber)
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+
+async function upsertPostgresOrder(order, transactionClient) {
+  const executor = transactionClient || { query };
+  await executor.query(
     `INSERT INTO orders (
       order_number, customer, address, items, subtotal_cents, discount_total_cents,
       shipping_fee_cents, shipping_region, shipping_region_label, free_shipping_unlocked,
       total_cents, cart_snapshot, checkout_channel, payment_method, channel, status,
       fulfillment_status, payment_status, cod_confirmation_status, delivery_status,
       delivery_method, tracking_number, tags, notes, exported_to_jnt, jnt_exported_at,
-      admin_editable_totals, placed_at, updated_at, discount_code, customer_account_id, discount_snapshot
+      admin_editable_totals, placed_at, updated_at, discount_code, customer_account_id, discount_snapshot,
+      checkout_idempotency_key
     ) VALUES (
       $1, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10,
       $11, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20,
-      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb
+      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33
     )
     ON CONFLICT (order_number) DO UPDATE SET
       customer = EXCLUDED.customer,
@@ -154,6 +281,7 @@ async function upsertPostgresOrder(order) {
       discount_code = EXCLUDED.discount_code,
       customer_account_id = EXCLUDED.customer_account_id,
       discount_snapshot = EXCLUDED.discount_snapshot,
+      checkout_idempotency_key = EXCLUDED.checkout_idempotency_key,
       placed_at = EXCLUDED.placed_at,
       updated_at = now()`,
     [
@@ -188,7 +316,8 @@ async function upsertPostgresOrder(order) {
       order.updatedAt || null,
       order.discountCode || '',
       order.customerAccountId || '',
-      JSON.stringify(order.discountSnapshot || {})
+      JSON.stringify(order.discountSnapshot || {}),
+      order.checkoutIdempotencyKey || ''
     ]
   );
 }
@@ -204,6 +333,7 @@ function fromPostgresOrder(row) {
     discountCode: row.discount_code || '',
     customerAccountId: row.customer_account_id || '',
     discountSnapshot: row.discount_snapshot || {},
+    checkoutIdempotencyKey: row.checkout_idempotency_key || '',
     shippingFeeCents: row.shipping_fee_cents,
     shippingRegion: row.shipping_region,
     shippingRegionLabel: row.shipping_region_label,
@@ -230,8 +360,65 @@ function fromPostgresOrder(row) {
   };
 }
 
+function normalizeStatusEvent(orderNumber, event) {
+  const createdAt = event.createdAt || new Date().toISOString();
+  return {
+    id: event.id || `status-event-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    orderNumber: String(orderNumber || event.orderNumber || '').trim(),
+    source: String(event.source || 'admin').trim(),
+    changes: event.changes && typeof event.changes === 'object' ? event.changes : {},
+    note: String(event.note || ''),
+    createdAt
+  };
+}
+
+function normalizeTrackingNotification(orderNumber, notification) {
+  const createdAt = notification.createdAt || new Date().toISOString();
+  return {
+    id: notification.id || `tracking-notification-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    orderNumber: String(orderNumber || notification.orderNumber || '').trim(),
+    channel: String(notification.channel || 'sms').trim(),
+    status: String(notification.status || 'recorded').trim(),
+    source: String(notification.source || 'admin').trim(),
+    recipient: String(notification.recipient || '').trim(),
+    trackingNumber: String(notification.trackingNumber || '').trim(),
+    message: String(notification.message || '').trim(),
+    createdAt
+  };
+}
+
+function fromPostgresStatusEvent(row) {
+  return {
+    id: row.id,
+    orderNumber: row.order_number,
+    source: row.source,
+    changes: row.changes || {},
+    note: row.note || '',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ''
+  };
+}
+
+function fromPostgresTrackingNotification(row) {
+  return {
+    id: row.id,
+    orderNumber: row.order_number,
+    channel: row.channel,
+    status: row.status,
+    source: row.source,
+    recipient: row.recipient || '',
+    trackingNumber: row.tracking_number || '',
+    message: row.message || '',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : ''
+  };
+}
+
 module.exports = {
+  appendOrderStatusEvent,
+  appendOrderTrackingNotification,
+  findOrderByIdempotencyKey,
   findOrderByNumber,
+  listOrderStatusEvents,
+  listOrderTrackingNotifications,
   listOrders,
   resetOrderRepositoryForTests,
   saveOrder,

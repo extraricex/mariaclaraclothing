@@ -2,12 +2,18 @@ const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { deductVariantStock } = require('../products/catalogRepository');
-const { findOrderByNumber, saveOrder } = require('../orders/orderRepository');
+const { findOrderByIdempotencyKey, findOrderByNumber, saveOrder } = require('../orders/orderRepository');
+const { appendInventoryMovements } = require('../inventory/inventoryMovementRepository');
 const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
 const { incrementDiscountUsage } = require('../discounts/discountRepository');
 const { quoteCart } = require('../promos/promoEngine');
 const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
 const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
+const { hasDatabaseUrl, transaction } = require('../db/postgres');
+const { env } = require('../config/env');
+const { persistPostgresCheckout } = require('../orders/checkoutService');
+const { buildMetaPurchaseEvent, parseMetaCookies } = require('../marketing/metaEvent');
+const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 
 const router = express.Router();
 
@@ -48,22 +54,72 @@ router.post('/', async (req, res, next) => {
       customerAccountId,
       placedAt: new Date().toISOString()
     };
-    await deductVariantStock(order.items.map((item) => ({
+    const stockItems = order.items.map((item) => ({
       slug: String(item.productId).replace(/^catalog-/, ''),
       sku: item.sku,
       size: item.size,
       quantity: item.quantity,
       productName: item.productName
-    })));
-    await saveOrder(persistedOrder);
-    await markCartSessionConverted(req.body?.cartSessionId, orderNumber);
+    }));
+    const movements = order.items.map((item) => ({
+      orderNumber,
+      source: 'order',
+      reason: 'order_created',
+      productSlug: String(item.productId).replace(/^catalog-/, ''),
+      productName: item.productName,
+      sku: item.sku,
+      size: item.size,
+      quantityChange: -Math.abs(Number(item.quantity || 0))
+    }));
+    let completedOrder = persistedOrder;
 
-    if (persistedOrder.discountCode) {
-      await incrementDiscountUsage(persistedOrder.discountCode);
+    if (hasDatabaseUrl()) {
+      const cookies = parseMetaCookies(req.headers.cookie);
+      completedOrder = await persistPostgresCheckout({
+        persistedOrder,
+        cartSessionId: req.body?.cartSessionId,
+        stockItems,
+        movements,
+        discountCode: persistedOrder.discountCode,
+        requestContext: {
+          ...cookies,
+          clientIp: req.ip,
+          clientUserAgent: req.get('user-agent') || '',
+          sourceUrl: checkoutSourceUrl(req)
+        }
+      }, {
+        transaction,
+        findByIdempotencyKey: findOrderByIdempotencyKey,
+        deductStock: deductVariantStock,
+        saveOrder,
+        appendMovements: appendInventoryMovements,
+        convertCart: markCartSessionConverted,
+        incrementDiscount: incrementDiscountUsage,
+        buildMetaEvent: buildMetaPurchaseEvent,
+        insertOutbox: insertMetaPurchaseOutbox,
+        metaEnabled: env.meta.enabled
+      });
+    } else {
+      await deductVariantStock(stockItems);
+      await saveOrder(persistedOrder);
+      await appendInventoryMovements(movements);
+      await markCartSessionConverted(req.body?.cartSessionId, orderNumber);
+      if (persistedOrder.discountCode) {
+        await incrementDiscountUsage(persistedOrder.discountCode);
+      }
     }
 
     res.status(201).json({
-      orderNumber,
+      orderNumber: completedOrder.orderNumber,
+      trackingEventId: `purchase:${completedOrder.orderNumber}`,
+      currency: 'PHP',
+      totalCents: completedOrder.totalCents,
+      items: completedOrder.items.map((item) => ({
+        variantId: item.variantId,
+        externalPosVariantId: item.externalPosVariantId || '',
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents
+      })),
       syncStatus: 'frontend_only',
       checkoutChannel: order.checkoutChannel,
       paymentMethod: order.paymentMethod,
@@ -77,6 +133,16 @@ router.post('/', async (req, res, next) => {
     next(error);
   }
 });
+
+function checkoutSourceUrl(req) {
+  const origin = String(req.get('origin') || '').trim();
+  if (!/^https?:\/\//i.test(origin)) return '';
+  try {
+    return new URL('/checkout', origin).toString();
+  } catch (_error) {
+    return '';
+  }
+}
 
 function createOrderNumber() {
   return `DEMO-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
@@ -250,6 +316,7 @@ async function normalizeCheckoutItem(item) {
     productName: product.name,
     size: variant.size,
     sku: variant.sku,
+    externalPosVariantId: variant.externalPosVariantId || '',
     quantity,
     unitPriceCents: product.priceCents
   };

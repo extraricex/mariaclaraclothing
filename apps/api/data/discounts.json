@@ -1,3 +1,32 @@
 {
-  "discounts": []
+  "discounts": [
+    {
+      "code": "BUY2FREESHIP",
+      "name": "Buy 2 Free Shipping",
+      "description": "Free shipping when the customer buys two or more items.",
+      "method": "automatic",
+      "type": "buy_more_save_more",
+      "value": 0,
+      "status": "active",
+      "startsAt": null,
+      "endsAt": null,
+      "usageLimit": null,
+      "usageCount": 22,
+      "minimumQuantity": 2,
+      "minimumSubtotalCents": null,
+      "bannerText": "Buy 2 or more items and get free shipping",
+      "terms": "Add at least two items to unlock free shipping.",
+      "rules": [
+        {
+          "minimumQuantity": 2,
+          "discountType": "fixed",
+          "discountValue": 0,
+          "discountValueCents": 0,
+          "freeShipping": true
+        }
+      ],
+      "createdAt": "2026-06-19T00:00:00.000Z",
+      "updatedAt": "2026-06-20T02:53:19.876Z"
+    }
+  ]
 }

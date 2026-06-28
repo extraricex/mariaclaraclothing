@@ -373,7 +373,7 @@ unchanged).
 Run: `DATABASE_URL= ADMIN_TOKEN= node --test test/inventoryDeduction.test.js`
 Expected: FAIL — "creating an order deducts the ordered variant stock" fails (stock still
 equals `picked.stock`, because the route does not deduct yet). The oversell test passes
-already (pre-check). 
+already (pre-check).
 
 - [ ] **Step 3: Wire deduction into the route**
 

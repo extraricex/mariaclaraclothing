@@ -111,6 +111,9 @@ test('website settings merge partial updates over the stored section', async () 
     assert.ok(defaults.website.infoPages.faq.length >= 3);
     assert.ok(defaults.website.infoPages.shippingReturns.length >= 3);
     assert.ok(defaults.website.infoPages.terms.length >= 3);
+    const privacy = defaults.website.infoPages.terms.find((section) => section.heading === 'Privacy');
+    assert.match(privacy.body, /Facebook Meta Pixel/);
+    assert.match(privacy.body, /hashed contact details/);
     assert.ok(defaults.website.infoPages.faq[0].heading);
     assert.ok(defaults.website.infoPages.faq[0].body);
 
@@ -166,6 +169,66 @@ test('inventory settings store the low stock threshold', async () => {
       /Low stock threshold must be an integer between 1 and 999\./);
     assert.throws(() => repository.updateSettingsSection('inventory', { lowStockThreshold: 12.5 }),
       /Low stock threshold must be an integer between 1 and 999\./);
+  } finally {
+    restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('collection countdown settings validate and increment server revisions', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-countdowns-'));
+  const previousSettingsFile = process.env.STORE_SETTINGS_FILE;
+  process.env.STORE_SETTINGS_FILE = path.join(tempDir, 'store-settings.json');
+
+  try {
+    const repository = freshRepository();
+    const defaults = repository.getStoreSettings();
+    assert.deepEqual(defaults.collectionCountdowns['New Arrivals'], {
+      enabled: false,
+      message: 'Hurry! Limited time left',
+      durationSeconds: 7200,
+      revision: 0
+    });
+    assert.deepEqual(defaults.collectionCountdowns['Freedom of Mind'], {
+      enabled: false,
+      message: 'Hurry! Limited time left',
+      durationSeconds: 7200,
+      revision: 0
+    });
+
+    const first = repository.updateCollectionCountdown('New Arrivals', {
+      enabled: true,
+      message: '  Drop ends soon  ',
+      durationSeconds: 3661,
+      revision: 999
+    });
+    assert.deepEqual(first.collectionCountdowns['New Arrivals'], {
+      enabled: true,
+      message: 'Drop ends soon',
+      durationSeconds: 3661,
+      revision: 1
+    });
+
+    const second = repository.updateCollectionCountdown('New Arrivals', {
+      enabled: false,
+      message: 'Drop ends soon',
+      durationSeconds: 3661
+    });
+    assert.equal(second.collectionCountdowns['New Arrivals'].revision, 2);
+    assert.equal(repository.getStoreSettings().collectionCountdowns['New Arrivals'].revision, 2);
+
+    assert.throws(() => repository.updateCollectionCountdown('Unknown', {
+      enabled: true, message: 'Soon', durationSeconds: 60
+    }), /Collection is invalid/);
+    assert.throws(() => repository.updateCollectionCountdown('New Arrivals', {
+      enabled: true, message: '', durationSeconds: 60
+    }), /message is required/);
+    assert.throws(() => repository.updateCollectionCountdown('New Arrivals', {
+      enabled: true, message: 'Soon', durationSeconds: 0
+    }), /between 1 and 359999 seconds/);
+    assert.throws(() => repository.updateCollectionCountdown('New Arrivals', {
+      enabled: true, message: 'Soon', durationSeconds: 360000
+    }), /between 1 and 359999 seconds/);
   } finally {
     restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
     await fs.rm(tempDir, { recursive: true, force: true });

@@ -12,7 +12,7 @@ test('admin discounts page exposes Shopify-style views, filters, table, and crea
   assert.match(source, /discount-search-field/);
   assert.match(source, /Create discount/);
   assert.match(source, /Generate code/);
-  assert.match(source, /Discount method/);
+  assert.match(source, /Promo method/);
   assert.match(source, /Discount code/);
   assert.match(source, /All/);
   assert.match(source, /Active/);
@@ -21,7 +21,7 @@ test('admin discounts page exposes Shopify-style views, filters, table, and crea
   assert.match(source, /Disabled/);
   assert.match(source, /Method/);
   assert.match(source, /Type/);
-  assert.match(source, /Combinations/);
+  assert.match(source, /Banner/);
   assert.match(source, /Used/);
   assert.match(source, /Start/);
   assert.match(source, /End/);
@@ -43,7 +43,7 @@ test('admin discount detail editor exposes Shopify-style editable cards and acti
   assert.match(appSource, /discounts\/:code/);
   assert.match(source, /discount-detail-shell/);
   assert.match(source, /discount-detail-grid/);
-  assert.match(source, /Amount off products/);
+  assert.match(source, /Promo identity/);
   assert.match(source, /Discount value/);
   assert.match(source, /Eligibility/);
   assert.match(source, /Minimum purchase/);

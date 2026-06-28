@@ -31,6 +31,7 @@ function normalizeDiscount(discount) {
   const usageLimit = discount.usageLimit === null || discount.usageLimit === undefined || discount.usageLimit === ''
     ? null
     : Math.max(0, Math.round(Number(discount.usageLimit) || 0));
+  const priority = Math.max(0, Math.round(Number(discount.priority) || 0));
   const minimumSubtotalCents = discount.minimumSubtotalCents === null || discount.minimumSubtotalCents === undefined || discount.minimumSubtotalCents === ''
     ? null
     : Math.max(0, Math.round(Number(discount.minimumSubtotalCents) || 0));
@@ -50,6 +51,7 @@ function normalizeDiscount(discount) {
     endsAt,
     usageLimit,
     usageCount: Math.max(0, Math.round(Number(discount.usageCount) || 0)),
+    priority,
     minimumQuantity,
     minimumSubtotalCents,
     bannerText: String(discount.bannerText || '').trim(),
@@ -133,6 +135,7 @@ function fromPostgresDiscount(row) {
     endsAt: row.ends_at ? new Date(row.ends_at).toISOString() : null,
     usageLimit: row.usage_limit,
     usageCount: row.usage_count,
+    priority: row.priority || 0,
     minimumQuantity: row.minimum_quantity,
     minimumSubtotalCents: row.minimum_subtotal_cents,
     bannerText: row.banner_text || '',
@@ -169,10 +172,10 @@ function saveDiscount(discount) {
     return query(
       `INSERT INTO discount_codes (
          code, name, description, method, type, value, status, starts_at, ends_at,
-         usage_limit, usage_count, minimum_quantity, minimum_subtotal_cents,
+         usage_limit, usage_count, priority, minimum_quantity, minimum_subtotal_cents,
          banner_text, terms, rules, created_at, updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19)
        ON CONFLICT (code) DO UPDATE SET
          name = EXCLUDED.name,
          description = EXCLUDED.description,
@@ -184,6 +187,7 @@ function saveDiscount(discount) {
          ends_at = EXCLUDED.ends_at,
          usage_limit = EXCLUDED.usage_limit,
          usage_count = EXCLUDED.usage_count,
+         priority = EXCLUDED.priority,
          minimum_quantity = EXCLUDED.minimum_quantity,
          minimum_subtotal_cents = EXCLUDED.minimum_subtotal_cents,
          banner_text = EXCLUDED.banner_text,
@@ -202,6 +206,7 @@ function saveDiscount(discount) {
         record.endsAt,
         record.usageLimit,
         record.usageCount,
+        record.priority,
         record.minimumQuantity,
         record.minimumSubtotalCents,
         record.bannerText,
@@ -233,10 +238,11 @@ function deleteDiscount(code) {
   return deleted;
 }
 
-function incrementDiscountUsage(code) {
+function incrementDiscountUsage(code, options = {}) {
   const normalized = normalizeDiscountCode(code);
   if (usePostgresDiscounts()) {
-    return query(
+    const executor = options.client || { query };
+    return executor.query(
       'UPDATE discount_codes SET usage_count = usage_count + 1, updated_at = now() WHERE code = $1',
       [normalized]
     ).then(() => undefined);
