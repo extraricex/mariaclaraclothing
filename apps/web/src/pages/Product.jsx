@@ -6,7 +6,9 @@ import { formatMoney } from '../lib/money.js';
 import { trackFacebookAddToCart, trackFacebookViewContent } from '../lib/metaPixel.js';
 import { sanitizeRichHtml } from '../lib/richText.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
+import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
+import CollectionCountdown from '../components/CollectionCountdown.jsx';
 
 export default function Product() {
   const { slug } = useParams();
@@ -64,6 +66,7 @@ export default function Product() {
 
   const soldOut = product.merchandisingStatus === 'sold_out';
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
+  const countdown = selectProductCountdown(product, settings);
   const variant = product.variants.find((candidate) => candidate.id === variantId) || null;
   const image = product.images[activeImage] || product.images[0];
   const productPage = product.productPage || {};
@@ -193,6 +196,10 @@ export default function Product() {
             <p className={`text-2xl font-semibold ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>
+
+          {countdown && (
+            <CollectionCountdown collectionName={countdown.collectionName} config={countdown.config} />
+          )}
 
           <div className="mt-8">
             <p className="eyebrow">Size</p>

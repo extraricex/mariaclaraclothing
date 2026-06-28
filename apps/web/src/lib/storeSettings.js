@@ -54,7 +54,8 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   },
   maintenanceMode: false,
   infoPages: DEFAULT_INFO_PAGES,
-  inventory: { lowStockThreshold: 12 }
+  inventory: { lowStockThreshold: 12 },
+  collectionCountdowns: {}
 };
 
 let settingsPromise = null;

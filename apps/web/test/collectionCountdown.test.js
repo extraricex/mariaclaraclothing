@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   countdownStorageKey,
   durationPartsToSeconds,
@@ -79,4 +81,29 @@ test('malformed or unavailable storage does not block a timer', () => {
     setItem() { throw new Error('blocked'); }
   };
   assert.equal(resolveVisitorCountdown('New Arrivals', enabled, unavailable, 100).deadlineMs, 7200100);
+});
+
+test('product page renders the collection countdown between price and size', async () => {
+  const component = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'components', 'CollectionCountdown.jsx'),
+    'utf8'
+  );
+  const product = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'pages', 'Product.jsx'),
+    'utf8'
+  );
+  const settings = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'lib', 'storeSettings.js'),
+    'utf8'
+  );
+
+  assert.match(component, /role="timer"/);
+  assert.match(component, /resolveVisitorCountdown/);
+  assert.match(component, /setInterval/);
+  assert.match(component, /rounded-2xl/);
+  assert.match(component, /text-accent/);
+  assert.match(product, /selectProductCountdown/);
+  assert.match(product, /<CollectionCountdown/);
+  assert.ok(product.indexOf('<CollectionCountdown') < product.indexOf('>Size</p>'));
+  assert.match(settings, /collectionCountdowns:\s*\{\}/);
 });
