@@ -1,0 +1,82 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  countdownStorageKey,
+  durationPartsToSeconds,
+  formatRemainingTime,
+  resolveVisitorCountdown,
+  selectProductCountdown
+} from '../src/lib/collectionCountdown.js';
+
+function memoryStorage(initial = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    value: (key) => values.get(key) ?? null
+  };
+}
+
+const enabled = {
+  enabled: true,
+  message: 'Hurry! Limited time left',
+  durationSeconds: 7200,
+  revision: 4
+};
+
+test('duration fields validate and format through 99:59:59', () => {
+  assert.equal(durationPartsToSeconds('02', '03', '04'), 7384);
+  assert.equal(durationPartsToSeconds('99', '59', '59'), 359999);
+  assert.throws(() => durationPartsToSeconds('00', '00', '00'), /at least one second/);
+  assert.throws(() => durationPartsToSeconds('100', '00', '00'), /99:59:59/);
+  assert.equal(formatRemainingTime(7384), '02:03:04');
+});
+
+test('only the first product collection selects a countdown', () => {
+  const settings = {
+    collectionCountdowns: {
+      'New Arrivals': { ...enabled, enabled: false },
+      'Freedom of Mind': enabled
+    }
+  };
+  assert.equal(selectProductCountdown({
+    collections: ['New Arrivals', 'Freedom of Mind']
+  }, settings), null);
+  assert.deepEqual(selectProductCountdown({
+    collections: ['Freedom of Mind', 'New Arrivals']
+  }, settings), {
+    collectionName: 'Freedom of Mind',
+    config: enabled
+  });
+  assert.equal(selectProductCountdown(
+    { collections: ['Freedom of Mind'] },
+    { collectionCountdowns: { 'Freedom of Mind': { ...enabled, durationSeconds: 360000 } } }
+  ), null);
+});
+
+test('visitor deadline persists, expires, and restarts only for a new revision', () => {
+  const storage = memoryStorage();
+  const key = countdownStorageKey('New Arrivals');
+  const first = resolveVisitorCountdown('New Arrivals', enabled, storage, 1000);
+  assert.equal(first.deadlineMs, 7201000);
+  assert.equal(JSON.parse(storage.value(key)).revision, 4);
+
+  assert.equal(resolveVisitorCountdown('New Arrivals', enabled, storage, 2000).deadlineMs, 7201000);
+  assert.equal(resolveVisitorCountdown('New Arrivals', enabled, storage, 7201000), null);
+  assert.equal(JSON.parse(storage.value(key)).deadlineMs, 7201000);
+
+  const restarted = resolveVisitorCountdown(
+    'New Arrivals', { ...enabled, revision: 5 }, storage, 8000000
+  );
+  assert.equal(restarted.deadlineMs, 15200000);
+});
+
+test('malformed or unavailable storage does not block a timer', () => {
+  const malformed = memoryStorage({ [countdownStorageKey('New Arrivals')]: '{bad' });
+  assert.equal(resolveVisitorCountdown('New Arrivals', enabled, malformed, 100).deadlineMs, 7200100);
+  const unavailable = {
+    getItem() { throw new Error('blocked'); },
+    setItem() { throw new Error('blocked'); }
+  };
+  assert.equal(resolveVisitorCountdown('New Arrivals', enabled, unavailable, 100).deadlineMs, 7200100);
+});
