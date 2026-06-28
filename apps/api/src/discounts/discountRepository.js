@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { hasDatabaseUrl, query } = require('../db/postgres');
+const { CommerceError } = require('../checkout/commerceError');
 
 const DEFAULT_DISCOUNTS_FILE = path.join(__dirname, '..', '..', 'data', 'discounts.json');
 const DISCOUNT_TYPES = new Set(['percentage', 'fixed', 'buy_more_save_more', 'free_shipping', 'bundle']);
@@ -257,6 +258,50 @@ function incrementDiscountUsage(code, options = {}) {
   return undefined;
 }
 
+async function claimDiscountUsage(code, options = {}) {
+  const normalized = normalizeDiscountCode(code);
+  const unavailable = () => new CommerceError('Discount is no longer available.', {
+    code: 'promo_unavailable',
+    status: 409,
+    details: { code: normalized }
+  });
+
+  if (!normalized) throw unavailable();
+
+  if (options.client || usePostgresDiscounts()) {
+    const executor = options.client || { query };
+    const result = await executor.query(
+      `UPDATE discount_codes
+       SET usage_count = usage_count + 1, updated_at = now()
+       WHERE code = $1 AND (usage_limit IS NULL OR usage_count < usage_limit)
+       RETURNING code`,
+      [normalized]
+    );
+    if (!result.rows[0]) throw unavailable();
+    return result.rows[0].code;
+  }
+
+  const discounts = readDiscountsFile();
+  const discount = discounts.find((candidate) => candidate.code === normalized);
+  const now = Date.now();
+  if (
+    !discount ||
+    discount.status !== 'active' ||
+    (discount.startsAt && new Date(discount.startsAt).getTime() > now) ||
+    (discount.endsAt && new Date(discount.endsAt).getTime() < now) ||
+    (discount.usageLimit !== null &&
+      discount.usageLimit !== undefined &&
+      Number(discount.usageCount || 0) >= Number(discount.usageLimit))
+  ) {
+    throw unavailable();
+  }
+
+  discount.usageCount = Number(discount.usageCount || 0) + 1;
+  discount.updatedAt = new Date().toISOString();
+  writeDiscountsFile(discounts);
+  return normalized;
+}
+
 function discountValidationError(discount, subtotalCents) {
   if (!discount || discount.status !== 'active') {
     return 'Discount code is invalid';
@@ -281,6 +326,7 @@ function computeDiscountCents(discount, subtotalCents) {
 }
 
 module.exports = {
+  claimDiscountUsage,
   computeDiscountCents,
   deleteDiscount,
   discountValidationError,
