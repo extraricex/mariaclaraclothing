@@ -144,7 +144,7 @@ export default function Collections() {
             <span className="relative inline-flex h-6 w-11 items-center">
               <input
                 type="checkbox"
-                className="peer sr-only"
+                className="peer absolute inset-0 z-10 cursor-pointer opacity-0"
                 checked={countdownForm.enabled}
                 onChange={(event) => setCountdownForm((value) => ({
                   ...value,

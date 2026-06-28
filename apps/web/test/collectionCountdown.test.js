@@ -123,4 +123,5 @@ test('collections admin edits and restarts one collection countdown', async () =
   assert.match(source, /durationPartsToSeconds/);
   assert.match(source, /settings\/collection-countdowns/);
   assert.match(source, /Live preview/);
+  assert.match(source, /absolute inset-0 z-10 cursor-pointer opacity-0/);
 });
