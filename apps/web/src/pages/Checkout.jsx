@@ -497,8 +497,15 @@ export default function Checkout() {
               <div className="mt-6 space-y-5">
                 {items.map((item) => (
                   <article key={item.variantId} className="flex gap-4">
-                    <div className="relative h-20 w-16 shrink-0 overflow-hidden bg-cream">
-                      {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-cover" loading="lazy" />}
+                    <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20">
+                      {item.imageUrl && (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          className="block h-full w-full object-contain"
+                          loading="lazy"
+                        />
+                      )}
                       <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-paper">{item.quantity}</span>
                     </div>
                     <div className="flex-1">

@@ -26,3 +26,21 @@ test('admin sidebar renders an expandable orders dropdown with draft and abandon
   assert.match(source, /hover:border-accent/);
   assert.doesNotMatch(source, /aria-disabled="true"/);
 });
+
+test('Products dropdown links to the dedicated product countdown route', async () => {
+  const layout = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'admin', 'AdminLayout.jsx'),
+    'utf8'
+  );
+  const app = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'App.jsx'),
+    'utf8'
+  );
+
+  assert.match(layout, /to: '\/admin\/products\/countdown', label: 'Product page countdown'/);
+  assert.ok(layout.indexOf("label: 'Collections'") < layout.indexOf("label: 'Product page countdown'"));
+  assert.ok(layout.indexOf("label: 'Product page countdown'") < layout.indexOf("label: 'Inventory'"));
+  assert.match(app, /import ProductCountdown from '\.\/admin\/ProductCountdown\.jsx'/);
+  assert.match(app, /path="products\/countdown" element=\{<ProductCountdown \/>\}/);
+  assert.ok(app.indexOf('path="products/countdown"') < app.indexOf('path="products/:slug"'));
+});

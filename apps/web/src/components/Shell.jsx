@@ -121,8 +121,19 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
               <div className="divide-y divide-line">
                 {items.map((item) => (
                   <article key={item.variantId} className="flex gap-4 py-5">
-                    <Link to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`} className="h-24 w-18 shrink-0 overflow-hidden bg-cream" onClick={onClose}>
-                      {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-cover" loading="lazy" />}
+                    <Link
+                      to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`}
+                      className="aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20"
+                      onClick={onClose}
+                    >
+                      {item.imageUrl && (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          className="block h-full w-full object-contain"
+                          loading="lazy"
+                        />
+                      )}
                     </Link>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">

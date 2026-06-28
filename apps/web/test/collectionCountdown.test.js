@@ -111,22 +111,36 @@ test('product page renders the collection countdown between price and size', asy
   assert.ok(product.indexOf('<CollectionCountdown') < product.indexOf('>Size</p>'));
   assert.match(settings, /collectionCountdowns:\s*\{\}/);
   assert.doesNotMatch(nginx, /location \/product\/\s*\{[\s\S]*?proxy_pass/);
+  assert.match(
+    nginx,
+    /location = \/index\.html\s*\{[\s\S]*?Cache-Control "no-store, no-cache, must-revalidate"/
+  );
 });
 
-test('collections admin edits and restarts one collection countdown', async () => {
-  const source = await readFile(
+test('dedicated product countdown page owns the editor and Collections stays focused', async () => {
+  const countdownPage = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'admin', 'ProductCountdown.jsx'),
+    'utf8'
+  );
+  const collectionsPage = await readFile(
     path.join(import.meta.dirname, '..', 'src', 'admin', 'Collections.jsx'),
     'utf8'
   );
-  assert.match(source, /Product page countdown/);
-  assert.match(source, /Show countdown/);
-  assert.match(source, /Marketing message/);
-  assert.match(source, /Hours/);
-  assert.match(source, /Minutes/);
-  assert.match(source, /Seconds/);
-  assert.match(source, /Save and restart countdown/);
-  assert.match(source, /durationPartsToSeconds/);
-  assert.match(source, /settings\/collection-countdowns/);
-  assert.match(source, /Live preview/);
-  assert.match(source, /absolute inset-0 z-10 cursor-pointer opacity-0/);
+
+  assert.match(countdownPage, /Product page countdown/);
+  assert.match(countdownPage, /Show countdown/);
+  assert.match(countdownPage, /Marketing message/);
+  assert.match(countdownPage, /Hours/);
+  assert.match(countdownPage, /Minutes/);
+  assert.match(countdownPage, /Seconds/);
+  assert.match(countdownPage, /Save and restart countdown/);
+  assert.match(countdownPage, /durationPartsToSeconds/);
+  assert.match(countdownPage, /settings\/collection-countdowns/);
+  assert.match(countdownPage, /Live preview/);
+  assert.match(countdownPage, /absolute inset-0 z-10 cursor-pointer opacity-0/);
+
+  assert.doesNotMatch(collectionsPage, /Product page countdown/);
+  assert.doesNotMatch(collectionsPage, /durationPartsToSeconds/);
+  assert.doesNotMatch(collectionsPage, /\/api\/admin\/settings/);
+  assert.doesNotMatch(collectionsPage, /countdownForm/);
 });

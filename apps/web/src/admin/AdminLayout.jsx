@@ -12,6 +12,7 @@ const ORDER_SUBNAV = [
 const PRODUCT_SUBNAV = [
   { to: '/admin/products', label: 'All products', end: true },
   { to: '/admin/collections', label: 'Collections' },
+  { to: '/admin/products/countdown', label: 'Product page countdown' },
   { to: '/admin/inventory', label: 'Inventory' }
 ];
 

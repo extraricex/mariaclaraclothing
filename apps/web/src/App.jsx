@@ -18,6 +18,7 @@ import OrderDetail from './admin/OrderDetail.jsx';
 import CartSessions from './admin/CartSessions.jsx';
 import Products from './admin/Products.jsx';
 import ProductEditor from './admin/ProductEditor.jsx';
+import ProductCountdown from './admin/ProductCountdown.jsx';
 import Collections from './admin/Collections.jsx';
 import Inventory from './admin/Inventory.jsx';
 import Customers from './admin/Customers.jsx';
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="orders/abandoned-checkout" element={<CartSessions status="abandoned_checkout" />} />
         <Route path="orders/:orderNumber" element={<OrderDetail />} />
         <Route path="products" element={<Products />} />
+        <Route path="products/countdown" element={<ProductCountdown />} />
         <Route path="products/:slug" element={<ProductEditor />} />
         <Route path="collections" element={<Collections />} />
         <Route path="inventory" element={<Inventory />} />
