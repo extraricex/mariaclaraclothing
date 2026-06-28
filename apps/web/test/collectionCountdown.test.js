@@ -107,3 +107,20 @@ test('product page renders the collection countdown between price and size', asy
   assert.ok(product.indexOf('<CollectionCountdown') < product.indexOf('>Size</p>'));
   assert.match(settings, /collectionCountdowns:\s*\{\}/);
 });
+
+test('collections admin edits and restarts one collection countdown', async () => {
+  const source = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'admin', 'Collections.jsx'),
+    'utf8'
+  );
+  assert.match(source, /Product page countdown/);
+  assert.match(source, /Show countdown/);
+  assert.match(source, /Marketing message/);
+  assert.match(source, /Hours/);
+  assert.match(source, /Minutes/);
+  assert.match(source, /Seconds/);
+  assert.match(source, /Save and restart countdown/);
+  assert.match(source, /durationPartsToSeconds/);
+  assert.match(source, /settings\/collection-countdowns/);
+  assert.match(source, /Live preview/);
+});
