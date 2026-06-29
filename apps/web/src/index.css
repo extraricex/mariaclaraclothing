@@ -70,19 +70,21 @@
   .btn-ink:not([aria-disabled="true"]),
   .btn-ghost:not([aria-disabled="true"]),
   .btn-secondary:not([aria-disabled="true"]) {
-    box-shadow: 0 2px 0 var(--color-line);
-    transition-property: color, background-color, border-color, box-shadow, filter, transform;
+    box-shadow: none;
+    transition-property: color, background-color, border-color, filter, transform;
   }
   .btn-ink:not([aria-disabled="true"]):hover,
   .btn-ghost:not([aria-disabled="true"]):hover,
   .btn-secondary:not([aria-disabled="true"]):hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 0 var(--color-line);
+    filter: brightness(0.92);
+    box-shadow: none;
   }
   .btn-ink:not([aria-disabled="true"]):active,
   .btn-ghost:not([aria-disabled="true"]):active,
   .btn-secondary:not([aria-disabled="true"]):active {
     transform: translateY(1px);
+    filter: brightness(0.84);
     box-shadow: none;
   }
   :is(button, [role="button"], .btn-ink, .btn-ghost, .btn-secondary):focus-visible {

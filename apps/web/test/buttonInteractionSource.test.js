@@ -13,5 +13,7 @@ test('all enabled buttons expose consistent interaction feedback', async () => {
   }
   assert.match(css, /:focus-visible[\s\S]*outline:\s*2px solid currentColor/);
   assert.match(css, /button:disabled,[\s\S]*cursor:\s*not-allowed[\s\S]*transform:\s*none/);
+  assert.match(css, /\.btn-ink:not\(\[aria-disabled="true"\]\),[\s\S]*box-shadow:\s*none/);
+  assert.doesNotMatch(css, /box-shadow:\s*0\s+[24]px\s+0/);
   assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*transition:\s*none !important[\s\S]*transform:\s*none !important/);
 });
