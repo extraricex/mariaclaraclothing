@@ -13,3 +13,12 @@ test('product and order editors expose parcel weights in grams', async () => {
   assert.match(order, /parcelWeightOverrideGrams/);
   assert.match(order, /Calculated parcel weight/);
 });
+
+test('orders table selects all visible orders and exposes indeterminate state', async () => {
+  const source = await readFile(path.join(root, 'admin', 'Orders.jsx'), 'utf8');
+  assert.match(source, /Select all filtered orders/);
+  assert.match(source, /toggleAllVisibleOrders/);
+  assert.match(source, /allVisibleSelected/);
+  assert.match(source, /someVisibleSelected/);
+  assert.match(source, /\.indeterminate\s*=\s*someVisibleSelected/);
+});

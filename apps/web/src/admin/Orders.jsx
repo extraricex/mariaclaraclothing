@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminDownload, adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
@@ -59,6 +59,7 @@ export default function Orders() {
   const [message, setMessage] = useState('');
   const [exportErrors, setExportErrors] = useState([]);
   const [updatingStatus, setUpdatingStatus] = useState({});
+  const selectAllRef = useRef(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -68,7 +69,12 @@ export default function Orders() {
     if (dateRange === 'custom' && dateTo) params.set('dateTo', dateTo);
     if (query) params.set('q', query);
     adminJson(`/api/admin/orders?${params}`)
-      .then((body) => setOrders(body.orders))
+      .then((body) => {
+        const nextOrders = body.orders || [];
+        const visible = new Set(nextOrders.map((order) => order.orderNumber));
+        setOrders(nextOrders);
+        setSelected((previous) => new Set([...previous].filter((orderNumber) => visible.has(orderNumber))));
+      })
       .catch((err) => setMessage(err.message));
   }, [status, dateRange, dateFrom, dateTo, query]);
 
@@ -79,6 +85,11 @@ export default function Orders() {
   const selectedOrderNumbers = orders
     .filter((order) => selected.has(order.orderNumber))
     .map((order) => order.orderNumber);
+  const allVisibleSelected = orders.length > 0 && selectedOrderNumbers.length === orders.length;
+  const someVisibleSelected = selectedOrderNumbers.length > 0 && !allVisibleSelected;
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
   const exportableOrderNumbers = selectedOrderNumbers.length
     ? selectedOrderNumbers
     : jntReady.map((order) => order.orderNumber);
@@ -105,6 +116,12 @@ export default function Orders() {
       else next.add(orderNumber);
       return next;
     });
+  }
+
+  function toggleAllVisibleOrders() {
+    setSelected(allVisibleSelected
+      ? new Set()
+      : new Set(orders.map((order) => order.orderNumber)));
   }
 
   async function exportJnt() {
@@ -207,7 +224,15 @@ export default function Orders() {
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-clay">
-              <th className="p-3"></th>
+              <th className="p-3">
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  aria-label="Select all filtered orders"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisibleOrders}
+                />
+              </th>
               <th className="p-3">Order</th>
               <th className="p-3">Customer</th>
               <th className="p-3">Total</th>
