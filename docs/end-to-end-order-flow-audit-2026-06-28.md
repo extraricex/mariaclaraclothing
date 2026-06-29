@@ -5,6 +5,10 @@
 **Scope:** Customer visit, product discovery, cart, cart-session capture, checkout, promotions, order persistence, inventory, customer account history, admin processing, cancellation, J&T Excel export, tracking records, Meta tracking, security, operations, and tests.
 **Purpose:** Review and approve the recommended work before implementation. This document does not change application behavior.
 
+> Update 2026-06-29: `multer` is now locked to 2.2.0, removing its reported advisories. The
+> `xlsx` 0.18.5 advisories remain because npm provides no fixed release; replacing the workbook
+> library while preserving the J&T template is still required.
+
 ## Executive Summary
 
 The project has a working end-to-end commerce prototype with a credible foundation:
