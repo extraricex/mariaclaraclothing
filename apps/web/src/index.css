@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-paper: #ffffff;
-  --color-cream: #ffffff;
-  --color-ink: #171411;
-  --color-ink-soft: #4d4742;
-  --color-clay: #8a7d70;
-  --color-line: #d9d2c7;
-  --color-accent: #e8590c;
-  --color-accent-deep: #b83d00;
+  --color-paper: #f1f1f1;
+  --color-cream: #f1f1f1;
+  --color-white: #f1f1f1;
+  --color-ink: #202020;
+  --color-ink-soft: color-mix(in srgb, #202020 78%, #f1f1f1);
+  --color-clay: color-mix(in srgb, #202020 58%, #f1f1f1);
+  --color-line: color-mix(in srgb, #202020 22%, #f1f1f1);
+  --color-accent: #202020;
+  --color-accent-deep: #202020;
   --radius-admin: 6px;
 
   --font-display: "Clash Display", "Archivo Black", sans-serif;
