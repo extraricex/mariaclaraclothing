@@ -36,3 +36,11 @@ test('product photos blend into the site background without affecting brand medi
     assert.doesNotMatch(await source(file), /product-photo-blend/, `${file} contains brand media, not product photos`);
   }
 });
+
+test('product card hover paints only one blended photo at a time', async () => {
+  const card = await source('src/components/ProductCard.jsx');
+
+  assert.match(card, /className="product-photo-blend h-full w-full object-contain group-hover:hidden"/);
+  assert.match(card, /className="product-photo-blend absolute inset-0 hidden h-full w-full object-contain group-hover:block"/);
+  assert.doesNotMatch(card, /product-photo-blend[^"\n]*group-hover:opacity-100/);
+});

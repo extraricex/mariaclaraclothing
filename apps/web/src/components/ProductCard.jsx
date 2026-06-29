@@ -23,7 +23,7 @@ export default function ProductCard({ product, index }) {
             src={image.url}
             alt={image.altText || product.name}
             loading="lazy"
-            className="product-photo-blend h-full w-full object-contain"
+            className="product-photo-blend h-full w-full object-contain group-hover:hidden"
           />
         )}
         {hoverImage && (
@@ -32,7 +32,7 @@ export default function ProductCard({ product, index }) {
             alt=""
             aria-hidden="true"
             loading="lazy"
-            className="product-photo-blend absolute inset-0 h-full w-full object-contain opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+            className="product-photo-blend absolute inset-0 hidden h-full w-full object-contain group-hover:block"
           />
         )}
         {soldOut && (
