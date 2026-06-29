@@ -163,3 +163,16 @@ Product photos with white pixels must visually blend into the approved `#F1F1F1`
 - Do not apply blending to logos, homepage banners, content images, icons, or video.
 - Do not rewrite or replace uploaded image files. Future product uploads inherit the display rule automatically.
 - Add source regression coverage for the shared class and its product-image call sites, then verify representative light and dark products in the browser.
+
+## Approved Button Interaction Addendum
+
+Every enabled storefront and admin button must look and feel interactive without changing the approved palette, typography, shape, label, size, or action.
+
+- Apply a pointer cursor to enabled native buttons, `[role="button"]` controls, and the shared `.btn-ink`, `.btn-ghost`, and `.btn-secondary` button-style links.
+- Give all enabled native/role buttons a subtle hover brightness response and a small pressed scale response.
+- Give shared `.btn-*` controls a slight hover lift and pressed movement with a restrained shadow derived from the existing two-tone tokens.
+- Add a visible `:focus-visible` outline with sufficient offset for keyboard navigation.
+- Disabled controls retain `cursor: not-allowed` and receive no hover, lift, pressed, filter, or shadow effect.
+- Respect `prefers-reduced-motion: reduce` by removing transitions and movement while retaining cursor, focus, and non-motion state feedback.
+- Keep all button actions and accessible names unchanged.
+- Add source regression tests for enabled, disabled, focus-visible, active, shared-link, and reduced-motion rules; verify representative storefront, icon, form, and admin controls in the browser.

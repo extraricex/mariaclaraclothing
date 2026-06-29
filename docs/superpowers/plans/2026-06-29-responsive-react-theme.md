@@ -328,6 +328,45 @@ git add apps/web/src apps/web/test/productPhotoBlendSource.test.js
 git commit -m "style: blend product photos with site background"
 ```
 
+## Task 2B: Make Every Button Visibly Interactive
+
+**Files:**
+- Modify: `apps/web/src/index.css`
+- Create: `apps/web/test/buttonInteractionSource.test.js`
+
+- [ ] **Step 1: Write the failing interaction regression test**
+
+Assert shared CSS rules cover enabled native buttons, `[role="button"]`, `.btn-ink`, `.btn-ghost`, and `.btn-secondary`; verify pointer, hover, active, focus-visible, disabled suppression, and `prefers-reduced-motion` behavior.
+
+- [ ] **Step 2: Run RED**
+
+```bash
+node --test apps/web/test/buttonInteractionSource.test.js
+```
+
+Expected: FAIL because the shared interaction rules do not exist.
+
+- [ ] **Step 3: Implement the shared interaction rules**
+
+Use scoped `:not(:disabled):not([aria-disabled="true"])` selectors. Apply pointer and subtle filter/press feedback to native/role controls; apply the lift and shadow treatment to `.btn-ink`, `.btn-ghost`, and `.btn-secondary`; add a shared `:focus-visible` outline; explicitly suppress movement/filter/shadow for disabled controls; and disable transition/movement inside the existing reduced-motion media query.
+
+- [ ] **Step 4: Run GREEN and the web suite**
+
+```bash
+node --test apps/web/test/buttonInteractionSource.test.js
+node --test apps/web/test/*.test.js
+npm run build:web
+```
+
+Expected: all tests pass and the production build exits 0.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/src/index.css apps/web/test/buttonInteractionSource.test.js
+git commit -m "style: add consistent button interaction feedback"
+```
+
 ## Task 3: Add Admin Responsive Source Contracts
 
 **Files:**
