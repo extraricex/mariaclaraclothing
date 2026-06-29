@@ -102,14 +102,14 @@ export default function Cart() {
 
       <div className="mt-8 divide-y divide-line border-y border-line">
         {items.map((item) => (
-          <article key={item.variantId} className="flex gap-5 py-6">
+          <article key={item.variantId} className="flex min-w-0 gap-4 py-6 sm:gap-5">
             <Link to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`} className="block h-32 w-24 shrink-0 overflow-hidden bg-cream">
               {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-contain" loading="lazy" />}
             </Link>
-            <div className="flex flex-1 flex-col">
-              <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="flex min-w-0 items-start justify-between gap-3 sm:gap-4">
                 <div>
-                  <h2 className="text-sm font-semibold">{item.productName}</h2>
+                  <h2 className="break-words text-sm font-semibold">{item.productName}</h2>
                   <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">Size {item.size}</p>
                   <p className="mt-1 text-sm">{formatMoney(item.unitPriceCents)}</p>
                 </div>

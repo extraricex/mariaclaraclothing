@@ -41,14 +41,14 @@ export default function ThankYou() {
       <p className="eyebrow text-accent">Order received</p>
       <h1 className="display mt-3 text-4xl sm:text-6xl">Salamat{summary.customerFirstName ? `, ${summary.customerFirstName}` : ''}.</h1>
       <p className="mx-auto mt-5 max-w-md text-sm leading-relaxed text-ink-soft">
-        Your order <strong className="text-ink">{summary.orderNumber}</strong> is in.
+        Your order <strong className="break-all text-ink">{summary.orderNumber}</strong> is in.
         {summary.paymentMethod === 'cash_on_delivery' ? " We'll text you to confirm Cash on Delivery before anything ships." : ' Payment instructions are shown below.'}
       </p>
 
       <dl className="mx-auto mt-10 max-w-md space-y-3 border border-line bg-white p-6 text-left text-sm">
-        <div className="flex justify-between gap-6"><dt className="text-clay">Order no.</dt><dd className="font-semibold">{summary.orderNumber}</dd></div>
+        <div className="flex justify-between gap-6"><dt className="text-clay">Order no.</dt><dd className="min-w-0 break-words text-right font-semibold">{summary.orderNumber}</dd></div>
         {summary.addressLine && (
-          <div className="flex justify-between gap-6"><dt className="text-clay">Deliver to</dt><dd className="text-right">{summary.addressLine}</dd></div>
+          <div className="flex justify-between gap-6"><dt className="text-clay">Deliver to</dt><dd className="min-w-0 break-words text-right">{summary.addressLine}</dd></div>
         )}
         <div className="flex justify-between gap-6"><dt className="text-clay">Payment</dt><dd>{summary.paymentMethodLabel}</dd></div>
         {summary.shippingFeeCents !== undefined && (

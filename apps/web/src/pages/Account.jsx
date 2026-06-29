@@ -96,7 +96,7 @@ export default function Account() {
           <p className="eyebrow">Account</p>
           <h1 className="display mt-1 text-4xl sm:text-5xl">Hi, {customer.fullName.split(' ')[0]}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Link to="/account/settings" className="btn-ghost !px-5 !py-2.5 text-xs">Account settings</Link>
           <button
             type="button"

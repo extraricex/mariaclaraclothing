@@ -23,11 +23,11 @@ export default function InfoPage({ title, pageKey }) {
       <div className="mt-10">
         {sections.map((section, index) => (
           <details key={section.heading} className="group border-t border-line py-5" open={index === 0}>
-            <summary className="flex cursor-pointer items-center justify-between gap-4 text-sm font-semibold uppercase tracking-[0.12em]">
+            <summary className="flex min-w-0 cursor-pointer items-center justify-between gap-4 text-sm font-semibold uppercase tracking-[0.12em]">
               {section.heading}
               <span className="text-accent transition-transform group-open:rotate-45">+</span>
             </summary>
-            <p className="mt-3 text-sm leading-relaxed text-ink-soft">{section.body}</p>
+            <p className="mt-3 break-words text-sm leading-relaxed text-ink-soft">{section.body}</p>
           </details>
         ))}
         <div className="hairline" />

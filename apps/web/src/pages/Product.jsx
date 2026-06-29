@@ -229,13 +229,13 @@ export default function Product() {
             )}
           </div>
 
-          <div className="mt-6 flex items-center gap-4">
+          <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
             <div className="flex items-center rounded border border-line">
               <button type="button" className="px-4 py-3 text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Decrease quantity">−</button>
               <span className="min-w-10 text-center text-sm font-semibold">{quantity}</span>
               <button type="button" className="px-4 py-3 text-lg" onClick={() => setQuantity((q) => q + 1)} aria-label="Increase quantity">+</button>
             </div>
-            <button type="button" className="btn-ink flex-1 !rounded" disabled={soldOut || !variant} onClick={handleAdd}>
+            <button type="button" className="btn-ink min-w-44 flex-1 !rounded" disabled={soldOut || !variant} onClick={handleAdd}>
               {soldOut ? (page.soldOutText || 'Sold out') : added ? 'Added ✓' : 'Add to cart'}
             </button>
           </div>

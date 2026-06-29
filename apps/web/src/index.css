@@ -21,6 +21,11 @@
     @apply bg-paper text-ink antialiased;
     font-family: var(--font-body);
   }
+  body,
+  #root {
+    min-width: 0;
+    max-width: 100%;
+  }
   ::selection {
     @apply bg-accent text-paper;
   }
@@ -62,6 +67,12 @@
   }
   .admin-mobile-nav a {
     @apply rounded-[var(--radius-admin)] px-2.5 py-2;
+  }
+  .table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .product-view-tabs {
     @apply flex gap-1 overflow-x-auto;

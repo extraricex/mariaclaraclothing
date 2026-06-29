@@ -37,3 +37,23 @@ test('derived neutral interface tokens use only the approved endpoints', async (
     );
   }
 });
+
+test('shared roots and every active storefront route define shrink and overflow boundaries', async () => {
+  const [css, shell, cart, checkout, account, product] = await Promise.all([
+    source('src/index.css'),
+    source('src/components/Shell.jsx'),
+    source('src/pages/Cart.jsx'),
+    source('src/pages/Checkout.jsx'),
+    source('src/pages/Account.jsx'),
+    source('src/pages/Product.jsx'),
+  ]);
+
+  assert.match(css, /body,\s*#root\s*{[^}]*min-width:\s*0;[^}]*}/s);
+  assert.match(css, /\.table-scroll\s*{[^}]*overflow-x:\s*auto;[^}]*}/s);
+  assert.match(shell, /className="[^"]*max-w-7xl min-w-0[^"]*"/);
+  assert.match(shell, /className="[^"]*min-w-0 flex-1[^"]*"/);
+  assert.match(cart, /<article[^>]*className="flex min-w-0/);
+  assert.match(checkout, /<article[^>]*className="flex min-w-0/);
+  assert.match(account, /className="flex flex-wrap items-center gap-3"/);
+  assert.match(product, /className="mt-6 flex flex-wrap items-center gap-3/);
+});

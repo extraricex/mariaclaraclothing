@@ -271,7 +271,7 @@ export default function Shell() {
   const logoMarkup = headerLogo?.url ? (
     <img src={headerLogo.url} alt={headerLogo.altText || 'Maria Clara Clothing'} className="h-[65px] max-w-[205px] object-contain lg:h-[73px] lg:max-w-[230px]" />
   ) : (
-    <span className="display text-[45px] tracking-tight lg:text-[49px]">
+    <span className="display truncate text-[32px] tracking-tight sm:text-[40px] lg:text-[49px]">
       Maria<span className="text-accent">Clara</span>
     </span>
   );
@@ -288,7 +288,7 @@ export default function Shell() {
       <Ticker items={storeInfo?.ticker || TICKER_ITEMS} />
       <PromoNotification notification={promoNotification} onClose={closePromoNotification} />
       <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-4 lg:px-8">
+        <div className="mx-auto flex max-w-7xl min-w-0 items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-5 lg:gap-6 lg:px-8">
           <button
             type="button"
             className="text-[12px] font-semibold uppercase tracking-[0.18em] lg:hidden"
@@ -297,7 +297,7 @@ export default function Shell() {
           >
             {menuOpen ? 'Close' : 'Menu'}
           </button>
-          <Link to="/" className="flex shrink-0 items-center">
+          <Link to="/" className="flex min-w-0 shrink items-center lg:shrink-0">
             {logoMarkup}
           </Link>
           <nav className="hidden items-center gap-8 lg:flex">

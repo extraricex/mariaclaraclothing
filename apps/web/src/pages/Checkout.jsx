@@ -463,7 +463,7 @@ export default function Checkout() {
             <>
               <div className="mt-6 space-y-5">
                 {items.map((item) => (
-                  <article key={item.variantId} className="flex gap-4">
+                  <article key={item.variantId} className="flex min-w-0 gap-3 sm:gap-4">
                     <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20">
                       {item.imageUrl && (
                         <img
@@ -475,8 +475,8 @@ export default function Checkout() {
                       )}
                       <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-paper">{item.quantity}</span>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-sm font-semibold leading-snug">{item.productName}</h3>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words text-sm font-semibold leading-snug">{item.productName}</h3>
                       <p className="text-xs uppercase tracking-[0.12em] text-clay">{item.size}</p>
                       <div className="mt-1 flex items-center gap-3 text-xs">
                         <button type="button" className="border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)} aria-label="Decrease quantity">−</button>
@@ -484,12 +484,12 @@ export default function Checkout() {
                         <button type="button" className="text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>Remove</button>
                       </div>
                     </div>
-                    <strong className="text-sm">{formatMoney(Number(item.unitPriceCents) * Number(item.quantity))}</strong>
+                    <strong className="shrink-0 text-sm">{formatMoney(Number(item.unitPriceCents) * Number(item.quantity))}</strong>
                   </article>
                 ))}
               </div>
               <div className="mt-8 border-t border-line pt-4">
-                <div className="flex gap-2">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <input
                     className="field flex-1 uppercase"
                     placeholder="Discount code"
