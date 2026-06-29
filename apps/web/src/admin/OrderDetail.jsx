@@ -29,6 +29,7 @@ function orderForm(order) {
     deliveryStatus: order.deliveryStatus,
     trackingNumber: order.trackingNumber || '',
     notes: order.notes || '',
+    parcelWeightOverrideGrams: order.parcelWeightOverrideGrams ?? '',
     customer: {
       fullName: order.customer?.fullName || '',
       phone: order.customer?.phone || '',
@@ -694,6 +695,11 @@ export default function OrderDetail() {
 
           <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">J&T readiness</h2>
+            <p className="mt-3 text-sm text-ink-soft">Calculated parcel weight: <strong>{order.parcelWeightGrams || 0} g</strong></p>
+            <label className="mt-3 block">
+              <span className="eyebrow">Parcel weight override (grams)</span>
+              <input className="field mt-1" type="number" min="1" value={form.parcelWeightOverrideGrams} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, parcelWeightOverrideGrams: e.target.value })); }} placeholder="Use calculated weight" />
+            </label>
             <p className="mt-3 text-sm text-ink-soft">{order.jntExportStatus === 'ready' ? 'Ready for J&T export.' : order.jntExportStatus === 'exported' ? 'Exported to J&T.' : 'Missing export fields.'}</p>
             {Array.isArray(order.jntMissingFields) && order.jntMissingFields.length > 0 && (
               <ul className="mt-2 list-disc pl-5 text-sm text-accent-deep">

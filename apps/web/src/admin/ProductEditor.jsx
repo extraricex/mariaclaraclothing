@@ -36,6 +36,7 @@ const EMPTY_PRODUCT = {
   featured: false,
   collections: [],
   priceCents: 0,
+  parcelWeightGrams: 250,
   compareAtPriceCents: null,
   images: [],
   variants: [{ size: 's', sku: '', priceCents: null, stockQuantity: 0 }],
@@ -541,6 +542,10 @@ export default function ProductEditor() {
                 <input className="field mt-1" name="comparePeso" inputMode="decimal" value={comparePeso} onChange={(e) => setComparePeso(e.target.value)} placeholder="Optional" />
               </label>
             </div>
+            <label className="mt-4 block max-w-xs">
+              <span className="eyebrow">Parcel weight (grams)</span>
+              <input className="field mt-1" type="number" min="1" max="100000" value={product.parcelWeightGrams || 250} onChange={(e) => update('parcelWeightGrams', Number(e.target.value))} />
+            </label>
           </section>
 
           <section className="border border-line bg-paper p-6">

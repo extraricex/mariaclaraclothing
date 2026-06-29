@@ -849,6 +849,7 @@ function normalizeProductRequest(body) {
     themeTemplate: String(body.themeTemplate || 'Default product').trim(),
     status,
     priceCents: normalizePositiveInteger(body.priceCents, 'Product price is invalid'),
+    parcelWeightGrams: normalizeParcelWeightGrams(body.parcelWeightGrams, 'Product parcel weight is invalid'),
     compareAtPriceCents: body.compareAtPriceCents === '' || body.compareAtPriceCents === null || body.compareAtPriceCents === undefined
       ? null
       : normalizePositiveInteger(body.compareAtPriceCents, 'Compare-at price is invalid'),
@@ -990,6 +991,7 @@ function productSummaryRecord(product, lowStockThreshold) {
     description: product.description,
     collections: product.collections,
     priceCents: product.priceCents,
+    parcelWeightGrams: product.parcelWeightGrams || 250,
     compareAtPriceCents: product.compareAtPriceCents,
     status: productStatus(product),
     merchandisingStatus: product.merchandisingStatus,
@@ -1107,6 +1109,11 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
   if (body.notes !== undefined) {
     changes.notes = String(body.notes || '').trim();
   }
+  if (body.parcelWeightOverrideGrams !== undefined) {
+    changes.parcelWeightOverrideGrams = body.parcelWeightOverrideGrams === null || body.parcelWeightOverrideGrams === ''
+      ? null
+      : normalizeParcelWeightGrams(body.parcelWeightOverrideGrams, 'Parcel weight override is invalid', 1000000);
+  }
   if (body.items !== undefined) {
     const items = normalizeOrderItemsUpdate(body.items);
     const subtotalCents = items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
@@ -1135,6 +1142,16 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
   }
 
   return changes;
+}
+
+function normalizeParcelWeightGrams(value, message, maximum = 100000) {
+  const number = Number(value === undefined || value === null || value === '' ? 250 : value);
+  if (!Number.isInteger(number) || number < 1 || number > maximum) {
+    const error = new Error(message);
+    error.status = 400;
+    throw error;
+  }
+  return number;
 }
 
 async function appendStatusEventIfChanged(previousOrder, nextOrder, source, note = '') {

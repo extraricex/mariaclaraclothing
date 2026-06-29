@@ -112,7 +112,9 @@ async function normalizeLine(input, deps) {
     externalPosVariantId: variant.externalPosVariantId || '',
     quantity,
     unitPriceCents,
-    lineTotalCents: unitPriceCents * quantity
+    lineTotalCents: unitPriceCents * quantity,
+    unitWeightGrams: Number(product.parcelWeightGrams || 250),
+    lineWeightGrams: Number(product.parcelWeightGrams || 250) * quantity
   };
 }
 
@@ -157,6 +159,7 @@ async function buildAuthoritativeQuote(input = {}, dependencyOverrides = {}) {
   const settings = await deps.getSettings();
   const shipping = shippingConfig(settings, address);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const parcelWeightGrams = items.reduce((sum, item) => sum + item.lineWeightGrams, 0);
   const subtotalCents = items.reduce((sum, item) => sum + item.lineTotalCents, 0);
   const discountCode = normalizeDiscountCode(input.discountCode);
   const promo = await deps.quotePromos({
@@ -213,6 +216,7 @@ async function buildAuthoritativeQuote(input = {}, dependencyOverrides = {}) {
     pricingFingerprint,
     items,
     itemCount,
+    parcelWeightGrams,
     address,
     shippingRegion: shipping.region,
     shippingRegionLabel: shipping.label,

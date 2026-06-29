@@ -245,11 +245,12 @@ async function upsertPostgresOrder(order, transactionClient) {
       fulfillment_status, payment_status, cod_confirmation_status, delivery_status,
       delivery_method, tracking_number, tags, notes, exported_to_jnt, jnt_exported_at,
       admin_editable_totals, placed_at, updated_at, discount_code, customer_account_id, discount_snapshot,
-      checkout_idempotency_key, confirmation_token_hash, confirmation_token_created_at
+      checkout_idempotency_key, confirmation_token_hash, confirmation_token_created_at,
+      parcel_weight_grams, parcel_weight_override_grams
     ) VALUES (
       $1, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10,
       $11, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20,
-      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33, $34, $35
+      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33, $34, $35, $36, $37
     )
     ON CONFLICT (order_number) DO UPDATE SET
       customer = EXCLUDED.customer,
@@ -284,6 +285,8 @@ async function upsertPostgresOrder(order, transactionClient) {
       checkout_idempotency_key = EXCLUDED.checkout_idempotency_key,
       confirmation_token_hash = EXCLUDED.confirmation_token_hash,
       confirmation_token_created_at = EXCLUDED.confirmation_token_created_at,
+      parcel_weight_grams = EXCLUDED.parcel_weight_grams,
+      parcel_weight_override_grams = EXCLUDED.parcel_weight_override_grams,
       placed_at = EXCLUDED.placed_at,
       updated_at = now()`,
     [
@@ -321,7 +324,11 @@ async function upsertPostgresOrder(order, transactionClient) {
       JSON.stringify(order.discountSnapshot || {}),
       order.checkoutIdempotencyKey || '',
       order.confirmationTokenHash || '',
-      order.confirmationTokenCreatedAt || null
+      order.confirmationTokenCreatedAt || null,
+      Number(order.parcelWeightGrams || 0),
+      order.parcelWeightOverrideGrams === null || order.parcelWeightOverrideGrams === undefined
+        ? null
+        : Number(order.parcelWeightOverrideGrams)
     ]
   );
 }
@@ -342,6 +349,10 @@ function fromPostgresOrder(row) {
     confirmationTokenCreatedAt: row.confirmation_token_created_at
       ? new Date(row.confirmation_token_created_at).toISOString()
       : '',
+    parcelWeightGrams: Number(row.parcel_weight_grams || 0),
+    parcelWeightOverrideGrams: row.parcel_weight_override_grams === null
+      ? null
+      : Number(row.parcel_weight_override_grams),
     shippingFeeCents: row.shipping_fee_cents,
     shippingRegion: row.shipping_region,
     shippingRegionLabel: row.shipping_region_label,

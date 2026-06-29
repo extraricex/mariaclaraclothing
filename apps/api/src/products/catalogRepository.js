@@ -246,6 +246,7 @@ function normalizeEditableProduct(product) {
     metafields: normalizeMetafields(product.metafields),
     themeTemplate: String(product.themeTemplate || 'Default product').trim(),
     priceCents: normalizeMoneyCents(product.priceCents),
+    parcelWeightGrams: normalizeParcelWeight(product.parcelWeightGrams),
     compareAtPriceCents: product.compareAtPriceCents === '' || product.compareAtPriceCents === undefined ? null : normalizeMoneyCents(product.compareAtPriceCents),
     merchandisingStatus: product.merchandisingStatus || (variants.some((variant) => Number(variant.stockQuantity) > 0) ? 'sale' : 'sold_out'),
     status,
@@ -328,6 +329,7 @@ function toCatalogProduct(product) {
     collections: product.collections,
     description: product.description,
     price: product.priceCents,
+    parcelWeightGrams: product.parcelWeightGrams,
     compareAtPrice: product.compareAtPriceCents,
     status,
     featured: Boolean(product.featured),
@@ -378,8 +380,8 @@ async function savePostgresProduct(client, product) {
     `INSERT INTO products (
       slug, name, description, collections, price_cents, compare_at_price_cents,
       merchandising_status, status, featured, category, product_type, vendor, tags, seo,
-      metafields, theme_template, product_page, updated_at
-    ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17::jsonb, now())
+      metafields, theme_template, product_page, parcel_weight_grams, updated_at
+    ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17::jsonb, $18, now())
     ON CONFLICT (slug) DO UPDATE SET
       name = EXCLUDED.name,
       description = EXCLUDED.description,
@@ -397,6 +399,7 @@ async function savePostgresProduct(client, product) {
       metafields = EXCLUDED.metafields,
       theme_template = EXCLUDED.theme_template,
       product_page = EXCLUDED.product_page,
+      parcel_weight_grams = EXCLUDED.parcel_weight_grams,
       updated_at = now()`,
     [
       product.slug,
@@ -415,7 +418,8 @@ async function savePostgresProduct(client, product) {
       JSON.stringify(product.seo || {}),
       JSON.stringify(product.metafields || {}),
       product.themeTemplate,
-      JSON.stringify(product.productPage || null)
+      JSON.stringify(product.productPage || null),
+      product.parcelWeightGrams
     ]
   );
 
@@ -443,6 +447,7 @@ function fromPostgresProduct(row) {
     description: row.description,
     collections: row.collections || [],
     priceCents: row.price_cents,
+    parcelWeightGrams: row.parcel_weight_grams || 250,
     compareAtPriceCents: row.compare_at_price_cents,
     merchandisingStatus: row.merchandising_status,
     status: row.status,
@@ -604,6 +609,15 @@ function normalizeMoneyCents(value) {
 function normalizeInventory(value) {
   const number = Number(value);
   return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function normalizeParcelWeight(value) {
+  if (value === undefined || value === null || value === '') return 250;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > 100000) {
+    throw new Error('Product parcel weight must be between 1 and 100000 grams.');
+  }
+  return number;
 }
 
 function slugify(value) {

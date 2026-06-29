@@ -30,6 +30,7 @@ function toStorefrontProduct(product) {
     name: product.name,
     description: product.description,
     priceCents: product.price,
+    parcelWeightGrams: product.parcelWeightGrams || 250,
     compareAtPriceCents: product.compareAtPrice,
     collection: product.collection,
     collections: product.collections,

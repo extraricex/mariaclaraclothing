@@ -44,6 +44,8 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
     shippingRegionLabel: snapshot.shippingRegionLabel,
     freeShippingUnlocked: Boolean(snapshot.freeShippingUnlocked),
     totalCents: snapshot.totalCents,
+    parcelWeightGrams: Number(snapshot.parcelWeightGrams || 0),
+    parcelWeightOverrideGrams: null,
     cartSnapshot: snapshot.items,
     checkoutChannel: 'storefront_checkout',
     paymentMethod: String(input.paymentMethod || 'cash_on_delivery'),
