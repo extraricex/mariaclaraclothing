@@ -24,7 +24,7 @@ test('shell renders a quote-backed cart drawer', async () => {
   const source = await readFile(path.join(root, 'components', 'Shell.jsx'), 'utf8');
 
   assert.match(source, /CART_DRAWER_EVENT/);
-  assert.match(source, /quoteCart/);
+  assert.match(source, /createCheckoutQuote/);
   assert.match(source, /cartDrawerOpen/);
   assert.match(source, /setCartDrawerOpen\(true\)/);
   assert.match(source, /window\.addEventListener\(CART_DRAWER_EVENT/);

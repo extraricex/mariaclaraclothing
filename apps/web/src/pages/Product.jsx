@@ -125,7 +125,7 @@ export default function Product() {
       productName: product.name,
       size: variant.size,
       quantity: Math.max(1, Number(quantity) || 1),
-      unitPriceCents: product.priceCents,
+      unitPriceCents: variant.priceCents ?? product.priceCents,
       imageUrl: product.images[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''

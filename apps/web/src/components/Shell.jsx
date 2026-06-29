@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { CART_DRAWER_EVENT, cartQuantity, getCartSessionId, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
-import { fetchActivePromoNotification, fetchSiteContent, quoteCart } from '../lib/api.js';
+import { createCheckoutQuote, fetchActivePromoNotification, fetchSiteContent } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
@@ -78,8 +78,8 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
   const subtotal = items.reduce((sum, item) => sum + Number(item.unitPriceCents || 0) * Number(item.quantity || 0), 0);
   const displaySubtotal = quote?.subtotalCents ?? subtotal;
   const displayDiscount = quote?.discountTotalCents ?? 0;
-  const displayShipping = quote?.shippingFeeCents ?? 0;
-  const displayTotal = quote?.totalCents ?? Math.max(0, displaySubtotal - displayDiscount + displayShipping);
+  const displayShipping = quote?.shippingFeeCents;
+  const displayTotal = quote?.totalCents ?? Math.max(0, displaySubtotal - displayDiscount);
 
   function checkout() {
     trackFacebookInitiateCheckout(
@@ -163,7 +163,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(displaySubtotal)}</dd></div>
                 {displayDiscount > 0 && <div className="flex justify-between text-[#2f7d32]"><dt>Discount</dt><dd>-{formatMoney(displayDiscount)}</dd></div>}
-                <div className="flex justify-between"><dt className="text-ink-soft">Shipping</dt><dd>{quote?.freeShippingUnlocked ? 'Free' : formatMoney(displayShipping)}</dd></div>
+                <div className="flex justify-between"><dt className="text-ink-soft">Shipping</dt><dd>{quote?.freeShippingUnlocked ? 'Free' : 'Calculated at checkout'}</dd></div>
                 <div className="flex justify-between border-t border-line pt-3 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(displayTotal)}</dd></div>
               </dl>
               <div className="mt-5 grid gap-2">
@@ -252,7 +252,7 @@ export default function Shell() {
       return;
     }
     let cancelled = false;
-    quoteCart({ items, shippingFeeCents: 0 })
+    createCheckoutQuote({ cartSessionId: getCartSessionId(), items })
       .then((body) => {
         if (cancelled) return;
         setQuote(body.quote || null);

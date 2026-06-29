@@ -4,6 +4,7 @@ const CART_KEY = 'maria-clara-cart';
 const CART_EVENT = 'maria-clara-cart-changed';
 export const CART_DRAWER_EVENT = 'maria-clara-cart-drawer-open';
 const CART_SESSION_KEY = 'maria-clara-cart-session-id';
+const CHECKOUT_IDEMPOTENCY_KEY = 'maria-clara-checkout-idempotency';
 
 export function getCart() {
   try {
@@ -31,6 +32,27 @@ export function getCartSessionId() {
 
 export function resetCartSessionId() {
   localStorage.removeItem(CART_SESSION_KEY);
+}
+
+export function getCheckoutIdempotencyKey(
+  quoteId,
+  storage = globalThis.sessionStorage,
+  create = () => globalThis.crypto.randomUUID()
+) {
+  let current = null;
+  try {
+    current = JSON.parse(storage.getItem(CHECKOUT_IDEMPOTENCY_KEY) || 'null');
+  } catch (_error) {
+    current = null;
+  }
+  if (current?.quoteId === quoteId && current?.key) return current.key;
+  const key = create();
+  storage.setItem(CHECKOUT_IDEMPOTENCY_KEY, JSON.stringify({ quoteId, key }));
+  return key;
+}
+
+export function clearCheckoutIdempotencyKey(storage = globalThis.sessionStorage) {
+  storage.removeItem(CHECKOUT_IDEMPOTENCY_KEY);
 }
 
 export function syncCartSession(payload = {}) {

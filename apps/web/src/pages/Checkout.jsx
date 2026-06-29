@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createOrder, quoteCart } from '../lib/api.js';
+import { createCheckoutQuote, createQuoteBackedOrder } from '../lib/api.js';
 import { customerJson, getCustomerToken, useCustomerLoggedIn } from '../lib/customerAuth.js';
-import { cartQuantity, clearCart, getCartSessionId, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
+import { cartQuantity, clearCart, clearCheckoutIdempotencyKey, getCartSessionId, getCheckoutIdempotencyKey, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookPurchase } from '../lib/metaPixel.js';
 import {
@@ -36,33 +36,6 @@ function checkoutTotals(items, region, discountTotalCents, settings) {
     shippingRegion: region,
     shippingRegionLabel: regionLabel(region),
     freeShippingUnlocked
-  };
-}
-
-function cartSnapshotFields(items, totals, paymentMethod) {
-  return {
-    checkoutChannel: 'storefront_checkout',
-    paymentMethod,
-    shippingRegion: totals.shippingRegion,
-    shippingRegionLabel: totals.shippingRegionLabel,
-    freeShippingUnlocked: totals.freeShippingUnlocked,
-    cartSnapshot: items.map((item) => ({
-      productId: item.productId,
-      variantId: item.variantId,
-      sku: item.sku || '',
-      slug: item.slug || '',
-      productName: item.productName,
-      size: item.size,
-      imageUrl: item.imageUrl || '',
-      unitPriceCents: Number(item.unitPriceCents || 0),
-      quantity: Number(item.quantity || 0)
-    })),
-    adminEditableTotals: {
-      subtotalCents: totals.subtotalCents,
-      discountTotalCents: totals.discountTotalCents,
-      shippingFeeCents: totals.shippingFeeCents,
-      totalCents: totals.totalCents
-    }
   };
 }
 
@@ -183,16 +156,21 @@ export default function Checkout() {
   const doorToDoorWarning = Boolean(barangay) && String(barangay.doorToDoor || '').toUpperCase() !== 'YES';
 
   function quotePayload(discountCode = activeDiscountCode) {
-    const shippingRegion = addressReady ? regionForProvince(province) : 'pending_address';
     return {
+      cartSessionId: getCartSessionId(),
       items,
       discountCode,
-      shippingFeeCents: items.length && shippingRegion !== 'pending_address' ? regionFee(settings, shippingRegion) : 0
+      ...(addressReady ? { address: {
+        houseAddress: house.trim(),
+        provinceCode,
+        cityCode,
+        barangayCode
+      } } : {})
     };
   }
 
   async function refreshQuote(discountCode = activeDiscountCode) {
-    const body = await quoteCart(quotePayload(discountCode));
+    const body = await createCheckoutQuote(quotePayload(discountCode));
     setQuote(body.quote || null);
     return body.quote || null;
   }
@@ -223,7 +201,7 @@ export default function Checkout() {
       return;
     }
     let cancelled = false;
-    quoteCart(quotePayload(activeDiscountCode))
+    createCheckoutQuote(quotePayload(activeDiscountCode))
       .then((body) => {
         if (!cancelled) setQuote(body.quote || null);
       })
@@ -308,58 +286,47 @@ export default function Checkout() {
       setPending(false);
       return;
     }
-    const submitTotals = quoteTotals(latestQuote, checkoutTotals(items, regionForProvince(province), 0, settings));
-    const addressLine = `${house.trim()}, ${barangay.name}, ${city.name}, ${province.name}, Philippines`;
+    const reviewedTotals = ['subtotalCents', 'discountTotalCents', 'shippingFeeCents', 'totalCents'];
+    if (!reviewQuote || reviewedTotals.some((field) => reviewQuote[field] !== latestQuote[field])) {
+      setReviewQuote(latestQuote);
+      setStatus({ tone: 'error', message: 'Checkout totals changed. Review the updated total before placing your order.' });
+      setPending(false);
+      return;
+    }
     const payload = {
       cartSessionId: getCartSessionId(),
       customer: { fullName: fullName.trim(), phone: phone.trim(), email: email.trim() },
-      address: {
-        addressLine,
-        houseAddress: house.trim(),
-        barangay: barangay.name,
-        city: city.name,
-        province: province.name,
-        country: 'Philippines',
-        postalCode: ''
-      },
-      shippingRegion: submitTotals.shippingRegion,
-      shippingRegionLabel: submitTotals.shippingRegionLabel,
-      freeShippingUnlocked: submitTotals.freeShippingUnlocked,
-      shippingFeeCents: submitTotals.shippingFeeCents,
-      discountCode: discountInput.trim(),
-      discountTotalCents: submitTotals.discountTotalCents,
+      paymentMethod,
       notes: notes.trim(),
-      items,
-      ...cartSnapshotFields(items, submitTotals, paymentMethod)
     };
 
     try {
       const token = loggedIn ? getCustomerToken() : '';
-      const result = await createOrder(payload, token ? { Authorization: `Bearer ${token}` } : {});
+      const idempotencyKey = getCheckoutIdempotencyKey(latestQuote.id);
+      const result = await createQuoteBackedOrder(
+        payload,
+        latestQuote.id,
+        idempotencyKey,
+        token ? { Authorization: `Bearer ${token}` } : {}
+      );
       trackFacebookPurchase(result, result.items, result.trackingEventId);
       if (loggedIn && saveAddress) {
         customerJson('/api/customer/me', {
           method: 'PUT',
           body: JSON.stringify({ savedAddress: {
-            houseAddress: payload.address.houseAddress,
-            barangay: payload.address.barangay,
-            city: payload.address.city,
-            province: payload.address.province,
+            houseAddress: house.trim(),
+            provinceCode, province: province.name,
+            cityCode, city: city.name,
+            barangayCode, barangay: barangay.name,
             postalCode: ''
           } })
         }).catch(() => {});
       }
-      const methodLabel = settings.paymentMethods.find((method) => method.id === paymentMethod)?.label || 'Cash on Delivery';
       sessionStorage.setItem('maria-clara-last-order', JSON.stringify({
         orderNumber: result.orderNumber,
-        customerName: payload.customer.fullName,
-        paymentMethod: methodLabel,
-        addressLine: payload.address.addressLine,
-        shippingRegionLabel: submitTotals.shippingRegionLabel,
-        shippingFeeCents: submitTotals.shippingFeeCents,
-        totalCents: submitTotals.totalCents,
-        placedAt: new Date().toISOString()
+        confirmationToken: result.confirmationToken
       }));
+      clearCheckoutIdempotencyKey();
       clearCart();
       resetCartSessionId();
       navigate(`/thank-you?order=${encodeURIComponent(result.orderNumber)}`);

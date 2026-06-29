@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchProducts, quoteCart } from '../lib/api.js';
+import { createCheckoutQuote, fetchProducts } from '../lib/api.js';
 import { addToCart, cartQuantity, getCartSessionId, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookAddToCart, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
@@ -18,8 +18,8 @@ export default function Cart() {
   const subtotal = subtotalCents(items);
   const displaySubtotal = quote?.subtotalCents ?? subtotal;
   const displayDiscount = quote?.discountTotalCents ?? 0;
-  const displayShipping = quote?.shippingFeeCents ?? 0;
-  const displayTotal = quote?.totalCents ?? Math.max(0, subtotal - displayDiscount + displayShipping);
+  const displayShipping = quote?.shippingFeeCents;
+  const displayTotal = quote?.totalCents ?? Math.max(0, subtotal - displayDiscount);
   const cartUpsells = useMemo(() => products
     .filter((product) => firstAvailableVariant(product))
     .filter((product) => !items.some((item) => item.slug === product.slug || item.productId === product.id))
@@ -38,7 +38,7 @@ export default function Cart() {
       return;
     }
     let cancelled = false;
-    quoteCart({ items, shippingFeeCents: 0 })
+    createCheckoutQuote({ cartSessionId: getCartSessionId(), items })
       .then((body) => {
         if (cancelled) return;
         setQuote(body.quote || null);
@@ -64,7 +64,7 @@ export default function Cart() {
       productName: product.name,
       size: variant.size,
       quantity: 1,
-      unitPriceCents: product.priceCents,
+      unitPriceCents: variant.priceCents ?? product.priceCents,
       imageUrl: product.images?.[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''
@@ -135,7 +135,7 @@ export default function Cart() {
         {displayDiscount > 0 && (
           <p className="text-sm text-[#2f7d32]">Discount <span className="ml-4 text-base font-semibold">-{formatMoney(displayDiscount)}</span></p>
         )}
-        <p className="text-sm text-ink-soft">Shipping <span className="ml-4 text-base font-semibold text-ink">{quote?.freeShippingUnlocked ? 'Free' : formatMoney(displayShipping)}</span></p>
+        <p className="text-sm text-ink-soft">Shipping <span className="ml-4 text-base font-semibold text-ink">{quote?.freeShippingUnlocked ? 'Free' : 'Calculated at checkout'}</span></p>
         <p className="text-base font-semibold">Total <span className="ml-4 text-lg">{formatMoney(displayTotal)}</span></p>
         <p className="text-xs text-clay">Final delivery fee is confirmed after your address · COD nationwide</p>
         <Link to="/checkout" className="btn-ink mt-3 w-full sm:w-auto" onClick={trackCheckout}>Check out — Cash on Delivery</Link>
