@@ -1,0 +1,45 @@
+import { test, expect } from '@playwright/test';
+
+const PRODUCT_SLUG = 'oversized-fit-shirt-mc-curiosity-black-maria-clara-clothing-oversized-fit-100-cotton-copy-1';
+
+test('customer checkout uses server totals and private confirmation', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.removeItem('maria-clara-cart');
+    localStorage.removeItem('maria-clara-cart-session-id');
+    sessionStorage.clear();
+  });
+
+  let orderRequest;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/orders') {
+      orderRequest = {
+        body: request.postDataJSON(),
+        idempotencyKey: request.headers()['idempotency-key']
+      };
+    }
+  });
+
+  await page.goto(`/product/${PRODUCT_SLUG}`);
+  await page.getByRole('button', { name: /add to cart/i }).click();
+  await page.getByRole('link', { name: /^checkout$/i }).click();
+  await page.getByPlaceholder('Full name').fill('Phase One Customer');
+  await page.getByPlaceholder(/Mobile number/).fill('09171234567');
+  await page.getByPlaceholder(/House no/).fill('12 Test Street');
+
+  const selects = page.getByRole('combobox');
+  await selects.nth(0).selectOption({ label: 'CAVITE' });
+  await selects.nth(1).selectOption({ label: 'IMUS' });
+  await selects.nth(2).selectOption({ label: 'BUCANDALA IV' });
+  await page.getByRole('button', { name: /review order/i }).click();
+  await page.getByRole('button', { name: /place cod order/i }).click();
+
+  await expect(page).toHaveURL(/\/thank-you\?order=/);
+  await expect(page.getByText(/Order received/i)).toBeVisible();
+  await expect(page.getByText(/Total due/i)).toBeVisible();
+  expect(orderRequest.idempotencyKey).toBeTruthy();
+  expect(orderRequest.body.quoteId).toBeTruthy();
+  for (const forbidden of ['items', 'shippingFeeCents', 'shippingRegion', 'totalCents']) {
+    expect(orderRequest.body).not.toHaveProperty(forbidden);
+  }
+});

@@ -69,3 +69,16 @@ jobs:
 
       - name: Web build
         run: npm run build:web
+
+      - name: Install Playwright browser
+        if: matrix.node-version == 22
+        run: npx playwright install --with-deps chromium
+
+      - name: Critical checkout browser journey
+        if: matrix.node-version == 22
+        run: |
+          ORDER_CONFIRMATION_SECRET=ci-confirmation-secret-at-least-32 docker compose up -d --build --force-recreate
+          npm run test:e2e -w apps/web
+          npm run test:e2e -w apps/web
+        env:
+          CHECKOUT_V2_REQUIRED: 'true'
