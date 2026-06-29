@@ -245,11 +245,11 @@ async function upsertPostgresOrder(order, transactionClient) {
       fulfillment_status, payment_status, cod_confirmation_status, delivery_status,
       delivery_method, tracking_number, tags, notes, exported_to_jnt, jnt_exported_at,
       admin_editable_totals, placed_at, updated_at, discount_code, customer_account_id, discount_snapshot,
-      checkout_idempotency_key
+      checkout_idempotency_key, confirmation_token_hash, confirmation_token_created_at
     ) VALUES (
       $1, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10,
       $11, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20,
-      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33
+      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33, $34, $35
     )
     ON CONFLICT (order_number) DO UPDATE SET
       customer = EXCLUDED.customer,
@@ -282,6 +282,8 @@ async function upsertPostgresOrder(order, transactionClient) {
       customer_account_id = EXCLUDED.customer_account_id,
       discount_snapshot = EXCLUDED.discount_snapshot,
       checkout_idempotency_key = EXCLUDED.checkout_idempotency_key,
+      confirmation_token_hash = EXCLUDED.confirmation_token_hash,
+      confirmation_token_created_at = EXCLUDED.confirmation_token_created_at,
       placed_at = EXCLUDED.placed_at,
       updated_at = now()`,
     [
@@ -317,7 +319,9 @@ async function upsertPostgresOrder(order, transactionClient) {
       order.discountCode || '',
       order.customerAccountId || '',
       JSON.stringify(order.discountSnapshot || {}),
-      order.checkoutIdempotencyKey || ''
+      order.checkoutIdempotencyKey || '',
+      order.confirmationTokenHash || '',
+      order.confirmationTokenCreatedAt || null
     ]
   );
 }
@@ -334,6 +338,10 @@ function fromPostgresOrder(row) {
     customerAccountId: row.customer_account_id || '',
     discountSnapshot: row.discount_snapshot || {},
     checkoutIdempotencyKey: row.checkout_idempotency_key || '',
+    confirmationTokenHash: row.confirmation_token_hash || '',
+    confirmationTokenCreatedAt: row.confirmation_token_created_at
+      ? new Date(row.confirmation_token_created_at).toISOString()
+      : '',
     shippingFeeCents: row.shipping_fee_cents,
     shippingRegion: row.shipping_region,
     shippingRegionLabel: row.shipping_region_label,
