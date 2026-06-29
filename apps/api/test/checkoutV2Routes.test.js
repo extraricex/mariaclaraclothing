@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const { createCheckoutRouter } = require('../src/routes/checkout');
+const { createOrderRouter } = require('../src/routes/orders');
 const { errorHandler } = require('../src/app');
 
 function sampleSnapshot({ finalizable = true } = {}) {
@@ -31,6 +32,22 @@ function sampleSnapshot({ finalizable = true } = {}) {
     freeShippingUnlocked: false,
     finalizable
   };
+}
+
+async function withOrderServer(dependencies, callback) {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/orders', createOrderRouter(dependencies));
+  app.use(errorHandler);
+  const server = await new Promise((resolve, reject) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+    listener.on('error', reject);
+  });
+  try {
+    await callback(server.address().port);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 }
 
 async function withServer(dependencies, callback) {
@@ -155,5 +172,79 @@ test('POST /api/checkout/quotes returns 503 when PostgreSQL is unavailable', asy
 
     assert.equal(response.status, 503);
     assert.equal(body.code, 'checkout_v2_unavailable');
+  });
+});
+
+test('V2 order ignores client money and forwards the idempotency key', async () => {
+  let input;
+  await withOrderServer({
+    getStoreSettings: async () => ({ website: { maintenanceMode: false } }),
+    resolveCustomerAccountId: async () => '',
+    placeAuthoritativeCheckout: async (value) => {
+      input = value;
+      return { orderNumber: 'MCC-1', totalCents: 72900, confirmationToken: 'secret' };
+    },
+    authoritativeDependencies: () => ({})
+  }, async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': 'idem-1234567890123456' },
+      body: JSON.stringify({
+        quoteId: 'quote-1', cartSessionId: 'cart-1', totalCents: 1,
+        customer: { fullName: 'Maria Test', phone: '09171234567' },
+        paymentMethod: 'cash_on_delivery'
+      })
+    });
+    const body = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(body.totalCents, 72900);
+    assert.equal(body.confirmationToken, 'secret');
+    assert.equal(input.idempotencyKey, 'idem-1234567890123456');
+  });
+});
+
+test('public lookup returns no PII and private confirmation requires its header token', async () => {
+  const order = {
+    orderNumber: 'MCC-1',
+    customer: { fullName: 'Maria Test', phone: '09171234567' },
+    address: { addressLine: '12 Test St' },
+    items: [{ productName: 'Server Shirt', quantity: 1 }],
+    subtotalCents: 64900,
+    discountTotalCents: 0,
+    shippingFeeCents: 8000,
+    totalCents: 72900,
+    paymentMethod: 'cash_on_delivery',
+    confirmationTokenHash: 'stored-hash',
+    placedAt: '2026-06-29T00:00:00.000Z',
+    status: 'received', fulfillmentStatus: 'unfulfilled', paymentStatus: 'cod_pending'
+  };
+  await withOrderServer({
+    findOrderByNumber: async () => order,
+    verifyConfirmationToken: (token, hash) => token === 'right-token' && hash === 'stored-hash'
+  }, async (port) => {
+    const publicResponse = await fetch(`http://127.0.0.1:${port}/api/orders/MCC-1`);
+    const publicBody = await publicResponse.json();
+    assert.deepEqual(Object.keys(publicBody.order).sort(), [
+      'fulfillmentStatus', 'orderNumber', 'paymentStatus', 'placedAt', 'status', 'totalCents'
+    ]);
+    assert.equal(JSON.stringify(publicBody).includes('0917'), false);
+
+    for (const token of ['', 'wrong']) {
+      const denied = await fetch(`http://127.0.0.1:${port}/api/orders/MCC-1/confirmation`, {
+        headers: token ? { 'X-Order-Confirmation': token } : {}
+      });
+      const deniedBody = await denied.json();
+      assert.equal(denied.status, 404);
+      assert.equal(deniedBody.code, 'confirmation_not_found');
+    }
+
+    const allowed = await fetch(`http://127.0.0.1:${port}/api/orders/MCC-1/confirmation`, {
+      headers: { 'X-Order-Confirmation': 'right-token' }
+    });
+    const allowedBody = await allowed.json();
+    assert.equal(allowed.status, 200);
+    assert.equal(allowedBody.order.customerFirstName, 'Maria');
+    assert.equal(allowedBody.order.paymentMethodLabel, 'Cash on Delivery');
+    assert.equal(allowedBody.order.totalCents, 72900);
   });
 });

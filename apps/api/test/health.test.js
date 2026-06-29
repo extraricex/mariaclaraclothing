@@ -129,11 +129,9 @@ test('storefront APIs run from in-project catalog only', async () => {
 
     assert.equal(confirmationResponse.status, 200);
     assert.equal(confirmationBody.order.orderNumber, orderBody.orderNumber);
-    assert.equal(confirmationBody.order.customerName, 'Test Customer');
-    assert.equal(confirmationBody.order.paymentMethod, 'Cash on Delivery');
-    assert.equal(confirmationBody.order.shippingRegionLabel, 'Metro Manila & Cavite Region');
-    assert.equal(confirmationBody.order.shippingFeeCents, 0);
     assert.equal(confirmationBody.order.totalCents, 64900);
+    assert.equal(JSON.stringify(confirmationBody).includes('Test Customer'), false);
+    assert.equal(JSON.stringify(confirmationBody).includes('09171234567'), false);
   } finally {
     server.close();
   }
@@ -291,8 +289,7 @@ test('orders persist after app restart and remain fetchable by order number', as
 
     assert.equal(response.status, 200);
     assert.equal(body.order.orderNumber, orderNumber);
-    assert.equal(body.order.customerName, 'Persistent Customer');
-    assert.equal(body.order.shippingFeeCents, 8000);
+    assert.equal(JSON.stringify(body).includes('Persistent Customer'), false);
     assert.equal(body.order.totalCents, 72900);
   } finally {
     await new Promise((resolve) => secondServer.close(resolve));

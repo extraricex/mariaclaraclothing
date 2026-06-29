@@ -6,6 +6,7 @@ const { findOrderByIdempotencyKey, findOrderByNumber, saveOrder } = require('../
 const { appendInventoryMovements } = require('../inventory/inventoryMovementRepository');
 const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
 const { incrementDiscountUsage } = require('../discounts/discountRepository');
+const { claimDiscountUsage } = require('../discounts/discountRepository');
 const { quoteCart } = require('../promos/promoEngine');
 const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
 const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
@@ -14,10 +15,17 @@ const { env } = require('../config/env');
 const { persistPostgresCheckout } = require('../orders/checkoutService');
 const { buildMetaPurchaseEvent, parseMetaCookies } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
+const { placeAuthoritativeCheckout } = require('../checkout/authoritativeCheckoutService');
+const { claimIdempotency, completeIdempotency, hashIdempotencyKey } = require('../checkout/checkoutIdempotencyRepository');
+const { findCheckoutQuoteForUpdate, consumeCheckoutQuote } = require('../checkout/checkoutQuoteRepository');
+const { buildAuthoritativeQuote } = require('../checkout/checkoutQuoteService');
+const { deriveConfirmationToken, hashConfirmationToken, verifyConfirmationToken } = require('../checkout/confirmationToken');
+const { sha256Object } = require('../checkout/requestHash');
+const { CommerceError } = require('../checkout/commerceError');
 
-const router = express.Router();
+const legacyRouter = express.Router();
 
-router.get('/:orderNumber', async (req, res, next) => {
+legacyRouter.get('/:orderNumber', async (req, res, next) => {
   try {
     const orderNumber = String(req.params.orderNumber || '').trim();
     const order = await findOrderByNumber(orderNumber);
@@ -32,7 +40,7 @@ router.get('/:orderNumber', async (req, res, next) => {
   }
 });
 
-router.post('/', async (req, res, next) => {
+legacyRouter.post('/', async (req, res, next) => {
   try {
     const storeSettings = await getStoreSettings();
     if (storeSettings.website.maintenanceMode) {
@@ -322,4 +330,155 @@ async function normalizeCheckoutItem(item) {
   };
 }
 
-module.exports = { orderRouter: router };
+function notFoundConfirmation(res) {
+  return res.status(404).json({
+    error: 'Order confirmation not found',
+    code: 'confirmation_not_found'
+  });
+}
+
+function publicOrderPayload(order) {
+  return {
+    orderNumber: order.orderNumber,
+    placedAt: order.placedAt,
+    totalCents: order.totalCents,
+    status: order.status,
+    fulfillmentStatus: order.fulfillmentStatus,
+    paymentStatus: order.paymentStatus
+  };
+}
+
+function privateOrderPayload(order) {
+  const paymentMethodLabel = order.paymentMethod === 'cash_on_delivery'
+    ? 'Cash on Delivery'
+    : String(order.paymentMethod || '').replaceAll('_', ' ');
+  return {
+    orderNumber: order.orderNumber,
+    customerFirstName: String(order.customer?.fullName || '').trim().split(/\s+/)[0] || '',
+    addressLine: order.address?.addressLine || '',
+    address: order.address || {},
+    paymentMethod: order.paymentMethod,
+    paymentMethodLabel,
+    shippingRegionLabel: order.shippingRegionLabel || '',
+    shippingFeeCents: order.shippingFeeCents,
+    items: order.items || [],
+    subtotalCents: order.subtotalCents,
+    discountCode: order.discountCode || '',
+    discountTotalCents: order.discountTotalCents,
+    totalCents: order.totalCents,
+    status: order.status,
+    fulfillmentStatus: order.fulfillmentStatus,
+    paymentStatus: order.paymentStatus,
+    placedAt: order.placedAt
+  };
+}
+
+function defaultAuthoritativeDependencies(req) {
+  return {
+    now: () => new Date(),
+    confirmationSecret: env.checkout.confirmationSecret,
+    idempotencyTtlMs: env.checkout.idempotencyTtlMs,
+    hashRequest: sha256Object,
+    hashKey: hashIdempotencyKey,
+    createOrderNumber,
+    transaction,
+    claimIdempotency,
+    loadQuote: findCheckoutQuoteForUpdate,
+    refreshQuote: buildAuthoritativeQuote,
+    deductStock: deductVariantStock,
+    saveOrder,
+    appendMovements: appendInventoryMovements,
+    convertCart: markCartSessionConverted,
+    claimPromo: claimDiscountUsage,
+    insertMeta: async (client, order, requestContext) => {
+      if (!env.meta.enabled) return null;
+      return insertMetaPurchaseOutbox(client, buildMetaPurchaseEvent({ order, requestContext }));
+    },
+    consumeQuote: consumeCheckoutQuote,
+    completeIdempotency,
+    deriveToken: deriveConfirmationToken,
+    hashToken: hashConfirmationToken
+  };
+}
+
+const DEFAULT_ROUTE_DEPENDENCIES = {
+  authoritativeDependencies: defaultAuthoritativeDependencies,
+  findOrderByNumber,
+  getStoreSettings,
+  placeAuthoritativeCheckout,
+  resolveCustomerAccountId,
+  verifyConfirmationToken,
+  v2Required: env.checkout.v2Required
+};
+
+function createOrderRouter(overrides = {}) {
+  const dependencies = { ...DEFAULT_ROUTE_DEPENDENCIES, ...overrides };
+  const router = express.Router();
+
+  router.get('/:orderNumber/confirmation', async (req, res, next) => {
+    try {
+      const order = await dependencies.findOrderByNumber(String(req.params.orderNumber || '').trim());
+      const token = String(req.get('X-Order-Confirmation') || '');
+      if (!order || !dependencies.verifyConfirmationToken(token, order.confirmationTokenHash)) {
+        return notFoundConfirmation(res);
+      }
+      return res.json({ order: privateOrderPayload(order) });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.get('/:orderNumber', async (req, res, next) => {
+    try {
+      const order = await dependencies.findOrderByNumber(String(req.params.orderNumber || '').trim());
+      if (!order) return notFoundConfirmation(res);
+      return res.json({ order: publicOrderPayload(order) });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.post('/', async (req, res, next) => {
+    try {
+      const settings = await dependencies.getStoreSettings();
+      if (settings.website.maintenanceMode) {
+        return res.status(503).json({ error: 'Store is under maintenance.' });
+      }
+      if (req.body?.quoteId) {
+        const customerAccountId = await dependencies.resolveCustomerAccountId(req);
+        const cookies = parseMetaCookies(req.headers.cookie);
+        const result = await dependencies.placeAuthoritativeCheckout({
+          ...req.body,
+          customerAccountId,
+          idempotencyKey: req.get('Idempotency-Key') || '',
+          requestContext: {
+            ...cookies,
+            clientIp: req.ip,
+            clientUserAgent: req.get('user-agent') || '',
+            sourceUrl: checkoutSourceUrl(req)
+          }
+        }, dependencies.authoritativeDependencies(req));
+        return res.status(201).json(result);
+      }
+      if (dependencies.v2Required) {
+        throw new CommerceError('Refresh checkout to continue.', {
+          code: 'checkout_upgrade_required', status: 409
+        });
+      }
+      return legacyRouter.handle(req, res, next);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  return router;
+}
+
+const orderRouter = createOrderRouter();
+
+module.exports = {
+  createOrderRouter,
+  orderRouter,
+  privateOrderPayload,
+  publicOrderPayload
+};
