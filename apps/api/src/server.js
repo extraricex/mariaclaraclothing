@@ -2,6 +2,7 @@ const { createApp } = require('./app');
 const { env } = require('./config/env');
 const { closePool, getPool } = require('./db/postgres');
 const { createMetaConversionsWorker } = require('./marketing/metaConversionsWorker');
+const { createOrderNotificationWorker } = require('./notifications/orderNotificationWorker');
 
 function closeHttpServer(server) {
   return new Promise((resolve, reject) => {
@@ -13,6 +14,7 @@ function startServer({
   app = createApp(),
   config = env,
   createWorker = createMetaConversionsWorker,
+  createNotificationWorker = createOrderNotificationWorker,
   pool,
   closeDatabase = closePool,
   registerSignals = true,
@@ -25,12 +27,17 @@ function startServer({
     ? createWorker({ client: pool || getPool(), config: config.meta, logger })
     : null;
   worker?.start();
+  const notificationWorker = config.notifications?.enabled
+    ? createNotificationWorker({ client: process.env.DATABASE_URL ? (pool || getPool()) : undefined, config: config.notifications, logger })
+    : null;
+  notificationWorker?.start();
   let shutdownPromise;
 
   function shutdown() {
     if (!shutdownPromise) {
       shutdownPromise = (async () => {
         worker?.stop();
+        notificationWorker?.stop();
         await closeHttpServer(server);
         await closeDatabase();
       })();
@@ -49,7 +56,7 @@ function startServer({
     }
   }
 
-  return { server, worker, shutdown };
+  return { server, worker, notificationWorker, shutdown };
 }
 
 if (require.main === module) startServer();

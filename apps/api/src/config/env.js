@@ -44,10 +44,26 @@ function checkoutConfig(source = process.env) {
   };
 }
 
+function notificationConfig(source = process.env) {
+  const enabled = source.ORDER_NOTIFICATIONS_ENABLED === 'true';
+  const sms = {
+    apiKey: String(source.SEMAPHORE_API_KEY || ''),
+    senderName: String(source.SEMAPHORE_SENDER_NAME || '').trim()
+  };
+  const email = {
+    apiKey: String(source.RESEND_API_KEY || ''),
+    from: String(source.ORDER_NOTIFICATION_FROM_EMAIL || '').trim()
+  };
+  sms.configured = enabled && Boolean(sms.apiKey);
+  email.configured = enabled && Boolean(email.apiKey && email.from);
+  return { enabled, sms, email };
+}
+
 const env = {
   port: Number(optional('PORT', '3000')),
   meta: metaConfig(),
-  checkout: checkoutConfig()
+  checkout: checkoutConfig(),
+  notifications: notificationConfig()
 };
 
-module.exports = { env, metaConfig, checkoutConfig };
+module.exports = { env, metaConfig, checkoutConfig, notificationConfig };

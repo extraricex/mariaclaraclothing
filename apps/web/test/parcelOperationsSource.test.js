@@ -22,3 +22,10 @@ test('orders table selects all visible orders and exposes indeterminate state', 
   assert.match(source, /someVisibleSelected/);
   assert.match(source, /\.indeterminate\s*=\s*someVisibleSelected/);
 });
+
+test('order detail shows delivery confirmation delivery states', async () => {
+  const source = await readFile(path.join(root, 'admin', 'OrderDetail.jsx'), 'utf8');
+  assert.match(source, /Delivery confirmations/);
+  assert.match(source, /order\.notifications/);
+  assert.match(source, /notification\.lastError/);
+});

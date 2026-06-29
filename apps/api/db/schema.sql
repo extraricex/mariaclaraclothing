@@ -122,6 +122,27 @@ CREATE TABLE IF NOT EXISTS order_tracking_notifications (
 
 CREATE INDEX IF NOT EXISTS order_tracking_notifications_order_number_idx ON order_tracking_notifications(order_number, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS order_notification_outbox (
+  id text PRIMARY KEY,
+  order_number text NOT NULL REFERENCES orders(order_number) ON DELETE CASCADE,
+  event_name text NOT NULL,
+  channel text NOT NULL CHECK (channel IN ('sms', 'email')),
+  recipient text NOT NULL DEFAULT '',
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'sent', 'failed', 'skipped')),
+  attempt_count integer NOT NULL DEFAULT 0,
+  next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  locked_at timestamptz,
+  sent_at timestamptz,
+  provider_message_id text NOT NULL DEFAULT '',
+  last_error text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (order_number, event_name, channel)
+);
+
+CREATE INDEX IF NOT EXISTS order_notification_outbox_due_idx ON order_notification_outbox(status, next_attempt_at);
+
 CREATE TABLE IF NOT EXISTS inventory_movements (
   id text PRIMARY KEY,
   order_number text NOT NULL DEFAULT '',

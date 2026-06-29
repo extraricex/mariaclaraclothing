@@ -363,6 +363,7 @@ export default function OrderDetail() {
   ].filter(Boolean);
   const statusEvents = Array.isArray(order.statusEvents) ? order.statusEvents : [];
   const trackingNotifications = Array.isArray(order.trackingNotifications) ? order.trackingNotifications : [];
+  const deliveryNotifications = Array.isArray(order.notifications) ? order.notifications : [];
   const canSendTrackingNotification = Boolean(order.exportedToJnt)
     || form.status === 'shipped'
     || form.fulfillmentStatus === 'shipped'
@@ -716,6 +717,21 @@ export default function OrderDetail() {
                 {trackingNotifications.length ? 'Resend tracking notification' : 'Send tracking notification'}
               </button>
             )}
+          </section>
+
+          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Delivery confirmations</h2>
+            {deliveryNotifications.length ? (
+              <div className="mt-4 space-y-3">
+                {deliveryNotifications.map((notification) => (
+                  <article key={notification.id} className="rounded-[var(--radius-admin)] border border-line bg-white p-3 text-sm">
+                    <p className="font-semibold">{titleCase(notification.channel)} · {titleCase(notification.status)}</p>
+                    <p className="mt-1 text-xs text-clay">{notification.recipient}</p>
+                    {notification.lastError && <p className="mt-2 text-xs text-red-700">{notification.lastError}</p>}
+                  </article>
+                ))}
+              </div>
+            ) : <p className="mt-3 text-sm text-clay">Created automatically when the order is first marked delivered.</p>}
           </section>
 
           <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">

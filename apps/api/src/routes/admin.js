@@ -11,6 +11,8 @@ const {
   updateOrder
 } = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
+const { enqueueDeliveredOrderNotifications } = require('../notifications/orderNotificationService');
+const { listForOrder: listOrderNotifications } = require('../notifications/orderNotificationOutboxRepository');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
 const { cartSessionSummary, deleteCartSession, listCartSessions } = require('../cartSessions/cartSessionRepository');
 const {
@@ -635,7 +637,7 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    return res.json({ order });
+    return res.json({ order: { ...order, notifications: await listOrderNotifications(order.orderNumber) } });
   } catch (error) {
     return next(error);
   }
@@ -687,7 +689,9 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
 
     await restoreCancelledOrderStock(existingOrder, order);
     await appendStatusEventIfChanged(existingOrder, order, 'admin');
-    return res.json({ order: await findOrderByNumber(orderNumber) });
+    await enqueueDeliveredOrderNotifications(existingOrder, order);
+    const refreshedOrder = await findOrderByNumber(orderNumber);
+    return res.json({ order: { ...refreshedOrder, notifications: await listOrderNotifications(orderNumber) } });
   } catch (error) {
     return next(error);
   }
