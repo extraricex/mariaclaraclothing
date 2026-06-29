@@ -48,6 +48,10 @@ npm run dev:web                          # React app on :5173 (proxies /api to :
 - `PANCAKE_WEBHOOK_SECRET` — reserved for future POS integration
 - `CHECKOUT_V2_REQUIRED` — rejects legacy browser-authoritative checkout when `true`
 - `ORDER_CONFIRMATION_SECRET` — HMAC secret for private guest order confirmations
+- `ORDER_NOTIFICATIONS_ENABLED` — enables the delivered-order SMS/email worker
+- `SEMAPHORE_API_KEY` / `SEMAPHORE_SENDER_NAME` — Semaphore SMS credentials
+- `RESEND_API_KEY` / `ORDER_NOTIFICATION_FROM_EMAIL` — Resend email credentials
+- `JNT_INTEGRATION_MODE` — keep `dry_run` until J&T Philippines grants official API access
 
 `.env` files are gitignored; only `.env.example` is committed.
 
@@ -87,3 +91,10 @@ Product image cleanup rule:
 The J&T Excel export uses the template in `apps/api/data/jnt/jntexportfile.xlsx`.
 Do not delete files inside `apps/api/data/jnt/` unless the export feature is changed
 and tested.
+
+Order detail also provides a server-generated J&T parcel preview using the effective parcel
+weight, customer address, items, and COD amount. It never books a shipment in `dry_run` mode.
+See [`docs/jnt-integration-recommendation.md`](docs/jnt-integration-recommendation.md).
+
+Delivered-order SMS/email setup and monitoring are documented in
+[`docs/parcel-notification-operations.md`](docs/parcel-notification-operations.md).
