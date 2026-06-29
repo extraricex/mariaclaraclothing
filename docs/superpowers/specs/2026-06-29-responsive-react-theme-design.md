@@ -152,3 +152,14 @@ Browser acceptance includes:
 - No new font or font-file integration.
 - No content, product-media, API, database, pricing, inventory, checkout, order, analytics, notification, or authentication changes.
 - No device-specific user-agent detection.
+
+## Approved Product Photo Background Addendum
+
+Product photos with white pixels must visually blend into the approved `#F1F1F1` website surface without editing image assets.
+
+- Add one reusable product-photo class that applies `mix-blend-mode: multiply`.
+- Apply it to product imagery in storefront product cards, product detail galleries and thumbnails, recommendations, cart, cart drawer, checkout, customer order imagery where present, and admin product previews.
+- Keep product image sizing, `object-fit`, aspect ratios, loading behavior, alternative text, links, and controls unchanged.
+- Do not apply blending to logos, homepage banners, content images, icons, or video.
+- Do not rewrite or replace uploaded image files. Future product uploads inherit the display rule automatically.
+- Add source regression coverage for the shared class and its product-image call sites, then verify representative light and dark products in the browser.

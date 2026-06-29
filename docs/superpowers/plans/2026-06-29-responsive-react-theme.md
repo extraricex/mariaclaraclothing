@@ -282,6 +282,52 @@ git add apps/web/src/index.css apps/web/src/components/Shell.jsx apps/web/src/pa
 git commit -m "fix: contain storefront layouts on narrow screens"
 ```
 
+## Task 2A: Blend Product Photo Backgrounds Into The Website Surface
+
+**Files:**
+- Modify: `apps/web/src/index.css`
+- Modify: `apps/web/src/components/ProductCard.jsx`, `apps/web/src/components/Shell.jsx`, `apps/web/src/pages/Product.jsx`, `apps/web/src/pages/Cart.jsx`, `apps/web/src/pages/Checkout.jsx`, `apps/web/src/admin/Collections.jsx`, `apps/web/src/admin/Products.jsx`, `apps/web/src/admin/OrderDetail.jsx`, and `apps/web/src/admin/ProductEditor.jsx`
+- Create: `apps/web/test/productPhotoBlendSource.test.js`
+
+- [ ] **Step 1: Write the failing source regression test**
+
+Assert that `index.css` defines `.product-photo-blend` with `mix-blend-mode: multiply`. Assert product image call sites in `ProductCard.jsx`, `Shell.jsx`, `Product.jsx`, `Cart.jsx`, `Checkout.jsx`, `Collections.jsx`, `Products.jsx`, `OrderDetail.jsx`, and `ProductEditor.jsx` use the class. Assert `Home.jsx`, `Banners.jsx`, `AdminLayout.jsx`, and `Login.jsx` do not use it so banners and logos remain unchanged.
+
+- [ ] **Step 2: Run RED**
+
+```bash
+node --test apps/web/test/productPhotoBlendSource.test.js
+```
+
+Expected: FAIL because the shared class and call-site markers do not exist.
+
+- [ ] **Step 3: Implement the shared display rule**
+
+```css
+.product-photo-blend {
+  mix-blend-mode: multiply;
+}
+```
+
+Append `product-photo-blend` to product `<img>` class names only. Preserve every existing sizing, aspect-ratio, `object-fit`, loading, alt-text, link, and interaction attribute.
+
+- [ ] **Step 4: Run GREEN and the web suite**
+
+```bash
+node --test apps/web/test/productPhotoBlendSource.test.js
+node --test apps/web/test/*.test.js
+npm run build:web
+```
+
+Expected: all tests pass and the production build exits 0.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/src apps/web/test/productPhotoBlendSource.test.js
+git commit -m "style: blend product photos with site background"
+```
+
 ## Task 3: Add Admin Responsive Source Contracts
 
 **Files:**
