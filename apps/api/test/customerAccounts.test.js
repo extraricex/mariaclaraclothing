@@ -84,7 +84,7 @@ test('customer accounts: register, login, profile, order linking', async () => {
   const { port } = server.address();
 
   try {
-    // guest order placed BEFORE the account exists, same phone → should link later
+    // Guest order placed before registration must not become account-owned by phone alone.
     const guestOrder = await jsonRequest(port, '/api/orders', {
       method: 'POST',
       body: JSON.stringify(checkoutPayload('09171230001'))
@@ -147,11 +147,20 @@ test('customer accounts: register, login, profile, order linking', async () => {
     const updateResponse = await jsonRequest(port, '/api/customer/me', {
       method: 'PUT',
       token: loginBody.token,
-      body: JSON.stringify({ savedAddress: { houseAddress: '12 Test St', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE', postalCode: '' } })
+      body: JSON.stringify({ savedAddress: {
+        houseAddress: '12 Test St',
+        provinceCode: 'CAVITE', province: 'CAVITE',
+        cityCode: 'CAVITE|IMUS', city: 'IMUS',
+        barangayCode: 'CAVITE|IMUS|BUCANDALA IV', barangay: 'BUCANDALA IV',
+        datasetVersion: '2026-06-05', postalCode: ''
+      } })
     });
     assert.equal(updateResponse.status, 200);
     const updated = await updateResponse.json();
     assert.equal(updated.customer.savedAddress.barangay, 'BUCANDALA IV');
+    assert.equal(updated.customer.savedAddress.provinceCode, 'CAVITE');
+    assert.equal(updated.customer.savedAddress.cityCode, 'CAVITE|IMUS');
+    assert.equal(updated.customer.savedAddress.barangayCode, 'CAVITE|IMUS|BUCANDALA IV');
 
     // logged-in checkout stamps customerAccountId
     const memberOrder = await jsonRequest(port, '/api/orders', {
@@ -161,11 +170,11 @@ test('customer accounts: register, login, profile, order linking', async () => {
     });
     assert.equal(memberOrder.status, 201);
 
-    // history: includes both the linked guest order (same phone) and the account-stamped order
+    // History contains only the explicitly account-stamped order.
     const ordersResponse = await jsonRequest(port, '/api/customer/orders', { token: loginBody.token });
     assert.equal(ordersResponse.status, 200);
     const { orders } = await ordersResponse.json();
-    assert.equal(orders.length, 2);
+    assert.equal(orders.length, 1);
     assert.ok(orders.every((order) => order.items.length === 1));
     assert.ok(orders.every((order) => order.totalCents === 64900 + 8000));
   } finally {

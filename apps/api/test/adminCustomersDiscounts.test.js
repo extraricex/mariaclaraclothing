@@ -138,10 +138,10 @@ test('discounts: admin CRUD, public validation, checkout application and usage c
     assert.equal(orderResponse.status, 201);
     const { orderNumber } = await orderResponse.json();
 
-    const confirmation = await fetch(`http://127.0.0.1:${port}/api/orders/${orderNumber}`).then((r) => r.json());
-    assert.equal(confirmation.order.discountCode, 'MARIA10');
-    assert.equal(confirmation.order.discountTotalCents, 6490);
-    assert.equal(confirmation.order.totalCents, 64900 - 6490 + 8000);
+    const detail = await adminRequest(port, `/api/admin/orders/${orderNumber}`).then((r) => r.json());
+    assert.equal(detail.order.discountCode, 'MARIA10');
+    assert.equal(detail.order.discountTotalCents, 6490);
+    assert.equal(detail.order.totalCents, 64900 - 6490 + 8000);
 
     const listAfterUse = await adminRequest(port, '/api/admin/discounts').then((r) => r.json());
     assert.equal(listAfterUse.discounts[0].usageCount, 1);
@@ -240,15 +240,15 @@ test('promos: quote and checkout apply automatic buy more save more snapshots', 
     assert.equal(orderResponse.status, 201);
     const { orderNumber } = await orderResponse.json();
 
-    const confirmation = await fetch(`http://127.0.0.1:${port}/api/orders/${orderNumber}`).then((r) => r.json());
-    assert.equal(confirmation.order.discountCode, 'BMSM2026');
-    assert.equal(confirmation.order.discountTotalCents, 10000);
-    assert.equal(confirmation.order.shippingFeeCents, 0);
-    assert.equal(confirmation.order.freeShippingUnlocked, true);
-    assert.equal(confirmation.order.totalCents, 119800);
-    assert.equal(confirmation.order.discountSnapshot.name, 'Buy More Save More Promo');
-    assert.equal(confirmation.order.discountSnapshot.type, 'buy_more_save_more');
-    assert.equal(confirmation.order.discountSnapshot.freeShippingApplied, true);
+    const detail = await adminRequest(port, `/api/admin/orders/${orderNumber}`).then((r) => r.json());
+    assert.equal(detail.order.discountCode, 'BMSM2026');
+    assert.equal(detail.order.discountTotalCents, 10000);
+    assert.equal(detail.order.shippingFeeCents, 0);
+    assert.equal(detail.order.freeShippingUnlocked, true);
+    assert.equal(detail.order.totalCents, 119800);
+    assert.equal(detail.order.discountSnapshot.name, 'Buy More Save More Promo');
+    assert.equal(detail.order.discountSnapshot.type, 'buy_more_save_more');
+    assert.equal(detail.order.discountSnapshot.freeShippingApplied, true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('ORDERS_DATA_FILE', previousOrdersFile);

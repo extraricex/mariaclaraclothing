@@ -10,7 +10,6 @@ const {
   verifyCustomerToken,
   verifyPassword
 } = require('../customers/customerAccountRepository');
-const { findCustomerOrders } = require('../customers/customerAggregator');
 const { listOrders } = require('../orders/orderRepository');
 const { normalizePhilippinePhone } = require('../jnt/jntExport');
 
@@ -121,14 +120,9 @@ router.get('/orders', requireCustomer, async (req, res, next) => {
   try {
     const orders = await listOrders();
     const account = req.customerAccount;
-    const byPhone = findCustomerOrders(orders, account.phone);
-    const seen = new Set();
-    const customerOrders = [];
-
-    [...orders.filter((order) => order.customerAccountId === account.id), ...byPhone].forEach((order) => {
-      if (seen.has(order.orderNumber)) return;
-      seen.add(order.orderNumber);
-      customerOrders.push({
+    const customerOrders = orders
+      .filter((order) => order.customerAccountId === account.id)
+      .map((order) => ({
         orderNumber: order.orderNumber,
         placedAt: order.placedAt,
         status: order.status,
@@ -145,8 +139,7 @@ router.get('/orders', requireCustomer, async (req, res, next) => {
           quantity: item.quantity,
           unitPriceCents: item.unitPriceCents
         }))
-      });
-    });
+      }));
 
     customerOrders.sort((a, b) => new Date(b.placedAt || 0) - new Date(a.placedAt || 0));
     return res.json({ orders: customerOrders });

@@ -58,6 +58,9 @@ export default function AccountSettings() {
         }
         changes.savedAddress = {
           houseAddress: draft.house.trim(),
+          provinceCode: province.code,
+          cityCode: city.code,
+          barangayCode: barangay.code,
           barangay: barangay.name,
           city: city.name,
           province: province.name,
@@ -103,9 +106,6 @@ export default function AccountSettings() {
             </label>
             <p className="text-xs text-clay">
               Email: <strong className="text-ink">{customer.email}</strong> (used for login — contact us to change it)
-            </p>
-            <p className="text-xs text-clay">
-              Your mobile number also links your past guest orders to this account.
             </p>
           </div>
         </section>

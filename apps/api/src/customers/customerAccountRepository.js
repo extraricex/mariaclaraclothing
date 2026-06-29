@@ -56,10 +56,14 @@ function normalizeSavedAddress(address) {
   if (!address || typeof address !== 'object') return null;
   const normalized = {
     houseAddress: String(address.houseAddress || '').trim(),
+    provinceCode: String(address.provinceCode || '').trim(),
+    cityCode: String(address.cityCode || '').trim(),
+    barangayCode: String(address.barangayCode || '').trim(),
     barangay: String(address.barangay || '').trim(),
     city: String(address.city || '').trim(),
     province: String(address.province || '').trim(),
-    postalCode: String(address.postalCode || '').trim()
+    postalCode: String(address.postalCode || '').trim(),
+    datasetVersion: String(address.datasetVersion || '').trim()
   };
   if (!normalized.houseAddress && !normalized.barangay && !normalized.city && !normalized.province) {
     return null;
