@@ -336,7 +336,27 @@ git commit -m "style: blend product photos with site background"
 
 - [ ] **Step 1: Write the failing interaction regression test**
 
-Assert shared CSS rules cover enabled native buttons, `[role="button"]`, `.btn-ink`, `.btn-ghost`, and `.btn-secondary`; verify pointer, hover, active, focus-visible, disabled suppression, and `prefers-reduced-motion` behavior.
+Create `apps/web/test/buttonInteractionSource.test.js`:
+
+```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+test('all enabled buttons expose consistent interaction feedback', async () => {
+  const css = await readFile(path.join(import.meta.dirname, '..', 'src', 'index.css'), 'utf8');
+
+  assert.match(css, /button:not\(:disabled\):not\(\[aria-disabled="true"\]\)[\s\S]*cursor:\s*pointer/);
+  assert.match(css, /\[role="button"\]:not\(\[aria-disabled="true"\]\)[\s\S]*cursor:\s*pointer/);
+  for (const className of ['btn-ink', 'btn-ghost', 'btn-secondary']) {
+    assert.match(css, new RegExp(`\\.${className}:not\\(\\[aria-disabled="true"\\]\\)`));
+  }
+  assert.match(css, /:focus-visible[\s\S]*outline:\s*2px solid currentColor/);
+  assert.match(css, /button:disabled,[\s\S]*cursor:\s*not-allowed[\s\S]*transform:\s*none/);
+  assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*transition:\s*none !important[\s\S]*transform:\s*none !important/);
+});
+```
 
 - [ ] **Step 2: Run RED**
 
@@ -348,7 +368,89 @@ Expected: FAIL because the shared interaction rules do not exist.
 
 - [ ] **Step 3: Implement the shared interaction rules**
 
-Use scoped `:not(:disabled):not([aria-disabled="true"])` selectors. Apply pointer and subtle filter/press feedback to native/role controls; apply the lift and shadow treatment to `.btn-ink`, `.btn-ghost`, and `.btn-secondary`; add a shared `:focus-visible` outline; explicitly suppress movement/filter/shadow for disabled controls; and disable transition/movement inside the existing reduced-motion media query.
+Add these rules to the component layer in `apps/web/src/index.css` after the shared button definitions:
+
+```css
+button:not(:disabled):not([aria-disabled="true"]),
+[role="button"]:not([aria-disabled="true"]),
+.btn-ink:not([aria-disabled="true"]),
+.btn-ghost:not([aria-disabled="true"]),
+.btn-secondary:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:not(:disabled):not([aria-disabled="true"]):hover,
+[role="button"]:not([aria-disabled="true"]):hover {
+  filter: brightness(0.92);
+}
+
+button:not(:disabled):not([aria-disabled="true"]):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.98);
+}
+
+.btn-ink:not([aria-disabled="true"]),
+.btn-ghost:not([aria-disabled="true"]),
+.btn-secondary:not([aria-disabled="true"]) {
+  box-shadow: 0 2px 0 var(--color-line);
+  transition-property: color, background-color, border-color, box-shadow, filter, transform;
+}
+
+.btn-ink:not([aria-disabled="true"]):hover,
+.btn-ghost:not([aria-disabled="true"]):hover,
+.btn-secondary:not([aria-disabled="true"]):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 var(--color-line);
+}
+
+.btn-ink:not([aria-disabled="true"]):active,
+.btn-ghost:not([aria-disabled="true"]):active,
+.btn-secondary:not([aria-disabled="true"]):active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+:is(button, [role="button"], .btn-ink, .btn-ghost, .btn-secondary):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+.btn-ink[aria-disabled="true"],
+.btn-ghost[aria-disabled="true"],
+.btn-secondary[aria-disabled="true"] {
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+  box-shadow: none;
+}
+```
+
+Add this media query after the component layer:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  button,
+  [role="button"],
+  .btn-ink,
+  .btn-ghost,
+  .btn-secondary {
+    transition: none !important;
+  }
+
+  button:active,
+  [role="button"]:active,
+  .btn-ink:hover,
+  .btn-ghost:hover,
+  .btn-secondary:hover,
+  .btn-ink:active,
+  .btn-ghost:active,
+  .btn-secondary:active {
+    transform: none !important;
+  }
+}
+```
 
 - [ ] **Step 4: Run GREEN and the web suite**
 
