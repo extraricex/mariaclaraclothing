@@ -8,6 +8,7 @@ const { siteContentRouter } = require('./routes/siteContent');
 const { discountRouter } = require('./routes/discounts');
 const { customerRouter } = require('./routes/customer');
 const { storeSettingsRouter } = require('./routes/storeSettings');
+const { checkoutRouter } = require('./routes/checkout');
 const { postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
@@ -80,10 +81,12 @@ function createApp() {
 
   app.use('/api/admin/login', loginRateLimit);
   app.use('/api/orders', checkoutRateLimit);
+  app.use('/api/checkout', checkoutRateLimit);
 
   app.use('/api/products', productRouter);
   app.use('/api/site-content', siteContentRouter);
   app.use('/api/orders', orderRouter);
+  app.use('/api/checkout', checkoutRouter);
   app.use('/api/cart-sessions', cartSessionRouter);
   app.use('/api/discounts', discountRouter);
   app.use('/api/customer', customerRouter);
