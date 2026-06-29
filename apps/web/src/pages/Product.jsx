@@ -146,7 +146,7 @@ export default function Product() {
         <div>
           <div className="media-zoom relative aspect-[4/5] overflow-hidden bg-white">
             {image && (
-              <img src={image.url} alt={image.altText || product.name} className="h-full w-full object-contain" />
+              <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" />
             )}
             {product.images.length > 1 && (
               <>
@@ -183,7 +183,7 @@ export default function Product() {
                   onClick={() => setActiveImage(index)}
                   className={`h-20 w-16 shrink-0 overflow-hidden border bg-white ${index === activeImage ? 'border-accent' : 'border-line'}`}
                 >
-                  <img src={thumb.url} alt="" className="h-full w-full object-contain" />
+                  <img src={thumb.url} alt="" className="product-photo-blend h-full w-full object-contain" />
                 </button>
               ))}
             </div>

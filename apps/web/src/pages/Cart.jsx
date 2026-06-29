@@ -104,7 +104,7 @@ export default function Cart() {
         {items.map((item) => (
           <article key={item.variantId} className="flex min-w-0 gap-4 py-6 sm:gap-5">
             <Link to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`} className="block h-32 w-24 shrink-0 overflow-hidden bg-cream">
-              {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-contain" loading="lazy" />}
+              {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="product-photo-blend h-full w-full object-contain" loading="lazy" />}
             </Link>
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="flex min-w-0 items-start justify-between gap-3 sm:gap-4">
@@ -157,7 +157,7 @@ export default function Cart() {
               return (
                 <article key={product.id} className="border border-line bg-paper p-3">
                   <Link to={`/product/${encodeURIComponent(product.slug)}`} className="block aspect-[4/5] overflow-hidden bg-cream">
-                    {image && <img src={image.url} alt={image.altText || product.name} className="h-full w-full object-contain" loading="lazy" />}
+                    {image && <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" loading="lazy" />}
                   </Link>
                   <div className="mt-3">
                     <h3 className="min-h-10 text-sm font-semibold leading-snug">{product.name}</h3>

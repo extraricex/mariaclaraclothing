@@ -242,7 +242,7 @@ export default function Products() {
                   <td className="p-3">
                     <Link to={`/admin/products/${encodeURIComponent(product.slug)}`} className="flex items-center gap-3">
                       {product.image ? (
-                        <img src={product.image} alt="" className="h-12 w-10 border border-line object-cover" />
+                        <img src={product.image} alt="" className="product-photo-blend h-12 w-10 border border-line object-cover" />
                       ) : (
                         <span className="h-12 w-10 border border-line bg-cream" aria-hidden="true" />
                       )}

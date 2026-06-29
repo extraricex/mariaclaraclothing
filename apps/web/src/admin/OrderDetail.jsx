@@ -431,7 +431,7 @@ export default function OrderDetail() {
                 <div key={index} className="rounded-[var(--radius-admin)] border border-line bg-white p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                     {item.imageUrl ? (
-                      <img src={item.imageUrl} alt="" className="h-14 w-14 rounded-[var(--radius-admin)] border border-line object-cover" />
+                      <img src={item.imageUrl} alt="" className="product-photo-blend h-14 w-14 rounded-[var(--radius-admin)] border border-line object-cover" />
                     ) : (
                       <span className="h-14 w-14 rounded-[var(--radius-admin)] border border-line bg-cream" aria-hidden="true" />
                     )}
@@ -493,7 +493,7 @@ export default function OrderDetail() {
                       <article key={product.slug} className="rounded-[var(--radius-admin)] border border-line bg-white p-3">
                         <div className="flex gap-3">
                           {product.image ? (
-                            <img src={product.image} alt="" className="h-14 w-12 rounded-[var(--radius-admin)] border border-line object-cover" />
+                            <img src={product.image} alt="" className="product-photo-blend h-14 w-12 rounded-[var(--radius-admin)] border border-line object-cover" />
                           ) : (
                             <span className="h-14 w-12 rounded-[var(--radius-admin)] border border-line bg-cream" aria-hidden="true" />
                           )}

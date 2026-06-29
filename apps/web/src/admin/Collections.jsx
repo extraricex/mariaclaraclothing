@@ -88,7 +88,11 @@ export default function Collections() {
       <div className="mt-5 space-y-2">
         {members.map((product) => (
           <article key={product.slug} className="flex items-center gap-4 border border-line bg-paper p-3">
-            <img src={product.image || '/brand/logo.png'} alt="" className="h-14 w-11 object-cover" />
+            {product.image ? (
+              <img src={product.image} alt="" className="product-photo-blend h-14 w-11 object-cover" />
+            ) : (
+              <img src="/brand/logo.png" alt="" className="h-14 w-11 object-cover" />
+            )}
             <div className="flex-1">
               <strong className="block text-sm">{product.name}</strong>
               <span className="text-xs text-clay">{product.status || 'active'} · {Number(product.inventoryQuantity || 0)} in stock</span>

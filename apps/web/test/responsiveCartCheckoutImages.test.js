@@ -19,7 +19,7 @@ test('cart drawer and checkout keep complete product photos in responsive frames
   );
   assert.match(
     shell,
-    /alt=\{item\.productName\}\s+className="block h-full w-full object-contain"/
+    /alt=\{item\.productName\}\s+className="product-photo-blend block h-full w-full object-contain"/
   );
   assert.doesNotMatch(
     shell,
@@ -32,7 +32,7 @@ test('cart drawer and checkout keep complete product photos in responsive frames
   );
   assert.match(
     checkout,
-    /alt=\{item\.productName\}\s+className="block h-full w-full object-contain"/
+    /alt=\{item\.productName\}\s+className="product-photo-blend block h-full w-full object-contain"/
   );
   assert.doesNotMatch(
     checkout,

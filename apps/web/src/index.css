@@ -74,6 +74,9 @@
     overscroll-behavior-inline: contain;
     -webkit-overflow-scrolling: touch;
   }
+  .product-photo-blend {
+    mix-blend-mode: multiply;
+  }
   .product-view-tabs {
     @apply flex gap-1 overflow-x-auto;
     scrollbar-width: thin;

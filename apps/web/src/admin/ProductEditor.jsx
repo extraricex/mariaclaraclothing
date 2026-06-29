@@ -506,7 +506,7 @@ export default function ProductEditor() {
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                 {product.images.map((image, index) => (
                   <figure key={index} className="group relative overflow-hidden border border-line bg-cream">
-                    <img src={image.url} alt={image.altText || ''} className="aspect-[4/5] w-full object-cover" />
+                    <img src={image.url} alt={image.altText || ''} className="product-photo-blend aspect-[4/5] w-full object-cover" />
                     <figcaption className="flex items-center justify-between gap-2 border-t border-line bg-white px-2 py-2 text-[11px] text-clay">
                       <span>Photo {index + 1}</span>
                       <button

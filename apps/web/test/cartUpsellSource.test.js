@@ -18,6 +18,6 @@ test('cart page renders product upsells backed by storefront products', async ()
 test('cart item product photos fit inside their thumbnail frame', async () => {
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'Cart.jsx'), 'utf8');
 
-  assert.match(source, /className="h-full w-full object-contain"/);
+  assert.match(source, /className="product-photo-blend h-full w-full object-contain"/);
   assert.doesNotMatch(source, /alt=\{item\.productName\} className="h-full w-full object-cover"/);
 });

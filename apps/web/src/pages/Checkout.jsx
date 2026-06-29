@@ -469,7 +469,7 @@ export default function Checkout() {
                         <img
                           src={item.imageUrl}
                           alt={item.productName}
-                          className="block h-full w-full object-contain"
+                          className="product-photo-blend block h-full w-full object-contain"
                           loading="lazy"
                         />
                       )}
