@@ -52,6 +52,53 @@
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] border border-line bg-white px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:bg-cream disabled:text-clay;
   }
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]),
+  .btn-ink:not([aria-disabled="true"]),
+  .btn-ghost:not([aria-disabled="true"]),
+  .btn-secondary:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  button:not(:disabled):not([aria-disabled="true"]):hover,
+  [role="button"]:not([aria-disabled="true"]):hover {
+    filter: brightness(0.92);
+  }
+  button:not(:disabled):not([aria-disabled="true"]):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: scale(0.98);
+  }
+  .btn-ink:not([aria-disabled="true"]),
+  .btn-ghost:not([aria-disabled="true"]),
+  .btn-secondary:not([aria-disabled="true"]) {
+    box-shadow: 0 2px 0 var(--color-line);
+    transition-property: color, background-color, border-color, box-shadow, filter, transform;
+  }
+  .btn-ink:not([aria-disabled="true"]):hover,
+  .btn-ghost:not([aria-disabled="true"]):hover,
+  .btn-secondary:not([aria-disabled="true"]):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 0 var(--color-line);
+  }
+  .btn-ink:not([aria-disabled="true"]):active,
+  .btn-ghost:not([aria-disabled="true"]):active,
+  .btn-secondary:not([aria-disabled="true"]):active {
+    transform: translateY(1px);
+    box-shadow: none;
+  }
+  :is(button, [role="button"], .btn-ink, .btn-ghost, .btn-secondary):focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+  }
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  .btn-ink[aria-disabled="true"],
+  .btn-ghost[aria-disabled="true"],
+  .btn-secondary[aria-disabled="true"] {
+    cursor: not-allowed;
+    filter: none;
+    transform: none;
+    box-shadow: none;
+  }
   .field {
     @apply w-full rounded-[var(--radius-admin)] border border-line bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-clay focus:border-ink disabled:bg-cream disabled:text-clay;
   }
@@ -99,6 +146,26 @@
   }
   .hairline {
     @apply border-t border-line;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  [role="button"],
+  .btn-ink,
+  .btn-ghost,
+  .btn-secondary {
+    transition: none !important;
+  }
+  button:active,
+  [role="button"]:active,
+  .btn-ink:hover,
+  .btn-ghost:hover,
+  .btn-secondary:hover,
+  .btn-ink:active,
+  .btn-ghost:active,
+  .btn-secondary:active {
+    transform: none !important;
   }
 }
 
