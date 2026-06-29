@@ -354,6 +354,8 @@ test('all enabled buttons expose consistent interaction feedback', async () => {
   }
   assert.match(css, /:focus-visible[\s\S]*outline:\s*2px solid currentColor/);
   assert.match(css, /button:disabled,[\s\S]*cursor:\s*not-allowed[\s\S]*transform:\s*none/);
+  assert.match(css, /\.btn-ink:not\(\[aria-disabled="true"\]\),[\s\S]*box-shadow:\s*none/);
+  assert.doesNotMatch(css, /box-shadow:\s*0\s+[24]px\s+0/);
   assert.match(css, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*transition:\s*none !important[\s\S]*transform:\s*none !important/);
 });
 ```
@@ -392,21 +394,23 @@ button:not(:disabled):not([aria-disabled="true"]):active,
 .btn-ink:not([aria-disabled="true"]),
 .btn-ghost:not([aria-disabled="true"]),
 .btn-secondary:not([aria-disabled="true"]) {
-  box-shadow: 0 2px 0 var(--color-line);
-  transition-property: color, background-color, border-color, box-shadow, filter, transform;
+  box-shadow: none;
+  transition-property: color, background-color, border-color, filter, transform;
 }
 
 .btn-ink:not([aria-disabled="true"]):hover,
 .btn-ghost:not([aria-disabled="true"]):hover,
 .btn-secondary:not([aria-disabled="true"]):hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 0 var(--color-line);
+  filter: brightness(0.92);
+  box-shadow: none;
 }
 
 .btn-ink:not([aria-disabled="true"]):active,
 .btn-ghost:not([aria-disabled="true"]):active,
 .btn-secondary:not([aria-disabled="true"]):active {
   transform: translateY(1px);
+  filter: brightness(0.84);
   box-shadow: none;
 }
 

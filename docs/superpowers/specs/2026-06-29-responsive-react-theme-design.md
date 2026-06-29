@@ -170,7 +170,8 @@ Every enabled storefront and admin button must look and feel interactive without
 
 - Apply a pointer cursor to enabled native buttons, `[role="button"]` controls, and the shared `.btn-ink`, `.btn-ghost`, and `.btn-secondary` button-style links.
 - Give all enabled native/role buttons a subtle hover brightness response and a small pressed scale response.
-- Give shared `.btn-*` controls a slight hover lift and pressed movement with a restrained shadow derived from the existing two-tone tokens.
+- Give shared `.btn-*` controls a slight 1px hover lift with tonal feedback and a 1px pressed movement.
+- Shared `.btn-*` controls have no box shadow in their default, hover, active, focus, disabled, or reduced-motion states.
 - Add a visible `:focus-visible` outline with sufficient offset for keyboard navigation.
 - Disabled controls retain `cursor: not-allowed` and receive no hover, lift, pressed, filter, or shadow effect.
 - Respect `prefers-reduced-motion: reduce` by removing transitions and movement while retaining cursor, focus, and non-motion state feedback.
