@@ -113,6 +113,7 @@ export default function OrderDetail() {
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [productSearchResults, setProductSearchResults] = useState([]);
   const [productSearchLoading, setProductSearchLoading] = useState(false);
+  const [jntPreview, setJntPreview] = useState(null);
 
   useEffect(() => {
     adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}`)
@@ -338,6 +339,17 @@ export default function OrderDetail() {
       setOrder(body.order);
       setForm(orderForm(body.order));
       setMessage('Tracking notification recorded.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function previewJnt() {
+    setMessage('');
+    try {
+      const body = await adminSend('POST', `/api/admin/orders/${encodeURIComponent(orderNumber)}/jnt/preview`, {});
+      setJntPreview(body.preview);
+      setMessage(body.preview.ready ? 'J&T parcel data is ready for dry-run review.' : 'Complete the missing parcel fields.');
     } catch (error) {
       setMessage(error.message);
     }
@@ -711,6 +723,18 @@ export default function OrderDetail() {
               <p className="mt-3 text-xs uppercase tracking-[0.1em] text-clay">
                 Exported to J&T {order.jntExportedAt ? new Date(order.jntExportedAt).toLocaleString('en-PH') : ''}
               </p>
+            )}
+            <button type="button" className="btn-secondary mt-4 w-full !py-2" onClick={previewJnt}>Preview J&T parcel</button>
+            {jntPreview && (
+              <div className="mt-4 rounded-[var(--radius-admin)] border border-line bg-white p-3 text-xs">
+                <p className="font-semibold uppercase tracking-[0.1em]">Dry run · {jntPreview.ready ? 'Ready' : 'Needs information'}</p>
+                {jntPreview.missingFields?.length > 0 && <p className="mt-2 text-red-700">Missing: {jntPreview.missingFields.join(', ')}</p>}
+                <dl className="mt-3 space-y-1 text-ink-soft">
+                  <div className="flex justify-between"><dt>Weight</dt><dd>{jntPreview.parcel.weightKg} kg</dd></div>
+                  <div className="flex justify-between"><dt>Parcels</dt><dd>{jntPreview.parcel.parcelCount}</dd></div>
+                  <div className="flex justify-between"><dt>COD</dt><dd>{formatMoney(jntPreview.parcel.codAmountCents)}</dd></div>
+                </dl>
+              </div>
             )}
             {canSendTrackingNotification && (
               <button type="button" className="btn-ink mt-4 w-full !py-2" onClick={sendTrackingNotification}>

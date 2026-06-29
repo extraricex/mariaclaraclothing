@@ -29,3 +29,10 @@ test('order detail shows delivery confirmation delivery states', async () => {
   assert.match(source, /order\.notifications/);
   assert.match(source, /notification\.lastError/);
 });
+
+test('order detail previews J&T parcel data without booking a live shipment', async () => {
+  const source = await readFile(path.join(root, 'admin', 'OrderDetail.jsx'), 'utf8');
+  assert.match(source, /\/jnt\/preview/);
+  assert.match(source, /Preview J&T parcel/);
+  assert.match(source, /Dry run/);
+});

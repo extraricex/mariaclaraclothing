@@ -11,6 +11,7 @@ const {
   updateOrder
 } = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
+const { previewJntParcel } = require('../jnt/jntParcelService');
 const { enqueueDeliveredOrderNotifications } = require('../notifications/orderNotificationService');
 const { listForOrder: listOrderNotifications } = require('../notifications/orderNotificationOutboxRepository');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
@@ -638,6 +639,16 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
     }
 
     return res.json({ order: { ...order, notifications: await listOrderNotifications(order.orderNumber) } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/orders/:orderNumber/jnt/preview', async (req, res, next) => {
+  try {
+    const order = await findOrderByNumber(String(req.params.orderNumber || '').trim());
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    return res.json({ preview: previewJntParcel(order) });
   } catch (error) {
     return next(error);
   }
