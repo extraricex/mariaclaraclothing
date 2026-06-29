@@ -121,7 +121,7 @@ test('admin J&T export writes orders into template row 9 and validates missing f
     assert.equal(exportedOrder.deliveryStatus, 'out_for_delivery');
     assert.equal(exportedOrder.statusEvents.length, 1);
     assert.equal(exportedOrder.statusEvents[0].source, 'jnt_export');
-    assert.equal(exportedOrder.statusEvents[0].changes.status.from, 'received');
+    assert.equal(exportedOrder.statusEvents[0].changes.status.from, 'confirmed');
     assert.equal(exportedOrder.statusEvents[0].changes.status.to, 'shipped');
     assert.equal(exportedOrder.statusEvents[0].changes.fulfillmentStatus.from, 'unfulfilled');
     assert.equal(exportedOrder.statusEvents[0].changes.fulfillmentStatus.to, 'shipped');
@@ -251,7 +251,7 @@ function exampleOrder() {
     checkoutChannel: 'storefront_checkout',
     paymentMethod: 'cash_on_delivery',
     channel: 'Online Store',
-    status: 'received',
+    status: 'confirmed',
     fulfillmentStatus: 'unfulfilled',
     paymentStatus: 'cod_pending',
     codConfirmationStatus: 'pending',

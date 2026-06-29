@@ -50,7 +50,7 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
     checkoutChannel: 'storefront_checkout',
     paymentMethod: String(input.paymentMethod || 'cash_on_delivery'),
     channel: 'Online Store',
-    status: 'received',
+    status: 'confirmed',
     fulfillmentStatus: 'unfulfilled',
     paymentStatus: input.paymentMethod === 'cash_on_delivery' ? 'cod_pending' : 'payment_pending',
     codConfirmationStatus: 'pending',

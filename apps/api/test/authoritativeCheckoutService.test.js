@@ -142,6 +142,7 @@ test('successful checkout performs every commerce write in one transaction', asy
   ]);
   assert.equal(result.confirmationToken, 'derived-confirmation-token');
   assert.equal(result.totalCents, 72900);
+  assert.equal(result.status, 'confirmed');
 });
 
 test('idempotency repository hashes keys, locks claims, and stores token-free responses', async () => {

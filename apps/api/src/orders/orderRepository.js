@@ -305,7 +305,7 @@ async function upsertPostgresOrder(order, transactionClient) {
       order.checkoutChannel || 'storefront_checkout',
       order.paymentMethod || 'cash_on_delivery',
       order.channel || 'Online Store',
-      order.status || 'received',
+      order.status || 'confirmed',
       order.fulfillmentStatus || 'unfulfilled',
       order.paymentStatus || 'cod_pending',
       order.codConfirmationStatus || 'pending',

@@ -16,7 +16,7 @@ status and leave all fulfillment, payment, COD, and delivery states unchanged.
 
 **Files:**
 - Modify: `apps/api/test/health.test.js`
-- Modify: `apps/api/test/checkoutV2Routes.test.js`
+- Modify: `apps/api/test/authoritativeCheckoutService.test.js`
 - Modify: `apps/api/test/adminOrders.test.js`
 - Modify: `apps/api/test/adminJntExport.test.js`
 
@@ -27,19 +27,19 @@ Assert that newly placed orders and their first later status transition begin at
 ```js
 assert.equal(orderBody.status, 'confirmed');
 assert.equal(listBody.orders[0].status, 'confirmed');
-assert.equal(updateBody.order.statusEvents[0].changes.status.from, 'confirmed');
+assert.equal(updateBody.order.statusEvents[0].changes.status, undefined);
 assert.equal(exportedOrder.statusEvents[0].changes.status.from, 'confirmed');
 ```
 
-Update the Checkout V2 expected persisted order fixture from `status: 'received'` to
-`status: 'confirmed'`.
+Assert the successful Checkout V2 service response uses `status: 'confirmed'`. Keep manually
+constructed historical-order fixtures unchanged.
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
 Run:
 
 ```bash
-node --test test/health.test.js test/checkoutV2Routes.test.js test/adminOrders.test.js test/adminJntExport.test.js
+node --test test/health.test.js test/authoritativeCheckoutService.test.js test/adminOrders.test.js test/adminJntExport.test.js
 ```
 
 Expected: FAIL because production order builders still return `received`.

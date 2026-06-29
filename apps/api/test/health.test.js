@@ -120,7 +120,7 @@ test('storefront APIs run from in-project catalog only', async () => {
     assert.equal(orderBody.paymentMethod, 'cash_on_delivery');
     assert.equal(orderBody.shippingRegion, 'metro_manila_cavite');
     assert.equal(orderBody.freeShippingUnlocked, true);
-    assert.equal(orderBody.status, 'received');
+    assert.equal(orderBody.status, 'confirmed');
     assert.equal(orderBody.fulfillmentStatus, 'unfulfilled');
     assert.equal(orderBody.paymentStatus, 'cod_pending');
 

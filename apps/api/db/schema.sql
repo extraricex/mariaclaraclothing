@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS orders (
   checkout_channel text NOT NULL DEFAULT 'storefront_checkout',
   payment_method text NOT NULL DEFAULT 'cash_on_delivery',
   channel text NOT NULL DEFAULT 'Online Store',
-  status text NOT NULL DEFAULT 'received',
+  status text NOT NULL DEFAULT 'confirmed',
   fulfillment_status text NOT NULL DEFAULT 'unfulfilled',
   payment_status text NOT NULL DEFAULT 'cod_pending',
   cod_confirmation_status text NOT NULL DEFAULT 'pending',
@@ -90,6 +90,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS exported_to_jnt boolean NOT NULL DEF
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS jnt_exported_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS parcel_weight_grams integer NOT NULL DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS parcel_weight_override_grams integer;
+ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'confirmed';
 
 CREATE INDEX IF NOT EXISTS orders_placed_at_idx ON orders(placed_at DESC);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);

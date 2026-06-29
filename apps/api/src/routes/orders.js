@@ -270,7 +270,7 @@ async function normalizeCheckout(body) {
       totalCents: quote.totalCents
     },
     notes,
-    status: 'received',
+    status: 'confirmed',
     fulfillmentStatus: 'unfulfilled',
     paymentStatus: 'cod_pending'
   };

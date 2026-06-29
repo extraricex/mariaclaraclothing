@@ -327,7 +327,7 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(listBody.orders.length, 1);
     assert.equal(listBody.orders[0].orderNumber, orderNumber);
     assert.equal(listBody.orders[0].customerName, 'Admin Customer');
-    assert.equal(listBody.orders[0].status, 'received');
+    assert.equal(listBody.orders[0].status, 'confirmed');
     assert.equal(listBody.orders[0].shippingFeeCents, 8000);
     assert.equal(listBody.orders[0].codConfirmationStatus, 'pending');
     assert.equal(listBody.orders[0].channel, 'Online Store');
@@ -428,8 +428,7 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(updateBody.order.statusEvents.length, 1);
     assert.equal(updateBody.order.statusEvents[0].orderNumber, orderNumber);
     assert.equal(updateBody.order.statusEvents[0].source, 'admin');
-    assert.equal(updateBody.order.statusEvents[0].changes.status.from, 'received');
-    assert.equal(updateBody.order.statusEvents[0].changes.status.to, 'confirmed');
+    assert.equal(updateBody.order.statusEvents[0].changes.status, undefined);
     assert.equal(updateBody.order.statusEvents[0].changes.fulfillmentStatus.from, 'unfulfilled');
     assert.equal(updateBody.order.statusEvents[0].changes.fulfillmentStatus.to, 'packed');
     assert.equal(updateBody.order.statusEvents[0].changes.codConfirmationStatus.from, 'pending');
