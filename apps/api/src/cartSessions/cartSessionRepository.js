@@ -137,6 +137,36 @@ async function markCartSessionConverted(sessionId, orderNumber, options = {}) {
   return store.sessions[index];
 }
 
+async function deleteCartSession(sessionId, allowedStatuses = ['draft', 'abandoned_checkout']) {
+  const id = String(sessionId || '').trim();
+  const allowed = allowedStatuses.map((status) => String(status));
+  if (usePostgresCartSessions()) {
+    const result = await query(
+      `DELETE FROM cart_sessions
+       WHERE session_id = $1 AND status = ANY($2::text[]) AND converted_order_number = ''
+       RETURNING session_id, status`,
+      [id, allowed]
+    );
+    if (result.rows[0]) return { sessionId: result.rows[0].session_id, status: result.rows[0].status };
+    const existing = await query('SELECT status, converted_order_number FROM cart_sessions WHERE session_id = $1', [id]);
+    throw cartDeletionError(existing.rows[0]);
+  }
+  const store = await readStore();
+  const index = store.sessions.findIndex((session) => session.sessionId === id);
+  if (index < 0) throw cartDeletionError(null);
+  const session = store.sessions[index];
+  if (!allowed.includes(session.status) || session.convertedOrderNumber) throw cartDeletionError(session);
+  store.sessions.splice(index, 1);
+  await writeStore(store);
+  return { sessionId: session.sessionId, status: session.status };
+}
+
+function cartDeletionError(existing) {
+  const error = new Error(existing ? 'Converted or active cart sessions cannot be deleted' : 'Cart session not found');
+  error.status = existing ? 409 : 404;
+  return error;
+}
+
 function normalizeCartSession(sessionId, payload = {}) {
   const id = String(sessionId || '').trim();
   if (!id) {
@@ -232,6 +262,7 @@ function fromPostgresCartSession(row) {
 
 module.exports = {
   cartSessionSummary,
+  deleteCartSession,
   listCartSessions,
   markCartSessionConverted,
   upsertCartSession

@@ -29,6 +29,8 @@ test('admin has real draft and abandoned checkout pages backed by cart sessions 
   assert.match(layoutSource, /\/admin\/orders\/draft/);
   assert.match(layoutSource, /\/admin\/orders\/abandoned-checkout/);
   assert.match(pageSource, /\/api\/admin\/cart-sessions\?status=\$\{status\}/);
+  assert.match(pageSource, /adminSend\('DELETE'/);
+  assert.match(pageSource, /Delete this \$\{label\}/);
   assert.match(pageSource, /Anonymous/);
   assert.match(pageSource, /formatMoney/);
 });

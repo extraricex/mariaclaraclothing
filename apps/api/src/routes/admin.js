@@ -12,7 +12,7 @@ const {
 } = require('../orders/orderRepository');
 const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
-const { cartSessionSummary, listCartSessions } = require('../cartSessions/cartSessionRepository');
+const { cartSessionSummary, deleteCartSession, listCartSessions } = require('../cartSessions/cartSessionRepository');
 const {
   deleteDiscount,
   findDiscountByCode,
@@ -565,6 +565,18 @@ router.get('/cart-sessions', async (req, res, next) => {
     const status = String(req.query.status || '').trim();
     const sessions = await listCartSessions(status);
     return res.json({ sessions: sessions.map(cartSessionSummary) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete('/cart-sessions/:sessionId', async (req, res, next) => {
+  try {
+    const deleted = await deleteCartSession(req.params.sessionId);
+    console.info(JSON.stringify({
+      level: 'info', event: 'admin_cart_session_deleted', sessionId: deleted.sessionId, status: deleted.status
+    }));
+    return res.json({ deleted });
   } catch (error) {
     return next(error);
   }

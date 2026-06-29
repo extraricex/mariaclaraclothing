@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { adminJson } from '../lib/adminApi.js';
+import { adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
 
 const PAGE_COPY = {
@@ -28,6 +28,18 @@ export default function CartSessions({ status }) {
 
   useEffect(() => { load(); }, [load]);
 
+  async function deleteSession(session) {
+    const label = status === 'abandoned_checkout' ? 'abandoned checkout' : 'draft cart';
+    if (!window.confirm(`Delete this ${label}? This cannot be undone.`)) return;
+    try {
+      await adminSend('DELETE', `/api/admin/cart-sessions/${encodeURIComponent(session.sessionId)}`);
+      setSessions((previous) => previous.filter((item) => item.sessionId !== session.sessionId));
+      setMessage(`${label[0].toUpperCase()}${label.slice(1)} deleted.`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -51,6 +63,7 @@ export default function CartSessions({ status }) {
               <th className="p-3">Subtotal</th>
               <th className="p-3">Cart contents</th>
               <th className="p-3">Last activity</th>
+              <th className="p-3">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -74,10 +87,11 @@ export default function CartSessions({ status }) {
                   </ul>
                 </td>
                 <td className="p-3 text-xs text-clay">{session.lastActivityAt ? new Date(session.lastActivityAt).toLocaleString('en-PH') : ''}</td>
+                <td className="p-3"><button type="button" className="text-xs font-semibold text-red-700 underline" onClick={() => deleteSession(session)}>Delete</button></td>
               </tr>
             ))}
             {!sessions.length && (
-              <tr><td colSpan="6" className="p-6 text-center text-sm text-clay">No sessions found.</td></tr>
+              <tr><td colSpan="7" className="p-6 text-center text-sm text-clay">No sessions found.</td></tr>
             )}
           </tbody>
         </table>

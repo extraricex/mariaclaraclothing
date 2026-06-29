@@ -75,6 +75,15 @@ test('admin cart sessions list anonymous drafts and abandoned checkout sessions,
     assert.equal(draftsBody.sessions[0].itemCount, 1);
     assert.equal(draftsBody.sessions[0].subtotalCents, 64900);
 
+    const deleteDraftResponse = await fetch(
+      `http://127.0.0.1:${port}/api/admin/cart-sessions/browser-draft`,
+      adminRequest({ method: 'DELETE' })
+    );
+    assert.equal(deleteDraftResponse.status, 200);
+    assert.deepEqual(await deleteDraftResponse.json(), {
+      deleted: { sessionId: 'browser-draft', status: 'draft' }
+    });
+
     const abandonedListResponse = await fetch(`http://127.0.0.1:${port}/api/admin/cart-sessions?status=abandoned_checkout`, adminRequest());
     const abandonedListBody = await abandonedListResponse.json();
 
@@ -123,6 +132,12 @@ test('admin cart sessions list anonymous drafts and abandoned checkout sessions,
     assert.equal(convertedSession.status, 'converted');
     assert.ok(convertedSession.convertedOrderNumber);
 
+    const deleteConvertedResponse = await fetch(
+      `http://127.0.0.1:${port}/api/admin/cart-sessions/browser-checkout`,
+      adminRequest({ method: 'DELETE' })
+    );
+    assert.equal(deleteConvertedResponse.status, 409);
+
     const abandonedAfterOrderResponse = await fetch(`http://127.0.0.1:${port}/api/admin/cart-sessions?status=abandoned_checkout`, adminRequest());
     const abandonedAfterOrderBody = await abandonedAfterOrderResponse.json();
 
@@ -135,9 +150,11 @@ test('admin cart sessions list anonymous drafts and abandoned checkout sessions,
   }
 });
 
-function adminRequest() {
+function adminRequest(options = {}) {
   return {
+    ...options,
     headers: {
+      ...options.headers,
       authorization: 'Bearer local-admin-token'
     }
   };
