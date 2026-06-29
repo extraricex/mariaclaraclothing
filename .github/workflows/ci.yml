@@ -59,8 +59,8 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/maria_clara_test
 
-      - name: PostgreSQL Meta outbox integration test
-        run: node --test apps/api/test/metaOutboxPostgres.integration.test.js
+      - name: PostgreSQL commerce integration tests
+        run: node --test apps/api/test/metaOutboxPostgres.integration.test.js apps/api/test/authoritativeCheckoutPostgres.integration.test.js
         env:
           TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/maria_clara_test
 
