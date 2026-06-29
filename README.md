@@ -15,6 +15,7 @@ docs        Specs, plans, and recommendations (see docs/ENHANCEMENT_PROPOSALS.md
 ## Quick start (Docker — full stack)
 
 ```bash
+printf 'ORDER_CONFIRMATION_SECRET=%s\n' "$(openssl rand -hex 32)" > .env
 docker compose up --build
 ```
 
@@ -25,6 +26,8 @@ docker compose up --build
 
 Default credentials are for local use only — override `ADMIN_TOKEN`, `ADMIN_PASSWORD`, and
 `POSTGRES_PASSWORD` before deploying anywhere public.
+The ignored root `.env` must provide a unique `ORDER_CONFIRMATION_SECRET` of at least 32
+characters. Never rotate it while customers still need access to existing confirmations.
 
 ## Quick start (no Docker)
 
@@ -43,6 +46,8 @@ npm run dev:web                          # React app on :5173 (proxies /api to :
 - `ADMIN_TOKEN` / `ADMIN_PASSWORD` — admin auth (defaults `local-admin-token` / `admin`)
 - `DATABASE_URL` — optional; enables PostgreSQL persistence (JSON files otherwise)
 - `PANCAKE_WEBHOOK_SECRET` — reserved for future POS integration
+- `CHECKOUT_V2_REQUIRED` — rejects legacy browser-authoritative checkout when `true`
+- `ORDER_CONFIRMATION_SECRET` — HMAC secret for private guest order confirmations
 
 `.env` files are gitignored; only `.env.example` is committed.
 
@@ -55,7 +60,11 @@ npm run db:migrate             # apply db/schema.sql (needs DATABASE_URL)
 npm run db:seed                # import JSON data into Postgres
 npm run audit:product-images   # classify product image references
 npm run jnt:address-guide      # regenerate the J&T address guide JSON
+npm run test:e2e -w apps/web  # critical quote-to-private-confirmation journey (Docker required)
 ```
+
+Checkout V2 deployment and rollback steps are documented in
+[`docs/phase-1-checkout-v2-rollout.md`](docs/phase-1-checkout-v2-rollout.md).
 
 If your shell has `DATABASE_URL` or `ADMIN_TOKEN` set, clear them for tests:
 `DATABASE_URL= ADMIN_TOKEN= npm test`.

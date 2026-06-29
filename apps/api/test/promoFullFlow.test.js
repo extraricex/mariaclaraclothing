@@ -153,9 +153,9 @@ test('promo notification, quote, checkout, and admin order promo data stay conne
 
     const confirmation = await jsonRequest(port, `/api/orders/${encodeURIComponent(orderNumber)}`);
     assert.equal(confirmation.status, 200);
-    assert.equal(confirmation.body.order.discountCode, 'FLOW2026');
-    assert.equal(confirmation.body.order.discountSnapshot.name, 'Full Flow Promo');
     assert.equal(confirmation.body.order.totalCents, 119800);
+    assert.equal(confirmation.body.order.discountCode, undefined);
+    assert.equal(JSON.stringify(confirmation.body).includes('flow@example.com'), false);
 
     const adminList = await jsonRequest(port, '/api/admin/orders?q=flow', adminRequest());
     assert.equal(adminList.status, 200);

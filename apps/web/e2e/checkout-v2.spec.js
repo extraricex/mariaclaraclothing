@@ -31,7 +31,7 @@ test('customer checkout uses server totals and private confirmation', async ({ p
   await selects.nth(0).selectOption({ label: 'CAVITE' });
   await selects.nth(1).selectOption({ label: 'IMUS' });
   await selects.nth(2).selectOption({ label: 'BUCANDALA IV' });
-  await page.getByRole('button', { name: /review order/i }).click();
+  await page.getByRole('button', { name: /continue to review/i }).click();
   await page.getByRole('button', { name: /place cod order/i }).click();
 
   await expect(page).toHaveURL(/\/thank-you\?order=/);
