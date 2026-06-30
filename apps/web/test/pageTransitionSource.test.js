@@ -1,0 +1,24 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const source = (relativePath) =>
+  readFile(path.join(import.meta.dirname, '..', relativePath), 'utf8');
+
+test('page transition uses the approved route motion and scroll reset', async () => {
+  const component = await source('src/components/PageTransition.jsx');
+  const css = await source('src/index.css');
+
+  assert.match(component, /useLayoutEffect/);
+  assert.match(component, /useLocation/);
+  assert.match(component, /window\.scrollTo\(\{ top: 0, left: 0, behavior: 'auto' \}\)/);
+  assert.match(component, /\[location\.pathname\]/);
+  assert.match(component, /key=\{location\.pathname\}/);
+  assert.match(component, /className="page-transition"/);
+
+  assert.match(css, /@keyframes page-enter/);
+  assert.match(css, /opacity:\s*0[\s\S]*translateY\(10px\)/);
+  assert.match(css, /\.page-transition\s*\{[\s\S]*animation:\s*page-enter 320ms cubic-bezier\(0\.22, 1, 0\.36, 1\) both/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce[\s\S]*\.page-transition[\s\S]*animation:\s*none !important[\s\S]*transform:\s*none !important/);
+});
