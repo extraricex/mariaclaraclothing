@@ -13,7 +13,7 @@ test('storefront navigation animates content, preserves chrome, and resets scrol
   await expect(page).toHaveURL(/\/faq$/);
   const transition = page.locator('.page-transition');
   await expect(transition).toHaveCSS('animation-name', 'page-enter');
-  await expect(transition).toHaveCSS('animation-duration', '0.48s');
+  await expect(transition).toHaveCSS('animation-duration', '0.75s');
   await expect(transition).toHaveCSS('background-color', 'rgb(241, 241, 241)');
   await expect.poll(
     () => transition.evaluate((element) => getComputedStyle(element).transform),

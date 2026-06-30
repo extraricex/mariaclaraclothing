@@ -20,7 +20,7 @@ test('page transition uses the approved route motion and scroll reset', async ()
   assert.match(css, /@keyframes page-enter/);
   assert.match(css, /opacity:\s*0\.06[\s\S]*translateY\(18px\)/);
   assert.match(css, /\.page-transition\s*\{[\s\S]*background-color:\s*var\(--color-paper\)/);
-  assert.match(css, /\.page-transition\s*\{[\s\S]*animation:\s*page-enter 480ms cubic-bezier\(0\.22, 1, 0\.36, 1\) backwards/);
+  assert.match(css, /\.page-transition\s*\{[\s\S]*animation:\s*page-enter 750ms cubic-bezier\(0\.22, 1, 0\.36, 1\) backwards/);
   assert.match(css, /prefers-reduced-motion:\s*reduce[\s\S]*\.page-transition[\s\S]*animation:\s*none !important[\s\S]*transform:\s*none !important/);
 });
 
