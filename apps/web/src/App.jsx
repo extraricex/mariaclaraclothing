@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import Shell from './components/Shell.jsx';
+import PageTransition from './components/PageTransition.jsx';
 import MaintenanceGate from './components/MaintenanceGate.jsx';
 import Home from './pages/Home.jsx';
 import Product from './pages/Product.jsx';
@@ -43,7 +44,7 @@ export default function App() {
         <Route path="/shipping-returns" element={<InfoPage title="Shipping & returns" pageKey="shippingReturns" />} />
         <Route path="/terms" element={<InfoPage title="Terms of service" pageKey="terms" />} />
       </Route>
-      <Route path="/checkout" element={<MaintenanceGate><Checkout /></MaintenanceGate>} />
+      <Route path="/checkout" element={<MaintenanceGate><PageTransition><Checkout /></PageTransition></MaintenanceGate>} />
       <Route path="/admin/login" element={<Login />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />

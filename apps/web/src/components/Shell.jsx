@@ -7,6 +7,7 @@ import { formatMoney } from '../lib/money.js';
 import { trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
 import useModalFocus from '../hooks/useModalFocus.js';
+import PageTransition from './PageTransition.jsx';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -390,7 +391,9 @@ export default function Shell() {
       />
 
       <main className="flex-1">
-        <Outlet />
+        <PageTransition>
+          <Outlet />
+        </PageTransition>
       </main>
 
       <footer className="mt-24 bg-ink text-paper">

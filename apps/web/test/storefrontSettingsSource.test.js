@@ -67,7 +67,7 @@ test('maintenance gate wraps the storefront but not the admin', async () => {
 
   const app = await readFile(path.join(root, 'App.jsx'), 'utf8');
   assert.match(app, /<MaintenanceGate><Shell \/><\/MaintenanceGate>/);
-  assert.match(app, /<MaintenanceGate><Checkout \/><\/MaintenanceGate>/);
+  assert.match(app, /<MaintenanceGate><PageTransition><Checkout \/><\/PageTransition><\/MaintenanceGate>/);
   assert.doesNotMatch(app, /<MaintenanceGate><AdminLayout/);
 });
 

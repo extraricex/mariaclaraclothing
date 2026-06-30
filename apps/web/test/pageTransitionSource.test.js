@@ -22,3 +22,16 @@ test('page transition uses the approved route motion and scroll reset', async ()
   assert.match(css, /\.page-transition\s*\{[\s\S]*animation:\s*page-enter 320ms cubic-bezier\(0\.22, 1, 0\.36, 1\) both/);
   assert.match(css, /prefers-reduced-motion:\s*reduce[\s\S]*\.page-transition[\s\S]*animation:\s*none !important[\s\S]*transform:\s*none !important/);
 });
+
+test('storefront content transitions while shell chrome and admin stay stable', async () => {
+  const shell = await source('src/components/Shell.jsx');
+  const app = await source('src/App.jsx');
+  const admin = await source('src/admin/AdminLayout.jsx');
+
+  assert.match(shell, /import PageTransition from '\.\/PageTransition\.jsx'/);
+  assert.match(shell, /<main className="flex-1">\s*<PageTransition>\s*<Outlet \/>\s*<\/PageTransition>\s*<\/main>/);
+  assert.match(app, /import PageTransition from '\.\/components\/PageTransition\.jsx'/);
+  assert.match(app, /path="\/checkout" element=\{<MaintenanceGate><PageTransition><Checkout \/><\/PageTransition><\/MaintenanceGate>\}/);
+  assert.match(app, /<Route path="\/admin" element=\{<AdminLayout \/>\}>/);
+  assert.doesNotMatch(admin, /PageTransition/);
+});
