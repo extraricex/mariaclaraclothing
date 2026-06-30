@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { CART_DRAWER_EVENT, cartQuantity, getCartSessionId, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
@@ -6,6 +6,7 @@ import { createCheckoutQuote, fetchActivePromoNotification, fetchSiteContent } f
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
+import useModalFocus from '../hooks/useModalFocus.js';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -75,6 +76,10 @@ function CartIcon() {
 }
 
 function CartDrawer({ items, quote, quoteError, open, onClose }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  useModalFocus({ open, containerRef: dialogRef, initialFocusRef: closeButtonRef, onClose });
+
   const subtotal = items.reduce((sum, item) => sum + Number(item.unitPriceCents || 0) * Number(item.quantity || 0), 0);
   const displaySubtotal = quote?.subtotalCents ?? subtotal;
   const displayDiscount = quote?.discountTotalCents ?? 0;
@@ -94,17 +99,26 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
     <div className={`fixed inset-0 z-50 ${open ? '' : 'pointer-events-none'}`} aria-hidden={!open}>
       <button
         type="button"
+        tabIndex={-1}
         className={`absolute inset-0 bg-ink/35 transition-opacity ${open ? 'opacity-100' : 'opacity-0'}`}
         aria-label="Close cart drawer"
         onClick={onClose}
       />
-      <aside className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-paper shadow-2xl transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
+      <aside
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cart-drawer-title"
+        inert={open ? undefined : ''}
+        tabIndex={-1}
+        className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-paper shadow-2xl transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+      >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <p className="eyebrow">Cart</p>
-            <h2 className="display text-3xl">Your cart</h2>
+            <h2 id="cart-drawer-title" className="display text-3xl">Your cart</h2>
           </div>
-          <button type="button" className="text-sm font-semibold uppercase tracking-[0.14em] text-clay hover:text-ink" onClick={onClose}>
+          <button ref={closeButtonRef} type="button" className="touch-target inline-flex items-center text-sm font-semibold uppercase tracking-[0.14em] text-clay hover:text-ink" onClick={onClose}>
             Close
           </button>
         </div>
@@ -190,6 +204,7 @@ export default function Shell() {
   const [footerLogo, setFooterLogo] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
   const [promoNotification, setPromoNotification] = useState(null);
+  const closeCartDrawer = useCallback(() => setCartDrawerOpen(false), []);
 
   useEffect(() => {
     function loadSiteContent() {
@@ -354,7 +369,7 @@ export default function Shell() {
         quote={quote}
         quoteError={quoteError}
         open={cartDrawerOpen}
-        onClose={() => setCartDrawerOpen(false)}
+        onClose={closeCartDrawer}
       />
 
       <main className="flex-1">

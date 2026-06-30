@@ -26,3 +26,15 @@ test('homepage carousel is manual and adds no pause control', async () => {
   assert.match(home, /onClick=\{\(\) => setActiveHeroIndex\(index\)\}/);
   assert.match(home, /hero-slide absolute inset-0/);
 });
+
+test('cart drawer exposes modal keyboard behavior', async () => {
+  const shell = await source('src/components/Shell.jsx');
+
+  assert.match(shell, /role="dialog"/);
+  assert.match(shell, /aria-modal="true"/);
+  assert.match(shell, /aria-labelledby="cart-drawer-title"/);
+  assert.match(shell, /id="cart-drawer-title"/);
+  assert.match(shell, /inert=\{open \? undefined : ''\}/);
+  assert.match(shell, /useModalFocus/);
+  assert.match(shell, /closeCartDrawer/);
+});
