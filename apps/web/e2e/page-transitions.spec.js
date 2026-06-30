@@ -13,7 +13,8 @@ test('storefront navigation animates content, preserves chrome, and resets scrol
   await expect(page).toHaveURL(/\/faq$/);
   const transition = page.locator('.page-transition');
   await expect(transition).toHaveCSS('animation-name', 'page-enter');
-  await expect(transition).toHaveCSS('animation-duration', '0.32s');
+  await expect(transition).toHaveCSS('animation-duration', '0.48s');
+  await expect(transition).toHaveCSS('background-color', 'rgb(241, 241, 241)');
   await expect.poll(
     () => transition.evaluate((element) => getComputedStyle(element).transform),
     { timeout: 1500 }
@@ -40,7 +41,11 @@ test('reduced motion shows routed content immediately', async ({ page }) => {
 test('mobile product page keeps responsive width and blended photo backgrounds', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(`/product/${PRODUCT_SLUG}`);
-  await page.waitForTimeout(400);
+  const transition = page.locator('.page-transition');
+  await expect.poll(
+    () => transition.evaluate((element) => getComputedStyle(element).transform),
+    { timeout: 1500 }
+  ).toBe('none');
 
   const layout = await page.evaluate(() => ({
     viewportWidth: window.innerWidth,
