@@ -143,7 +143,7 @@ export default function Product() {
         <Link to="/" className="hover:text-accent">Shop</Link> / {product.collection || 'Catalog'}
       </p>
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
-        <div>
+        <div className="min-w-0">
           <div className="media-zoom relative aspect-[4/5] overflow-hidden bg-white">
             {image && (
               <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" />
@@ -190,7 +190,7 @@ export default function Product() {
           )}
         </div>
 
-        <div>
+        <div className="min-w-0">
           <h1 className="display text-3xl leading-tight sm:text-4xl">{product.name}</h1>
           <div className="mt-4 flex items-baseline gap-3">
             <p className={`text-2xl font-semibold ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>

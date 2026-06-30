@@ -56,4 +56,6 @@ test('shared roots and every active storefront route define shrink and overflow 
   assert.match(checkout, /<article[^>]*className="flex min-w-0/);
   assert.match(account, /className="flex flex-wrap items-center gap-3"/);
   assert.match(product, /className="mt-6 flex flex-wrap items-center gap-3/);
+  assert.match(product, /className="mt-6 grid gap-10 lg:grid-cols-\[1\.15fr_1fr\]">\s*<div className="min-w-0">/);
+  assert.equal((product.match(/<div className="min-w-0">/g) || []).length, 2);
 });
