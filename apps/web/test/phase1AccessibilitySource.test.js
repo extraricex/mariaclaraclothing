@@ -38,3 +38,20 @@ test('cart drawer exposes modal keyboard behavior', async () => {
   assert.match(shell, /useModalFocus/);
   assert.match(shell, /closeCartDrawer/);
 });
+
+test('mobile menu and compact storefront controls use phase one behavior', async () => {
+  const [shell, checkout] = await Promise.all([
+    source('src/components/Shell.jsx'),
+    source('src/pages/Checkout.jsx'),
+  ]);
+
+  assert.match(shell, /menuButtonRef/);
+  assert.match(shell, /event\.key === 'Escape'[\s\S]*setMenuOpen\(false\)/);
+  assert.match(shell, /aria-controls="storefront-mobile-menu"/);
+  assert.match(shell, /aria-label=\{menuOpen \? 'Close navigation menu' : 'Open navigation menu'\}/);
+  assert.match(shell, /id="storefront-mobile-menu"/);
+  assert.match(shell, /className="touch-target px-3 py-1\.5" aria-label="Decrease quantity"/);
+  assert.match(shell, /className="touch-target px-3 py-1\.5" aria-label="Increase quantity"/);
+  assert.match(checkout, /className="touch-target border border-line px-2 py-0\.5"[^\n]*aria-label="Decrease quantity"/);
+  assert.match(checkout, /className="touch-target border border-line px-2 py-0\.5"[^\n]*aria-label="Increase quantity"/);
+});

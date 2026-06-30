@@ -56,7 +56,7 @@ function PromoNotification({ notification, onClose }) {
         </p>
         <button
           type="button"
-          className="text-action shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep hover:text-ink"
+          className="text-action touch-target shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep hover:text-ink"
           aria-label="Close promo notification"
           onClick={onClose}
         >
@@ -159,9 +159,9 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <div className="flex items-center border border-line">
-                          <button type="button" className="px-3 py-1.5" aria-label="Decrease quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)}>−</button>
+                          <button type="button" className="touch-target px-3 py-1.5" aria-label="Decrease quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)}>−</button>
                           <span className="min-w-8 text-center text-sm">{item.quantity}</span>
-                          <button type="button" className="px-3 py-1.5" aria-label="Increase quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)}>+</button>
+                          <button type="button" className="touch-target px-3 py-1.5" aria-label="Increase quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)}>+</button>
                         </div>
                         <button type="button" className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>
                           Remove
@@ -204,7 +204,21 @@ export default function Shell() {
   const [footerLogo, setFooterLogo] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
   const [promoNotification, setPromoNotification] = useState(null);
+  const menuButtonRef = useRef(null);
   const closeCartDrawer = useCallback(() => setCartDrawerOpen(false), []);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    function handleMenuKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMenuOpen(false);
+        window.requestAnimationFrame(() => menuButtonRef.current?.focus());
+      }
+    }
+    document.addEventListener('keydown', handleMenuKeyDown);
+    return () => document.removeEventListener('keydown', handleMenuKeyDown);
+  }, [menuOpen]);
 
   useEffect(() => {
     function loadSiteContent() {
@@ -305,10 +319,13 @@ export default function Shell() {
       <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl min-w-0 items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-5 lg:gap-6 lg:px-8">
           <button
+            ref={menuButtonRef}
             type="button"
-            className="text-action text-[12px] font-semibold uppercase tracking-[0.18em] lg:hidden"
+            className="text-action touch-target text-[12px] font-semibold uppercase tracking-[0.18em] lg:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             aria-expanded={menuOpen}
+            aria-controls="storefront-mobile-menu"
+            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
           >
             {menuOpen ? 'Close' : 'Menu'}
           </button>
@@ -342,7 +359,7 @@ export default function Shell() {
           </div>
         </div>
         {menuOpen && (
-          <nav className="flex flex-col border-t border-line lg:hidden">
+          <nav id="storefront-mobile-menu" className="flex flex-col border-t border-line lg:hidden">
             {NAV_LINKS.map((link) => (
               <NavLink
                 key={link.to}

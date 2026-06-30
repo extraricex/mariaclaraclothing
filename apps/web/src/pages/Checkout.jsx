@@ -479,8 +479,8 @@ export default function Checkout() {
                       <h3 className="break-words text-sm font-semibold leading-snug">{item.productName}</h3>
                       <p className="text-xs uppercase tracking-[0.12em] text-clay">{item.size}</p>
                       <div className="mt-1 flex items-center gap-3 text-xs">
-                        <button type="button" className="border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)} aria-label="Decrease quantity">−</button>
-                        <button type="button" className="border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)} aria-label="Increase quantity">+</button>
+                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)} aria-label="Decrease quantity">−</button>
+                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)} aria-label="Increase quantity">+</button>
                         <button type="button" className="text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>Remove</button>
                       </div>
                     </div>
