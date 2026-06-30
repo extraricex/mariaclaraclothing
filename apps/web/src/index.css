@@ -6,7 +6,7 @@
   --color-white: #f1f1f1;
   --color-ink: #202020;
   --color-ink-soft: color-mix(in srgb, #202020 78%, #f1f1f1);
-  --color-clay: color-mix(in srgb, #202020 58%, #f1f1f1);
+  --color-clay: color-mix(in srgb, #202020 65%, #f1f1f1);
   --color-line: color-mix(in srgb, #202020 22%, #f1f1f1);
   --color-accent: #202020;
   --color-accent-deep: #202020;
@@ -60,6 +60,30 @@
   .text-action[aria-disabled="true"] {
     cursor: not-allowed;
     background-size: 0 2px;
+  }
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .carousel-dot {
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-paper);
+  }
+  .carousel-dot::after {
+    width: 0.625rem;
+    height: 0.625rem;
+    content: "";
+    border: 1px solid currentColor;
+    border-radius: 9999px;
+    background: transparent;
+    transition: background-color 200ms ease;
+  }
+  .carousel-dot[aria-current="true"]::after {
+    background: currentColor;
   }
   .btn-ink {
     @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] bg-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-paper transition-colors duration-200 hover:bg-accent disabled:cursor-not-allowed disabled:bg-line disabled:text-clay;
@@ -170,6 +194,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .carousel-dot::after,
+  .hero-slide {
+    transition: none !important;
+  }
   .text-action {
     transition: none !important;
   }

@@ -23,7 +23,7 @@ test('derived neutral interface tokens use only the approved endpoints', async (
   const css = await source('src/index.css');
   const neutralTokens = {
     'ink-soft': 78,
-    clay: 58,
+    clay: 65,
     line: 22,
   };
 
