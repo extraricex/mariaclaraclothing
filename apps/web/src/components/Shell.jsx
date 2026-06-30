@@ -55,7 +55,7 @@ function PromoNotification({ notification, onClose }) {
         </p>
         <button
           type="button"
-          className="shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep hover:text-ink"
+          className="text-action shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep hover:text-ink"
           aria-label="Close promo notification"
           onClick={onClose}
         >
@@ -291,7 +291,7 @@ export default function Shell() {
         <div className="mx-auto flex max-w-7xl min-w-0 items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-5 lg:gap-6 lg:px-8">
           <button
             type="button"
-            className="text-[12px] font-semibold uppercase tracking-[0.18em] lg:hidden"
+            className="text-action text-[12px] font-semibold uppercase tracking-[0.18em] lg:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             aria-expanded={menuOpen}
           >
@@ -306,14 +306,14 @@ export default function Shell() {
                 key={link.to}
                 to={link.to}
                 className={({ isActive }) =>
-                  `text-[12px] font-semibold uppercase tracking-[0.18em] transition-colors hover:text-accent ${isActive ? 'text-accent' : 'text-ink'}`}
+                  `text-[12px] font-semibold uppercase tracking-[0.18em] transition-colors text-action hover:text-accent ${isActive ? 'text-accent' : 'text-ink'}`}
               >
                 {link.label}
               </NavLink>
             ))}
           </nav>
           <div className="flex items-center gap-6">
-          <Link to={loggedIn ? '/account' : '/login'} className="hidden text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent sm:block">
+          <Link to={loggedIn ? '/account' : '/login'} className="text-action hidden text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent sm:block">
             {loggedIn ? 'Account' : 'Log in'}
           </Link>
           <Link to="/cart" className="relative flex h-9 w-9 items-center justify-center hover:text-accent" aria-label="Cart">
@@ -333,7 +333,7 @@ export default function Shell() {
                 key={link.to}
                 to={link.to}
                 onClick={() => setMenuOpen(false)}
-                className="border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em]"
+                className="text-action border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em]"
               >
                 {link.label}
               </NavLink>
@@ -341,7 +341,7 @@ export default function Shell() {
             <NavLink
               to={loggedIn ? '/account' : '/login'}
               onClick={() => setMenuOpen(false)}
-              className="border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em] text-accent"
+              className="text-action border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em] text-accent"
             >
               {loggedIn ? 'My account' : 'Log in / Register'}
             </NavLink>
@@ -376,16 +376,16 @@ export default function Shell() {
             <div>
               <p className="eyebrow text-paper/60">Shop</p>
               <ul className="mt-3 space-y-2 text-sm text-paper/80">
-                <li><Link to="/" className="hover:text-accent">All products</Link></li>
-                <li><Link to="/cart" className="hover:text-accent">Cart</Link></li>
+                <li><Link to="/" className="text-action hover:text-accent">All products</Link></li>
+                <li><Link to="/cart" className="text-action hover:text-accent">Cart</Link></li>
               </ul>
             </div>
             <div>
               <p className="eyebrow text-paper/60">Help</p>
               <ul className="mt-3 space-y-2 text-sm text-paper/80">
-                <li><Link to="/faq" className="hover:text-accent">FAQ</Link></li>
-                <li><Link to="/shipping-returns" className="hover:text-accent">Shipping & returns</Link></li>
-                <li><Link to="/terms" className="hover:text-accent">Terms of service</Link></li>
+                <li><Link to="/faq" className="text-action hover:text-accent">FAQ</Link></li>
+                <li><Link to="/shipping-returns" className="text-action hover:text-accent">Shipping & returns</Link></li>
+                <li><Link to="/terms" className="text-action hover:text-accent">Terms of service</Link></li>
               </ul>
             </div>
             <div>
@@ -397,7 +397,7 @@ export default function Shell() {
               {storeInfo && (storeInfo.contactEmail || storeInfo.contactNumber) && (
                 <ul className="mt-4 space-y-1 text-sm text-paper/80">
                   {storeInfo.contactEmail && (
-                    <li><a className="hover:text-accent" href={`mailto:${storeInfo.contactEmail}`}>{storeInfo.contactEmail}</a></li>
+                    <li><a className="text-action hover:text-accent" href={`mailto:${storeInfo.contactEmail}`}>{storeInfo.contactEmail}</a></li>
                   )}
                   {storeInfo.contactNumber && <li>{storeInfo.contactNumber}</li>}
                 </ul>
@@ -406,7 +406,7 @@ export default function Shell() {
                 <ul className="mt-3 flex gap-4 text-sm text-paper/80">
                   {Object.entries(storeInfo.socialLinks).filter(([, url]) => url).map(([name, url]) => (
                     <li key={name}>
-                      <a className="capitalize hover:text-accent" href={url} target="_blank" rel="noreferrer">{name}</a>
+                      <a className="text-action capitalize hover:text-accent" href={url} target="_blank" rel="noreferrer">{name}</a>
                     </li>
                   ))}
                 </ul>

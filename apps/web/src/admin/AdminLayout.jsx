@@ -33,12 +33,12 @@ const MOBILE_NAV = [
 ];
 
 const topLinkClass = (active) =>
-  `rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+  `text-action rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${
     active ? 'bg-ink text-paper' : 'text-ink-soft hover:bg-line/40'
   }`;
 
 const subLinkClass = (isActive) =>
-  `block cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-[12px] font-medium uppercase tracking-[0.08em] transition-colors hover:border-accent ${
+  `text-action block cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-[12px] font-medium uppercase tracking-[0.08em] transition-colors hover:border-accent ${
     isActive
       ? 'border-accent text-accent-deep'
       : 'border-transparent text-clay hover:text-ink'
@@ -121,7 +121,7 @@ export default function AdminLayout() {
           <div>
             <button
               type="button"
-              className={`flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${ordersActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
+              className={`text-action flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${ordersActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
               aria-label={ordersMenuOpen ? 'Collapse orders menu' : 'Expand orders menu'}
               aria-expanded={ordersMenuOpen}
               onClick={() => setOrdersMenuOpen((open) => !open)}
@@ -143,7 +143,7 @@ export default function AdminLayout() {
           <div>
             <button
               type="button"
-              className={`flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${productsActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
+              className={`text-action flex w-full items-center justify-between rounded-[var(--radius-admin)] px-3 py-2.5 text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors ${productsActive ? 'bg-line/60 text-accent-deep' : 'text-ink-soft hover:bg-line/40'}`}
               aria-label={productsMenuOpen ? 'Collapse products menu' : 'Expand products menu'}
               aria-expanded={productsMenuOpen}
               onClick={() => setProductsMenuOpen((open) => !open)}
@@ -169,10 +169,10 @@ export default function AdminLayout() {
           ))}
         </nav>
         <div className="mt-auto space-y-3 pt-10">
-          <Link to="/" className="block text-xs uppercase tracking-[0.12em] text-clay hover:text-accent">← View store</Link>
+          <Link to="/" className="text-action block text-xs uppercase tracking-[0.12em] text-clay hover:text-accent">← View store</Link>
           <button
             type="button"
-            className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent"
+            className="text-action text-xs uppercase tracking-[0.12em] text-clay hover:text-accent"
             onClick={() => { clearAdminToken(); navigate('/admin/login'); }}
           >
             Sign out
@@ -186,7 +186,7 @@ export default function AdminLayout() {
               key={item.to}
               to={item.to}
               end={item.end}
-              className={({ isActive }) => `whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-accent' : 'text-ink-soft'}`}
+              className={({ isActive }) => `text-action whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-accent' : 'text-ink-soft'}`}
             >
               {item.label}
             </NavLink>

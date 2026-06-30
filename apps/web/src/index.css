@@ -43,6 +43,24 @@
   .eyebrow {
     @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-clay;
   }
+  .text-action {
+    cursor: pointer;
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: left calc(100% - 0.05em);
+    background-repeat: no-repeat;
+    background-size: 0 2px;
+    transition: background-size 180ms ease, color 200ms ease;
+  }
+  .text-action:hover,
+  .text-action:focus-visible,
+  .text-action[aria-current="page"] {
+    background-size: 100% 2px;
+  }
+  .text-action:disabled,
+  .text-action[aria-disabled="true"] {
+    cursor: not-allowed;
+    background-size: 0 2px;
+  }
   .btn-ink {
     @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] bg-ink px-6 py-3.5 text-[13px] font-semibold uppercase tracking-[0.14em] text-paper transition-colors duration-200 hover:bg-accent disabled:cursor-not-allowed disabled:bg-line disabled:text-clay;
   }
@@ -152,6 +170,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .text-action {
+    transition: none !important;
+  }
   button,
   [role="button"],
   .btn-ink,
