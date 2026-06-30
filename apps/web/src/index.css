@@ -94,12 +94,33 @@
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] border border-line bg-white px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink transition-colors duration-200 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:bg-cream disabled:text-clay;
   }
-  button:not(:disabled):not([aria-disabled="true"]),
-  [role="button"]:not([aria-disabled="true"]),
-  .btn-ink:not([aria-disabled="true"]),
-  .btn-ghost:not([aria-disabled="true"]),
-  .btn-secondary:not([aria-disabled="true"]) {
-    cursor: pointer;
+  :is(
+    a[href]:not([aria-disabled="true"]),
+    button:not(:disabled):not([aria-disabled="true"]),
+    [role="button"]:not([aria-disabled="true"]),
+    summary,
+    label[for],
+    label:has(:is(input, select, textarea):not(:disabled)),
+    .text-action:not([aria-disabled="true"])
+  ) {
+    cursor: pointer !important;
+  }
+  :is(
+    a[href]:not([aria-disabled="true"]),
+    button:not(:disabled):not([aria-disabled="true"]),
+    [role="button"]:not([aria-disabled="true"]),
+    summary,
+    label[for],
+    label:has(:is(input, select, textarea):not(:disabled)),
+    .text-action:not([aria-disabled="true"])
+  ) * {
+    cursor: inherit !important;
+  }
+  :is(button:disabled, [role="button"][aria-disabled="true"], a[aria-disabled="true"]) {
+    cursor: not-allowed !important;
+  }
+  :is(button:disabled, [role="button"][aria-disabled="true"], a[aria-disabled="true"]) * {
+    cursor: inherit !important;
   }
   button:not(:disabled):not([aria-disabled="true"]):hover,
   [role="button"]:not([aria-disabled="true"]):hover {
