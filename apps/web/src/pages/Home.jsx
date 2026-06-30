@@ -38,19 +38,6 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (banners.length < 2) {
-      setActiveHeroIndex(0);
-      return undefined;
-    }
-
-    const interval = window.setInterval(() => {
-      setActiveHeroIndex((index) => (index + 1) % banners.length);
-    }, 5000);
-
-    return () => window.clearInterval(interval);
-  }, [banners.length]);
-
   const newArrivals = products.filter((product) => (product.collections || []).includes('New Arrivals'));
   const freedom = products.filter((product) => (product.collections || []).includes('Freedom of Mind'));
 
@@ -63,7 +50,7 @@ export default function Home() {
             src={banner.url}
             alt={index === activeHeroIndex ? banner.altText || 'Maria Clara Clothing' : ''}
             aria-hidden={index !== activeHeroIndex}
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroIndex ? 'opacity-100' : 'opacity-0'}`}
+            className={`hero-slide absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroIndex ? 'opacity-100' : 'opacity-0'}`}
           />
         ))}
         <div className="absolute inset-0 bg-ink/55" />
@@ -81,12 +68,12 @@ export default function Home() {
             <a href="#freedom-of-mind" className="btn-ghost !border-paper/40 !text-paper hover:!border-accent hover:!text-accent">Freedom of Mind</a>
           </div>
           {banners.length > 1 && (
-            <div className="mt-10 flex gap-2" aria-label="Homepage banner slides">
+            <div className="mt-10 flex items-center justify-center" aria-label="Homepage banner slides">
               {banners.map((banner, index) => (
                 <button
                   key={`${banner.url}-dot-${index}`}
                   type="button"
-                  className={`h-2.5 w-2.5 rounded-full border border-paper/70 transition-colors ${index === activeHeroIndex ? 'bg-paper' : 'bg-transparent'}`}
+                  className="carousel-dot"
                   aria-label={`Show banner ${index + 1}`}
                   aria-current={index === activeHeroIndex ? 'true' : undefined}
                   onClick={() => setActiveHeroIndex(index)}

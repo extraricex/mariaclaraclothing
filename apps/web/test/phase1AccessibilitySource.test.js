@@ -14,3 +14,15 @@ test('phase one provides accessible contrast and touch targets', async () => {
   assert.match(css, /\.carousel-dot::after\s*{[^}]*width:\s*0\.625rem;[^}]*height:\s*0\.625rem;/s);
   assert.match(css, /\.carousel-dot\[aria-current="true"\]::after\s*{[^}]*background:\s*currentColor;/s);
 });
+
+test('homepage carousel is manual and adds no pause control', async () => {
+  const home = await source('src/pages/Home.jsx');
+
+  assert.doesNotMatch(home, /setInterval|clearInterval/);
+  assert.doesNotMatch(home, />\s*(Pause|Play)\s*</i);
+  assert.match(home, /className="mt-10 flex items-center justify-center"/);
+  assert.match(home, /className="carousel-dot"/);
+  assert.match(home, /aria-label={`Show banner \$\{index \+ 1\}`}/);
+  assert.match(home, /onClick=\{\(\) => setActiveHeroIndex\(index\)\}/);
+  assert.match(home, /hero-slide absolute inset-0/);
+});
