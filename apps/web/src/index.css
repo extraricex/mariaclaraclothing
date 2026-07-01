@@ -98,6 +98,17 @@
     a[href]:not([aria-disabled="true"]),
     button:not(:disabled):not([aria-disabled="true"]),
     [role="button"]:not([aria-disabled="true"]),
+    input:is(
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"],
+      [type="color"],
+      [type="range"]
+    ):not(:disabled),
+    select:not(:disabled),
     summary,
     label[for],
     label:has(:is(input, select, textarea):not(:disabled)),
@@ -109,6 +120,17 @@
     a[href]:not([aria-disabled="true"]),
     button:not(:disabled):not([aria-disabled="true"]),
     [role="button"]:not([aria-disabled="true"]),
+    input:is(
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"],
+      [type="color"],
+      [type="range"]
+    ):not(:disabled),
+    select:not(:disabled),
     summary,
     label[for],
     label:has(:is(input, select, textarea):not(:disabled)),
@@ -116,10 +138,40 @@
   ) * {
     cursor: inherit !important;
   }
-  :is(button:disabled, [role="button"][aria-disabled="true"], a[aria-disabled="true"]) {
+  :is(
+    button:disabled,
+    [role="button"][aria-disabled="true"],
+    a[aria-disabled="true"],
+    input:is(
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"],
+      [type="color"],
+      [type="range"]
+    ):disabled,
+    select:disabled
+  ) {
     cursor: not-allowed !important;
   }
-  :is(button:disabled, [role="button"][aria-disabled="true"], a[aria-disabled="true"]) * {
+  :is(
+    button:disabled,
+    [role="button"][aria-disabled="true"],
+    a[aria-disabled="true"],
+    input:is(
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"],
+      [type="color"],
+      [type="range"]
+    ):disabled,
+    select:disabled
+  ) * {
     cursor: inherit !important;
   }
   button:not(:disabled):not([aria-disabled="true"]):hover,
