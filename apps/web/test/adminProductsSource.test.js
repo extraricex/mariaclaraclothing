@@ -40,6 +40,7 @@ test('admin products page exposes phase 1 filters and sort controls', async () =
 
 test('admin product editor exposes organization fields, variant price, and total inventory', async () => {
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'ProductEditor.jsx'), 'utf8');
+  const collectionDropdown = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'CollectionDropdown.jsx'), 'utf8');
 
   assert.match(source, /product-editor-shell/);
   assert.match(source, /product-editor-grid/);
@@ -98,6 +99,13 @@ test('admin product editor exposes organization fields, variant price, and total
   assert.match(source, /buildNewProductBody/);
   assert.match(source, /Add at least one product photo before saving/);
   assert.doesNotMatch(source, /Save this product before uploading photos/);
+  assert.match(source, /<CollectionDropdown/);
+  assert.doesNotMatch(source, /COLLECTIONS\.map\(\(collection\)/);
+  assert.match(collectionDropdown, /aria-haspopup="listbox"/);
+  assert.match(collectionDropdown, /aria-multiselectable="true"/);
+  assert.match(collectionDropdown, /New Arrivals/);
+  assert.match(collectionDropdown, /Freedom of Mind/);
+  assert.match(collectionDropdown, /event\.key === 'Escape'/);
 });
 
 test('storefront product page renders editable product page content and size chart rows', async () => {

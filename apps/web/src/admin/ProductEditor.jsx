@@ -11,8 +11,8 @@ import {
 import { sanitizeRichHtml } from '../lib/richText.js';
 import { centsToPesoInput, pesoToCents } from '../lib/money.js';
 import { buildNewProductBody, validateQueuedProductFiles } from './newProductMedia.js';
+import CollectionDropdown from './CollectionDropdown.jsx';
 
-const COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
 const STATUSES = ['active', 'draft', 'archived'];
 const DESCRIPTION_TOOLS = [
   ['paragraph', 'Paragraph'],
@@ -692,21 +692,10 @@ export default function ProductEditor() {
 
           <section className="border border-line bg-paper p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Collections</h2>
-            {COLLECTIONS.map((collection) => (
-              <label key={collection} className="mt-3 flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={(product.collections || []).includes(collection)}
-                  onChange={(e) => update(
-                    'collections',
-                    e.target.checked
-                      ? [...(product.collections || []), collection]
-                      : (product.collections || []).filter((item) => item !== collection)
-                  )}
-                />
-                {collection}
-              </label>
-            ))}
+            <CollectionDropdown
+              value={product.collections || []}
+              onChange={(collections) => update('collections', collections)}
+            />
           </section>
           <section className="border border-line bg-paper p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Product organization</h2>
