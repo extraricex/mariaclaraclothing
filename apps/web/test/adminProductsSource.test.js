@@ -92,6 +92,12 @@ test('admin product editor exposes organization fields, variant price, and total
   assert.match(source, /removeSizeChartRow/);
   assert.match(source, /sizeChartRowIsComplete/);
   assert.match(source, /Complete every size chart field before saving/);
+  assert.match(source, /queuedImages/);
+  assert.match(source, /queueNewProductImages/);
+  assert.match(source, /removeQueuedImage/);
+  assert.match(source, /buildNewProductBody/);
+  assert.match(source, /Add at least one product photo before saving/);
+  assert.doesNotMatch(source, /Save this product before uploading photos/);
 });
 
 test('storefront product page renders editable product page content and size chart rows', async () => {

@@ -10,6 +10,7 @@ import {
 } from './descriptionEditor.js';
 import { sanitizeRichHtml } from '../lib/richText.js';
 import { centsToPesoInput, pesoToCents } from '../lib/money.js';
+import { buildNewProductBody, validateQueuedProductFiles } from './newProductMedia.js';
 
 const COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
 const STATUSES = ['active', 'draft', 'archived'];
@@ -62,7 +63,9 @@ export default function ProductEditor() {
   const [pricePeso, setPricePeso] = useState('');
   const [comparePeso, setComparePeso] = useState('');
   const [message, setMessage] = useState('');
+  const [queuedImages, setQueuedImages] = useState([]);
   const descriptionEditorRef = useRef(null);
+  const queuedImagesRef = useRef([]);
 
   useEffect(() => {
     if (isNew) return;
@@ -79,6 +82,14 @@ export default function ProductEditor() {
     if (!product || !descriptionEditorRef.current) return;
     descriptionEditorRef.current.innerHTML = sanitizeRichHtml(product.description || '');
   }, [product?.slug]);
+
+  useEffect(() => {
+    queuedImagesRef.current = queuedImages;
+  }, [queuedImages]);
+
+  useEffect(() => () => {
+    queuedImagesRef.current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+  }, []);
 
   if (!product) {
     return <p className="text-sm text-clay">{message || 'Loading product…'}</p>;
@@ -247,11 +258,36 @@ export default function ProductEditor() {
     syncDescriptionFromEditor();
   }
 
+  function queueNewProductImages(files) {
+    try {
+      const accepted = validateQueuedProductFiles(queuedImages.map((image) => image.file), [...files]);
+      const existingCount = queuedImages.length;
+      setQueuedImages([
+        ...queuedImages,
+        ...accepted.slice(existingCount).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))
+      ]);
+      setMessage('');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  function removeQueuedImage(index) {
+    setQueuedImages((current) => current.filter((image, imageIndex) => {
+      if (imageIndex === index) URL.revokeObjectURL(image.previewUrl);
+      return imageIndex !== index;
+    }));
+  }
+
   async function save() {
     setMessage('');
     const partialSizeChartRow = sizeChartRows.some((row) => sizeChartRowHasValue(row) && !sizeChartRowIsComplete(row));
     if (partialSizeChartRow) {
       setMessage('Complete every size chart field before saving, or remove the incomplete row.');
+      return;
+    }
+    if (isNew && !queuedImages.length) {
+      setMessage('Add at least one product photo before saving.');
       return;
     }
     const completeSizeChartRows = sizeChartRows
@@ -280,7 +316,11 @@ export default function ProductEditor() {
     };
     try {
       if (isNew) {
-        const body = await adminSend('POST', '/api/admin/products', payload);
+        const body = await adminJson('/api/admin/products', {
+          method: 'POST',
+          body: buildNewProductBody(payload, queuedImages.map((image) => image.file))
+        });
+        queuedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
         navigate(`/admin/products/${encodeURIComponent(body.product.slug)}`, { replace: true });
       } else {
         const body = await adminSend('PUT', `/api/admin/products/${encodeURIComponent(slug)}`, payload);
@@ -296,10 +336,6 @@ export default function ProductEditor() {
 
   async function uploadImages(files) {
     if (!files.length) return;
-    if (isNew) {
-      setMessage('Save the product before uploading photos.');
-      return;
-    }
     const formData = new FormData();
     [...files].forEach((file) => formData.append('images', file));
     try {
@@ -496,12 +532,37 @@ export default function ProductEditor() {
                 <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Media</h2>
                 <p className="mt-1 text-xs text-clay">Add photos and remove old product images. One photo is required.</p>
               </div>
-              <label className={`btn-ghost cursor-pointer !px-4 !py-2 text-xs ${isNew ? 'pointer-events-none opacity-50' : ''}`}>
+              <label className="btn-ghost cursor-pointer !px-4 !py-2 text-xs">
                 Add photos
-                <input type="file" accept="image/*" multiple hidden disabled={isNew} onChange={(e) => uploadImages(e.target.files)} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  aria-label="Add photos"
+                  onChange={(e) => {
+                    if (isNew) queueNewProductImages(e.target.files);
+                    else uploadImages(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
               </label>
             </div>
-            {isNew && <p className="mt-3 text-xs text-clay">Save this product before adding photos.</p>}
+            {isNew && queuedImages.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                {queuedImages.map((image, index) => (
+                  <figure key={image.previewUrl} className="group relative overflow-hidden border border-line bg-cream">
+                    <img src={image.previewUrl} alt="Customer product preview" className="product-photo-blend aspect-[4/5] w-full object-cover" />
+                    <figcaption className="flex items-center justify-between gap-2 border-t border-line bg-white px-2 py-2 text-[11px] text-clay">
+                      <span>{index === 0 ? 'Storefront cover' : `Photo ${index + 1}`}</span>
+                      <button type="button" className="font-bold uppercase text-accent-deep underline" onClick={() => removeQueuedImage(index)}>
+                        Remove photo
+                      </button>
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
             {!isNew && (
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                 {product.images.map((image, index) => (
