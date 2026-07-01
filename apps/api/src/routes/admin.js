@@ -502,13 +502,31 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
   }
 });
 
-router.post('/products', async (req, res, next) => {
+router.post('/products', upload.array('images', 8), async (req, res, next) => {
+  const files = Array.isArray(req.files) ? req.files : [];
+  let product;
   try {
-    const product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest(req.body || {})));
-    return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
+    const incoming = multipartProductBody(req);
+    if (req.is('multipart/form-data') && !files.length) {
+      const error = new Error('Add at least one product photo before saving');
+      error.status = 400;
+      throw error;
+    }
+    const images = files.length ? uploadedProductImages(files, incoming.name) : incoming.images;
+    product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest({
+      ...incoming,
+      images
+    })));
   } catch (error) {
+    try {
+      removeUploadedProductFiles(files);
+    } catch (cleanupError) {
+      cleanupError.cause = error;
+      return next(cleanupError);
+    }
     return next(error);
   }
+  return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
 });
 
 router.put('/products/:slug', async (req, res, next) => {
@@ -834,6 +852,35 @@ function productUploadDir() {
 
 function productUploadUrl(filename) {
   return `/uploads/products/${filename}`;
+}
+
+function multipartProductBody(req) {
+  if (!req.is('multipart/form-data')) return req.body || {};
+  try {
+    return JSON.parse(String(req.body?.product || '{}'));
+  } catch {
+    const error = new Error('Product data is invalid JSON');
+    error.status = 400;
+    throw error;
+  }
+}
+
+function uploadedProductImages(files, productName) {
+  return (Array.isArray(files) ? files : []).map((file, index) => ({
+    url: productUploadUrl(file.filename),
+    altText: String(productName || 'Product image').trim(),
+    sortOrder: index
+  }));
+}
+
+function removeUploadedProductFiles(files) {
+  (Array.isArray(files) ? files : []).forEach((file) => {
+    try {
+      fs.unlinkSync(file.path);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  });
 }
 
 function bannerUploadDir() {

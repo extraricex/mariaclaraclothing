@@ -230,6 +230,64 @@ test('admin product APIs require login and support product management', async ()
     assert.ok(listBody.products[0].variants[0].id);
     assert.ok(listBody.products[0].variants[0].sku);
 
+    const multipartProduct = {
+      slug: 'multipart-product-shirt',
+      name: 'Multipart Product Shirt',
+      description: 'Created with customer photos.',
+      collections: ['New Arrivals', 'Freedom of Mind'],
+      status: 'active',
+      priceCents: 89900,
+      images: [],
+      variants: [{ size: 'm', sku: 'MULTIPART-M', stockQuantity: 5 }]
+    };
+    const missingImagesBody = new FormData();
+    missingImagesBody.append('product', JSON.stringify({ ...multipartProduct, slug: 'missing-images-shirt' }));
+    const missingImagesResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products`, {
+      method: 'POST',
+      headers: adminRequest().headers,
+      body: missingImagesBody
+    });
+    assert.equal(missingImagesResponse.status, 400);
+
+    const multipartBody = new FormData();
+    multipartBody.append('product', JSON.stringify(multipartProduct));
+    multipartBody.append('images', new Blob([Buffer.from('front bytes')], { type: 'image/png' }), 'front.png');
+    multipartBody.append('images', new Blob([Buffer.from('back bytes')], { type: 'image/jpeg' }), 'back.jpg');
+
+    const multipartResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products`, {
+      method: 'POST',
+      headers: adminRequest().headers,
+      body: multipartBody
+    });
+    const multipartJson = await multipartResponse.json();
+
+    assert.equal(multipartResponse.status, 201);
+    assert.deepEqual(multipartJson.product.collections, ['New Arrivals', 'Freedom of Mind']);
+    assert.equal(multipartJson.product.images.length, 2);
+    assert.deepEqual(multipartJson.product.images.map((image) => image.sortOrder), [0, 1]);
+    assert.ok(multipartJson.product.images.every((image) => image.altText === multipartProduct.name));
+    assert.match(multipartJson.product.images[0].url, /^\/uploads\/products\//);
+
+    const multipartStorefrontResponse = await fetch(`http://127.0.0.1:${port}/api/products/multipart-product-shirt`);
+    const multipartStorefrontJson = await multipartStorefrontResponse.json();
+    assert.equal(multipartStorefrontResponse.status, 200);
+    assert.deepEqual(
+      multipartStorefrontJson.product.images.map((image) => image.url),
+      multipartJson.product.images.map((image) => image.url)
+    );
+
+    const filesBeforeFailedCreate = await fs.readdir(process.env.PRODUCT_UPLOAD_DIR);
+    const invalidBody = new FormData();
+    invalidBody.append('product', JSON.stringify({ ...multipartProduct, slug: 'invalid-multipart', priceCents: -1 }));
+    invalidBody.append('images', new Blob([Buffer.from('orphan bytes')], { type: 'image/png' }), 'orphan.png');
+    const invalidResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products`, {
+      method: 'POST',
+      headers: adminRequest().headers,
+      body: invalidBody
+    });
+    assert.equal(invalidResponse.status, 400);
+    assert.deepEqual(await fs.readdir(process.env.PRODUCT_UPLOAD_DIR), filesBeforeFailedCreate);
+
     const newProduct = {
       slug: 'admin-test-shirt',
       name: 'Admin Test Shirt',
