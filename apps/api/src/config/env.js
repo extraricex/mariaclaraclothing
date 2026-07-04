@@ -70,16 +70,28 @@ function pancakeConfig(source = process.env) {
     throw new Error('PANCAKE_API_BASE_URL must use the official Pancake API host in production');
   }
   const timeout = Number(source.PANCAKE_REQUEST_TIMEOUT_MS || 8000);
+  const apiKey = String(source.PANCAKE_API_KEY || '');
+  const catalogInteger = (name, fallback, maximum) => {
+    const raw = source[name];
+    const value = Number(raw === undefined || raw === '' ? fallback : raw);
+    if (!Number.isInteger(value) || value < 1 || value > maximum) {
+      throw new Error(`${name} Pancake catalog value must be an integer from 1 to ${maximum}`);
+    }
+    return value;
+  };
   return {
     mode,
-    configured: Boolean(String(source.PANCAKE_API_KEY || '').trim() && String(source.PANCAKE_SHOP_ID || '').trim()),
+    configured: Boolean(apiKey.trim() && String(source.PANCAKE_SHOP_ID || '').trim()),
+    apiKeyConfigured: Boolean(apiKey.trim()),
     apiBaseUrl,
-    apiKey: String(source.PANCAKE_API_KEY || ''),
+    apiKey,
     shopId: String(source.PANCAKE_SHOP_ID || '').trim(),
     warehouseId: String(source.PANCAKE_WAREHOUSE_ID || '').trim(),
     orderSourceId: String(source.PANCAKE_ORDER_SOURCE_ID || '').trim(),
     webhookSecret: String(source.PANCAKE_WEBHOOK_SECRET || ''),
-    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 8000
+    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 8000,
+    catalogPageSize: catalogInteger('PANCAKE_CATALOG_PAGE_SIZE', 100, 100),
+    catalogMaxPages: catalogInteger('PANCAKE_CATALOG_MAX_PAGES', 100, 500)
   };
 }
 
