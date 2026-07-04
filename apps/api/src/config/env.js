@@ -59,6 +59,30 @@ function notificationConfig(source = process.env) {
   return { enabled, sms, email };
 }
 
+function pancakeConfig(source = process.env) {
+  const mode = String(source.PANCAKE_MODE || 'disabled').trim().toLowerCase();
+  if (!['disabled', 'read_only', 'shadow', 'live'].includes(mode)) {
+    throw new Error('PANCAKE_MODE must be disabled, read_only, shadow, or live');
+  }
+  const apiBaseUrl = String(source.PANCAKE_API_BASE_URL || 'https://pos.pages.fm/api/v1').trim().replace(/\/$/, '');
+  const appEnv = String(source.APP_ENV || 'development').trim().toLowerCase();
+  if (appEnv === 'production' && apiBaseUrl !== 'https://pos.pages.fm/api/v1') {
+    throw new Error('PANCAKE_API_BASE_URL must use the official Pancake API host in production');
+  }
+  const timeout = Number(source.PANCAKE_REQUEST_TIMEOUT_MS || 8000);
+  return {
+    mode,
+    configured: Boolean(String(source.PANCAKE_API_KEY || '').trim() && String(source.PANCAKE_SHOP_ID || '').trim()),
+    apiBaseUrl,
+    apiKey: String(source.PANCAKE_API_KEY || ''),
+    shopId: String(source.PANCAKE_SHOP_ID || '').trim(),
+    warehouseId: String(source.PANCAKE_WAREHOUSE_ID || '').trim(),
+    orderSourceId: String(source.PANCAKE_ORDER_SOURCE_ID || '').trim(),
+    webhookSecret: String(source.PANCAKE_WEBHOOK_SECRET || ''),
+    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 8000
+  };
+}
+
 function validateProductionConfig(source = process.env) {
   if (String(source.APP_ENV || 'development').trim().toLowerCase() !== 'production') return;
   if (!String(source.DATABASE_URL || '').trim()) {
@@ -104,10 +128,11 @@ function buildEnv(source = process.env) {
     port: Number(optional(source, 'PORT', '3000')),
     meta: metaConfig(source),
     checkout: checkoutConfig(source),
-    notifications: notificationConfig(source)
+    notifications: notificationConfig(source),
+    pancake: pancakeConfig(source)
   };
 }
 
 const env = buildEnv();
 
-module.exports = { buildEnv, env, metaConfig, checkoutConfig, notificationConfig, validateProductionConfig };
+module.exports = { buildEnv, env, metaConfig, checkoutConfig, notificationConfig, pancakeConfig, validateProductionConfig };

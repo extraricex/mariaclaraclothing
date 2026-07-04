@@ -129,6 +129,7 @@ function createApp() {
   app.use('/api/customer/login', customerAuthRateLimit);
   app.use('/api/customer/register', customerAuthRateLimit);
   app.use('/api/admin/settings/security', adminSensitiveRateLimit);
+  app.use('/api/admin/integrations/pancake', adminSensitiveRateLimit);
   app.use('/api/admin/products', adminSensitiveRateLimit);
   app.use('/api/admin/site-content', adminSensitiveRateLimit);
 

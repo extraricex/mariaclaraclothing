@@ -21,6 +21,7 @@ const SECONDARY_NAV = [
   { to: '/admin/customers', label: 'Customers' },
   { to: '/admin/discounts', label: 'Discounts' },
   { to: '/admin/banners', label: 'Website content' },
+  { to: '/admin/pancake', label: 'Pancake POS' },
   { to: '/admin/settings', label: 'Settings' }
 ];
 

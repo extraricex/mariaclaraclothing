@@ -71,6 +71,7 @@ const {
   sessionTokenFromRequest,
   setSessionCookies
 } = require('../auth/sessionHttp');
+const { createAdminPancakeRouter } = require('./adminPancake');
 
 const router = express.Router();
 
@@ -190,6 +191,8 @@ router.post('/login', async (req, res, next) => {
 
 router.use(requireAdmin);
 router.use(requireAdminCsrf);
+
+router.use('/integrations/pancake', createAdminPancakeRouter());
 
 router.get('/session', (req, res) => res.json({ authenticated: true }));
 

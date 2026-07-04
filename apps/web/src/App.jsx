@@ -27,6 +27,7 @@ import Discounts from './admin/Discounts.jsx';
 import DiscountDetail from './admin/DiscountDetail.jsx';
 import Banners from './admin/Banners.jsx';
 import Settings from './admin/Settings.jsx';
+import PancakePos from './admin/PancakePos.jsx';
 
 export default function App() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="discounts/:code" element={<DiscountDetail />} />
         <Route path="banners" element={<Banners />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="pancake" element={<PancakePos />} />
       </Route>
       <Route path="*" element={<MaintenanceGate><Shell /></MaintenanceGate>} />
     </Routes>
