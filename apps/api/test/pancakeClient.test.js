@@ -143,3 +143,15 @@ test('connection service safely reports missing shops and provider failures', as
   assert.equal(failed.lastErrorCode, 'pancake_timeout');
   assert.equal(JSON.stringify(failed).includes('contains secret'), false);
 });
+
+test('connection status exposes locally selected references and validation state', () => {
+  const { publicStatus } = require('../src/integrations/pancake/pancakeConnectionService');
+  const result = publicStatus({ mode: 'read_only', configured: false, apiKey: 'secret' }, {
+    shopId: '7', warehouseId: 'w1', orderSourceId: 'web', currencyStatus: 'unknown',
+    priceUnitStatus: 'confirmed_centavos', shopLocked: false, warehouseLocked: false, orderSourceLocked: false
+  });
+  assert.equal(result.shopId, '7');
+  assert.equal(result.warehouseId, 'w1');
+  assert.equal(result.priceUnitStatus, 'confirmed_centavos');
+  assert.equal(JSON.stringify(result).includes('secret'), false);
+});

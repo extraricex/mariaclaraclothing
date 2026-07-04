@@ -13,7 +13,13 @@ function mapConnection(row) {
     healthStatus: row.health_status || 'never_checked',
     lastCheckedAt: row.last_checked_at ? new Date(row.last_checked_at).toISOString() : '',
     lastConnectedAt: row.last_connected_at ? new Date(row.last_connected_at).toISOString() : '',
-    lastErrorCode: row.last_error_code || ''
+    lastErrorCode: row.last_error_code || '',
+    currencyCode: row.currency_code || '',
+    currencyStatus: row.currency_status || 'unknown',
+    priceUnitStatus: row.price_unit_status || 'unknown',
+    shopLocked: Boolean(row.shop_locked),
+    warehouseLocked: Boolean(row.warehouse_locked),
+    orderSourceLocked: Boolean(row.order_source_locked)
   };
 }
 
