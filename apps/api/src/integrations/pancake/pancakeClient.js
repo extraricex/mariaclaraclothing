@@ -6,7 +6,8 @@ class PancakeApiError extends Error {
       pancake_invalid_response: 'Pancake returned an invalid response.',
       pancake_rejected: 'Pancake rejected the request.',
       pancake_timeout: 'Pancake request timed out.',
-      pancake_network_error: 'Pancake could not be reached.'
+      pancake_network_error: 'Pancake could not be reached.',
+      pancake_invalid_request: 'Pancake request configuration is invalid.'
     };
     super(messages[code] || 'Pancake request failed.');
     this.name = 'PancakeApiError';
@@ -17,9 +18,10 @@ class PancakeApiError extends Error {
 }
 
 function createPancakeClient(config, fetchImpl = fetch) {
-  async function request(pathname) {
+  async function request(pathname, query = {}) {
     const url = new URL(`${config.apiBaseUrl}${pathname}`);
     url.searchParams.set('api_key', config.apiKey);
+    Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, String(value)));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
     let response;
@@ -63,8 +65,41 @@ function createPancakeClient(config, fetchImpl = fetch) {
     return body;
   }
 
+  function shopPath(shopId, suffix) {
+    const id = String(shopId || '').trim();
+    if (!id) throw new PancakeApiError('pancake_invalid_request');
+    return `/shops/${encodeURIComponent(id)}${suffix}`;
+  }
+
+  async function listData(shopId, suffix) {
+    const body = await request(shopPath(shopId, suffix));
+    if (!Array.isArray(body.data)) throw new PancakeApiError('pancake_invalid_response');
+    return body;
+  }
+
+  async function listVariations(shopId, options = {}) {
+    const pageNumber = Number(options.pageNumber);
+    const pageSize = Number(options.pageSize);
+    if (!Number.isInteger(pageNumber) || pageNumber < 1 || !Number.isInteger(pageSize) || pageSize < 1) {
+      throw new PancakeApiError('pancake_invalid_request');
+    }
+    const body = await request(shopPath(shopId, '/products/variations'), {
+      page_number: pageNumber,
+      page_size: pageSize
+    });
+    const fields = ['page_number', 'page_size', 'total_entries', 'total_pages'];
+    if (!Array.isArray(body.data) || fields.some((field) => !Number.isInteger(body[field]) || body[field] < 0)
+      || body.page_number < 1 || body.page_size < 1) {
+      throw new PancakeApiError('pancake_invalid_response');
+    }
+    return body;
+  }
+
   return {
-    listShops: () => request('/shops')
+    listShops: () => request('/shops'),
+    listWarehouses: (shopId) => listData(shopId, '/warehouses'),
+    listOrderSources: (shopId) => listData(shopId, '/order_source'),
+    listVariations
   };
 }
 
