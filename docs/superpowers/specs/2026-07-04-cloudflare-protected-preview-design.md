@@ -19,7 +19,7 @@ Make the current Docker website available for testing through the store's Cloudf
 
 ## Selected Approach
 
-Use a named Cloudflare Tunnel from the Mac to the existing nginx web gateway and publish it only at `preview.mariaclaraclothing.com`. Protect the hostname with Cloudflare Access email verification. Preserve the apex domain and `www` for the eventual production launch.
+Use a named Cloudflare Tunnel from the Mac to the existing nginx web gateway and publish it only at `preview.mariaclaraclothing.com`. Run `cloudflared` as an optional Docker Compose sidecar using a pinned official image. Protect the hostname with Cloudflare Access email verification. Preserve the apex domain and `www` for the eventual production launch.
 
 This approach avoids router port forwarding and does not reveal the Mac's public IP address. It is appropriate for a temporary preview, but availability still depends on the Mac, Docker, internet connection, and tunnel process remaining online.
 
@@ -37,23 +37,25 @@ preview.mariaclaraclothing.com
       |
       | Cloudflare Tunnel
       v
-Mac: http://127.0.0.1:8081
+cloudflared Compose sidecar
       |
+      | Private Compose network
       v
-Docker nginx web gateway
+Docker nginx web gateway: http://web:80
       |-- /api/*     -> api:3000
       |-- /uploads/* -> api:3000
       `-- SPA/static files
 ```
 
-Only nginx port `8081` is a tunnel origin. Port `3000`, PostgreSQL, and Docker-internal service names are never configured as public Cloudflare origins.
+Only the nginx service at `http://web:80` is a tunnel origin. Port `3000` and PostgreSQL are never configured as Cloudflare origins.
 
 ## Components
 
 ### Cloudflare Tunnel
 
 - Create one named tunnel for the Maria Clara preview.
-- Configure one ingress rule from `preview.mariaclaraclothing.com` to `http://127.0.0.1:8081`.
+- Run `cloudflared` as an optional Docker Compose sidecar using the pinned official image.
+- Configure one ingress rule from `preview.mariaclaraclothing.com` to `http://web:80` on the private Compose network.
 - End the ingress configuration with a catch-all `http_status:404` rule.
 - Let Cloudflare create the tunnel-backed DNS record; do not create an `A` record pointing to the Mac.
 - Keep the tunnel credential outside Git and outside the web image.
@@ -68,6 +70,7 @@ Only nginx port `8081` is a tunnel origin. Port `3000`, PostgreSQL, and Docker-i
 ### Local Docker Application
 
 - Keep the existing application routing through the web/nginx container.
+- Do not publish ports from the tunnel sidecar or expose API port `3000` or PostgreSQL through Cloudflare.
 - Continue using the current Docker volumes for PostgreSQL and uploaded product media.
 - Do not publish any additional ports for the tunnel.
 - Keep this preview separate from permanent production infrastructure.
@@ -91,7 +94,7 @@ Database and upload volumes must not be deleted during ordinary rebuilds. Destru
 1. A tester opens `https://preview.mariaclaraclothing.com`.
 2. Cloudflare Access verifies that the tester's email is allowed.
 3. Cloudflare sends the authorized request through the named tunnel.
-4. The local tunnel forwards the request to nginx on `127.0.0.1:8081`.
+4. The `cloudflared` sidecar forwards the request to nginx at `http://web:80` on the private Compose network.
 5. Nginx serves the React application or proxies same-origin API/media requests to the API container.
 6. The API reads and writes the existing PostgreSQL and upload volumes.
 
