@@ -97,3 +97,37 @@ test('Pancake admin subrouter can report an injected successful connection', asy
     assert.deepEqual(body.pancake.shop, { id: '123', name: 'Maria Clara' });
   });
 });
+
+test('Pancake admin subrouter exposes validated catalog import mapping and selection APIs', async () => {
+  const { createAdminPancakeRouter } = require('../src/routes/adminPancake');
+  const calls = [];
+  const catalogService = {
+    getCatalogStatus: async () => ({ status: 'complete' }),
+    runCatalogImport: async () => ({ status: 'complete', summary: { verifiedCount: 2 } }),
+    saveReferenceSelection: async ({ selection }) => { calls.push(selection); return selection; }
+  };
+  const catalogRepository = {
+    listMappings: async (filters) => ({ items: [], ...filters }),
+    listReferences: async () => ({ shops: [], warehouses: [], orderSources: [] })
+  };
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminPancakeRouter({
+    config: { mode: 'read_only', apiKeyConfigured: true, apiBaseUrl: 'https://pos.pages.fm/api/v1', apiKey: 'secret' },
+    repository: { getConnectionStatus: async () => null, recordConnectionCheck: async () => {} },
+    client: { listShops: async () => ({ shops: [] }) }, catalogService, catalogRepository
+  }));
+  app.use((error, _req, res, _next) => res.status(error.status || 500).json({ error: error.message }));
+  await listen(app, async (port) => {
+    const base = `http://127.0.0.1:${port}`;
+    assert.equal((await fetch(`${base}/catalog/status`)).status, 200);
+    assert.equal((await fetch(`${base}/catalog/import`, { method: 'POST' })).status, 200);
+    const mappings = await (await fetch(`${base}/catalog/mappings?page=2&pageSize=25&conflictOnly=true&search=SKU`)).json();
+    assert.deepEqual(mappings.mappings, { items: [], page: 2, pageSize: 25, conflictOnly: true, search: 'SKU' });
+    assert.equal((await fetch(`${base}/catalog/mappings?page=0`)).status, 400);
+    assert.equal((await fetch(`${base}/references`)).status, 200);
+    const selection = await fetch(`${base}/references/selection`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ shopId: ' 7 ', warehouseId: ' w1 ', orderSourceId: ' web ' }) });
+    assert.equal(selection.status, 200);
+    assert.deepEqual(calls[0], { shopId: '7', warehouseId: 'w1', orderSourceId: 'web' });
+  });
+});
