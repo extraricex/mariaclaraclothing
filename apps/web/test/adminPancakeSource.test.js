@@ -23,3 +23,17 @@ test('Pancake admin page is read-only, responsive, and can test the safe connect
   assert.match(page, /Credentials are managed on the API server/);
   assert.doesNotMatch(page, /PANCAKE_API_KEY|PANCAKE_WEBHOOK_SECRET|type="password"/);
 });
+
+test('Pancake admin page exposes responsive Phase 2 catalog mapping controls', async () => {
+  const page = await readFile(path.join(sourceRoot, 'admin', 'PancakePos.jsx'), 'utf8');
+  for (const endpoint of ['/catalog/status', '/catalog/import', '/catalog/mappings', '/references', '/references/selection']) {
+    assert.match(page, new RegExp(endpoint.replaceAll('/', '\\/')));
+  }
+  for (const label of ['Import catalog', 'Read-only', 'Mapping coverage', 'Currency', 'Price unit', 'Shop', 'Warehouse', 'Order source', 'Safe conflict code']) {
+    assert.match(page, new RegExp(label, 'i'));
+  }
+  assert.match(page, /grid-cols-1/);
+  assert.match(page, /overflow-x-auto/);
+  assert.match(page, /conflictOnly/);
+  assert.doesNotMatch(page, /PANCAKE_API_KEY|PANCAKE_WEBHOOK_SECRET|type="password"/);
+});
