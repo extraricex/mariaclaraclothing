@@ -11,7 +11,7 @@ const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'invent
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
-const STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
+const DEFAULT_STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
 const DEFAULT_COUNTDOWN_MESSAGE = 'Hurry! Limited time left';
 
 let postgresCredentialsCache = { loaded: false, value: null };
@@ -42,22 +42,51 @@ function badRequest(message) {
   return error;
 }
 
-function defaultCollectionCountdowns() {
-  return Object.fromEntries(STOREFRONT_COLLECTIONS.map((name) => [name, {
+function conflict(message) {
+  const error = new Error(message);
+  error.status = 409;
+  return error;
+}
+
+function defaultCollectionCountdown() {
+  return {
     enabled: false,
     message: DEFAULT_COUNTDOWN_MESSAGE,
     durationSeconds: 2 * 60 * 60,
     revision: 0
-  }]));
+  };
+}
+
+function defaultCollectionCountdowns(collections = DEFAULT_STOREFRONT_COLLECTIONS) {
+  return Object.fromEntries(collections.map((name) => [name, defaultCollectionCountdown()]));
+}
+
+function normalizeCollectionName(value) {
+  const name = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!name) throw badRequest('Collection name is required.');
+  if (name.length > 60) throw badRequest('Collection name must be 60 characters or fewer.');
+  return name;
+}
+
+function normalizeStorefrontCollections(value) {
+  const incoming = Array.isArray(value) ? value : [];
+  const collections = [];
+  for (const item of [...DEFAULT_STOREFRONT_COLLECTIONS, ...incoming]) {
+    const name = normalizeCollectionName(item);
+    if (!collections.some((existing) => existing.toLowerCase() === name.toLowerCase())) collections.push(name);
+  }
+  return collections;
 }
 
 function defaultStoreSettings() {
+  const storefrontCollections = [...DEFAULT_STOREFRONT_COLLECTIONS];
   return {
     general: {
       storeName: 'Maria Clara Clothing',
       contactEmail: '',
       contactNumber: '',
       storeAddress: '',
+      messengerUrl: '',
       socialLinks: { facebook: '', instagram: '', tiktok: '' }
     },
     shipping: {
@@ -115,7 +144,8 @@ function defaultStoreSettings() {
     inventory: {
       lowStockThreshold: 12
     },
-    collectionCountdowns: defaultCollectionCountdowns()
+    storefrontCollections,
+    collectionCountdowns: defaultCollectionCountdowns(storefrontCollections)
   };
 }
 
@@ -139,13 +169,35 @@ function normalizeCollectionCountdown(value, fallback) {
   return { enabled, message, durationSeconds, revision };
 }
 
-function normalizeCollectionCountdowns(value) {
+function normalizeCollectionCountdowns(value, collections) {
   const input = value && typeof value === 'object' ? value : {};
-  const defaults = defaultCollectionCountdowns();
-  return Object.fromEntries(STOREFRONT_COLLECTIONS.map((name) => [
+  const defaults = defaultCollectionCountdowns(collections);
+  return Object.fromEntries(collections.map((name) => [
     name,
     normalizeCollectionCountdown(input[name], defaults[name])
   ]));
+}
+
+function normalizeMessengerUrl(value) {
+  const input = String(value || '').trim();
+  if (!input) return '';
+  let parsed;
+  try {
+    parsed = new URL(input);
+  } catch (_error) {
+    throw badRequest('Enter a valid Messenger URL.');
+  }
+  const hosts = new Set([
+    'm.me',
+    'messenger.com',
+    'www.messenger.com',
+    'facebook.com',
+    'www.facebook.com'
+  ]);
+  if (parsed.protocol !== 'https:' || !hosts.has(parsed.hostname.toLowerCase())) {
+    throw badRequest('Messenger URL must use HTTPS and point to Messenger or Facebook.');
+  }
+  return parsed.toString();
 }
 
 function normalizeGeneral(general) {
@@ -160,6 +212,7 @@ function normalizeGeneral(general) {
     contactEmail,
     contactNumber: String(value.contactNumber || '').trim(),
     storeAddress: String(value.storeAddress || '').trim(),
+    messengerUrl: normalizeMessengerUrl(value.messengerUrl),
     socialLinks: {
       facebook: String(socialLinks.facebook || '').trim(),
       instagram: String(socialLinks.instagram || '').trim(),
@@ -309,13 +362,15 @@ function normalizeInventory(inventory) {
 
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
+  const storefrontCollections = normalizeStorefrontCollections(value.storefrontCollections);
   return {
     general: normalizeGeneral(value.general),
     shipping: normalizeShipping(value.shipping),
     payments: normalizePayments(value.payments),
     website: normalizeWebsite(value.website),
     inventory: normalizeInventory(value.inventory),
-    collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns)
+    storefrontCollections,
+    collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns, storefrontCollections)
   };
 }
 
@@ -382,8 +437,53 @@ function updateSettingsSection(section, value) {
   return next;
 }
 
+function nextStorefrontCollection(current, input) {
+  const name = normalizeCollectionName(input);
+  if (current.storefrontCollections.some((existing) => existing.toLowerCase() === name.toLowerCase())) {
+    throw conflict('Collection already exists.');
+  }
+  return {
+    ...current,
+    storefrontCollections: [...current.storefrontCollections, name],
+    collectionCountdowns: {
+      ...current.collectionCountdowns,
+      [name]: defaultCollectionCountdown()
+    }
+  };
+}
+
+function addStorefrontCollection(name) {
+  const normalizedName = normalizeCollectionName(name);
+  if (usePostgresSettings()) {
+    return transaction(async (client) => {
+      await client.query(
+        `INSERT INTO store_settings (key, value, updated_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (key) DO NOTHING`,
+        [SETTINGS_KEY, JSON.stringify(defaultStoreSettings())]
+      );
+      const result = await client.query(
+        'SELECT value FROM store_settings WHERE key = $1 FOR UPDATE',
+        [SETTINGS_KEY]
+      );
+      const current = normalizeStoreSettings(result.rows[0]?.value || {});
+      const next = nextStorefrontCollection(current, normalizedName);
+      await client.query(
+        `UPDATE store_settings SET value = $2, updated_at = now() WHERE key = $1`,
+        [SETTINGS_KEY, JSON.stringify(next)]
+      );
+      return next;
+    });
+  }
+
+  const current = normalizeStoreSettings(readJsonFile(settingsDataFile()) || {});
+  const next = nextStorefrontCollection(current, normalizedName);
+  writeJsonFile(settingsDataFile(), next);
+  return next;
+}
+
 function nextCollectionCountdown(current, collectionName, input) {
-  if (!STOREFRONT_COLLECTIONS.includes(collectionName)) {
+  if (!current.storefrontCollections.includes(collectionName)) {
     throw badRequest('Collection is invalid.');
   }
   const previous = current.collectionCountdowns[collectionName];
@@ -503,6 +603,7 @@ function resetStoreSettingsForTests() {
 }
 
 module.exports = {
+  addStorefrontCollection,
   defaultStoreSettings,
   getAdminCredentials,
   getStoreSettings,

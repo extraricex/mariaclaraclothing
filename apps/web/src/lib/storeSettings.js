@@ -28,6 +28,7 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   contactEmail: '',
   contactNumber: '',
   storeAddress: '',
+  messengerUrl: '',
   socialLinks: { facebook: '', instagram: '', tiktok: '' },
   shipping: {
     regions: [
@@ -55,6 +56,7 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   maintenanceMode: false,
   infoPages: DEFAULT_INFO_PAGES,
   inventory: { lowStockThreshold: 12 },
+  storefrontCollections: ['New Arrivals', 'Freedom of Mind'],
   collectionCountdowns: {}
 };
 

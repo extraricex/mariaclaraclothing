@@ -1,8 +1,8 @@
 # Maria Clara Clothing Webstore
 
-Monorepo for the Maria Clara Clothing webstore: an Express API with dual JSON/PostgreSQL
-persistence and a redesigned React + Tailwind storefront/admin (with a built-in analytics
-dashboard), all runnable with Docker Compose.
+Monorepo for the Maria Clara Clothing webstore: an Express API, PostgreSQL production
+persistence, and a React + Tailwind storefront/admin, all runnable with Docker Compose.
+JSON persistence remains available only for isolated local development and tests.
 
 ## Layout
 
@@ -24,8 +24,8 @@ docker compose up --build
 - Store analytics: the in-app admin Dashboard (`/admin`)
 - PostgreSQL is migrated and seeded automatically on first start.
 
-Default credentials are for local use only — override `ADMIN_TOKEN`, `ADMIN_PASSWORD`, and
-`POSTGRES_PASSWORD` before deploying anywhere public.
+Default credentials are for local use only — override `ADMIN_TOKEN`, `ADMIN_PASSWORD`,
+`CUSTOMER_AUTH_SECRET`, and `POSTGRES_PASSWORD` before deploying anywhere public.
 The ignored root `.env` must provide a unique `ORDER_CONFIRMATION_SECRET` of at least 32
 characters. Never rotate it while customers still need access to existing confirmations.
 
@@ -43,8 +43,11 @@ npm run dev:web                          # React app on :5173 (proxies /api to :
 
 ## Environment (apps/api/.env)
 
-- `ADMIN_TOKEN` / `ADMIN_PASSWORD` — admin auth (defaults `local-admin-token` / `admin`)
-- `DATABASE_URL` — optional; enables PostgreSQL persistence (JSON files otherwise)
+- `APP_ENV` — use `development` locally and `production` only with all required secrets
+- `ADMIN_TOKEN` / `ADMIN_PASSWORD` — legacy local API auth and admin login bootstrap values
+- `CUSTOMER_AUTH_SECRET` — customer compatibility-token secret; minimum 32 characters in production
+- `DATABASE_URL` — optional in development and mandatory in production
+- `TRUST_PROXY` — trusted reverse-proxy hops; Docker Nginx uses `1`
 - `PANCAKE_WEBHOOK_SECRET` — reserved for future POS integration
 - `CHECKOUT_V2_REQUIRED` — rejects legacy browser-authoritative checkout when `true`
 - `ORDER_CONFIRMATION_SECRET` — HMAC secret for private guest order confirmations
@@ -54,6 +57,38 @@ npm run dev:web                          # React app on :5173 (proxies /api to :
 - `JNT_INTEGRATION_MODE` — keep `dry_run` until J&T Philippines grants official API access
 
 `.env` files are gitignored; only `.env.example` is committed.
+
+Admin and customer browser sessions use random server-side records in PostgreSQL. The browser
+receives an `HttpOnly`, `SameSite=Lax`, production-`Secure` session cookie and a separate CSRF
+cookie. Authentication credentials are not stored in `localStorage`. Password changes and admin
+token rotation revoke prior admin sessions.
+
+## Production deployment boundary
+
+Set `APP_ENV=production` and provide unique values for `DATABASE_URL`, `ADMIN_TOKEN`,
+`ADMIN_PASSWORD`, `CUSTOMER_AUTH_SECRET`, and `ORDER_CONFIRMATION_SECRET`. Startup rejects local
+defaults, short secrets, missing PostgreSQL, and all `*_DATA_FILE`/JSON persistence overrides.
+Generate secrets with `openssl rand -hex 32`; do not reuse values between environments.
+
+Run the API behind one controlled reverse proxy and set `TRUST_PROXY` to the exact hop count.
+Endpoint-specific rate limits cover login, registration, quotes, checkout, cart writes, order
+lookups, uploads, and security actions. Their limits and windows are documented in
+`apps/api/.env.example` and can be disabled locally with a max value of `0`.
+
+Responses include framing, MIME-sniffing, referrer, permissions, and report-only CSP headers.
+Review CSP reports before converting the policy to enforcement. Meta Pixel stays unloaded until
+the shopper selects “Allow analytics”; shoppers can withdraw or change that choice through the
+footer’s “Privacy choices” control.
+
+Before a release:
+
+```bash
+npm test
+node --test apps/web/test/*.test.js
+npm run build:web
+docker compose up -d --build --force-recreate
+curl -fsS http://localhost:8081/api/health
+```
 
 ## Commands (run from repo root)
 

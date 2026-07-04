@@ -10,8 +10,16 @@ import {
 } from './descriptionEditor.js';
 import { sanitizeRichHtml } from '../lib/richText.js';
 import { centsToPesoInput, pesoToCents } from '../lib/money.js';
-import { buildNewProductBody, validateQueuedProductFiles } from './newProductMedia.js';
+import {
+  buildNewProductBody,
+  moveQueuedProductImage,
+  PRODUCT_IMAGE_ACCEPT,
+  reorderQueuedProductImages,
+  validateNewProduct,
+  validateQueuedProductFiles
+} from './newProductMedia.js';
 import CollectionDropdown from './CollectionDropdown.jsx';
+import QueuedProductMedia from './QueuedProductMedia.jsx';
 
 const STATUSES = ['active', 'draft', 'archived'];
 const DESCRIPTION_TOOLS = [
@@ -33,7 +41,7 @@ const EMPTY_PRODUCT = {
   vendor: 'Maria Clara',
   tags: [],
   themeTemplate: 'Default product',
-  status: 'draft',
+  status: 'active',
   featured: false,
   collections: [],
   priceCents: 0,
@@ -64,6 +72,7 @@ export default function ProductEditor() {
   const [comparePeso, setComparePeso] = useState('');
   const [message, setMessage] = useState('');
   const [queuedImages, setQueuedImages] = useState([]);
+  const [fieldErrors, setFieldErrors] = useState({});
   const descriptionEditorRef = useRef(null);
   const queuedImagesRef = useRef([]);
 
@@ -99,11 +108,21 @@ export default function ProductEditor() {
     setProduct((previous) => ({ ...previous, [field]: value }));
   }
 
+  function clearFieldError(field) {
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
   function updateVariant(index, field, value) {
     setProduct((previous) => ({
       ...previous,
       variants: previous.variants.map((variant, i) => i === index ? { ...variant, [field]: value } : variant)
     }));
+    if (field === 'stockQuantity') clearFieldError('inventory');
   }
 
   function updateProductPage(field, value) {
@@ -266,6 +285,7 @@ export default function ProductEditor() {
         ...queuedImages,
         ...accepted.slice(existingCount).map((file) => ({ file, previewUrl: URL.createObjectURL(file) }))
       ]);
+      clearFieldError('media');
       setMessage('');
     } catch (error) {
       setMessage(error.message);
@@ -286,9 +306,18 @@ export default function ProductEditor() {
       setMessage('Complete every size chart field before saving, or remove the incomplete row.');
       return;
     }
-    if (isNew && !queuedImages.length) {
-      setMessage('Add at least one product photo before saving.');
-      return;
+    const priceCents = pesoToCents(pricePeso);
+    if (isNew) {
+      const errors = validateNewProduct({
+        product,
+        priceCents,
+        files: queuedImages.map((image) => image.file)
+      });
+      setFieldErrors(errors);
+      if (Object.keys(errors).length) {
+        setMessage(Object.values(errors)[0]);
+        return;
+      }
     }
     const completeSizeChartRows = sizeChartRows
       .filter(sizeChartRowIsComplete)
@@ -302,7 +331,7 @@ export default function ProductEditor() {
     const payload = {
       ...product,
       description: sanitizeRichHtml(descriptionEditorRef.current?.innerHTML || product.description || ''),
-      priceCents: pesoToCents(pricePeso) ?? 0,
+      priceCents: priceCents ?? 0,
       compareAtPriceCents: comparePeso.trim() === '' ? null : pesoToCents(comparePeso),
       productPage: {
         ...(product.productPage || {}),
@@ -409,7 +438,11 @@ export default function ProductEditor() {
           <section className="border border-line bg-paper p-6">
             <label className="block">
               <span className="eyebrow">Title</span>
-              <input className="field mt-1" value={product.name} onChange={(e) => update('name', e.target.value)} />
+              <input className="field mt-1" value={product.name} onChange={(e) => {
+                update('name', e.target.value);
+                clearFieldError('details');
+              }} />
+              {fieldErrors.details && <span className="mt-2 block text-xs text-accent-deep" role="alert">{fieldErrors.details}</span>}
             </label>
             <div className="mt-5">
               <span className="eyebrow">Description</span>
@@ -532,36 +565,22 @@ export default function ProductEditor() {
                 <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Media</h2>
                 <p className="mt-1 text-xs text-clay">Add photos and remove old product images. One photo is required.</p>
               </div>
-              <label className="btn-ghost cursor-pointer !px-4 !py-2 text-xs">
-                Add photos
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  hidden
-                  aria-label="Add photos"
-                  onChange={(e) => {
-                    if (isNew) queueNewProductImages(e.target.files);
-                    else uploadImages(e.target.files);
-                    e.target.value = '';
-                  }}
-                />
-              </label>
+              {!isNew && (
+                <label className="btn-ghost cursor-pointer !px-4 !py-2 text-xs">
+                  Add photos
+                  <input type="file" accept={PRODUCT_IMAGE_ACCEPT} multiple hidden onChange={(e) => uploadImages(e.target.files)} />
+                </label>
+              )}
             </div>
-            {isNew && queuedImages.length > 0 && (
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                {queuedImages.map((image, index) => (
-                  <figure key={image.previewUrl} className="group relative overflow-hidden border border-line bg-cream">
-                    <img src={image.previewUrl} alt="Customer product preview" className="product-photo-blend aspect-[4/5] w-full object-cover" />
-                    <figcaption className="flex items-center justify-between gap-2 border-t border-line bg-white px-2 py-2 text-[11px] text-clay">
-                      <span>{index === 0 ? 'Storefront cover' : `Photo ${index + 1}`}</span>
-                      <button type="button" className="font-bold uppercase text-accent-deep underline" onClick={() => removeQueuedImage(index)}>
-                        Remove photo
-                      </button>
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
+            {isNew && (
+              <QueuedProductMedia
+                images={queuedImages}
+                error={fieldErrors.media}
+                onAdd={queueNewProductImages}
+                onRemove={removeQueuedImage}
+                onReorder={(fromIndex, toIndex) => setQueuedImages((images) => reorderQueuedProductImages(images, fromIndex, toIndex))}
+                onMove={(index, destination) => setQueuedImages((images) => moveQueuedProductImage(images, index, destination))}
+              />
             )}
             {!isNew && (
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -585,7 +604,7 @@ export default function ProductEditor() {
                 <label className="flex aspect-[4/5] cursor-pointer flex-col items-center justify-center border border-dashed border-line bg-cream text-center text-sm font-semibold text-clay hover:border-ink hover:text-ink">
                   <span className="text-3xl leading-none">+</span>
                   Add photos
-                  <input type="file" accept="image/*" multiple hidden onChange={(e) => uploadImages(e.target.files)} />
+                  <input type="file" accept={PRODUCT_IMAGE_ACCEPT} multiple hidden onChange={(e) => uploadImages(e.target.files)} />
                 </label>
               </div>
             )}
@@ -596,13 +615,17 @@ export default function ProductEditor() {
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="eyebrow">Price (₱)</span>
-                <input className="field mt-1" name="pricePeso" inputMode="decimal" value={pricePeso} onChange={(e) => setPricePeso(e.target.value)} />
+                <input className="field mt-1" name="pricePeso" inputMode="decimal" value={pricePeso} onChange={(e) => {
+                  setPricePeso(e.target.value);
+                  clearFieldError('pricing');
+                }} />
               </label>
               <label className="block">
                 <span className="eyebrow">Compare-at (₱)</span>
                 <input className="field mt-1" name="comparePeso" inputMode="decimal" value={comparePeso} onChange={(e) => setComparePeso(e.target.value)} placeholder="Optional" />
               </label>
             </div>
+            {fieldErrors.pricing && <p className="mt-2 text-xs text-accent-deep" role="alert">{fieldErrors.pricing}</p>}
             <label className="mt-4 block max-w-xs">
               <span className="eyebrow">Parcel weight (grams)</span>
               <input className="field mt-1" type="number" min="1" max="100000" value={product.parcelWeightGrams || 250} onChange={(e) => update('parcelWeightGrams', Number(e.target.value))} />
@@ -650,6 +673,7 @@ export default function ProductEditor() {
             >
               Add variant
             </button>
+            {fieldErrors.inventory && <p className="mt-2 text-xs text-accent-deep" role="alert">{fieldErrors.inventory}</p>}
           </section>
         </div>
 
@@ -657,7 +681,10 @@ export default function ProductEditor() {
           <section className="border border-line bg-paper p-6">
             <label className="block">
               <span className="eyebrow">Status</span>
-              <select className="field mt-1" value={product.status} onChange={(e) => update('status', e.target.value)}>
+              <select className="field mt-1" value={product.status} onChange={(e) => {
+                update('status', e.target.value);
+                clearFieldError('inventory');
+              }}>
                 {STATUSES.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             </label>
@@ -694,8 +721,12 @@ export default function ProductEditor() {
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Collections</h2>
             <CollectionDropdown
               value={product.collections || []}
-              onChange={(collections) => update('collections', collections)}
+              onChange={(collections) => {
+                update('collections', collections);
+                clearFieldError('collections');
+              }}
             />
+            {fieldErrors.collections && <p className="mt-2 text-xs text-accent-deep" role="alert">{fieldErrors.collections}</p>}
           </section>
           <section className="border border-line bg-paper p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Product organization</h2>

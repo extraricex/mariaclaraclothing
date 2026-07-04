@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { fetchSiteContent } from '../lib/api.js';
-import { adminJson, clearAdminToken, getAdminToken } from '../lib/adminApi.js';
+import { adminJson, adminLogout } from '../lib/adminApi.js';
 
 const ORDER_SUBNAV = [
   { to: '/admin/orders', label: 'All orders', end: true },
@@ -76,10 +76,6 @@ export default function AdminLayout() {
     location.pathname.startsWith('/admin/inventory');
 
   useEffect(() => {
-    if (!getAdminToken()) {
-      navigate('/admin/login', { replace: true });
-      return;
-    }
     adminJson('/api/admin/session')
       .then(() => setReady(true))
       .catch(() => {});
@@ -173,7 +169,10 @@ export default function AdminLayout() {
           <button
             type="button"
             className="text-action text-xs uppercase tracking-[0.12em] text-clay hover:text-accent"
-            onClick={() => { clearAdminToken(); navigate('/admin/login'); }}
+            onClick={async () => {
+              try { await adminLogout(); } catch (_error) { /* redirect still clears the UI session */ }
+              navigate('/admin/login');
+            }}
           >
             Sign out
           </button>

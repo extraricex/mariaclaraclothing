@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminJson, adminSend } from '../lib/adminApi.js';
-
-const STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
+import useAdminCollections from './useAdminCollections.js';
 
 function inCollection(product, collectionName) {
   return (product.collections || []).includes(collectionName);
@@ -10,9 +9,12 @@ function inCollection(product, collectionName) {
 
 export default function Collections() {
   const navigate = useNavigate();
+  const { collections, error: collectionError, reload: reloadCollections } = useAdminCollections();
   const [products, setProducts] = useState([]);
-  const [active, setActive] = useState(STOREFRONT_COLLECTIONS[0]);
+  const [active, setActive] = useState('New Arrivals');
   const [status, setStatus] = useState('');
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [savingCollection, setSavingCollection] = useState(false);
 
   function load() {
     adminJson('/api/admin/products?sort=name_asc')
@@ -21,6 +23,27 @@ export default function Collections() {
   }
 
   useEffect(load, []);
+
+  useEffect(() => {
+    if (!collections.includes(active)) setActive(collections[0] || '');
+  }, [active, collections]);
+
+  async function addCollection(event) {
+    event.preventDefault();
+    setSavingCollection(true);
+    setStatus('Adding collection...');
+    try {
+      const body = await adminSend('POST', '/api/admin/collections', { name: newCollectionName });
+      const next = await reloadCollections();
+      setActive(body.collections?.at(-1) || next.at(-1) || active);
+      setNewCollectionName('');
+      setStatus('Collection added. Add products to show it on the storefront.');
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setSavingCollection(false);
+    }
+  }
 
   async function saveCollections(slug, change) {
     setStatus('Saving collection...');
@@ -48,13 +71,27 @@ export default function Collections() {
       <p className="eyebrow">Collections</p>
       <h1 className="display mt-1 text-3xl">Storefront collections</h1>
       <p className="mt-2 text-sm text-ink-soft">
-        These two collections power the homepage sections. Adding or removing a product here
-        updates the storefront immediately.
+        Collections with active products appear on the customer homepage. Product changes update the storefront immediately.
       </p>
-      {status && <p className="mt-3 text-sm text-accent-deep" role="status">{status}</p>}
+      {(status || collectionError) && <p className="mt-3 text-sm text-accent-deep" role="status">{status || collectionError}</p>}
+
+      <form className="mt-5 flex max-w-xl flex-col gap-2 sm:flex-row" onSubmit={addCollection}>
+        <label className="sr-only" htmlFor="new-collection-name">Collection name</label>
+        <input
+          id="new-collection-name"
+          className="field flex-1"
+          maxLength="60"
+          placeholder="Collection name"
+          value={newCollectionName}
+          onChange={(event) => setNewCollectionName(event.target.value)}
+        />
+        <button type="submit" className="btn-ink whitespace-nowrap" disabled={savingCollection || !newCollectionName.trim()}>
+          {savingCollection ? 'Adding...' : 'Add collection'}
+        </button>
+      </form>
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {STOREFRONT_COLLECTIONS.map((name) => {
+        {collections.map((name) => {
           const count = products.filter((product) => inCollection(product, name)).length;
           return (
             <button
@@ -116,7 +153,7 @@ export default function Collections() {
         {!members.length && (
           <div className="border border-line bg-paper p-8 text-center">
             <h2 className="text-sm font-semibold">No products in {active}</h2>
-            <p className="mt-1 text-sm text-clay">Add products with the selector above to show them on the customer homepage.</p>
+            <p className="mt-1 text-sm text-clay">Add an active product with the selector above to show this collection on the customer homepage.</p>
           </div>
         )}
       </div>

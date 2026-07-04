@@ -10,6 +10,10 @@ process.env.PRODUCTS_DATA_FILE = nodePath.join(
   nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'mc-inv-')),
   'products.json'
 );
+process.env.INVENTORY_MOVEMENTS_DATA_FILE = nodePath.join(
+  nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'mc-movements-')),
+  'inventory-movements.json'
+);
 
 const { loadEditableProducts, deductVariantStock } = require('../src/products/catalogRepository');
 

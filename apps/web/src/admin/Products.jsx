@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminJson } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
+import useAdminCollections from './useAdminCollections.js';
 
 const STOCK_FILTERS = [['', 'All stock'], ['in_stock', 'In stock'], ['low_stock', 'Low stock'], ['sold_out', 'Sold out']];
 const STATUS_FILTERS = [['', 'All statuses'], ['active', 'Active'], ['draft', 'Draft'], ['archived', 'Archived']];
-const COLLECTION_FILTERS = [['', 'All collections'], ['New Arrivals', 'New Arrivals'], ['Freedom of Mind', 'Freedom of Mind']];
 const CATEGORY_FILTERS = [['', 'All categories'], ['T-Shirts', 'T-Shirts'], ['Apparel', 'Apparel'], ['Uncategorized', 'Uncategorized']];
 const VENDOR_FILTERS = [['', 'All vendors'], ['Maria Clara', 'Maria Clara'], ['Maria Clara Clothing', 'Maria Clara Clothing']];
 const SORT_OPTIONS = [
@@ -59,6 +59,7 @@ function SearchIcon() {
 }
 
 export default function Products() {
+  const { collections } = useAdminCollections();
   const [products, setProducts] = useState([]);
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState('');
@@ -183,7 +184,8 @@ export default function Products() {
               {STOCK_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
             <select className="field min-w-0" value={collection} onChange={(e) => setCollection(e.target.value)}>
-              {COLLECTION_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              <option value="">All collections</option>
+              {collections.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
             <select className="field min-w-0" value={category} onChange={(e) => setCategory(e.target.value)}>
               {CATEGORY_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}

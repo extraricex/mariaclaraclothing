@@ -2,9 +2,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { hasDatabaseUrl, query } = require('../db/postgres');
+const { resolveRuntimeDataFile } = require('../db/runtimeDataFile');
 
 const defaultFile = path.join(__dirname, '..', '..', 'data', 'order-notifications.json');
-const filePath = () => process.env.ORDER_NOTIFICATIONS_DATA_FILE || defaultFile;
+const filePath = () => resolveRuntimeDataFile('ORDER_NOTIFICATIONS_DATA_FILE', defaultFile);
 
 async function enqueueMany(orderNumber, eventName, notifications) {
   if (hasDatabaseUrl()) {

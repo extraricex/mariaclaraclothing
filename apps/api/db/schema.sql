@@ -189,6 +189,19 @@ CREATE TABLE IF NOT EXISTS customer_accounts (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash text PRIMARY KEY,
+  csrf_token_hash text NOT NULL,
+  actor_type text NOT NULL CHECK (actor_type IN ('admin', 'customer')),
+  actor_id text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS auth_sessions_actor_idx ON auth_sessions(actor_type, actor_id);
+CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at) WHERE revoked_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS store_settings (
   key text PRIMARY KEY,
   value jsonb NOT NULL,

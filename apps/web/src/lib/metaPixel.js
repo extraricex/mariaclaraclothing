@@ -1,7 +1,31 @@
 const CURRENCY = 'PHP';
 const META_SCRIPT_URL = 'https://connect.facebook.net/en_US/fbevents.js';
+const META_CONSENT_KEY = 'maria-clara-meta-tracking-consent';
+export const META_CONSENT_EVENT = 'maria-clara-meta-consent-changed';
 let lastTrackedPagePath = '';
 let lastCheckoutEventId = '';
+
+function defaultConsentStorage() {
+  return typeof localStorage !== 'undefined' ? localStorage : null;
+}
+
+export function getMetaTrackingConsent(storage = defaultConsentStorage()) {
+  const value = storage?.getItem(META_CONSENT_KEY);
+  return value === 'accepted' || value === 'declined' ? value : 'unset';
+}
+
+export function setMetaTrackingConsent(value, options = {}) {
+  const storage = options.storage || defaultConsentStorage();
+  const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
+  if (value === 'accepted' || value === 'declined') storage?.setItem(META_CONSENT_KEY, value);
+  else storage?.removeItem(META_CONSENT_KEY);
+  if (windowRef?.fbq) windowRef.fbq('consent', value === 'accepted' ? 'grant' : 'revoke');
+  windowRef?.dispatchEvent?.(new Event(META_CONSENT_EVENT));
+}
+
+function hasMetaTrackingConsent(options = {}) {
+  return options.consent ?? getMetaTrackingConsent(options.consentStorage) === 'accepted';
+}
 
 export function metaPixelConfig(source = {}) {
   const pixelId = String(source.VITE_FACEBOOK_META_PIXEL_ID || '').trim();
@@ -28,7 +52,7 @@ export function initializeFacebookMetaPixel(options = {}) {
   const pixelId = String(options.pixelId ?? environment.pixelId).trim();
   const path = options.path ?? windowRef?.location?.pathname ?? '';
 
-  if (!windowRef || !documentRef || !enabled || !pixelId || isFacebookAdminPath(path)) return false;
+  if (!windowRef || !documentRef || !enabled || !pixelId || !hasMetaTrackingConsent(options) || isFacebookAdminPath(path)) return false;
   if (windowRef.__mariaClaraFacebookPixelId === pixelId) return true;
 
   if (!windowRef.fbq) {
@@ -56,6 +80,7 @@ export function initializeFacebookMetaPixel(options = {}) {
   }
 
   windowRef.fbq('init', pixelId);
+  windowRef.fbq('consent', 'grant');
   windowRef.__mariaClaraFacebookPixelId = pixelId;
   return true;
 }
@@ -144,7 +169,7 @@ export function buildFacebookInitiateCheckout(items = [], totals = {}) {
 export function trackFacebookEvent(eventName, payload = {}, options = {}) {
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
   const path = options.path ?? windowRef?.location?.pathname ?? '';
-  if (!windowRef?.fbq || isFacebookAdminPath(path)) return false;
+  if (!windowRef?.fbq || !hasMetaTrackingConsent(options) || isFacebookAdminPath(path)) return false;
 
   if (options.eventId) {
     windowRef.fbq('track', eventName, payload, { eventID: options.eventId });

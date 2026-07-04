@@ -9,6 +9,8 @@ const { incrementDiscountUsage } = require('../discounts/discountRepository');
 const { claimDiscountUsage } = require('../discounts/discountRepository');
 const { quoteCart } = require('../promos/promoEngine');
 const { findAccountById, verifyCustomerToken } = require('../customers/customerAccountRepository');
+const { findAuthSession } = require('../auth/sessionRepository');
+const { isProduction, sessionTokenFromRequest } = require('../auth/sessionHttp');
 const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/storeSettingsRepository');
 const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const { env } = require('../config/env');
@@ -277,6 +279,15 @@ async function normalizeCheckout(body) {
 }
 
 async function resolveCustomerAccountId(req) {
+  const sessionToken = sessionTokenFromRequest(req, 'customer');
+  const session = sessionToken ? await findAuthSession(sessionToken) : null;
+  if (session?.actorType === 'customer') {
+    const account = await findAccountById(session.actorId);
+    if (account) return account.id;
+  }
+
+  if (isProduction()) return '';
+
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) return '';
   const accountId = verifyCustomerToken(header.slice(7));

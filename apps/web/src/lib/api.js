@@ -1,5 +1,5 @@
 async function request(path, options = {}) {
-  const response = await fetch(path, { cache: 'no-store', ...options });
+  const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin', ...options });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(body.error || 'Something went wrong.');

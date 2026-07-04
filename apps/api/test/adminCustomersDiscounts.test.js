@@ -16,6 +16,10 @@ nodeFsForProducts.copyFileSync(
   nodePathForProducts.join(__dirname, '..', 'data', 'products.json'),
   process.env.PRODUCTS_DATA_FILE
 );
+process.env.INVENTORY_MOVEMENTS_DATA_FILE = nodePathForProducts.join(
+  nodeFsForProducts.mkdtempSync(nodePathForProducts.join(nodeOsForProducts.tmpdir(), 'mc-movements-')),
+  'inventory-movements.json'
+);
 
 const ADMIN_TOKEN = 'local-admin-token';
 

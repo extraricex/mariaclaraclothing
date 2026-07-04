@@ -1,28 +1,29 @@
-const TOKEN_KEY = 'maria-clara-admin-token';
+const CSRF_COOKIE = 'mc_admin_csrf';
 
-export function getAdminToken() {
-  return localStorage.getItem(TOKEN_KEY) || '';
+function readCookie(name) {
+  return document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1) || '';
 }
 
-export function setAdminToken(token) {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearAdminToken() {
-  localStorage.removeItem(TOKEN_KEY);
+function csrfHeaders(options) {
+  const method = String(options.method || 'GET').toUpperCase();
+  const token = readCookie(CSRF_COOKIE);
+  return !['GET', 'HEAD', 'OPTIONS'].includes(method) && token
+    ? { 'X-CSRF-Token': decodeURIComponent(token) }
+    : {};
 }
 
 export async function adminFetch(path, options = {}) {
   const response = await fetch(path, {
     cache: 'no-store',
+    credentials: 'same-origin',
     ...options,
     headers: {
-      Authorization: `Bearer ${getAdminToken()}`,
+      ...csrfHeaders(options),
       ...(options.headers || {})
     }
   });
   if (response.status === 401) {
-    clearAdminToken();
     if (!window.location.pathname.startsWith('/admin/login')) {
       window.location.assign('/admin/login');
     }
@@ -53,15 +54,17 @@ export function adminSend(method, path, body) {
 export async function adminLogin(password) {
   const response = await fetch('/api/admin/login', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password })
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body.error || 'Login failed.');
-  }
-  setAdminToken(body.token);
+  if (!response.ok) throw new Error(body.error || 'Login failed.');
   return body;
+}
+
+export async function adminLogout() {
+  await adminFetch('/api/admin/logout', { method: 'POST' });
 }
 
 export async function adminDownload(path, body, fallbackName) {

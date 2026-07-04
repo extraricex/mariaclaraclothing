@@ -6,7 +6,7 @@ import path from 'node:path';
 test('admin products page exposes phase 1 filters and sort controls', async () => {
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Products.jsx'), 'utf8');
 
-  assert.match(source, /COLLECTION_FILTERS/);
+  assert.match(source, /useAdminCollections/);
   assert.match(source, /CATEGORY_FILTERS/);
   assert.match(source, /VENDOR_FILTERS/);
   assert.match(source, /SORT_OPTIONS/);
@@ -41,6 +41,9 @@ test('admin products page exposes phase 1 filters and sort controls', async () =
 test('admin product editor exposes organization fields, variant price, and total inventory', async () => {
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'ProductEditor.jsx'), 'utf8');
   const collectionDropdown = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'CollectionDropdown.jsx'), 'utf8');
+  const queuedProductMedia = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'QueuedProductMedia.jsx'), 'utf8');
+  const newProductMedia = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'newProductMedia.js'), 'utf8');
+  const nginx = await readFile(path.join(import.meta.dirname, '..', 'nginx.conf'), 'utf8');
 
   assert.match(source, /product-editor-shell/);
   assert.match(source, /product-editor-grid/);
@@ -97,15 +100,38 @@ test('admin product editor exposes organization fields, variant price, and total
   assert.match(source, /queueNewProductImages/);
   assert.match(source, /removeQueuedImage/);
   assert.match(source, /buildNewProductBody/);
-  assert.match(source, /Add at least one product photo before saving/);
+  assert.match(newProductMedia, /Add at least one product photo/);
   assert.doesNotMatch(source, /Save this product before uploading photos/);
   assert.match(source, /<CollectionDropdown/);
   assert.doesNotMatch(source, /COLLECTIONS\.map\(\(collection\)/);
   assert.match(collectionDropdown, /aria-haspopup="listbox"/);
   assert.match(collectionDropdown, /aria-multiselectable="true"/);
-  assert.match(collectionDropdown, /New Arrivals/);
-  assert.match(collectionDropdown, /Freedom of Mind/);
+  assert.match(collectionDropdown, /useAdminCollections/);
   assert.match(collectionDropdown, /event\.key === 'Escape'/);
+  assert.match(source, /<QueuedProductMedia/);
+  assert.match(source, /reorderQueuedProductImages/);
+  assert.match(source, /moveQueuedProductImage/);
+  assert.match(queuedProductMedia, /Select up to 8 photos at once/);
+  assert.match(queuedProductMedia, /PRODUCT_IMAGE_ACCEPT/);
+  assert.match(source, /PRODUCT_IMAGE_ACCEPT/);
+  assert.match(newProductMedia, /image\/jpeg,image\/png,image\/webp,image\/gif,image\/avif,image\/tiff/);
+  assert.match(nginx, /client_max_body_size 350m;/);
+  assert.match(queuedProductMedia, /multiple/);
+  assert.match(queuedProductMedia, /draggable/);
+  assert.match(queuedProductMedia, /onDragStart/);
+  assert.match(queuedProductMedia, /onDrop/);
+  assert.match(queuedProductMedia, /Move first/);
+  assert.match(queuedProductMedia, /Move left/);
+  assert.match(queuedProductMedia, /Move right/);
+  assert.match(queuedProductMedia, /Move last/);
+  assert.match(queuedProductMedia, /Storefront cover/);
+  assert.match(source, /status:\s*'active'/);
+  assert.match(source, /validateNewProduct/);
+  assert.match(source, /fieldErrors/);
+  assert.match(newProductMedia, /Enter a product title/);
+  assert.match(newProductMedia, /Enter a price greater than zero/);
+  assert.match(newProductMedia, /Select at least one storefront collection/);
+  assert.match(newProductMedia, /Enter inventory before publishing an active product/);
 });
 
 test('storefront product page renders editable product page content and size chart rows', async () => {

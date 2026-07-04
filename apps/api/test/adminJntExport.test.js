@@ -5,6 +5,11 @@ const os = require('node:os');
 const path = require('node:path');
 const XLSX = require('xlsx');
 
+process.env.ORDER_NOTIFICATIONS_DATA_FILE = path.join(
+  require('node:fs').mkdtempSync(path.join(os.tmpdir(), 'mc-notifications-')),
+  'order-notifications.json'
+);
+
 const ADMIN_TOKEN = 'local-admin-token';
 const JNT_HEADERS = [
   'Receiver(*)',

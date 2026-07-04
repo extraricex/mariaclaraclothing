@@ -15,6 +15,7 @@ test('storeSettings lib fetches the public endpoint with safe fallbacks', async 
   assert.match(source, /export function regionEstimate/);
   assert.match(source, /export function isFreeShipping/);
   assert.match(source, /export function freeShippingHint/);
+  assert.match(source, /messengerUrl:\s*''/);
 });
 
 test('checkout uses store settings for shipping and payment methods', async () => {

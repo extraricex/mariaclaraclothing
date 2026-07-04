@@ -54,6 +54,19 @@ jobs:
           DATABASE_URL: ''
           ADMIN_TOKEN: ''
 
+      - name: Validate production configuration boundary
+        run: node -e "require('./apps/api/src/config/env')"
+        env:
+          APP_ENV: production
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/maria_clara_test
+          ADMIN_TOKEN: ci-admin-token-with-at-least-thirty-two-characters
+          ADMIN_PASSWORD: ci-admin-password-with-at-least-sixteen-characters
+          CUSTOMER_AUTH_SECRET: ci-customer-auth-secret-with-at-least-thirty-two-characters
+          CHECKOUT_V2_REQUIRED: 'true'
+          ORDER_CONFIRMATION_SECRET: ci-order-confirmation-secret-with-at-least-thirty-two-characters
+          META_CONVERSIONS_API_ENABLED: 'false'
+          ORDER_NOTIFICATIONS_ENABLED: 'false'
+
       - name: PostgreSQL migrations
         run: npm run db:migrate
         env:

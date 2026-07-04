@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { CART_DRAWER_EVENT, cartQuantity, getCartSessionId, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
-import { createCheckoutQuote, fetchActivePromoNotification, fetchSiteContent } from '../lib/api.js';
+import { createCheckoutQuote, fetchActivePromoNotification, fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
-import { trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
+import { setMetaTrackingConsent, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
+import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storefrontSupport.js';
 import useModalFocus from '../hooks/useModalFocus.js';
 import PageTransition from './PageTransition.jsx';
 
@@ -22,6 +23,8 @@ const NAV_LINKS = [
   { to: '/shipping-returns', label: 'Shipping & Returns' },
   { to: '/terms', label: 'Terms' }
 ];
+const FREE_SHIPPING_OFFER_DISMISSED = 'maria-clara-free-shipping-offer-dismissed';
+const RECOMMENDATION_DISMISSED = 'maria-clara-new-arrival-recommendation-dismissed';
 
 function Ticker({ items }) {
   const sequence = [...items, ...items, ...items];
@@ -65,6 +68,102 @@ function PromoNotification({ notification, onClose }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function PrivacyDialog({ onChoice, onClose }) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/35 p-4 sm:items-center" role="presentation">
+      <div className="w-full max-w-lg border border-line bg-paper p-5 shadow-2xl" role="dialog" aria-modal="true" aria-label="Privacy choices">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold">Privacy choices</p>
+            <p className="mt-1 text-sm text-ink-soft">Allow optional Meta analytics to help us measure store visits and purchases. The store works without it.</p>
+          </div>
+          <button type="button" className="text-action text-xs uppercase tracking-[0.12em] text-clay hover:text-ink" onClick={onClose}>Close</button>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" className="btn-ink !px-5 !py-2 text-xs" onClick={() => onChoice('accepted')}>Allow analytics</button>
+          <button type="button" className="btn-ghost !px-5 !py-2 text-xs" onClick={() => onChoice('declined')}>Decline</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FreeShippingAside({ offer, onClose }) {
+  if (!offer) return null;
+  return (
+    <aside className="relative border border-paper/30 bg-ink p-3.5 text-paper shadow-2xl sm:p-4" aria-label="Free shipping offer">
+      <button type="button" className="absolute right-2 top-2 h-8 w-8 text-paper/60 hover:text-paper" aria-label="Close free shipping offer" onClick={onClose}>×</button>
+      <p className="pr-7 text-xs font-bold uppercase tracking-[0.13em]">{offer.title}</p>
+      <p className="mt-1.5 text-xs leading-relaxed text-paper/70">{offer.body}</p>
+      {offer.state !== 'unlocked' && <a href="/#new-arrivals" className="text-action mt-3 inline-block text-[11px] font-semibold uppercase tracking-[0.14em] underline">Shop now</a>}
+    </aside>
+  );
+}
+
+function ProductRecommendation({ product, onClose, onNavigate }) {
+  if (!product) return null;
+  const image = product.images[0];
+  return (
+    <aside className="relative flex items-center gap-3 border border-line bg-paper p-2.5 shadow-2xl" aria-label="You may also like">
+      <Link to={`/product/${encodeURIComponent(product.slug)}`} className="flex min-w-0 flex-1 items-center gap-3" onClick={onNavigate}>
+        <img
+          src={image.url}
+          alt={image.altText || product.name}
+          className="product-photo-blend h-16 w-14 shrink-0 object-contain sm:h-[4.5rem] sm:w-16"
+          loading="lazy"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[9px] font-bold uppercase tracking-[0.14em] text-clay">You may also like</span>
+          <span className="mt-1 block truncate text-xs font-semibold">{product.name}</span>
+          <span className="mt-1 block text-[11px] font-semibold">{formatMoney(product.priceCents)} · <span className="underline">View</span></span>
+        </span>
+      </Link>
+      <button type="button" className="absolute right-1 top-1 h-8 w-8 text-clay hover:text-ink" aria-label="Close product recommendation" onClick={onClose}>×</button>
+    </aside>
+  );
+}
+
+function OfferDock({ offer, product, offerCount, mobileOffersOpen, dockRef, onToggle, onNavigate, onCloseOffer, onCloseProduct }) {
+  if (!offerCount) return null;
+  return (
+    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] w-[min(15rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:w-72">
+      <div id="storefront-offer-cards" className={`${mobileOffersOpen ? 'grid' : 'hidden'} pointer-events-auto mb-2 gap-2 sm:grid`}>
+        <ProductRecommendation product={product} onClose={onCloseProduct} onNavigate={onNavigate} />
+        <FreeShippingAside offer={offer} onClose={onCloseOffer} />
+      </div>
+      <button
+        type="button"
+        className="pointer-events-auto inline-flex h-11 items-center rounded-full bg-ink px-4 text-[10px] font-bold uppercase tracking-[0.13em] text-paper shadow-2xl sm:hidden"
+        aria-expanded={mobileOffersOpen}
+        aria-controls="storefront-offer-cards"
+        onClick={onToggle}
+      >
+        Offers · {offerCount}
+      </button>
+    </div>
+  );
+}
+
+function MessengerSupportLink({ href }) {
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-2 z-[45] flex h-11 items-center gap-2 rounded-full border border-paper/30 bg-ink px-3 text-paper shadow-2xl transition-transform hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:bottom-4 sm:right-4 sm:h-14 sm:gap-3 sm:px-4"
+      aria-label="Chat Support — open Messenger"
+      title="Chat Support — open Messenger"
+    >
+      <span className="text-[10px] font-bold uppercase tracking-[0.11em]"><span className="hidden sm:inline">Chat Support</span><span className="sm:hidden">Chat</span></span>
+      <svg viewBox="0 0 24 24" className="h-5 w-5 sm:h-7 sm:w-7" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 9.2 9.2 0 0 1-3.8-.8L3 21l1.4-4.4A8.2 8.2 0 0 1 3 12C3 7.3 7 4 12 4s9 3 9 7.5Z" />
+        <path d="m7.5 14 3-3 2.3 2 3.7-3" />
+      </svg>
+    </a>
   );
 }
 
@@ -194,6 +293,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
 }
 
 export default function Shell() {
+  const location = useLocation();
   const items = useCart();
   const count = cartQuantity(items);
   const loggedIn = useCustomerLoggedIn();
@@ -205,7 +305,25 @@ export default function Shell() {
   const [footerLogo, setFooterLogo] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
   const [promoNotification, setPromoNotification] = useState(null);
+  const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
+  const [recommendation, setRecommendation] = useState(null);
+  const [mobileOffersOpen, setMobileOffersOpen] = useState(false);
+  const [recommendationDismissed, setRecommendationDismissed] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(RECOMMENDATION_DISMISSED) === 'true';
+    } catch (_error) {
+      return false;
+    }
+  });
+  const [freeShippingOfferDismissed, setFreeShippingOfferDismissed] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(FREE_SHIPPING_OFFER_DISMISSED) === 'true';
+    } catch (_error) {
+      return false;
+    }
+  });
   const menuButtonRef = useRef(null);
+  const offerDockRef = useRef(null);
   const closeCartDrawer = useCallback(() => setCartDrawerOpen(false), []);
 
   useEffect(() => {
@@ -239,6 +357,37 @@ export default function Shell() {
   useEffect(() => {
     loadStorefrontSettings().then(setStoreInfo);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchProducts()
+      .then((body) => {
+        if (!cancelled) setRecommendation(selectNewArrivalRecommendation(body.products));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setMobileOffersOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileOffersOpen) return undefined;
+    function closeMobileOffers(event) {
+      if (event.type === 'keydown' && event.key !== 'Escape') return;
+      if (event.type === 'pointerdown' && offerDockRef.current?.contains(event.target)) return;
+      setMobileOffersOpen(false);
+    }
+    document.addEventListener('keydown', closeMobileOffers);
+    document.addEventListener('pointerdown', closeMobileOffers);
+    return () => {
+      document.removeEventListener('keydown', closeMobileOffers);
+      document.removeEventListener('pointerdown', closeMobileOffers);
+    };
+  }, [mobileOffersOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -312,6 +461,34 @@ export default function Shell() {
     }
     setPromoNotification(null);
   }
+
+  function chooseTrackingConsent(value) {
+    setMetaTrackingConsent(value);
+    setPrivacyDialogOpen(false);
+  }
+
+  function dismissFreeShippingOffer() {
+    setFreeShippingOfferDismissed(true);
+    try {
+      window.sessionStorage.setItem(FREE_SHIPPING_OFFER_DISMISSED, 'true');
+    } catch (_error) {
+      // Keep the current-page dismissal even when storage is unavailable.
+    }
+  }
+
+  function dismissRecommendation() {
+    setRecommendationDismissed(true);
+    try {
+      window.sessionStorage.setItem(RECOMMENDATION_DISMISSED, 'true');
+    } catch (_error) {
+      // Keep the current-page dismissal even when storage is unavailable.
+    }
+  }
+
+  const shippingOffer = freeShippingOffer(storeInfo?.shipping, count);
+  const visibleShippingOffer = freeShippingOfferDismissed ? null : shippingOffer;
+  const visibleRecommendation = recommendationDismissed ? null : recommendation;
+  const offerCount = Number(Boolean(visibleShippingOffer)) + Number(Boolean(visibleRecommendation));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -390,6 +567,20 @@ export default function Shell() {
         onClose={closeCartDrawer}
       />
 
+      <OfferDock
+        offer={visibleShippingOffer}
+        product={visibleRecommendation}
+        offerCount={offerCount}
+        mobileOffersOpen={mobileOffersOpen}
+        dockRef={offerDockRef}
+        onToggle={() => setMobileOffersOpen((open) => !open)}
+        onNavigate={() => setMobileOffersOpen(false)}
+        onCloseOffer={dismissFreeShippingOffer}
+        onCloseProduct={dismissRecommendation}
+      />
+      <MessengerSupportLink href={storeInfo?.messengerUrl} />
+      {privacyDialogOpen && <PrivacyDialog onChoice={chooseTrackingConsent} onClose={() => setPrivacyDialogOpen(false)} />}
+
       <main className="flex-1">
         <PageTransition>
           <Outlet />
@@ -448,9 +639,10 @@ export default function Shell() {
               )}
             </div>
           </div>
-          <p className="mt-12 border-t border-paper/20 pt-6 text-xs uppercase tracking-[0.18em] text-paper/50">
-            © {new Date().getFullYear()} Maria Clara Clothing · Philippine streetwear
-          </p>
+          <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-paper/20 pt-6 text-xs uppercase tracking-[0.18em] text-paper/50">
+            <p>© {new Date().getFullYear()} Maria Clara Clothing · Philippine streetwear</p>
+            <button type="button" className="text-action hover:text-accent" onClick={() => setPrivacyDialogOpen(true)}>Privacy choices</button>
+          </div>
         </div>
       </footer>
     </div>

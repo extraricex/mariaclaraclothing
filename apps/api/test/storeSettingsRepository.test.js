@@ -27,6 +27,7 @@ test('store settings expose defaults, save sections, and validate input', async 
 
     const defaults = repository.getStoreSettings();
     assert.equal(defaults.general.storeName, 'Maria Clara Clothing');
+    assert.equal(defaults.general.messengerUrl, '');
     assert.equal(defaults.shipping.regions.length, 3);
     assert.equal(defaults.shipping.regions.find((region) => region.id === 'metro_manila_cavite').feeCents, 8000);
     assert.equal(defaults.shipping.freeShippingMinimumItems, 2);
@@ -60,6 +61,20 @@ test('store settings expose defaults, save sections, and validate input', async 
       /Payment method is invalid\./);
     assert.throws(() => repository.updateSettingsSection('general', { contactEmail: 'not-an-email' }),
       /Contact email is invalid\./);
+    assert.equal(repository.updateSettingsSection('general', {
+      storeName: 'Maria Clara Clothing',
+      messengerUrl: ' https://m.me/mariaclaraclothing '
+    }).general.messengerUrl, 'https://m.me/mariaclaraclothing');
+    for (const messengerUrl of [
+      'http://m.me/mariaclaraclothing',
+      'javascript:alert(1)',
+      'https://example.com/chat'
+    ]) {
+      assert.throws(
+        () => repository.updateSettingsSection('general', { messengerUrl }),
+        /Messenger URL/
+      );
+    }
     assert.throws(() => repository.updateSettingsSection('nope', {}),
       /Settings section is invalid\./);
   } finally {
@@ -229,6 +244,34 @@ test('collection countdown settings validate and increment server revisions', as
     assert.throws(() => repository.updateCollectionCountdown('New Arrivals', {
       enabled: true, message: 'Soon', durationSeconds: 360000
     }), /between 1 and 359999 seconds/);
+  } finally {
+    restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('storefront collections persist unique names and receive countdown defaults', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-collections-'));
+  const previousSettingsFile = process.env.STORE_SETTINGS_FILE;
+  process.env.STORE_SETTINGS_FILE = path.join(tempDir, 'store-settings.json');
+
+  try {
+    const repository = freshRepository();
+    assert.deepEqual(repository.getStoreSettings().storefrontCollections, ['New Arrivals', 'Freedom of Mind']);
+
+    const updated = await repository.addStorefrontCollection('  Summer   Drop  ');
+    assert.deepEqual(updated.storefrontCollections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.deepEqual(updated.collectionCountdowns['Summer Drop'], {
+      enabled: false,
+      message: 'Hurry! Limited time left',
+      durationSeconds: 7200,
+      revision: 0
+    });
+    assert.deepEqual(repository.getStoreSettings().storefrontCollections, updated.storefrontCollections);
+
+    assert.throws(() => repository.addStorefrontCollection('summer drop'), /already exists/i);
+    assert.throws(() => repository.addStorefrontCollection('   '), /name is required/i);
+    assert.throws(() => repository.addStorefrontCollection('x'.repeat(61)), /60 characters/i);
   } finally {
     restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
     await fs.rm(tempDir, { recursive: true, force: true });

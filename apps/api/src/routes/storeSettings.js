@@ -17,6 +17,7 @@ router.get('/', async (_req, res, next) => {
         contactEmail: settings.general.contactEmail,
         contactNumber: settings.general.contactNumber,
         storeAddress: settings.general.storeAddress,
+        messengerUrl: settings.general.messengerUrl,
         socialLinks: settings.general.socialLinks,
         shipping: settings.shipping,
         ticker: settings.website.ticker,
@@ -24,6 +25,7 @@ router.get('/', async (_req, res, next) => {
         maintenanceMode: settings.website.maintenanceMode,
         infoPages: settings.website.infoPages,
         inventory: settings.inventory,
+        storefrontCollections: settings.storefrontCollections,
         collectionCountdowns: settings.collectionCountdowns,
         paymentMethods: settings.payments.methods
           .filter((method) => method.enabled)

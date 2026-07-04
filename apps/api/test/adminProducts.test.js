@@ -201,6 +201,8 @@ test('admin product APIs require login and support product management', async ()
   process.env.PRODUCTS_DATA_FILE = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-admin-products-')), 'products.json');
   process.env.PRODUCT_UPLOAD_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-product-uploads-'));
   await fs.copyFile(path.join(__dirname, '..', 'data', 'products.json'), process.env.PRODUCTS_DATA_FILE);
+  const jpegFixture = await fs.readFile(path.join(__dirname, '..', 'public', 'MANDALA WHITE', 'mandala white front.jpg'));
+  const pngFixture = await fs.readFile(path.join(__dirname, '..', 'public', 'uploads', 'products', 'oranges-mcc-box-tee-1781162364372-494817ca92b258.png'));
 
   const app = createFreshApp();
   const server = await new Promise((resolve, reject) => {
@@ -251,8 +253,8 @@ test('admin product APIs require login and support product management', async ()
 
     const multipartBody = new FormData();
     multipartBody.append('product', JSON.stringify(multipartProduct));
-    multipartBody.append('images', new Blob([Buffer.from('front bytes')], { type: 'image/png' }), 'front.png');
-    multipartBody.append('images', new Blob([Buffer.from('back bytes')], { type: 'image/jpeg' }), 'back.jpg');
+    multipartBody.append('images', new Blob([pngFixture], { type: 'image/png' }), 'front.png');
+    multipartBody.append('images', new Blob([jpegFixture], { type: 'image/jpeg' }), 'back.jpg');
 
     const multipartResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products`, {
       method: 'POST',
@@ -266,7 +268,8 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(multipartJson.product.images.length, 2);
     assert.deepEqual(multipartJson.product.images.map((image) => image.sortOrder), [0, 1]);
     assert.ok(multipartJson.product.images.every((image) => image.altText === multipartProduct.name));
-    assert.match(multipartJson.product.images[0].url, /^\/uploads\/products\//);
+    assert.match(multipartJson.product.images[0].url, /^\/uploads\/products\/.*-optimized\.webp$/);
+    assert.match(multipartJson.product.images[1].url, /^\/uploads\/products\/.*-optimized\.webp$/);
 
     const multipartStorefrontResponse = await fetch(`http://127.0.0.1:${port}/api/products/multipart-product-shirt`);
     const multipartStorefrontJson = await multipartStorefrontResponse.json();
@@ -279,7 +282,7 @@ test('admin product APIs require login and support product management', async ()
     const filesBeforeFailedCreate = await fs.readdir(process.env.PRODUCT_UPLOAD_DIR);
     const invalidBody = new FormData();
     invalidBody.append('product', JSON.stringify({ ...multipartProduct, slug: 'invalid-multipart', priceCents: -1 }));
-    invalidBody.append('images', new Blob([Buffer.from('orphan bytes')], { type: 'image/png' }), 'orphan.png');
+    invalidBody.append('images', new Blob([pngFixture], { type: 'image/png' }), 'orphan.png');
     const invalidResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products`, {
       method: 'POST',
       headers: adminRequest().headers,
@@ -314,7 +317,7 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(createBody.product.images.length, 2);
 
     const imageUploadBody = new FormData();
-    imageUploadBody.append('images', new Blob([Buffer.from('fake image bytes')], { type: 'image/png' }), 'front.png');
+    imageUploadBody.append('images', new Blob([pngFixture], { type: 'image/png' }), 'front.png');
     const imageUploadResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt/images`, {
       method: 'POST',
       headers: adminRequest().headers,
@@ -324,7 +327,7 @@ test('admin product APIs require login and support product management', async ()
 
     assert.equal(imageUploadResponse.status, 201);
     assert.equal(imageUploadJson.product.images.length, 3);
-    assert.match(imageUploadJson.images[0].url, /^\/uploads\/products\/admin-test-shirt-/);
+    assert.match(imageUploadJson.images[0].url, /^\/uploads\/products\/admin-test-shirt-.*-optimized\.webp$/);
     assert.equal(imageUploadJson.images[0].altText, 'Admin Test Shirt');
 
     const storefrontAfterImageUploadResponse = await fetch(`http://127.0.0.1:${port}/api/products/admin-test-shirt`);

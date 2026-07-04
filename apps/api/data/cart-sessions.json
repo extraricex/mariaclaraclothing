@@ -1,0 +1,26 @@
+{
+  "sessions": [
+    {
+      "sessionId": "test-session",
+      "status": "empty",
+      "customer": {
+        "fullName": "",
+        "phone": "",
+        "email": ""
+      },
+      "address": {
+        "addressLine": "",
+        "province": "",
+        "city": "",
+        "barangay": ""
+      },
+      "items": [],
+      "itemCount": 0,
+      "subtotalCents": 0,
+      "checkoutStartedAt": "",
+      "convertedOrderNumber": "",
+      "lastActivityAt": "2026-07-02T00:39:03.420Z",
+      "updatedAt": "2026-07-02T00:39:03.420Z"
+    }
+  ]
+}

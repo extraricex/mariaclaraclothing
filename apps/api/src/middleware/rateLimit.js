@@ -66,15 +66,20 @@ function rateLimit({ keyPrefix, maxEnv, windowEnv, defaultMax, defaultWindowMs, 
 
 // Only POST requests should count against an action limiter (e.g. checkout),
 // leaving GET reads (order confirmation lookups) unthrottled.
-function postOnly(middleware) {
-  return function postOnlyRateLimit(req, res, next) {
-    if (req.method !== 'POST') return next();
+function methodOnly(methods, middleware) {
+  const allowedMethods = new Set(methods.map((method) => String(method).toUpperCase()));
+  return function methodOnlyRateLimit(req, res, next) {
+    if (!allowedMethods.has(req.method)) return next();
     return middleware(req, res, next);
   };
+}
+
+function postOnly(middleware) {
+  return methodOnly(['POST'], middleware);
 }
 
 function resetRateLimits() {
   buckets.clear();
 }
 
-module.exports = { postOnly, rateLimit, resetRateLimits };
+module.exports = { methodOnly, postOnly, rateLimit, resetRateLimits };

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchProducts, fetchSiteContent } from '../lib/api.js';
+import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
+import { buildStorefrontCollectionSections } from '../lib/storefrontCollections.js';
 import ProductCard from '../components/ProductCard.jsx';
 
 function CollectionSection({ id, index, title, blurb, products }) {
@@ -26,6 +28,7 @@ function CollectionSection({ id, index, title, blurb, products }) {
 export default function Home() {
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState([]);
+  const [collectionNames, setCollectionNames] = useState(DEFAULT_STOREFRONT_SETTINGS.storefrontCollections);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const [error, setError] = useState('');
 
@@ -36,10 +39,11 @@ export default function Home() {
     fetchSiteContent()
       .then((body) => setBanners(body.siteContent?.homepageBanners || []))
       .catch(() => {});
+    loadStorefrontSettings()
+      .then((settings) => setCollectionNames(settings.storefrontCollections || DEFAULT_STOREFRONT_SETTINGS.storefrontCollections));
   }, []);
 
-  const newArrivals = products.filter((product) => (product.collections || []).includes('New Arrivals'));
-  const freedom = products.filter((product) => (product.collections || []).includes('Freedom of Mind'));
+  const collectionSections = buildStorefrontCollectionSections(products, collectionNames);
 
   return (
     <div className="pb-4">
@@ -88,20 +92,7 @@ export default function Home() {
         <p className="mx-auto mt-16 max-w-7xl px-5 text-sm text-accent-deep lg:px-8">{error}</p>
       )}
 
-      <CollectionSection
-        id="new-arrivals"
-        index="01"
-        title="New Arrivals"
-        blurb="Fresh drops, cut boxy. Once a size sells through, it's gone."
-        products={newArrivals}
-      />
-      <CollectionSection
-        id="freedom-of-mind"
-        index="02"
-        title="Freedom of Mind"
-        blurb="The statement line — graphics for loud thoughts and quiet days."
-        products={freedom}
-      />
+      {collectionSections.map((section) => <CollectionSection key={section.title} {...section} />)}
 
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-px overflow-hidden border border-line bg-line sm:grid-cols-3">

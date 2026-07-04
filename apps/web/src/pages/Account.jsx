@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { clearCustomerToken, customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
+import { customerJson, customerLogout, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { fetchProduct } from '../lib/api.js';
 import { addToCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
@@ -101,7 +101,7 @@ export default function Account() {
           <button
             type="button"
             className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent"
-            onClick={() => { clearCustomerToken(); navigate('/'); }}
+            onClick={async () => { await customerLogout(); navigate('/'); }}
           >
             Log out
           </button>

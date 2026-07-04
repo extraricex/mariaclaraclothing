@@ -8,8 +8,10 @@ import {
   facebookContentId,
   facebookMoneyValue,
   initializeFacebookMetaPixel,
+  getMetaTrackingConsent,
   metaPixelConfig,
   purchaseEventId,
+  setMetaTrackingConsent,
   shouldTrackFacebookPath,
   trackFacebookPurchase
 } from '../src/lib/metaPixel.js';
@@ -67,13 +69,42 @@ test('Pixel initializes once on customer paths and never on admin paths', () => 
     documentRef,
     enabled: true,
     pixelId: '595813035761213',
-    path: '/product/example'
+    path: '/product/example',
+    consent: true
   };
   assert.equal(initializeFacebookMetaPixel(options), true);
   assert.equal(initializeFacebookMetaPixel(options), true);
   assert.equal(inserted.length, 1);
-  assert.equal(customerWindow.fbq.queue.length, 1);
+  assert.equal(customerWindow.fbq.queue.length, 2);
   assert.equal(customerWindow.fbq.queue[0][0], 'init');
+  assert.equal(customerWindow.fbq.queue[1][0], 'consent');
+  assert.equal(customerWindow.fbq.queue[1][1], 'grant');
+});
+
+test('Pixel does not initialize until tracking consent is accepted', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value)
+  };
+  const events = [];
+  const windowRef = { dispatchEvent: (event) => events.push(event.type) };
+  assert.equal(getMetaTrackingConsent(storage), 'unset');
+  setMetaTrackingConsent('declined', { storage, windowRef });
+  assert.equal(getMetaTrackingConsent(storage), 'declined');
+  setMetaTrackingConsent('accepted', { storage, windowRef });
+  assert.equal(getMetaTrackingConsent(storage), 'accepted');
+  assert.deepEqual(events, ['maria-clara-meta-consent-changed', 'maria-clara-meta-consent-changed']);
+
+  const documentRef = {
+    createElement: () => ({}),
+    getElementsByTagName: () => [{ parentNode: { insertBefore: () => {} } }]
+  };
+  const noConsentWindow = {};
+  assert.equal(initializeFacebookMetaPixel({
+    windowRef: noConsentWindow, documentRef, enabled: true, pixelId: '123', path: '/', consent: false
+  }), false);
+  assert.equal(noConsentWindow.fbq, undefined);
 });
 
 test('SPA page views skip repeated and admin paths', () => {
@@ -129,8 +160,8 @@ test('Purchase dispatches once with the server event ID', () => {
   const order = { orderNumber: 'MCC-1', totalCents: 79900 };
   const items = [{ variantId: 'V-1', quantity: 1, unitPriceCents: 79900 }];
 
-  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout' }), true);
-  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout' }), false);
+  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout', consent: true }), true);
+  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout', consent: true }), false);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][3], { eventID: 'purchase:MCC-1' });
 });

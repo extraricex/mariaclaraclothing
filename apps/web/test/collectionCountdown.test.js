@@ -138,6 +138,9 @@ test('dedicated product countdown page owns the editor and Collections stays foc
   assert.match(countdownPage, /settings\/collection-countdowns/);
   assert.match(countdownPage, /Live preview/);
   assert.match(countdownPage, /absolute inset-0 z-10 cursor-pointer opacity-0/);
+  assert.match(countdownPage, /useAdminCollections/);
+  assert.match(collectionsPage, /Add collection/);
+  assert.match(collectionsPage, /adminSend\('POST', '\/api\/admin\/collections'/);
 
   assert.doesNotMatch(collectionsPage, /Product page countdown/);
   assert.doesNotMatch(collectionsPage, /durationPartsToSeconds/);

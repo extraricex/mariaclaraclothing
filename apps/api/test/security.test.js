@@ -112,6 +112,66 @@ test('checkout is rate limited but order confirmation reads are not', async () =
   }
 });
 
+test('customer auth, quotes, cart writes, order lookups, and admin-sensitive actions have independent limits', async () => {
+  const names = [
+    'CUSTOMER_AUTH_RATE_LIMIT_MAX',
+    'QUOTE_RATE_LIMIT_MAX',
+    'CART_RATE_LIMIT_MAX',
+    'ORDER_LOOKUP_RATE_LIMIT_MAX',
+    'ADMIN_SENSITIVE_RATE_LIMIT_MAX'
+  ];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  names.forEach((name) => { process.env[name] = '1'; });
+
+  try {
+    await withServer(async (port) => {
+      const requestTwice = async (path, options) => {
+        assert.notEqual((await fetch(`http://127.0.0.1:${port}${path}`, options)).status, 429);
+        const limited = await fetch(`http://127.0.0.1:${port}${path}`, options);
+        assert.equal(limited.status, 429, `${path} is rate limited`);
+        assert.ok(limited.headers.get('retry-after'));
+      };
+      await requestTwice('/api/customer/login', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+      });
+      await requestTwice('/api/checkout/quotes', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+      });
+      await requestTwice('/api/cart-sessions/test-session', {
+        method: 'PUT', headers: { 'content-type': 'application/json' }, body: '{}'
+      });
+      await requestTwice('/api/orders/unknown-order');
+      await requestTwice('/api/admin/settings/security/rotate-token', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}'
+      });
+    });
+  } finally {
+    Object.entries(previous).forEach(([name, value]) => restoreEnv(name, value));
+  }
+});
+
+test('trusted proxy client IPs receive separate rate-limit buckets', async () => {
+  const previousMax = process.env.ADMIN_LOGIN_RATE_LIMIT_MAX;
+  const previousProxy = process.env.TRUST_PROXY;
+  process.env.ADMIN_LOGIN_RATE_LIMIT_MAX = '1';
+  process.env.TRUST_PROXY = '1';
+  try {
+    await withServer(async (port) => {
+      const login = (ip) => fetch(`http://127.0.0.1:${port}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+        body: '{}'
+      });
+      assert.notEqual((await login('203.0.113.10')).status, 429);
+      assert.notEqual((await login('203.0.113.11')).status, 429);
+      assert.equal((await login('203.0.113.10')).status, 429);
+    });
+  } finally {
+    restoreEnv('ADMIN_LOGIN_RATE_LIMIT_MAX', previousMax);
+    restoreEnv('TRUST_PROXY', previousProxy);
+  }
+});
+
 test('a limit of 0 disables the limiter', async () => {
   const prevMax = process.env.ADMIN_LOGIN_RATE_LIMIT_MAX;
   process.env.ADMIN_LOGIN_RATE_LIMIT_MAX = '0';
@@ -159,4 +219,16 @@ test('admin auth accepts the valid token and rejects wrong-length tokens', async
   } finally {
     restoreEnv('ADMIN_TOKEN', prevToken);
   }
+});
+
+test('API responses include baseline browser security headers', async () => {
+  await withServer(async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(response.headers.get('x-frame-options'), 'DENY');
+    assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+    assert.match(response.headers.get('permissions-policy') || '', /camera=\(\)/);
+    assert.match(response.headers.get('content-security-policy-report-only') || '', /default-src 'self'/);
+    assert.equal(response.headers.get('x-powered-by'), null);
+  });
 });

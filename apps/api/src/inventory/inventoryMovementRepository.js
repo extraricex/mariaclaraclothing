@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { hasDatabaseUrl, query, transaction } = require('../db/postgres');
+const { resolveRuntimeDataFile } = require('../db/runtimeDataFile');
 
 const DEFAULT_MOVEMENTS_FILE = path.join(__dirname, '..', '..', 'data', 'inventory-movements.json');
 const VALID_REASONS = new Set(['order_created', 'order_cancelled', 'admin_stock_correction']);
@@ -9,7 +10,7 @@ const VALID_SORTS = new Set(['newest', 'oldest']);
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
 
 function movementsDataFile() {
-  return process.env.INVENTORY_MOVEMENTS_DATA_FILE || DEFAULT_MOVEMENTS_FILE;
+  return resolveRuntimeDataFile('INVENTORY_MOVEMENTS_DATA_FILE', DEFAULT_MOVEMENTS_FILE);
 }
 
 function usePostgresMovements() {

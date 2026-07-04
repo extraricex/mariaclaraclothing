@@ -22,7 +22,7 @@ test('customer checkout uses server totals and private confirmation', async ({ p
 
   await page.goto(`/product/${PRODUCT_SLUG}`);
   await page.getByRole('button', { name: /add to cart/i }).click();
-  await page.getByRole('link', { name: /^checkout$/i }).click();
+  await page.getByRole('dialog', { name: /your cart/i }).getByRole('link', { name: /^checkout$/i }).click();
   await page.getByPlaceholder('Full name').fill('Phase One Customer');
   await page.getByPlaceholder(/Mobile number/).fill('09171234567');
   await page.getByPlaceholder(/House no/).fill('12 Test Street');

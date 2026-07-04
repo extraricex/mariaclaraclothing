@@ -14,8 +14,11 @@ test('admin settings page edits all four sections against the settings API', asy
   assert.match(source, /\/api\/admin\/settings\/payments/);
   assert.match(source, /\/api\/admin\/settings\/security\/password/);
   assert.match(source, /\/api\/admin\/settings\/security\/rotate-token/);
-  assert.match(source, /setAdminToken/);
+  assert.doesNotMatch(source, /setAdminToken/);
   assert.match(source, /freeShippingMinimumItems/);
+  assert.match(source, /Messenger chat link/);
+  assert.match(source, /form\.messengerUrl/);
+  assert.match(source, /https:\/\/m\.me\/your-page/);
   // section headers are collapsible toggles
   assert.match(source, /aria-expanded=\{open\}/);
   assert.match(source, /setOpen/);

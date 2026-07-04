@@ -12,8 +12,22 @@ const {
 } = require('../customers/customerAccountRepository');
 const { listOrders } = require('../orders/orderRepository');
 const { normalizePhilippinePhone } = require('../jnt/jntExport');
+const {
+  createAuthSession,
+  findAuthSession,
+  revokeAuthSession,
+  verifySessionCsrf
+} = require('../auth/sessionRepository');
+const {
+  clearSessionCookies,
+  csrfTokenFromRequest,
+  isProduction,
+  sessionTokenFromRequest,
+  setSessionCookies
+} = require('../auth/sessionHttp');
 
 const router = express.Router();
+const CUSTOMER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function badRequest(message) {
   const error = new Error(message);
@@ -28,6 +42,22 @@ function customerTokenFromRequest(req) {
 
 async function requireCustomer(req, res, next) {
   try {
+    const sessionToken = sessionTokenFromRequest(req, 'customer');
+    const session = sessionToken ? await findAuthSession(sessionToken) : null;
+    if (session?.actorType === 'customer') {
+      const account = await findAccountById(session.actorId);
+      if (account) {
+        req.authSession = session;
+        req.authSessionToken = sessionToken;
+        req.customerAccount = account;
+        return next();
+      }
+    }
+
+    if (isProduction()) {
+      return res.status(401).json({ error: 'Customer authentication is required' });
+    }
+
     const accountId = verifyCustomerToken(customerTokenFromRequest(req));
     const account = accountId ? await findAccountById(accountId) : null;
 
@@ -40,6 +70,24 @@ async function requireCustomer(req, res, next) {
   } catch (error) {
     return next(error);
   }
+}
+
+function requireCustomerCsrf(req, res, next) {
+  if (!req.authSession) return next();
+  if (!verifySessionCsrf(req.authSession, csrfTokenFromRequest(req))) {
+    return res.status(403).json({ error: 'A valid CSRF token is required' });
+  }
+  return next();
+}
+
+async function startCustomerSession(res, account) {
+  const auth = await createAuthSession({
+    actorType: 'customer',
+    actorId: account.id,
+    ttlMs: CUSTOMER_SESSION_TTL_MS
+  });
+  setSessionCookies(res, 'customer', auth, CUSTOMER_SESSION_TTL_MS);
+  return auth;
 }
 
 function normalizeRegistration(body) {
@@ -66,9 +114,11 @@ router.post('/register', async (req, res, next) => {
     }
 
     const account = await createAccount(registration);
+    const auth = await startCustomerSession(res, account);
     return res.status(201).json({
-      token: signCustomerToken(account.id),
-      customer: publicCustomer(account)
+      csrfToken: auth.csrfToken,
+      customer: publicCustomer(account),
+      ...(!isProduction() ? { token: signCustomerToken(account.id) } : {})
     });
   } catch (error) {
     return next(error);
@@ -85,9 +135,11 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Email or password is incorrect' });
     }
 
+    const auth = await startCustomerSession(res, account);
     return res.json({
-      token: signCustomerToken(account.id),
-      customer: publicCustomer(account)
+      csrfToken: auth.csrfToken,
+      customer: publicCustomer(account),
+      ...(!isProduction() ? { token: signCustomerToken(account.id) } : {})
     });
   } catch (error) {
     return next(error);
@@ -98,7 +150,7 @@ router.get('/me', requireCustomer, (req, res) => {
   res.json({ customer: publicCustomer(req.customerAccount) });
 });
 
-router.put('/me', requireCustomer, async (req, res, next) => {
+router.put('/me', requireCustomer, requireCustomerCsrf, async (req, res, next) => {
   try {
     const body = req.body || {};
 
@@ -111,6 +163,16 @@ router.put('/me', requireCustomer, async (req, res, next) => {
 
     const account = await updateAccount(req.customerAccount.id, body);
     return res.json({ customer: publicCustomer(account) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/logout', requireCustomer, requireCustomerCsrf, async (req, res, next) => {
+  try {
+    if (req.authSessionToken) await revokeAuthSession(req.authSessionToken);
+    clearSessionCookies(res, 'customer');
+    return res.status(204).end();
   } catch (error) {
     return next(error);
   }

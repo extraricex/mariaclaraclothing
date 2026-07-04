@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createCheckoutQuote, createQuoteBackedOrder } from '../lib/api.js';
-import { customerJson, getCustomerToken, useCustomerLoggedIn } from '../lib/customerAuth.js';
+import { customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { cartQuantity, clearCart, clearCheckoutIdempotencyKey, getCartSessionId, getCheckoutIdempotencyKey, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookPurchase } from '../lib/metaPixel.js';
@@ -301,13 +301,11 @@ export default function Checkout() {
     };
 
     try {
-      const token = loggedIn ? getCustomerToken() : '';
       const idempotencyKey = getCheckoutIdempotencyKey(latestQuote.id);
       const result = await createQuoteBackedOrder(
         payload,
         latestQuote.id,
-        idempotencyKey,
-        token ? { Authorization: `Bearer ${token}` } : {}
+        idempotencyKey
       );
       trackFacebookPurchase(result, result.items, result.trackingEventId);
       if (loggedIn && saveAddress) {

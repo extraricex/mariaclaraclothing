@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminJson, adminSend } from '../lib/adminApi.js';
 import { durationPartsToSeconds, formatRemainingTime } from '../lib/collectionCountdown.js';
-
-const STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
+import useAdminCollections from './useAdminCollections.js';
 const COUNTDOWN_FIELDS = [
   { key: 'hours', label: 'Hours' },
   { key: 'minutes', label: 'Minutes' },
@@ -17,7 +16,8 @@ const DEFAULT_FORM = {
 };
 
 export default function ProductCountdown() {
-  const [active, setActive] = useState(STOREFRONT_COLLECTIONS[0]);
+  const { collections, error: collectionError } = useAdminCollections();
+  const [active, setActive] = useState('New Arrivals');
   const [status, setStatus] = useState('');
   const [countdowns, setCountdowns] = useState({});
   const [countdownForm, setCountdownForm] = useState(DEFAULT_FORM);
@@ -27,6 +27,10 @@ export default function ProductCountdown() {
       .then((body) => setCountdowns(body.settings.collectionCountdowns || {}))
       .catch((error) => setStatus(error.message));
   }, []);
+
+  useEffect(() => {
+    if (!collections.includes(active)) setActive(collections[0] || '');
+  }, [active, collections]);
 
   useEffect(() => {
     const config = countdowns[active] || {
@@ -75,10 +79,10 @@ export default function ProductCountdown() {
       <p className="mt-2 text-sm text-ink-soft">
         Configure the marketing countdown shown when a collection is assigned first on a product.
       </p>
-      {status && <p className="mt-3 text-sm text-accent-deep" role="status">{status}</p>}
+      {(status || collectionError) && <p className="mt-3 text-sm text-accent-deep" role="status">{status || collectionError}</p>}
 
       <div className="mt-6 flex flex-wrap gap-2">
-        {STOREFRONT_COLLECTIONS.map((name) => (
+        {collections.map((name) => (
           <button
             key={name}
             type="button"

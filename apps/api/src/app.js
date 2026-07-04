@@ -9,7 +9,7 @@ const { discountRouter } = require('./routes/discounts');
 const { customerRouter } = require('./routes/customer');
 const { storeSettingsRouter } = require('./routes/storeSettings');
 const { checkoutRouter } = require('./routes/checkout');
-const { postOnly, rateLimit } = require('./middleware/rateLimit');
+const { methodOnly, postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
 // generous by default (read from env at request time) so a single shopper or
@@ -30,6 +30,36 @@ const checkoutRateLimit = postOnly(rateLimit({
   defaultMax: 100,
   defaultWindowMs: 10 * 60 * 1000,
   message: 'Too many checkout attempts. Please slow down and try again shortly.'
+}));
+
+const customerAuthRateLimit = postOnly(rateLimit({
+  keyPrefix: 'customer-auth', maxEnv: 'CUSTOMER_AUTH_RATE_LIMIT_MAX',
+  windowEnv: 'CUSTOMER_AUTH_RATE_LIMIT_WINDOW_MS', defaultMax: 30, defaultWindowMs: 15 * 60 * 1000,
+  message: 'Too many account attempts. Please try again later.'
+}));
+
+const quoteRateLimit = postOnly(rateLimit({
+  keyPrefix: 'checkout-quote', maxEnv: 'QUOTE_RATE_LIMIT_MAX',
+  windowEnv: 'QUOTE_RATE_LIMIT_WINDOW_MS', defaultMax: 120, defaultWindowMs: 10 * 60 * 1000,
+  message: 'Too many price refreshes. Please slow down and try again shortly.'
+}));
+
+const cartRateLimit = methodOnly(['PUT'], rateLimit({
+  keyPrefix: 'cart-session', maxEnv: 'CART_RATE_LIMIT_MAX',
+  windowEnv: 'CART_RATE_LIMIT_WINDOW_MS', defaultMax: 180, defaultWindowMs: 10 * 60 * 1000,
+  message: 'Too many cart updates. Please slow down and try again shortly.'
+}));
+
+const orderLookupRateLimit = methodOnly(['GET'], rateLimit({
+  keyPrefix: 'order-lookup', maxEnv: 'ORDER_LOOKUP_RATE_LIMIT_MAX',
+  windowEnv: 'ORDER_LOOKUP_RATE_LIMIT_WINDOW_MS', defaultMax: 120, defaultWindowMs: 10 * 60 * 1000,
+  message: 'Too many order lookups. Please try again shortly.'
+}));
+
+const adminSensitiveRateLimit = postOnly(rateLimit({
+  keyPrefix: 'admin-sensitive', maxEnv: 'ADMIN_SENSITIVE_RATE_LIMIT_MAX',
+  windowEnv: 'ADMIN_SENSITIVE_RATE_LIMIT_WINDOW_MS', defaultMax: 40, defaultWindowMs: 15 * 60 * 1000,
+  message: 'Too many sensitive admin actions. Please try again shortly.'
 }));
 
 function errorHandler(error, req, res, _next) {
@@ -54,6 +84,18 @@ function errorHandler(error, req, res, _next) {
 
 function createApp() {
   const app = express();
+  app.disable('x-powered-by');
+
+  app.use((_req, res, next) => {
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Content-Security-Policy-Report-Only': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https:; img-src 'self' data: blob: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com"
+    });
+    next();
+  });
 
   // Behind a reverse proxy (the Docker nginx) set TRUST_PROXY (e.g. `1`) so
   // req.ip reflects the real client for rate limiting. Off by default so local
@@ -81,7 +123,14 @@ function createApp() {
 
   app.use('/api/admin/login', loginRateLimit);
   app.use('/api/orders', checkoutRateLimit);
-  app.use('/api/checkout', checkoutRateLimit);
+  app.use('/api/orders', orderLookupRateLimit);
+  app.use('/api/checkout/quotes', quoteRateLimit);
+  app.use('/api/cart-sessions', cartRateLimit);
+  app.use('/api/customer/login', customerAuthRateLimit);
+  app.use('/api/customer/register', customerAuthRateLimit);
+  app.use('/api/admin/settings/security', adminSensitiveRateLimit);
+  app.use('/api/admin/products', adminSensitiveRateLimit);
+  app.use('/api/admin/site-content', adminSensitiveRateLimit);
 
   app.use('/api/products', productRouter);
   app.use('/api/site-content', siteContentRouter);

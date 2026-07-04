@@ -100,10 +100,23 @@ test('admin settings expose defaults and save sections', async () => {
 
     const generalResponse = await fetch(
       `http://127.0.0.1:${port}/api/admin/settings/general`,
-      adminRequest('PUT', { storeName: 'Maria Clara MNL', contactEmail: 'hello@mariaclara.ph' })
+      adminRequest('PUT', {
+        storeName: 'Maria Clara MNL',
+        contactEmail: 'hello@mariaclara.ph',
+        messengerUrl: 'https://m.me/mariaclaraclothing'
+      })
     );
     assert.equal(generalResponse.status, 200);
-    assert.equal((await generalResponse.json()).settings.general.storeName, 'Maria Clara MNL');
+    const general = await generalResponse.json();
+    assert.equal(general.settings.general.storeName, 'Maria Clara MNL');
+    assert.equal(general.settings.general.messengerUrl, 'https://m.me/mariaclaraclothing');
+
+    const invalidMessenger = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/general`,
+      adminRequest('PUT', { messengerUrl: 'https://example.com/chat' })
+    );
+    assert.equal(invalidMessenger.status, 400);
+    assert.match((await invalidMessenger.json()).error, /Messenger URL/);
 
     const badFee = await fetch(
       `http://127.0.0.1:${port}/api/admin/settings/shipping`,
@@ -216,6 +229,8 @@ test('public storefront settings expose only the safe subset', async () => {
 
     const body = await response.json();
     assert.equal(body.settings.storeName, 'Maria Clara Clothing');
+    assert.equal(body.settings.messengerUrl, '');
+    assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals', 'Freedom of Mind']);
     assert.equal(body.settings.shipping.regions.length, 3);
     assert.deepEqual(
       body.settings.paymentMethods.map((method) => method.id),
@@ -227,6 +242,35 @@ test('public storefront settings expose only the safe subset', async () => {
     assert.equal(raw.includes('bank_transfer'), false);
     assert.equal(raw.includes('passwordHash'), false);
     assert.equal(raw.includes('"token"'), false);
+  });
+});
+
+test('admin can create and list persistent storefront collections', async () => {
+  await withSettingsServer(async (port) => {
+    const unauthenticated = await fetch(`http://127.0.0.1:${port}/api/admin/collections`);
+    assert.equal(unauthenticated.status, 401);
+
+    const before = await fetch(`http://127.0.0.1:${port}/api/admin/collections`, adminRequest());
+    assert.equal(before.status, 200);
+    assert.deepEqual((await before.json()).collections, ['New Arrivals', 'Freedom of Mind']);
+
+    const created = await fetch(
+      `http://127.0.0.1:${port}/api/admin/collections`,
+      adminRequest('POST', { name: '  Summer   Drop  ' })
+    );
+    assert.equal(created.status, 201);
+    assert.deepEqual((await created.json()).collections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+
+    const duplicate = await fetch(
+      `http://127.0.0.1:${port}/api/admin/collections`,
+      adminRequest('POST', { name: 'summer drop' })
+    );
+    assert.equal(duplicate.status, 409);
+    assert.match((await duplicate.json()).error, /already exists/i);
+
+    const publicBody = await (await fetch(`http://127.0.0.1:${port}/api/storefront-settings`)).json();
+    assert.deepEqual(publicBody.settings.storefrontCollections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.ok(publicBody.settings.collectionCountdowns['Summer Drop']);
   });
 });
 

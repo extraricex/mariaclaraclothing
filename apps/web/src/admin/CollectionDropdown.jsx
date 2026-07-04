@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-
-export const STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
+import useAdminCollections from './useAdminCollections.js';
 
 export default function CollectionDropdown({ value = [], onChange }) {
+  const { collections } = useAdminCollections();
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
 
@@ -45,7 +45,7 @@ export default function CollectionDropdown({ value = [], onChange }) {
           role="listbox"
           aria-multiselectable="true"
         >
-          {STOREFRONT_COLLECTIONS.map((name) => (
+          {collections.map((name) => (
             <label
               key={name}
               className="flex items-center gap-2 px-2 py-2 text-sm hover:bg-cream"

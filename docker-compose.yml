@@ -25,10 +25,13 @@ services:
   api:
     build: ./apps/api
     environment:
+      APP_ENV: ${APP_ENV:-development}
       PORT: 3000
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/maria_clara
       ADMIN_TOKEN: ${ADMIN_TOKEN:-local-admin-token}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      CUSTOMER_AUTH_SECRET: ${CUSTOMER_AUTH_SECRET:-local-customer-auth-secret}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       CHECKOUT_V2_REQUIRED: ${CHECKOUT_V2_REQUIRED:-true}
       ORDER_CONFIRMATION_SECRET: ${ORDER_CONFIRMATION_SECRET:?ORDER_CONFIRMATION_SECRET is required}
       META_CONVERSIONS_API_ENABLED: ${META_CONVERSIONS_API_ENABLED:-false}

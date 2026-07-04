@@ -31,6 +31,7 @@ const {
   updateHomepageBanners
 } = require('../siteContent/siteContentRepository');
 const {
+  addStorefrontCollection,
   getAdminCredentials,
   getStoreSettings,
   rotateAdminToken,
@@ -51,6 +52,25 @@ const {
   appendInventoryMovements,
   queryInventoryMovements
 } = require('../inventory/inventoryMovementRepository');
+const {
+  MAX_PRODUCT_IMAGE_BYTES,
+  normalizeProductUploads,
+  productImageFileAllowed
+} = require('../images/productImageNormalizer');
+const {
+  createAuthSession,
+  findAuthSession,
+  revokeActorSessions,
+  revokeAuthSession,
+  verifySessionCsrf
+} = require('../auth/sessionRepository');
+const {
+  clearSessionCookies,
+  csrfTokenFromRequest,
+  isProduction,
+  sessionTokenFromRequest,
+  setSessionCookies
+} = require('../auth/sessionHttp');
 
 const router = express.Router();
 
@@ -61,6 +81,17 @@ const VALID_COD_CONFIRMATION_STATUSES = new Set(['pending', 'confirmed', 'unreac
 const VALID_DELIVERY_STATUSES = new Set(['pending', 'ready', 'out_for_delivery', 'delivered', 'returned', 'cancelled']);
 const VALID_PRODUCT_STATUSES = new Set(['active', 'draft', 'archived']);
 const ORDER_STATUS_EVENT_FIELDS = ['status', 'fulfillmentStatus', 'paymentStatus', 'codConfirmationStatus', 'deliveryStatus'];
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+async function replaceAdminSessions(res, legacyToken) {
+  await revokeActorSessions('admin', 'admin');
+  const auth = await createAuthSession({ actorType: 'admin', actorId: 'admin', ttlMs: ADMIN_SESSION_TTL_MS });
+  setSessionCookies(res, 'admin', auth, ADMIN_SESSION_TTL_MS);
+  return {
+    csrfToken: auth.csrfToken,
+    ...(!isProduction() ? { token: legacyToken } : {})
+  };
+}
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, callback) => {
@@ -75,12 +106,14 @@ const upload = multer({
     }
   }),
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: MAX_PRODUCT_IMAGE_BYTES,
     files: 8
   },
   fileFilter: (_req, file, callback) => {
-    if (!/^image\//.test(file.mimetype || '')) {
-      return callback(new Error('Only image uploads are allowed'));
+    if (!productImageFileAllowed(file)) {
+      const error = new Error('Use a JPG, PNG, WebP, GIF, AVIF, or TIFF product image');
+      error.status = 400;
+      return callback(error);
     }
     return callback(null, true);
   }
@@ -144,15 +177,49 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Admin password is invalid' });
     }
 
-    return res.json({ token: credentials?.token || adminToken() });
+    const auth = await createAuthSession({ actorType: 'admin', actorId: 'admin', ttlMs: ADMIN_SESSION_TTL_MS });
+    setSessionCookies(res, 'admin', auth, ADMIN_SESSION_TTL_MS);
+    return res.json({
+      csrfToken: auth.csrfToken,
+      ...(!isProduction() ? { token: credentials?.token || adminToken() } : {})
+    });
   } catch (error) {
     return next(error);
   }
 });
 
 router.use(requireAdmin);
+router.use(requireAdminCsrf);
 
 router.get('/session', (req, res) => res.json({ authenticated: true }));
+
+router.post('/logout', async (req, res, next) => {
+  try {
+    if (req.authSessionToken) await revokeAuthSession(req.authSessionToken);
+    clearSessionCookies(res, 'admin');
+    return res.status(204).end();
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/collections', async (_req, res, next) => {
+  try {
+    const settings = await getStoreSettings();
+    return res.json({ collections: settings.storefrontCollections });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/collections', async (req, res, next) => {
+  try {
+    const settings = await addStorefrontCollection(req.body?.name);
+    return res.status(201).json({ collections: settings.storefrontCollections });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 router.get('/inventory-movements', async (req, res, next) => {
   try {
@@ -283,7 +350,7 @@ router.post('/settings/security/password', async (req, res, next) => {
     }
 
     const record = await setAdminPassword(newPassword);
-    return res.json({ token: record.token });
+    return res.json(await replaceAdminSessions(res, record.token));
   } catch (error) {
     return next(error);
   }
@@ -292,7 +359,7 @@ router.post('/settings/security/password', async (req, res, next) => {
 router.post('/settings/security/rotate-token', async (req, res, next) => {
   try {
     const record = await rotateAdminToken();
-    return res.json({ token: record.token });
+    return res.json(await replaceAdminSessions(res, record.token));
   } catch (error) {
     return next(error);
   }
@@ -350,25 +417,24 @@ router.get('/products/settings', async (req, res, next) => {
 });
 
 router.post('/products/:slug/images', upload.array('images', 8), async (req, res, next) => {
+  const files = Array.isArray(req.files) ? req.files : [];
   try {
     const slug = String(req.params.slug || '').trim();
     const product = await findEditableProductBySlug(slug);
 
     if (!product) {
+      removeUploadedProductFiles(files);
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    const files = Array.isArray(req.files) ? req.files : [];
     if (!files.length) {
       return res.status(400).json({ error: 'At least one image file is required' });
     }
 
+    await normalizeProductUploads(files);
     const existingImages = Array.isArray(product.images) ? product.images : [];
-    const uploadedImages = files.map((file, index) => ({
-      url: productUploadUrl(file.filename),
-      altText: product.name,
-      sortOrder: existingImages.length + index
-    }));
+    const uploadedImages = uploadedProductImages(files, product.name)
+      .map((image, index) => ({ ...image, sortOrder: existingImages.length + index }));
     const updatedProduct = await saveEditableProduct({
       ...product,
       images: [...existingImages, ...uploadedImages]
@@ -376,6 +442,12 @@ router.post('/products/:slug/images', upload.array('images', 8), async (req, res
 
     return res.status(201).json({ product: updatedProduct, images: uploadedImages });
   } catch (error) {
+    try {
+      removeUploadedProductFiles(files);
+    } catch (cleanupError) {
+      cleanupError.cause = error;
+      return next(cleanupError);
+    }
     return next(error);
   }
 });
@@ -512,6 +584,7 @@ router.post('/products', upload.array('images', 8), async (req, res, next) => {
       error.status = 400;
       throw error;
     }
+    await normalizeProductUploads(files);
     const images = files.length ? uploadedProductImages(files, incoming.name) : incoming.images;
     product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest({
       ...incoming,
@@ -821,6 +894,19 @@ function csvValue(value, protectFormula) {
 
 async function requireAdmin(req, res, next) {
   try {
+    const cookieToken = sessionTokenFromRequest(req, 'admin');
+    if (cookieToken) {
+      const session = await findAuthSession(cookieToken);
+      if (session?.actorType === 'admin') {
+        req.authSession = session;
+        req.authSessionToken = cookieToken;
+        return next();
+      }
+    }
+
+    if (isProduction()) {
+      return res.status(401).json({ error: 'Admin authentication is required' });
+    }
     const header = String(req.headers.authorization || '');
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
     const credentials = await getAdminCredentials();
@@ -834,6 +920,14 @@ async function requireAdmin(req, res, next) {
   } catch (error) {
     return next(error);
   }
+}
+
+function requireAdminCsrf(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || !req.authSession) return next();
+  if (!verifySessionCsrf(req.authSession, csrfTokenFromRequest(req))) {
+    return res.status(403).json({ error: 'CSRF token is invalid' });
+  }
+  return next();
 }
 
 // Constant-time string compare for the admin bearer token. Guards length first

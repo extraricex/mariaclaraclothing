@@ -1,7 +1,7 @@
 require('dotenv').config();
 
-function optional(name, fallback = '') {
-  return process.env[name] || fallback;
+function optional(source, name, fallback = '') {
+  return source[name] || fallback;
 }
 
 function metaConfig(source = process.env) {
@@ -59,11 +59,55 @@ function notificationConfig(source = process.env) {
   return { enabled, sms, email };
 }
 
-const env = {
-  port: Number(optional('PORT', '3000')),
-  meta: metaConfig(),
-  checkout: checkoutConfig(),
-  notifications: notificationConfig()
-};
+function validateProductionConfig(source = process.env) {
+  if (String(source.APP_ENV || 'development').trim().toLowerCase() !== 'production') return;
+  if (!String(source.DATABASE_URL || '').trim()) {
+    throw new Error('DATABASE_URL is required in production');
+  }
+  const adminToken = String(source.ADMIN_TOKEN || '');
+  if (!adminToken || adminToken === 'local-admin-token') {
+    throw new Error('ADMIN_TOKEN must not use a local default in production');
+  }
+  const adminPassword = String(source.ADMIN_PASSWORD || '');
+  if (!adminPassword || adminPassword === 'admin') {
+    throw new Error('ADMIN_PASSWORD must not use a local default in production');
+  }
+  if (String(source.CUSTOMER_AUTH_SECRET || '').length < 32) {
+    throw new Error('CUSTOMER_AUTH_SECRET must be at least 32 characters in production');
+  }
+  if (String(source.ORDER_CONFIRMATION_SECRET || '').length < 32) {
+    throw new Error('ORDER_CONFIRMATION_SECRET must be at least 32 characters in production');
+  }
+  const jsonPersistenceOverrides = [
+    'ORDERS_DATA_FILE',
+    'CUSTOMER_ACCOUNTS_DATA_FILE',
+    'PRODUCTS_DATA_FILE',
+    'CART_SESSIONS_DATA_FILE',
+    'DISCOUNTS_DATA_FILE',
+    'INVENTORY_MOVEMENTS_DATA_FILE',
+    'ORDER_NOTIFICATIONS_DATA_FILE',
+    'STORE_SETTINGS_FILE',
+    'ADMIN_CREDENTIALS_FILE',
+    'SITE_CONTENT_FILE'
+  ];
+  for (const name of jsonPersistenceOverrides) {
+    if (String(source[name] || '').trim()) {
+      throw new Error(`${name} is not allowed in production; use PostgreSQL persistence`);
+    }
+  }
+}
 
-module.exports = { env, metaConfig, checkoutConfig, notificationConfig };
+function buildEnv(source = process.env) {
+  validateProductionConfig(source);
+  return {
+    appEnv: String(source.APP_ENV || 'development').trim().toLowerCase(),
+    port: Number(optional(source, 'PORT', '3000')),
+    meta: metaConfig(source),
+    checkout: checkoutConfig(source),
+    notifications: notificationConfig(source)
+  };
+}
+
+const env = buildEnv();
+
+module.exports = { buildEnv, env, metaConfig, checkoutConfig, notificationConfig, validateProductionConfig };

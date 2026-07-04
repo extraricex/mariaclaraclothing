@@ -16,6 +16,10 @@ nodeFsForProducts.copyFileSync(
   nodePathForProducts.join(__dirname, '..', 'data', 'products.json'),
   process.env.PRODUCTS_DATA_FILE
 );
+process.env.INVENTORY_MOVEMENTS_DATA_FILE = nodePathForProducts.join(
+  nodeFsForProducts.mkdtempSync(nodePathForProducts.join(nodeOsForProducts.tmpdir(), 'mc-movements-')),
+  'inventory-movements.json'
+);
 
 function restoreEnv(name, value) {
   if (value === undefined) {
@@ -43,6 +47,13 @@ function jsonRequest(port, pathname, { token, ...options } = {}) {
       ...(options.headers || {})
     }
   });
+}
+
+function cookieHeader(response) {
+  const values = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie') || ''];
+  return values.map((value) => value.split(';')[0]).filter(Boolean).join('; ');
 }
 
 const ORDER_ITEM = {
@@ -135,6 +146,7 @@ test('customer accounts: register, login, profile, order linking', async () => {
     assert.equal(login.status, 200);
     const loginBody = await login.json();
     assert.ok(loginBody.token);
+    const customerCookie = cookieHeader(login);
 
     // me requires auth
     const unauthorizedMe = await jsonRequest(port, '/api/customer/me');
@@ -165,13 +177,13 @@ test('customer accounts: register, login, profile, order linking', async () => {
     // logged-in checkout stamps customerAccountId
     const memberOrder = await jsonRequest(port, '/api/orders', {
       method: 'POST',
-      token: loginBody.token,
+      headers: { cookie: customerCookie },
       body: JSON.stringify(checkoutPayload('09998887777'))
     });
     assert.equal(memberOrder.status, 201);
 
     // History contains only the explicitly account-stamped order.
-    const ordersResponse = await jsonRequest(port, '/api/customer/orders', { token: loginBody.token });
+    const ordersResponse = await jsonRequest(port, '/api/customer/orders', { headers: { cookie: customerCookie } });
     assert.equal(ordersResponse.status, 200);
     const { orders } = await ordersResponse.json();
     assert.equal(orders.length, 1);

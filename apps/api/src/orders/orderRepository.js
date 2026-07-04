@@ -1,11 +1,12 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { hasDatabaseUrl, query } = require('../db/postgres');
+const { resolveRuntimeDataFile } = require('../db/runtimeDataFile');
 
 const DEFAULT_ORDERS_FILE = path.join(__dirname, '..', '..', 'data', 'orders.json');
 
 function ordersDataFile() {
-  return process.env.ORDERS_DATA_FILE || DEFAULT_ORDERS_FILE;
+  return resolveRuntimeDataFile('ORDERS_DATA_FILE', DEFAULT_ORDERS_FILE);
 }
 
 function usePostgresOrders() {

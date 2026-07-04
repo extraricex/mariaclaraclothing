@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { adminJson, adminSend, setAdminToken } from '../lib/adminApi.js';
+import { adminJson, adminSend } from '../lib/adminApi.js';
 
 function pesoFromCents(cents) {
   return (Number(cents || 0) / 100).toFixed(2);
@@ -81,6 +81,15 @@ function GeneralCard({ initial }) {
         <Field label="Contact email"><input className="field mt-1" type="email" value={form.contactEmail} onChange={(e) => set('contactEmail', e.target.value)} /></Field>
         <Field label="Contact number"><input className="field mt-1" value={form.contactNumber} onChange={(e) => set('contactNumber', e.target.value)} /></Field>
         <Field label="Store address"><textarea className="field mt-1" rows="2" value={form.storeAddress} onChange={(e) => set('storeAddress', e.target.value)} /></Field>
+        <Field label="Messenger chat link">
+          <input
+            className="field mt-1"
+            type="url"
+            placeholder="https://m.me/your-page"
+            value={form.messengerUrl || ''}
+            onChange={(e) => set('messengerUrl', e.target.value)}
+          />
+        </Field>
         <Field label="Facebook link"><input className="field mt-1" value={form.socialLinks.facebook} onChange={(e) => setSocial('facebook', e.target.value)} /></Field>
         <Field label="Instagram link"><input className="field mt-1" value={form.socialLinks.instagram} onChange={(e) => setSocial('instagram', e.target.value)} /></Field>
         <Field label="TikTok link"><input className="field mt-1" value={form.socialLinks.tiktok} onChange={(e) => setSocial('tiktok', e.target.value)} /></Field>
@@ -235,8 +244,7 @@ function SecurityCard() {
     }
     setPending(true);
     try {
-      const body = await adminSend('POST', '/api/admin/settings/security/password', { currentPassword, newPassword });
-      setAdminToken(body.token);
+      await adminSend('POST', '/api/admin/settings/security/password', { currentPassword, newPassword });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -252,8 +260,7 @@ function SecurityCard() {
     setStatus(null);
     setPending(true);
     try {
-      const body = await adminSend('POST', '/api/admin/settings/security/rotate-token', {});
-      setAdminToken(body.token);
+      await adminSend('POST', '/api/admin/settings/security/rotate-token', {});
       setStatus({ tone: 'ok', message: 'Admin token rotated. Other sessions were signed out.' });
     } catch (error) {
       setStatus({ tone: 'error', message: error.message });
