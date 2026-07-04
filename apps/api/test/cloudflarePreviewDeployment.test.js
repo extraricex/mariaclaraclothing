@@ -27,3 +27,17 @@ test('preview design routes the tunnel only to the nginx service', () => {
   assert.match(design, /`http:\/\/web:80`/);
   assert.match(design, /Port `3000`.*PostgreSQL.*never/i);
 });
+
+test('preview operations guide documents protected lifecycle and verification', () => {
+  const guide = read('docs/cloudflare-preview-operations.md');
+
+  assert.match(guide, /preview\.mariaclaraclothing\.com/);
+  assert.match(guide, /CLOUDFLARE_TUNNEL_TOKEN/);
+  assert.match(guide, /One-time PIN/i);
+  assert.match(guide, /explicit email/i);
+  assert.match(guide, /docker compose -f docker-compose\.yml -f docker-compose\.preview\.yml up -d/);
+  assert.match(guide, /docker compose -f docker-compose\.yml -f docker-compose\.preview\.yml logs/);
+  assert.match(guide, /docker compose -f docker-compose\.yml -f docker-compose\.preview\.yml stop cloudflared/);
+  assert.match(guide, /Do not run.*-v/is);
+  assert.match(guide, /127\.0\.0\.1:8081\/api\/health/);
+});
