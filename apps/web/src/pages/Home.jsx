@@ -61,7 +61,6 @@ export default function Home() {
           />
         ))}
         <div className="absolute inset-0 bg-ink/55" />
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[var(--customer-bg)] to-transparent" />
         <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center">
           <CustomerBadge tone="warm" className="reveal reveal-1">Philippine streetwear · Imus, Cavite</CustomerBadge>
           <h1 className="display reveal reveal-2 mt-4 text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
