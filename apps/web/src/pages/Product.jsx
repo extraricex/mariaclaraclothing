@@ -138,13 +138,13 @@ export default function Product() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-10 lg:px-8">
+    <div className="customer-page mx-auto max-w-7xl px-5 py-10 lg:px-8">
       <p className="eyebrow">
         <Link to="/" className="hover:text-accent">Shop</Link> / {product.collection || 'Catalog'}
       </p>
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
         <div className="min-w-0">
-          <div className="media-zoom relative aspect-[4/5] overflow-hidden bg-white">
+          <div className="customer-image-surface media-zoom relative aspect-[4/5] overflow-hidden rounded-[8px] border border-[var(--customer-border)]">
             {image && (
               <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" />
             )}
@@ -169,7 +169,7 @@ export default function Product() {
               </>
             )}
             {soldOut && (
-              <span className="absolute left-4 top-4 bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-paper">
+              <span className="absolute left-4 top-4 rounded-full bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-paper">
                 Sold out
               </span>
             )}
@@ -181,7 +181,7 @@ export default function Product() {
                   key={thumb.id || index}
                   type="button"
                   onClick={() => setActiveImage(index)}
-                  className={`h-20 w-16 shrink-0 overflow-hidden border bg-white ${index === activeImage ? 'border-accent' : 'border-line'}`}
+                  className={`customer-image-surface h-20 w-16 shrink-0 overflow-hidden rounded-[6px] border ${index === activeImage ? 'border-accent' : 'border-line'}`}
                 >
                   <img src={thumb.url} alt="" className="product-photo-blend h-full w-full object-contain" />
                 </button>
@@ -191,7 +191,8 @@ export default function Product() {
         </div>
 
         <div className="min-w-0">
-          <h1 className="display text-3xl leading-tight sm:text-4xl">{product.name}</h1>
+          <div className="customer-buy-panel rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-24">
+            <h1 className="display text-3xl leading-tight sm:text-4xl">{product.name}</h1>
           <div className="mt-4 flex items-baseline gap-3">
             <p className={`text-2xl font-semibold ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
@@ -230,7 +231,7 @@ export default function Product() {
           </div>
 
           <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
-            <div className="flex items-center rounded border border-line">
+            <div className="flex items-center rounded border border-line bg-white">
               <button type="button" className="px-4 py-3 text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Decrease quantity">−</button>
               <span className="min-w-10 text-center text-sm font-semibold">{quantity}</span>
               <button type="button" className="px-4 py-3 text-lg" onClick={() => setQuantity((q) => q + 1)} aria-label="Increase quantity">+</button>
@@ -317,6 +318,7 @@ export default function Product() {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
 

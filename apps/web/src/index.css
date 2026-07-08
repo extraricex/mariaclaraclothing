@@ -10,6 +10,14 @@
   --color-line: color-mix(in srgb, #202020 22%, #f1f1f1);
   --color-accent: #202020;
   --color-accent-deep: #202020;
+  --customer-bg: #f4f3ef;
+  --customer-surface: #ffffff;
+  --customer-soft: #ece9e2;
+  --customer-ink: #181714;
+  --customer-muted: #6b665d;
+  --customer-border: #d8d4ca;
+  --customer-accent: #8a5a2b;
+  --customer-accent-soft: #f2e6d6;
   --radius-admin: 6px;
   --admin-bg: #0b0f14;
   --admin-sidebar: #070a0f;
@@ -230,6 +238,46 @@
   }
   .field {
     @apply w-full rounded-[var(--radius-admin)] border border-line bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-clay focus:border-ink disabled:bg-cream disabled:text-clay;
+  }
+  .customer-page {
+    background: var(--customer-bg);
+    color: var(--customer-ink);
+  }
+  .customer-card {
+    box-shadow: 0 1px 0 rgba(24, 23, 20, 0.04), 0 18px 50px rgba(24, 23, 20, 0.06);
+  }
+  .customer-card:hover {
+    border-color: color-mix(in srgb, var(--customer-ink) 34%, var(--customer-border));
+  }
+  .customer-input {
+    border-color: var(--customer-border);
+    background: var(--customer-surface);
+    color: var(--customer-ink);
+    box-shadow: inset 0 1px 0 rgba(24, 23, 20, 0.02);
+  }
+  .customer-hero {
+    background:
+      linear-gradient(180deg, rgba(24, 23, 20, 0.62), rgba(24, 23, 20, 0.82)),
+      var(--customer-ink);
+  }
+  .customer-cart-sheet {
+    background: var(--customer-bg);
+    color: var(--customer-ink);
+  }
+  .customer-checkout-shell {
+    background: var(--customer-bg);
+    color: var(--customer-ink);
+  }
+  .customer-buy-panel,
+  .customer-order-summary {
+    border: 1px solid var(--customer-border);
+    background: color-mix(in srgb, var(--customer-surface) 92%, var(--customer-bg));
+    box-shadow: 0 20px 60px rgba(24, 23, 20, 0.07);
+  }
+  .customer-image-surface {
+    background:
+      radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.9), transparent 40%),
+      var(--customer-soft);
   }
   .admin-shell {
     @apply flex min-h-screen overflow-x-hidden;

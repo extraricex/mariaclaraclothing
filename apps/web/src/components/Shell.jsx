@@ -211,7 +211,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
         aria-labelledby="cart-drawer-title"
         inert={open ? undefined : ''}
         tabIndex={-1}
-        className={`absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-paper shadow-2xl transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`customer-cart-sheet absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-paper shadow-2xl transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
@@ -258,7 +258,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                         <p className="text-sm font-semibold">{formatMoney(Number(item.unitPriceCents) * Number(item.quantity))}</p>
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-3">
-                        <div className="flex items-center border border-line">
+                        <div className="flex items-center rounded-[8px] border border-line bg-white">
                           <button type="button" className="touch-target px-3 py-1.5" aria-label="Decrease quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)}>−</button>
                           <span className="min-w-8 text-center text-sm">{item.quantity}</span>
                           <button type="button" className="touch-target px-3 py-1.5" aria-label="Increase quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)}>+</button>
@@ -273,7 +273,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
               </div>
             </div>
 
-            <div className="border-t border-line px-5 py-5">
+            <div className="customer-order-summary border-t border-line px-5 py-5">
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(displaySubtotal)}</dd></div>
                 {displayDiscount > 0 && <div className="flex justify-between text-[#2f7d32]"><dt>Discount</dt><dd>-{formatMoney(displayDiscount)}</dd></div>}

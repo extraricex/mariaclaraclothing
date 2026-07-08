@@ -4,12 +4,15 @@ import { fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { buildStorefrontCollectionSections } from '../lib/storefrontCollections.js';
 import ProductCard from '../components/ProductCard.jsx';
+import { CustomerBadge } from '../components/ui/Badge.jsx';
+import { CustomerButton } from '../components/ui/Button.jsx';
+import { CustomerCard } from '../components/ui/Card.jsx';
 
 function CollectionSection({ id, index, title, blurb, products }) {
   if (!products.length) return null;
   return (
     <section id={id} className="mx-auto mt-20 max-w-7xl px-5 lg:px-8">
-      <div className="hairline flex flex-wrap items-end justify-between gap-4 pt-6">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-t border-[var(--customer-border)] pt-6">
         <div>
           <p className="eyebrow">{index} / Collection</p>
           <h2 className="display mt-2 text-3xl sm:text-5xl">{title}</h2>
@@ -46,8 +49,8 @@ export default function Home() {
   const collectionSections = buildStorefrontCollectionSections(products, collectionNames);
 
   return (
-    <div className="pb-4">
-      <section className="grain relative flex min-h-[520px] items-center justify-center overflow-hidden bg-ink px-5 py-20 text-center text-paper sm:min-h-[620px] lg:px-8">
+    <div className="customer-page pb-4">
+      <section className="customer-hero grain relative flex min-h-[520px] items-center justify-center overflow-hidden bg-ink px-5 py-20 text-center text-paper sm:min-h-[620px] lg:px-8">
         {banners.map((banner, index) => (
           <img
             key={`${banner.url}-${index}`}
@@ -58,18 +61,19 @@ export default function Home() {
           />
         ))}
         <div className="absolute inset-0 bg-ink/55" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[var(--customer-bg)] to-transparent" />
         <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center">
-          <p className="eyebrow reveal reveal-1 text-accent">Philippine streetwear · est. Imus, Cavite</p>
-          <h1 className="display reveal reveal-2 mt-4 text-5xl leading-[0.95] sm:text-7xl lg:text-8xl">
-            100%<br />Pure<br /><span className="text-accent">Cotton</span>
+          <CustomerBadge tone="warm" className="reveal reveal-1">Philippine streetwear · Imus, Cavite</CustomerBadge>
+          <h1 className="display reveal reveal-2 mt-4 text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
+            100%<br />Pure<br /><span className="text-[var(--customer-accent-soft)]">Cotton</span>
           </h1>
           <p className="reveal reveal-3 mt-6 max-w-sm text-sm leading-relaxed text-paper/80">
             Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it
             arrives — free shipping when you grab two.
           </p>
           <div className="reveal reveal-4 mt-8 flex flex-wrap justify-center gap-3">
-            <a href="#new-arrivals" className="btn-ink !bg-accent hover:!bg-accent-deep">Shop new arrivals</a>
-            <a href="#freedom-of-mind" className="btn-ghost !border-paper/40 !text-paper hover:!border-accent hover:!text-accent">Freedom of Mind</a>
+            <CustomerButton as="a" href="#new-arrivals" className="!bg-accent hover:!bg-accent-deep">Shop new arrivals</CustomerButton>
+            <CustomerButton as="a" href="#freedom-of-mind" variant="inverse">Freedom of Mind</CustomerButton>
           </div>
           {banners.length > 1 && (
             <div className="mt-10 flex items-center justify-center" aria-label="Homepage banner slides">
@@ -95,27 +99,28 @@ export default function Home() {
       {collectionSections.map((section) => <CollectionSection key={section.title} {...section} />)}
 
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
-        <div className="grid gap-px overflow-hidden border border-line bg-line sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ['COD', 'Cash on delivery, nationwide. We text to confirm before anything ships.'],
             ['240 GSM', 'Dense, structured cotton that holds its shape wash after wash.'],
+            ['Pancake synced orders', 'Website checkout is prepared for Pancake POS order tracking.'],
             ['2 = Free', 'Add any two pieces and shipping is on us, anywhere in the Philippines.']
           ].map(([title, body]) => (
-            <div key={title} className="bg-paper p-8">
+            <CustomerCard key={title} className="p-6">
               <p className="display text-3xl text-accent">{title}</p>
               <p className="mt-3 text-sm leading-relaxed text-ink-soft">{body}</p>
-            </div>
+            </CustomerCard>
           ))}
         </div>
       </section>
 
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
-        <div className="hairline pt-6">
+        <div className="border-t border-[var(--customer-border)] pt-6">
           <p className="eyebrow">Don't overthink it</p>
           <p className="display mt-2 max-w-3xl text-3xl leading-tight sm:text-5xl">
             Pick a shirt. We deliver. <span className="text-accent">You pay at the door.</span>
           </p>
-          <Link to="/faq" className="btn-ghost mt-8">How COD works</Link>
+          <CustomerButton as={Link} to="/faq" variant="secondary" className="mt-8">How COD works</CustomerButton>
         </div>
       </section>
     </div>

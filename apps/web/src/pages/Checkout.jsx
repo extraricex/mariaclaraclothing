@@ -336,16 +336,16 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="border-b border-line">
+    <div className="customer-checkout-shell min-h-screen bg-[var(--customer-bg)]">
+      <header className="border-b border-[var(--customer-border)] bg-[var(--customer-surface)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 lg:px-8">
           <Link to="/" className="display text-xl">Maria<span className="text-accent">Clara</span></Link>
           <Link to="/cart" className="text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent">Back to cart</Link>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-12 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
-        <form onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate={false}>
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
+        <form className="customer-card rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-6" onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate={false}>
           <p className="eyebrow">Checkout · Cash on Delivery</p>
           <h1 className="display mt-2 text-3xl sm:text-4xl">{step === 'review' ? 'Review and place order' : 'Where do we send it?'}</h1>
           {!loggedIn && (
@@ -357,23 +357,23 @@ export default function Checkout() {
 
           <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
-            <input className="field" required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
-            <input className="field" required type="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
-            <input className="field" type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            <input className="field customer-input" required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
+            <input className="field customer-input" required type="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
+            <input className="field customer-input" type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </fieldset>
 
           <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Shipping address</legend>
-            <input className="field" required placeholder="House no. / Street / Building / Unit" value={house} onChange={(e) => setHouse(e.target.value)} autoComplete="street-address" />
-            <select className="field" required value={provinceCode} onChange={(e) => setProvinceCode(e.target.value)}>
+            <input className="field customer-input" required placeholder="House no. / Street / Building / Unit" value={house} onChange={(e) => setHouse(e.target.value)} autoComplete="street-address" />
+            <select className="field customer-input" required value={provinceCode} onChange={(e) => setProvinceCode(e.target.value)}>
               <option value="">Select province</option>
               {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
-            <select className="field" required value={cityCode} disabled={!cities.length} onChange={(e) => setCityCode(e.target.value)}>
+            <select className="field customer-input" required value={cityCode} disabled={!cities.length} onChange={(e) => setCityCode(e.target.value)}>
               <option value="">{provinceCode ? 'Select city / municipality' : 'Select province first'}</option>
               {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
-            <select className="field" required value={barangayCode} disabled={!barangays.length} onChange={(e) => setBarangayCode(e.target.value)}>
+            <select className="field customer-input" required value={barangayCode} disabled={!barangays.length} onChange={(e) => setBarangayCode(e.target.value)}>
               <option value="">{cityCode ? 'Select barangay' : 'Select city / municipality first'}</option>
               {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
@@ -382,7 +382,7 @@ export default function Checkout() {
                 J&T door-to-door delivery is not confirmed for this barangay. We will review before shipping.
               </p>
             )}
-            <textarea className="field" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <textarea className="field customer-input" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
             {loggedIn && (
               <label className="flex items-center gap-2 text-sm text-ink-soft">
                 <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} />
@@ -394,7 +394,7 @@ export default function Checkout() {
           <fieldset className="mt-8 space-y-3" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Payment</legend>
             {settings.paymentMethods.map((method) => (
-              <label key={method.id} className="flex items-start gap-3 border border-line px-4 py-3 text-sm">
+              <label key={method.id} className="flex items-start gap-3 rounded-[8px] border border-line bg-white px-4 py-3 text-sm">
                 <input
                   type="radio"
                   name="payment-method"
@@ -421,7 +421,7 @@ export default function Checkout() {
           )}
 
           {step === 'review' && (
-            <section className="mt-6 border border-line bg-white p-4 text-sm">
+            <section className="mt-6 rounded-[8px] border border-line bg-white p-4 text-sm">
               <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Review</h2>
               <dl className="mt-3 space-y-2">
                 <div><dt className="font-semibold">Customer</dt><dd>{fullName} · {phone}</dd></div>
@@ -450,7 +450,7 @@ export default function Checkout() {
           </p>
         </form>
 
-        <aside className="lg:border-l lg:border-line lg:pl-12">
+        <aside className="customer-order-summary self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order summary</h2>
           {!items.length ? (
             <div className="mt-6">
@@ -489,7 +489,7 @@ export default function Checkout() {
               <div className="mt-8 border-t border-line pt-4">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <input
-                    className="field flex-1 uppercase"
+                    className="field customer-input flex-1 uppercase"
                     placeholder="Discount code"
                     value={discountInput}
                     onChange={(e) => setDiscountInput(e.target.value)}
