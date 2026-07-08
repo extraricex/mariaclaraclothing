@@ -100,10 +100,10 @@ export default function Cart() {
       </p>
       {quoteError && <p className="mt-3 text-sm text-accent-deep" role="alert">{quoteError}</p>}
 
-      <div className="mt-8 divide-y divide-line rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] px-4 shadow-sm sm:px-5">
+      <div className="mt-8 divide-y divide-line border-y border-line">
         {items.map((item) => (
           <article key={item.variantId} className="flex min-w-0 gap-4 py-6 sm:gap-5">
-            <Link to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`} className="customer-image-surface block h-32 w-24 shrink-0 overflow-hidden rounded-[6px]">
+            <Link to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`} className="block h-32 w-24 shrink-0 overflow-hidden bg-transparent">
               {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="product-photo-blend h-full w-full object-contain" loading="lazy" />}
             </Link>
             <div className="flex min-w-0 flex-1 flex-col">
@@ -155,11 +155,11 @@ export default function Cart() {
               const variant = firstAvailableVariant(product);
               const image = product.images?.[0];
               return (
-                <article key={product.id} className="customer-card rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-3 shadow-sm">
-                  <Link to={`/product/${encodeURIComponent(product.slug)}`} className="customer-image-surface block aspect-[4/5] overflow-hidden rounded-[6px]">
+                <article key={product.id} className="text-center">
+                  <Link to={`/product/${encodeURIComponent(product.slug)}`} className="block aspect-[4/5] overflow-hidden bg-transparent">
                     {image && <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" loading="lazy" />}
                   </Link>
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-col items-center">
                     <h3 className="min-h-10 text-sm font-semibold leading-snug">{product.name}</h3>
                     <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">Size {variant.size}</p>
                     <p className="mt-2 text-sm font-semibold">{formatMoney(product.priceCents)}</p>

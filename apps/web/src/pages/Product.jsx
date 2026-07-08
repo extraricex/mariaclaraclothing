@@ -144,7 +144,7 @@ export default function Product() {
       </p>
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
         <div className="min-w-0">
-          <div className="customer-image-surface media-zoom relative aspect-[4/5] overflow-hidden rounded-[8px] border border-[var(--customer-border)]">
+          <div className="media-zoom relative aspect-[4/5] overflow-hidden bg-transparent">
             {image && (
               <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" />
             )}
@@ -181,7 +181,7 @@ export default function Product() {
                   key={thumb.id || index}
                   type="button"
                   onClick={() => setActiveImage(index)}
-                  className={`customer-image-surface h-20 w-16 shrink-0 overflow-hidden rounded-[6px] border ${index === activeImage ? 'border-accent' : 'border-line'}`}
+                  className={`h-20 w-16 shrink-0 overflow-hidden bg-transparent ${index === activeImage ? 'opacity-100' : 'opacity-55'}`}
                 >
                   <img src={thumb.url} alt="" className="product-photo-blend h-full w-full object-contain" />
                 </button>
@@ -191,7 +191,7 @@ export default function Product() {
         </div>
 
         <div className="min-w-0">
-          <div className="customer-buy-panel rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-24">
+          <div className="customer-buy-panel lg:sticky lg:top-24">
             <h1 className="display text-3xl leading-tight sm:text-4xl">{product.name}</h1>
           <div className="mt-4 flex items-baseline gap-3">
             <p className={`text-2xl font-semibold ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>

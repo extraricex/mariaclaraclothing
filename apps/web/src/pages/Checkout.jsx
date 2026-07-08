@@ -462,7 +462,7 @@ export default function Checkout() {
               <div className="mt-6 space-y-5">
                 {items.map((item) => (
                   <article key={item.variantId} className="flex min-w-0 gap-3 sm:gap-4">
-                    <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20">
+                    <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20">
                       {item.imageUrl && (
                         <img
                           src={item.imageUrl}

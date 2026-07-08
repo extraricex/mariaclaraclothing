@@ -237,7 +237,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                   <article key={item.variantId} className="flex gap-4 py-5">
                     <Link
                       to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`}
-                      className="aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20"
+                      className="aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20"
                       onClick={onClose}
                     >
                       {item.imageUrl && (

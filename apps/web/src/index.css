@@ -268,7 +268,10 @@
     background: var(--customer-bg);
     color: var(--customer-ink);
   }
-  .customer-buy-panel,
+  .customer-buy-panel {
+    background: transparent;
+    box-shadow: none;
+  }
   .customer-order-summary {
     border: 1px solid var(--customer-border);
     background: color-mix(in srgb, var(--customer-surface) 92%, var(--customer-bg));
