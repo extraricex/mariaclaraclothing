@@ -80,6 +80,7 @@ function createDependencies({ idempotency, quoteOverrides, refreshOverrides } = 
     convertCart: async () => calls.push('convertCart'),
     claimPromo: async () => calls.push('claimPromo'),
     insertMeta: async () => calls.push('insertMeta'),
+    enqueueOrderExport: async () => calls.push('enqueueOrderExport'),
     consumeQuote: async () => calls.push('consumeQuote'),
     completeIdempotency: async () => calls.push('completeIdempotency'),
     deriveToken: () => 'derived-confirmation-token',
@@ -138,7 +139,7 @@ test('successful checkout performs every commerce write in one transaction', asy
   assert.deepEqual(deps.calls, [
     'transaction', 'claimIdempotency', 'loadQuote', 'refreshQuote', 'deductStock',
     'saveOrder', 'appendMovements', 'convertCart', 'claimPromo', 'insertMeta',
-    'consumeQuote', 'completeIdempotency'
+    'enqueueOrderExport', 'consumeQuote', 'completeIdempotency'
   ]);
   assert.equal(result.confirmationToken, 'derived-confirmation-token');
   assert.equal(result.totalCents, 72900);

@@ -14,9 +14,12 @@ test('Pancake defaults to disabled without credentials', () => {
     warehouseId: '',
     orderSourceId: '',
     webhookSecret: '',
-    timeoutMs: 8000,
+    timeoutMs: 20000,
     catalogPageSize: 100,
-    catalogMaxPages: 100
+    catalogMaxPages: 100,
+    autoSyncEnabled: false,
+    autoSyncIntervalMs: 600000,
+    autoSyncStartupDelayMs: 15000
   });
 });
 
@@ -41,6 +44,29 @@ test('Pancake catalog discovery can start with an API key before shop selection'
   assert.equal(value.configured, false);
   assert.equal(value.catalogPageSize, 100);
   assert.equal(value.catalogMaxPages, 100);
+  assert.equal(value.autoSyncEnabled, true);
+});
+
+test('Pancake auto sync can be disabled and validates interval bounds', () => {
+  const disabled = pancakeConfig({ PANCAKE_MODE: 'read_only', PANCAKE_AUTO_SYNC_ENABLED: 'false' });
+  assert.equal(disabled.autoSyncEnabled, false);
+
+  const custom = pancakeConfig({
+    PANCAKE_MODE: 'shadow',
+    PANCAKE_AUTO_SYNC_INTERVAL_MS: '120000',
+    PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS: '0'
+  });
+  assert.equal(custom.autoSyncEnabled, true);
+  assert.equal(custom.autoSyncIntervalMs, 120000);
+  assert.equal(custom.autoSyncStartupDelayMs, 0);
+  assert.equal(pancakeConfig({ PANCAKE_MODE: 'live' }).autoSyncEnabled, true);
+
+  for (const source of [
+    { PANCAKE_AUTO_SYNC_INTERVAL_MS: '59999' },
+    { PANCAKE_AUTO_SYNC_INTERVAL_MS: '86400001' },
+    { PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS: '-1' },
+    { PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS: '300001' }
+  ]) assert.throws(() => pancakeConfig({ PANCAKE_MODE: 'read_only', ...source }), /Pancake auto sync/);
 });
 
 test('Pancake catalog bounds accept safe integers and reject invalid values', () => {

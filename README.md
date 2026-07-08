@@ -70,6 +70,17 @@ Set `APP_ENV=production` and provide unique values for `DATABASE_URL`, `ADMIN_TO
 defaults, short secrets, missing PostgreSQL, and all `*_DATA_FILE`/JSON persistence overrides.
 Generate secrets with `openssl rand -hex 32`; do not reuse values between environments.
 
+Production Docker templates are in `deploy/`:
+
+```bash
+cp deploy/production.env.example deploy/production.env
+docker compose --env-file deploy/production.env -f deploy/docker-compose.production.yml up -d --build
+```
+
+Fill `deploy/production.env` with real secrets before running the stack. The file is gitignored.
+Use [`docs/production-deployment-runbook-2026-07-08.md`](docs/production-deployment-runbook-2026-07-08.md)
+for the full launch, verification, backup, and rollback checklist.
+
 Run the API behind one controlled reverse proxy and set `TRUST_PROXY` to the exact hop count.
 Endpoint-specific rate limits cover login, registration, quotes, checkout, cart writes, order
 lookups, uploads, and security actions. Their limits and windows are documented in

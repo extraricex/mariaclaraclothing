@@ -91,6 +91,37 @@ test('failed checkout does not record inventory movements', async () => {
   }
 });
 
+test('inventory movement queries accept Pancake reconciliation reason', async () => {
+  const previousMovementsFile = process.env.INVENTORY_MOVEMENTS_DATA_FILE;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-pancake-movement-'));
+  process.env.INVENTORY_MOVEMENTS_DATA_FILE = path.join(tempDir, 'inventory-movements.json');
+
+  try {
+    const { appendInventoryMovements, queryInventoryMovements } = freshInventoryRepository();
+    await appendInventoryMovements({
+      id: 'pancake-move-1',
+      source: 'pancake',
+      reason: 'pancake_reconcile',
+      productSlug: 'shirt',
+      productName: 'Shirt',
+      sku: 'SKU-1',
+      size: 'M',
+      quantityChange: 3,
+      createdAt: '2026-07-07T00:00:00.000Z'
+    });
+
+    const result = await queryInventoryMovements({ reason: 'pancake_reconcile' }, {
+      now: new Date('2026-07-07T00:00:00.000Z')
+    });
+
+    assert.equal(result.summary.totalMovements, 1);
+    assert.equal(result.movements[0].source, 'pancake');
+    assert.equal(result.movements[0].reason, 'pancake_reconcile');
+  } finally {
+    restoreEnv('INVENTORY_MOVEMENTS_DATA_FILE', previousMovementsFile);
+  }
+});
+
 function createFreshApp() {
   [
     '../src/app',
@@ -106,6 +137,11 @@ function createFreshApp() {
     }
   });
   return require('../src/app').createApp();
+}
+
+function freshInventoryRepository() {
+  delete require.cache[require.resolve('../src/inventory/inventoryMovementRepository')];
+  return require('../src/inventory/inventoryMovementRepository');
 }
 
 function checkoutPayload(items) {

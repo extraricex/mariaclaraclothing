@@ -163,6 +163,7 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     await deps.convertCart(request.cartSessionId, orderNumber, { client });
     if (order.discountCode) await deps.claimPromo(order.discountCode, { client });
     await deps.insertMeta(client, order, input.requestContext || {});
+    if (deps.enqueueOrderExport) await deps.enqueueOrderExport(order, { client });
     await deps.consumeQuote(client, quote.id, orderNumber);
     const response = checkoutResponse(order);
     await deps.completeIdempotency(client, { keyHash, orderNumber, response });

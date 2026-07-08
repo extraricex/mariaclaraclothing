@@ -15,14 +15,14 @@ const DATE_RANGE_OPTIONS = [
 
 export function statusBadge(status) {
   const tones = {
-    received: 'bg-cream text-ink-soft',
-    confirmed: 'bg-accent/15 text-accent-deep',
-    packed: 'bg-accent/15 text-accent-deep',
-    shipped: 'bg-ink text-paper',
-    delivered: 'bg-ink text-paper',
-    cancelled: 'bg-line text-clay line-through'
+    received: 'admin-status-info',
+    confirmed: 'admin-status-good',
+    packed: 'admin-status-warn',
+    shipped: 'admin-status-info',
+    delivered: 'admin-status-good',
+    cancelled: 'admin-status-bad line-through'
   };
-  return tones[status] || 'bg-cream text-ink-soft';
+  return tones[status] || 'admin-status-info';
 }
 
 function humanize(value) {
@@ -167,10 +167,11 @@ export default function Orders() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="admin-page-header">
         <div>
           <p className="eyebrow">Orders</p>
           <h1 className="display mt-1 text-3xl">Order management</h1>
+          <p className="mt-2 max-w-2xl text-sm text-[var(--admin-muted)]">Filter, export, and update fulfillment work from the same operations table.</p>
         </div>
         <button type="button" className="btn-ink" onClick={exportJnt}>
           Export {selectedOrderNumbers.length ? `${selectedOrderNumbers.length} selected` : `${exportableOrderNumbers.length} filtered ready`} to J&T
@@ -179,23 +180,23 @@ export default function Orders() {
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {summaryCards.map(([label, value]) => (
-          <div key={label} className="border border-line bg-paper p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-clay">{label}</p>
-            <p className="mt-2 text-xl font-semibold text-ink">{value}</p>
+          <div key={label} className="admin-metric-card">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">{label}</p>
+            <p className="mt-2 text-xl font-semibold text-[var(--admin-text)]">{value}</p>
           </div>
         ))}
       </div>
 
-      {message && <p className="mt-4 text-sm text-ink-soft" role="status">{message}</p>}
+      {message && <p className="mt-4 text-sm text-[var(--admin-muted)]" role="status">{message}</p>}
       {exportErrors.length > 0 && (
-        <ul className="mt-2 space-y-1 border border-accent/40 bg-accent/10 p-4 text-sm text-accent-deep">
+        <ul className="admin-panel mt-2 space-y-1 border-[var(--admin-red)]/40 bg-[var(--admin-red)]/10 text-sm text-[#ffd8de]">
           {exportErrors.map((item) => (
             <li key={item.orderNumber}><strong>{item.orderNumber}</strong>: missing {item.missing.join(', ')}</li>
           ))}
         </ul>
       )}
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <div className="admin-panel mt-6 flex flex-wrap gap-3">
         <select className="field max-w-44" value={status} onChange={(e) => setStatus(e.target.value)}>
           {STATUS_OPTIONS.map((option) => (
             <option key={option} value={option}>{option ? humanize(option) : 'All statuses'}</option>
@@ -220,10 +221,10 @@ export default function Orders() {
         />
       </div>
 
-      <div className="mt-6 overflow-x-auto border border-line bg-paper">
+      <div className="admin-table-shell mt-6">
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead>
-            <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-clay">
+            <tr className="border-b border-[var(--admin-line)] text-[11px] uppercase tracking-[0.12em] text-[var(--admin-muted)]">
               <th className="p-3">
                 <input
                   ref={selectAllRef}
@@ -249,7 +250,7 @@ export default function Orders() {
           </thead>
           <tbody>
             {orders.map((order) => (
-              <tr key={order.orderNumber} className="border-b border-line/60 hover:bg-cream/60">
+              <tr key={order.orderNumber} className="border-b border-[var(--admin-line)]">
                 <td className="p-3">
                   <input
                     type="checkbox"
@@ -259,20 +260,20 @@ export default function Orders() {
                   />
                 </td>
                 <td className="p-3">
-                  <Link to={`/admin/orders/${encodeURIComponent(order.orderNumber)}`} className="font-semibold text-accent-deep underline">
+                  <Link to={`/admin/orders/${encodeURIComponent(order.orderNumber)}`} className="font-semibold text-[var(--admin-orange)] underline">
                     {order.orderNumber}
                   </Link>
                 </td>
-                <td className="p-3">{order.customerName}<br /><span className="text-xs text-clay">{order.phone}</span></td>
+                <td className="p-3">{order.customerName}<br /><span className="text-xs text-[var(--admin-muted)]">{order.phone}</span></td>
                 <td className="p-3">{formatMoney(order.totalCents)}</td>
                 <td className="p-3">
                   {promoLabel(order) ? (
                     <>
-                      <span className="block text-xs font-semibold uppercase text-ink">{promoLabel(order)}</span>
-                      <span className="text-xs text-clay">-{formatMoney(order.discountTotalCents || 0)}</span>
+                      <span className="block text-xs font-semibold uppercase text-[var(--admin-text)]">{promoLabel(order)}</span>
+                      <span className="text-xs text-[var(--admin-muted)]">-{formatMoney(order.discountTotalCents || 0)}</span>
                     </>
                   ) : (
-                    <span className="text-xs text-clay">No promo</span>
+                    <span className="text-xs text-[var(--admin-muted)]">No promo</span>
                   )}
                 </td>
                 <td className="p-3">{order.itemCount}</td>
@@ -294,14 +295,14 @@ export default function Orders() {
                 <td className="p-3 text-xs uppercase">{humanize(order.codConfirmationStatus)}</td>
                 <td className="p-3">
                   <span className="block text-xs uppercase">{order.deliveryMethod || 'Standard shipping'}</span>
-                  <span className="text-xs text-clay">{order.shippingRegionLabel || 'No region'}</span>
+                  <span className="text-xs text-[var(--admin-muted)]">{order.shippingRegionLabel || 'No region'}</span>
                 </td>
                 <td className="p-3 text-xs uppercase">{jntStatusLabel(order.jntExportStatus)}</td>
-                <td className="p-3 text-xs text-clay">{order.placedAt ? new Date(order.placedAt).toLocaleString('en-PH') : ''}</td>
+                <td className="p-3 text-xs text-[var(--admin-muted)]">{order.placedAt ? new Date(order.placedAt).toLocaleString('en-PH') : ''}</td>
               </tr>
             ))}
             {!orders.length && (
-              <tr><td colSpan="13" className="p-6 text-center text-sm text-clay">No orders match.</td></tr>
+              <tr><td colSpan="13" className="p-6 text-center text-sm text-[var(--admin-muted)]">No orders match.</td></tr>
             )}
           </tbody>
         </table>

@@ -58,20 +58,31 @@ test('Pancake admin status requires authentication and never returns secrets', a
 });
 
 test('Pancake connection test inherits admin cookie CSRF protection', async () => {
-  await listen(freshApp(), async (port) => {
-    const login = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'admin' })
+  const previous = Object.fromEntries(['PANCAKE_MODE', 'PANCAKE_API_KEY', 'PANCAKE_SHOP_ID']
+    .map((name) => [name, process.env[name]]));
+  process.env.PANCAKE_MODE = 'disabled';
+  delete process.env.PANCAKE_API_KEY;
+  delete process.env.PANCAKE_SHOP_ID;
+  try {
+    await listen(freshApp(), async (port) => {
+      const login = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: 'admin' })
+      });
+      const loginBody = await login.json();
+      const cookie = cookieHeader(login);
+      const url = `http://127.0.0.1:${port}/api/admin/integrations/pancake/test-connection`;
+      assert.equal((await fetch(url, { method: 'POST', headers: { cookie } })).status, 403);
+      const allowed = await fetch(url, {
+        method: 'POST', headers: { cookie, 'x-csrf-token': loginBody.csrfToken }
+      });
+      assert.equal(allowed.status, 200);
+      assert.equal((await allowed.json()).pancake.healthStatus, 'disabled');
     });
-    const loginBody = await login.json();
-    const cookie = cookieHeader(login);
-    const url = `http://127.0.0.1:${port}/api/admin/integrations/pancake/test-connection`;
-    assert.equal((await fetch(url, { method: 'POST', headers: { cookie } })).status, 403);
-    const allowed = await fetch(url, {
-      method: 'POST', headers: { cookie, 'x-csrf-token': loginBody.csrfToken }
-    });
-    assert.equal(allowed.status, 200);
-    assert.equal((await allowed.json()).pancake.healthStatus, 'disabled');
-  });
+  } finally {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  }
 });
 
 test('Pancake admin subrouter can report an injected successful connection', async () => {
@@ -104,7 +115,13 @@ test('Pancake admin subrouter exposes validated catalog import mapping and selec
   const catalogService = {
     getCatalogStatus: async () => ({ status: 'complete' }),
     runCatalogImport: async () => ({ status: 'complete', summary: { verifiedCount: 2 } }),
-    saveReferenceSelection: async ({ selection }) => { calls.push(selection); return selection; }
+    saveReferenceSelection: async ({ selection }) => { calls.push(selection); return selection; },
+    getInventoryStatus: async () => ({ status: 'complete', summary: { updatedCount: 3 } }),
+    runInventoryReconciliation: async () => ({ status: 'complete', summary: { checkedCount: 4, updatedCount: 3 } })
+  };
+  const orderService = {
+    getOrderExportStatus: async () => ({ status: 'ready', summary: { queuedCount: 1 }, recent: [] }),
+    runOrderShadowBuild: async () => ({ status: 'complete', summary: { checkedCount: 1, builtCount: 1, blockedCount: 0, failedCount: 0 } })
   };
   const catalogRepository = {
     listMappings: async (filters) => ({ items: [], ...filters }),
@@ -115,13 +132,20 @@ test('Pancake admin subrouter exposes validated catalog import mapping and selec
   app.use(createAdminPancakeRouter({
     config: { mode: 'read_only', apiKeyConfigured: true, apiBaseUrl: 'https://pos.pages.fm/api/v1', apiKey: 'secret' },
     repository: { getConnectionStatus: async () => null, recordConnectionCheck: async () => {} },
-    client: { listShops: async () => ({ shops: [] }) }, catalogService, catalogRepository
+    client: { listShops: async () => ({ shops: [] }) }, catalogService, catalogRepository, orderService
   }));
   app.use((error, _req, res, _next) => res.status(error.status || 500).json({ error: error.message }));
   await listen(app, async (port) => {
     const base = `http://127.0.0.1:${port}`;
     assert.equal((await fetch(`${base}/catalog/status`)).status, 200);
     assert.equal((await fetch(`${base}/catalog/import`, { method: 'POST' })).status, 200);
+    assert.equal((await fetch(`${base}/inventory/status`)).status, 200);
+    const inventory = await (await fetch(`${base}/inventory/reconcile`, { method: 'POST' })).json();
+    assert.deepEqual(inventory.inventory.summary, { checkedCount: 4, updatedCount: 3 });
+    const orders = await (await fetch(`${base}/orders/status`)).json();
+    assert.deepEqual(orders.orders.summary, { queuedCount: 1 });
+    const shadow = await (await fetch(`${base}/orders/shadow-build`, { method: 'POST' })).json();
+    assert.deepEqual(shadow.orders.summary, { checkedCount: 1, builtCount: 1, blockedCount: 0, failedCount: 0 });
     const mappings = await (await fetch(`${base}/catalog/mappings?page=2&pageSize=25&conflictOnly=true&search=SKU`)).json();
     assert.deepEqual(mappings.mappings, { items: [], page: 2, pageSize: 25, conflictOnly: true, search: 'SKU' });
     assert.equal((await fetch(`${base}/catalog/mappings?page=0`)).status, 400);

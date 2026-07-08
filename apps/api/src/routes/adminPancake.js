@@ -4,6 +4,10 @@ const { createPancakeClient } = require('../integrations/pancake/pancakeClient')
 const repositoryDefault = require('../integrations/pancake/pancakeConnectionRepository');
 const catalogRepositoryDefault = require('../integrations/pancake/pancakeCatalogRepository');
 const catalogServiceDefault = require('../integrations/pancake/pancakeCatalogService');
+const inventoryRepositoryDefault = require('../integrations/pancake/pancakeInventoryRepository');
+const inventoryServiceDefault = require('../integrations/pancake/pancakeInventoryService');
+const orderExportRepositoryDefault = require('../integrations/pancake/pancakeOrderExportRepository');
+const orderExportServiceDefault = require('../integrations/pancake/pancakeOrderExportService');
 const {
   getPancakeConnectionStatus,
   testPancakeConnection
@@ -16,6 +20,10 @@ function createAdminPancakeRouter(dependencies = {}) {
   const client = dependencies.client || createPancakeClient(config);
   const catalogRepository = dependencies.catalogRepository || catalogRepositoryDefault;
   const catalogService = dependencies.catalogService || catalogServiceDefault;
+  const inventoryRepository = dependencies.inventoryRepository || inventoryRepositoryDefault;
+  const inventoryService = dependencies.inventoryService || dependencies.catalogService || inventoryServiceDefault;
+  const orderRepository = dependencies.orderRepository || orderExportRepositoryDefault;
+  const orderService = dependencies.orderService || orderExportServiceDefault;
 
   router.get('/status', async (_req, res, next) => {
     try {
@@ -45,6 +53,32 @@ function createAdminPancakeRouter(dependencies = {}) {
     try {
       const catalog = await catalogService.runCatalogImport({ config, client, repository: catalogRepository });
       return res.status(catalog.status === 'concurrent' ? 409 : 200).json({ catalog });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/inventory/status', async (_req, res, next) => {
+    try {
+      return res.json({ inventory: await inventoryService.getInventoryStatus({ repository: inventoryRepository }) });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/inventory/reconcile', async (_req, res, next) => {
+    try {
+      const inventory = await inventoryService.runInventoryReconciliation({ config, client, repository: inventoryRepository });
+      return res.status(inventory.status === 'concurrent' ? 409 : 200).json({ inventory });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/orders/status', async (_req, res, next) => {
+    try {
+      return res.json({ orders: await orderService.getOrderExportStatus({ repository: orderRepository }) });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/orders/shadow-build', async (_req, res, next) => {
+    try {
+      const orders = await orderService.runOrderShadowBuild({ config, repository: orderRepository });
+      return res.status(orders.status === 'concurrent' ? 409 : 200).json({ orders });
     } catch (error) { return next(error); }
   });
 

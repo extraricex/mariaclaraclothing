@@ -177,6 +177,7 @@ test('POST /api/checkout/quotes returns 503 when PostgreSQL is unavailable', asy
 
 test('V2 order ignores client money and forwards the idempotency key', async () => {
   let input;
+  const calls = [];
   await withOrderServer({
     getStoreSettings: async () => ({ website: { maintenanceMode: false } }),
     resolveCustomerAccountId: async () => '',
@@ -184,6 +185,7 @@ test('V2 order ignores client money and forwards the idempotency key', async () 
       input = value;
       return { orderNumber: 'MCC-1', totalCents: 72900, confirmationToken: 'secret' };
     },
+    exportPancakeOrderNow: async (orderNumber) => calls.push(['pancake', orderNumber]),
     authoritativeDependencies: () => ({})
   }, async (port) => {
     const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
@@ -200,6 +202,32 @@ test('V2 order ignores client money and forwards the idempotency key', async () 
     assert.equal(body.totalCents, 72900);
     assert.equal(body.confirmationToken, 'secret');
     assert.equal(input.idempotencyKey, 'idem-1234567890123456');
+    assert.deepEqual(calls, [['pancake', 'MCC-1']]);
+  });
+});
+
+test('V2 order still succeeds when realtime Pancake export fails', async () => {
+  await withOrderServer({
+    getStoreSettings: async () => ({ website: { maintenanceMode: false } }),
+    resolveCustomerAccountId: async () => '',
+    placeAuthoritativeCheckout: async () => ({ orderNumber: 'MCC-2', totalCents: 72900 }),
+    exportPancakeOrderNow: async () => { throw new Error('Pancake unavailable'); },
+    authoritativeDependencies: () => ({}),
+    logger: { error: () => {} }
+  }, async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': 'idem-1234567890123456' },
+      body: JSON.stringify({
+        quoteId: 'quote-1', cartSessionId: 'cart-1',
+        customer: { fullName: 'Maria Test', phone: '09171234567' },
+        paymentMethod: 'cash_on_delivery'
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(body.orderNumber, 'MCC-2');
   });
 });
 

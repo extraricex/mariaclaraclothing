@@ -12,14 +12,14 @@ const RANGES = [
 ];
 
 function Card({ children, className = '' }) {
-  return <section className={`border border-line bg-paper p-5 ${className}`}>{children}</section>;
+  return <section className={`admin-panel ${className}`}>{children}</section>;
 }
 
 function CardHeader({ title, aside }) {
   return (
     <div className="mb-4 flex items-baseline justify-between gap-3">
-      <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">{title}</h2>
-      {aside && <span className="text-xs text-clay">{aside}</span>}
+      <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--admin-text)]">{title}</h2>
+      {aside && <span className="text-xs text-[var(--admin-muted)]">{aside}</span>}
     </div>
   );
 }
@@ -41,8 +41,8 @@ function HorizontalBars({ rows }) {
     <div className="space-y-2.5">
       {rows.map(([label, value, color = '#171411']) => (
         <div key={label} className="grid grid-cols-[7.5rem_1fr_2rem] items-center gap-3 text-sm">
-          <span className="truncate text-xs text-ink-soft">{label}</span>
-          <div className="h-2.5 bg-cream">
+          <span className="truncate text-xs text-[var(--admin-muted)]">{label}</span>
+          <div className="h-2.5 rounded-full bg-[#0b1118]">
             <div className="h-2.5" style={{ width: `${(Number(value) / max) * 100}%`, background: color }} />
           </div>
           <strong className="text-right text-xs">{value}</strong>
@@ -199,27 +199,28 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="admin-page-header">
         <div>
           <p className="eyebrow">Dashboard</p>
           <h1 className="display mt-1 text-3xl">Store overview</h1>
+          <p className="mt-2 max-w-2xl text-sm text-[var(--admin-muted)]">Live store workload, sales, inventory health, and sync signals in one operations view.</p>
         </div>
-        <label className="flex items-center gap-2 text-xs uppercase tracking-[0.1em] text-clay">
+        <label className="flex items-center gap-2 text-xs uppercase tracking-[0.1em] text-[var(--admin-muted)]">
           Date range
           <select className="field !w-auto !py-2" value={range} onChange={(e) => setRange(e.target.value)}>
             {RANGES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
       </div>
-      {error && <p className="mt-4 text-sm text-accent-deep">{error}</p>}
+      {error && <p className="mt-4 text-sm text-[var(--admin-red)]">{error}</p>}
 
       {/* summary cards */}
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
         {summaryCards.map(([label, value, note, to]) => (
-          <Link key={label} to={to} className="border border-line bg-paper p-4 transition-colors hover:border-ink">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-clay">{label}</p>
+          <Link key={label} to={to} className="admin-metric-card">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--admin-muted)]">{label}</p>
             <p className="display mt-1.5 text-2xl">{value}</p>
-            <p className="mt-1 text-[11px] text-clay">{note}</p>
+            <p className="mt-1 text-[11px] text-[var(--admin-muted)]">{note}</p>
           </Link>
         ))}
       </div>
@@ -230,9 +231,9 @@ export default function Dashboard() {
           <CardHeader title="Today's work" aside="Action queue" />
           <div className="grid grid-cols-2 gap-2">
             {workItems.map(([label, count, to]) => (
-              <Link key={label} to={to} className={`flex items-center justify-between border px-3 py-2.5 text-sm transition-colors hover:border-ink ${count > 0 ? 'border-accent/50 bg-accent/5' : 'border-line'}`}>
+              <Link key={label} to={to} className={`flex items-center justify-between rounded-[var(--radius-admin)] border px-3 py-2.5 text-sm transition-colors hover:border-[var(--admin-orange)] ${count > 0 ? 'border-[var(--admin-yellow)]/50 bg-[var(--admin-yellow)]/10' : 'border-[var(--admin-line)] bg-[#0b1118]'}`}>
                 <span className="text-xs">{label}</span>
-                <strong className={count > 0 ? 'text-accent-deep' : ''}>{count}</strong>
+                <strong className={count > 0 ? 'text-[var(--admin-yellow)]' : ''}>{count}</strong>
               </Link>
             ))}
           </div>
@@ -250,8 +251,8 @@ export default function Dashboard() {
               ['Shipping fee collected', formatPeso(shippingCollected)],
               ['Free shipping orders', freeShippingOrders]
             ].map(([label, value]) => (
-              <div key={label} className="flex justify-between border-b border-line/60 pb-2 last:border-0">
-                <dt className="text-ink-soft">{label}</dt>
+              <div key={label} className="flex justify-between border-b border-[var(--admin-line)] pb-2 last:border-0">
+                <dt className="text-[var(--admin-muted)]">{label}</dt>
                 <dd className="font-semibold">{value}</dd>
               </div>
             ))}
@@ -276,16 +277,16 @@ export default function Dashboard() {
         {/* sales trend */}
         <Card>
           <CardHeader title="Sales trend" aside="Last 7 days" />
-          <p className="display text-2xl">{formatPeso(trendTotal)} <span className="text-xs font-normal normal-case text-clay">total sales</span></p>
+          <p className="display text-2xl">{formatPeso(trendTotal)} <span className="text-xs font-normal normal-case text-[var(--admin-muted)]">total sales</span></p>
           <div className="mt-4 flex h-36 items-end gap-2" role="img" aria-label="Sales trend for the last 7 days">
             {trend.map((day) => (
               <div key={day.key} className="flex flex-1 flex-col items-center gap-1">
                 <div
-                  className="w-full bg-accent transition-all"
+                  className="w-full rounded-t bg-[var(--admin-orange)] transition-all"
                   style={{ height: `${Math.max(4, (day.total / trendMax) * 100)}%`, opacity: day.total ? 1 : 0.15 }}
                   title={`${day.label}: ${formatPeso(day.total)}`}
                 />
-                <small className="text-[10px] text-clay">{day.label}</small>
+                <small className="text-[10px] text-[var(--admin-muted)]">{day.label}</small>
               </div>
             ))}
           </div>
@@ -302,7 +303,7 @@ export default function Dashboard() {
           <CardHeader title="Inventory health" aside={`${products.length} products`} />
           <div className="flex items-center gap-6">
             <svg viewBox="0 0 42 42" className="h-32 w-32 shrink-0 -rotate-90">
-              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#f3eee6" strokeWidth="7" />
+              <circle cx="21" cy="21" r="15.9" fill="none" stroke="#0b1118" strokeWidth="7" />
               {(() => {
                 let offset = 25;
                 return inventorySlices.map(([label, value, color]) => {
@@ -322,7 +323,7 @@ export default function Dashboard() {
               {inventorySlices.map(([label, value, color]) => (
                 <li key={label} className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-                  <span className="text-ink-soft">{label}</span>
+                  <span className="text-[var(--admin-muted)]">{label}</span>
                   <strong className="ml-auto">{value}</strong>
                 </li>
               ))}
@@ -340,60 +341,60 @@ export default function Dashboard() {
       <div className="mt-3 grid gap-3 xl:grid-cols-2">
         {/* recent orders */}
         <Card>
-          <CardHeader title="Recent orders" aside={<Link to="/admin/orders" className="text-accent underline">View all</Link>} />
+          <CardHeader title="Recent orders" aside={<Link to="/admin/orders" className="text-[var(--admin-orange)] underline">View all</Link>} />
           {recentOrders.length ? (
-            <ul className="divide-y divide-line/60">
+            <ul className="divide-y divide-[var(--admin-line)]">
               {recentOrders.map((order) => (
                 <li key={order.orderNumber}>
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-4 py-2.5 text-left text-sm hover:bg-cream/60"
+                    className="flex w-full items-center justify-between gap-4 py-2.5 text-left text-sm hover:bg-[var(--admin-panel-soft)]"
                     onClick={() => navigate(`/admin/orders/${encodeURIComponent(order.orderNumber)}`)}
                   >
                     <span>
                       <strong className="block">{order.orderNumber}</strong>
-                      <small className="text-clay">{order.customerName || 'Customer'}</small>
+                      <small className="text-[var(--admin-muted)]">{order.customerName || 'Customer'}</small>
                     </span>
                     <span className="text-right">
                       <strong className="block">{formatPeso(order.totalCents)}</strong>
-                      <small className="text-clay">{order.deliveryMethod || order.shippingRegionLabel || 'Standard shipping'}</small>
+                      <small className="text-[var(--admin-muted)]">{order.deliveryMethod || order.shippingRegionLabel || 'Standard shipping'}</small>
                     </span>
-                    <span className="bg-cream px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-soft">
+                    <span className="admin-status-info">
                       {order.fulfillmentStatus || 'unfulfilled'}
                     </span>
                   </button>
                 </li>
               ))}
             </ul>
-          ) : <p className="text-sm text-clay">No recent orders yet.</p>}
+          ) : <p className="text-sm text-[var(--admin-muted)]">No recent orders yet.</p>}
         </Card>
 
         {/* products needing attention */}
         <Card>
-          <CardHeader title="Products needing attention" aside={<Link to="/admin/products" className="text-accent underline">View all</Link>} />
+          <CardHeader title="Products needing attention" aside={<Link to="/admin/products" className="text-[var(--admin-orange)] underline">View all</Link>} />
           {productAlerts.length ? (
-            <ul className="divide-y divide-line/60">
+            <ul className="divide-y divide-[var(--admin-line)]">
               {productAlerts.map((product) => (
                 <li key={product.slug}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-4 py-2.5 text-left text-sm hover:bg-cream/60"
+                    className="flex w-full items-center gap-4 py-2.5 text-left text-sm hover:bg-[var(--admin-panel-soft)]"
                     onClick={() => navigate(`/admin/products/${encodeURIComponent(product.slug)}`)}
                   >
                     <span className="min-w-0 flex-1">
                       <strong className="block">{product.name}</strong>
-                      <small className="text-clay">{product.category || product.collections?.[0] || 'Uncategorized'}</small>
+                      <small className="text-[var(--admin-muted)]">{product.category || product.collections?.[0] || 'Uncategorized'}</small>
                     </span>
                     <span className="w-28 shrink-0 text-right">
                       <strong className="block">{Number(product.inventoryQuantity || 0)} in stock</strong>
-                      <small className="text-clay">{product.status || 'draft'}</small>
+                      <small className="text-[var(--admin-muted)]">{product.status || 'draft'}</small>
                     </span>
-                    <span className={`w-28 shrink-0 text-center px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                    <span className={`w-28 shrink-0 justify-center ${
                       product.stockStatus === 'sold_out' || Number(product.inventoryQuantity || 0) <= 0
-                        ? 'bg-[#c01818]/10 text-[#c01818]'
+                        ? 'admin-status-bad'
                         : product.stockStatus === 'low_stock'
-                          ? 'bg-[#b8860b]/10 text-[#8a6508]'
-                          : 'bg-cream text-ink-soft'
+                          ? 'admin-status-warn'
+                          : 'admin-status-info'
                     }`}>
                       {product.stockStatus || product.status || 'review'}
                     </span>
@@ -401,7 +402,7 @@ export default function Dashboard() {
                 </li>
               ))}
             </ul>
-          ) : <p className="text-sm text-clay">No product alerts right now.</p>}
+          ) : <p className="text-sm text-[var(--admin-muted)]">No product alerts right now.</p>}
         </Card>
       </div>
 
@@ -409,25 +410,27 @@ export default function Dashboard() {
       <Card className="mt-3">
         <CardHeader title="Top products by quantity sold" aside="From recent orders" />
         {topProducts.length ? (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-[0.1em] text-clay">
-                <th className="pb-2 font-semibold">Product</th>
-                <th className="pb-2 text-right font-semibold">Qty</th>
-                <th className="pb-2 text-right font-semibold">Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topProducts.map((product) => (
-                <tr key={product.name} className="border-t border-line/60">
-                  <td className="py-2">{product.name}</td>
-                  <td className="py-2 text-right">{product.quantity}</td>
-                  <td className="py-2 text-right font-semibold">{formatPeso(product.revenueCents)}</td>
+          <div className="admin-table-shell">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-[0.1em] text-[var(--admin-muted)]">
+                  <th className="p-3 font-semibold">Product</th>
+                  <th className="p-3 text-right font-semibold">Qty</th>
+                  <th className="p-3 text-right font-semibold">Revenue</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : <p className="text-sm text-clay">No completed orders yet.</p>}
+              </thead>
+              <tbody>
+                {topProducts.map((product) => (
+                  <tr key={product.name} className="border-t border-[var(--admin-line)]">
+                    <td className="p-3">{product.name}</td>
+                    <td className="p-3 text-right">{product.quantity}</td>
+                    <td className="p-3 text-right font-semibold">{formatPeso(product.revenueCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="text-sm text-[var(--admin-muted)]">No completed orders yet.</p>}
       </Card>
     </div>
   );

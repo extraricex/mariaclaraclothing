@@ -11,6 +11,18 @@
   --color-accent: #202020;
   --color-accent-deep: #202020;
   --radius-admin: 6px;
+  --admin-bg: #0b0f14;
+  --admin-sidebar: #070a0f;
+  --admin-panel: #111820;
+  --admin-panel-soft: #151d27;
+  --admin-line: #263241;
+  --admin-muted: #8d99a6;
+  --admin-text: #e8edf3;
+  --admin-orange: #ff9830;
+  --admin-blue: #5794f2;
+  --admin-green: #56a64b;
+  --admin-yellow: #f2cc0c;
+  --admin-red: #e02f44;
 
   --font-display: "Clash Display", "Archivo Black", sans-serif;
   --font-body: "Switzer", "Helvetica Neue", sans-serif;
@@ -220,17 +232,190 @@
     @apply w-full rounded-[var(--radius-admin)] border border-line bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors placeholder:text-clay focus:border-ink disabled:bg-cream disabled:text-clay;
   }
   .admin-shell {
-    @apply flex min-h-screen overflow-x-hidden bg-cream;
+    @apply flex min-h-screen overflow-x-hidden;
+    background: var(--admin-bg);
+    color: var(--admin-text);
   }
   .admin-main {
     @apply min-w-0 flex-1 overflow-x-hidden;
+    background:
+      linear-gradient(180deg, rgba(87, 148, 242, 0.08), transparent 22rem),
+      var(--admin-bg);
+  }
+  .admin-shell .text-accent {
+    color: var(--admin-orange);
   }
   .admin-mobile-nav {
-    @apply flex items-center gap-3 overflow-x-auto whitespace-nowrap border-b border-line bg-paper px-4 py-3 lg:hidden;
+    @apply flex items-center gap-3 overflow-x-auto whitespace-nowrap border-b px-4 py-3 lg:hidden;
+    border-color: var(--admin-line);
+    background: var(--admin-sidebar);
     scrollbar-width: thin;
   }
   .admin-mobile-nav a {
     @apply rounded-[var(--radius-admin)] px-2.5 py-2;
+  }
+  .admin-topbar {
+    @apply sticky top-0 z-20 hidden items-center justify-between gap-4 border-b px-5 py-3 lg:flex;
+    border-color: var(--admin-line);
+    background: color-mix(in srgb, var(--admin-bg) 92%, transparent);
+    backdrop-filter: blur(16px);
+  }
+  .admin-brand-mark {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-black uppercase tracking-[0.08em];
+    border: 2px solid var(--admin-text);
+    color: var(--admin-text);
+  }
+  .admin-page-header {
+    @apply grid grid-cols-1 gap-4 rounded-[var(--radius-admin)] border p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end;
+    border-color: var(--admin-line);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--admin-panel-soft) 92%, var(--admin-orange)), var(--admin-panel));
+    color: var(--admin-text);
+  }
+  .admin-page-header .eyebrow,
+  .admin-panel .eyebrow,
+  .admin-metric-card .eyebrow {
+    color: var(--admin-orange);
+  }
+  .admin-panel {
+    @apply rounded-[var(--radius-admin)] border p-5 sm:p-6;
+    border-color: var(--admin-line);
+    background: var(--admin-panel);
+    color: var(--admin-text);
+  }
+  .admin-metric-card {
+    @apply min-w-0 rounded-[var(--radius-admin)] border p-4 transition-colors;
+    border-color: var(--admin-line);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--admin-panel-soft) 88%, var(--admin-blue)), var(--admin-panel));
+    color: var(--admin-text);
+  }
+  .admin-metric-card:hover,
+  .admin-panel:hover {
+    border-color: color-mix(in srgb, var(--admin-orange) 56%, var(--admin-line));
+  }
+  .admin-table-shell {
+    @apply max-w-full overflow-x-auto rounded-[var(--radius-admin)] border;
+    border-color: var(--admin-line);
+    background: var(--admin-panel);
+  }
+  .admin-table-shell table {
+    color: var(--admin-text);
+  }
+  .admin-table-shell thead tr,
+  .admin-table-shell .table-head {
+    background: #0b1118;
+    color: var(--admin-muted);
+  }
+  .admin-table-shell tbody tr:hover {
+    background: color-mix(in srgb, var(--admin-blue) 12%, transparent);
+  }
+  .admin-status-good,
+  .admin-status-warn,
+  .admin-status-bad,
+  .admin-status-info {
+    @apply inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em];
+  }
+  .admin-status-good {
+    border-color: color-mix(in srgb, var(--admin-green) 45%, transparent);
+    background: color-mix(in srgb, var(--admin-green) 18%, transparent);
+    color: #d9f4d3;
+  }
+  .admin-status-warn {
+    border-color: color-mix(in srgb, var(--admin-yellow) 48%, transparent);
+    background: color-mix(in srgb, var(--admin-yellow) 18%, transparent);
+    color: #ffeaa2;
+  }
+  .admin-status-bad {
+    border-color: color-mix(in srgb, var(--admin-red) 48%, transparent);
+    background: color-mix(in srgb, var(--admin-red) 18%, transparent);
+    color: #ffd8de;
+  }
+  .admin-status-info {
+    border-color: color-mix(in srgb, var(--admin-blue) 48%, transparent);
+    background: color-mix(in srgb, var(--admin-blue) 18%, transparent);
+    color: #d9e8ff;
+  }
+  .admin-main .field,
+  .admin-main .input {
+    border-color: var(--admin-line);
+    background: #0b1118;
+    color: var(--admin-text);
+  }
+  .admin-main .field::placeholder,
+  .admin-main .input::placeholder {
+    color: var(--admin-muted);
+  }
+  .admin-main .btn-ghost,
+  .admin-main .btn-secondary,
+  .admin-main .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-[var(--radius-admin)] px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.12em] transition-colors duration-200 disabled:cursor-not-allowed;
+    border: 1px solid var(--admin-line);
+    background: #0b1118;
+    color: var(--admin-text);
+  }
+  .admin-main .btn-ghost:hover,
+  .admin-main .btn-secondary:hover,
+  .admin-main .btn-outline:hover {
+    border-color: var(--admin-orange);
+    color: var(--admin-orange);
+  }
+  .admin-main .btn-ghost:disabled,
+  .admin-main .btn-secondary:disabled,
+  .admin-main .btn-outline:disabled {
+    border-color: var(--admin-line);
+    background: color-mix(in srgb, var(--admin-panel) 80%, transparent);
+    color: var(--admin-muted);
+  }
+  .admin-main {
+    --legacy-admin-surface: var(--admin-panel);
+    --legacy-admin-surface-strong: var(--admin-panel-soft);
+  }
+  .admin-main .bg-paper,
+  .admin-main .bg-white,
+  .admin-main .bg-cream {
+    background-color: var(--legacy-admin-surface) !important;
+    color: var(--admin-text);
+  }
+  .admin-main .bg-cream\/60,
+  .admin-main .bg-line,
+  .admin-main .bg-line\/40,
+  .admin-main .bg-line\/60,
+  .admin-main .bg-accent\/5,
+  .admin-main .bg-accent\/10,
+  .admin-main .bg-accent\/15 {
+    background-color: var(--legacy-admin-surface-strong) !important;
+  }
+  .admin-main .hover\:bg-cream\/60:hover,
+  .admin-main .hover\:bg-line\/40:hover,
+  .admin-main .hover\:bg-line\/60:hover {
+    background-color: color-mix(in srgb, var(--admin-blue) 12%, transparent) !important;
+  }
+  .admin-main .border-line,
+  .admin-main .border-line\/60,
+  .admin-main .border-accent\/40,
+  .admin-main .border-accent\/50 {
+    border-color: var(--admin-line) !important;
+  }
+  .admin-main .text-ink,
+  .admin-main .text-ink-soft,
+  .admin-main .text-accent-deep {
+    color: var(--admin-text) !important;
+  }
+  .admin-main .text-clay {
+    color: var(--admin-muted) !important;
+  }
+  .admin-main .text-accent {
+    color: var(--admin-orange) !important;
+  }
+  .admin-main .divide-line\/60 > :not([hidden]) ~ :not([hidden]),
+  .admin-main .divide-line > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--admin-line) !important;
+  }
+  .admin-main table,
+  .admin-main tbody,
+  .admin-main tr,
+  .admin-main td,
+  .admin-main th {
+    border-color: var(--admin-line);
   }
   .table-scroll {
     max-width: 100%;
@@ -241,6 +426,23 @@
   .product-photo-blend {
     mix-blend-mode: multiply;
   }
+  .admin-main img {
+    background:
+      linear-gradient(45deg, rgba(38, 50, 65, 0.18) 25%, transparent 25% 75%, rgba(38, 50, 65, 0.18) 75%),
+      linear-gradient(45deg, rgba(38, 50, 65, 0.18) 25%, transparent 25% 75%, rgba(38, 50, 65, 0.18) 75%),
+      #f4f1ea;
+    background-position: 0 0, 8px 8px, 0 0;
+    background-size: 16px 16px, 16px 16px, auto;
+    border-color: var(--admin-line);
+  }
+  .admin-main .product-photo-blend,
+  .admin-main :is(img.product-photo-blend) {
+    mix-blend-mode: normal;
+    background:
+      linear-gradient(45deg, rgba(38, 50, 65, 0.18) 25%, transparent 25% 75%, rgba(38, 50, 65, 0.18) 75%),
+      linear-gradient(45deg, rgba(38, 50, 65, 0.18) 25%, transparent 25% 75%, rgba(38, 50, 65, 0.18) 75%),
+      #f4f1ea;
+  }
   .product-view-tabs {
     @apply flex gap-1 overflow-x-auto;
     scrollbar-width: thin;
@@ -250,6 +452,19 @@
   }
   .product-search-field {
     @apply flex min-h-12 w-full items-center gap-3 border border-line bg-white px-4 text-sm text-ink transition-colors focus-within:border-ink focus-within:shadow-sm;
+  }
+  .admin-main .product-search-field {
+    border-color: var(--admin-line) !important;
+    background: #0b1118 !important;
+    color: var(--admin-text) !important;
+  }
+  .admin-main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+    border-color: var(--admin-line);
+    background-color: #0b1118;
+    color: var(--admin-text);
+  }
+  .admin-main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea)::placeholder {
+    color: var(--admin-muted);
   }
   .product-editor-shell {
     @apply mx-auto w-full max-w-[1380px];

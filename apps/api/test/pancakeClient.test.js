@@ -24,6 +24,28 @@ test('listShops calls the official endpoint with the API key', async () => {
   assert.equal(calls[0].options.headers.Accept, 'application/json');
 });
 
+test('createOrder posts JSON to the official create-order endpoint and extracts the Pancake ID', async () => {
+  const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
+  const calls = [];
+  const client = createPancakeClient(CONFIG, async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true, data: { id: 987654 } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  });
+
+  const result = await client.createOrder('123', { custom_id: 'MCC-1001', items: [{ variation_id: 'pv-1', quantity: 1 }] });
+
+  assert.deepEqual(result, { pancakeOrderId: '987654', body: { success: true, data: { id: 987654 } } });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://pos.pages.fm/api/v1/shops/123/orders?api_key=secret+key%2Fvalue');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.equal(calls[0].options.headers.Accept, 'application/json');
+  assert.equal(calls[0].options.headers['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { custom_id: 'MCC-1001', items: [{ variation_id: 'pv-1', quantity: 1 }] });
+});
+
 test('client errors never expose credentials or provider response bodies', async () => {
   const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
   const client = createPancakeClient(CONFIG, async () => new Response(

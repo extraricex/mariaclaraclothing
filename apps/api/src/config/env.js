@@ -69,7 +69,7 @@ function pancakeConfig(source = process.env) {
   if (appEnv === 'production' && apiBaseUrl !== 'https://pos.pages.fm/api/v1') {
     throw new Error('PANCAKE_API_BASE_URL must use the official Pancake API host in production');
   }
-  const timeout = Number(source.PANCAKE_REQUEST_TIMEOUT_MS || 8000);
+  const timeout = Number(source.PANCAKE_REQUEST_TIMEOUT_MS || 20000);
   const apiKey = String(source.PANCAKE_API_KEY || '');
   const catalogInteger = (name, fallback, maximum) => {
     const raw = source[name];
@@ -79,6 +79,23 @@ function pancakeConfig(source = process.env) {
     }
     return value;
   };
+  const autoSyncBoolean = (name, fallback) => {
+    const raw = source[name];
+    if (raw === undefined || raw === '') return fallback;
+    const value = String(raw).trim().toLowerCase();
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    throw new Error(`${name} Pancake auto sync value must be true or false`);
+  };
+  const autoSyncInteger = (name, fallback, minimum, maximum) => {
+    const raw = source[name];
+    const value = Number(raw === undefined || raw === '' ? fallback : raw);
+    if (!Number.isInteger(value) || value < minimum || value > maximum) {
+      throw new Error(`${name} Pancake auto sync value must be an integer from ${minimum} to ${maximum}`);
+    }
+    return value;
+  };
+  const autoSyncDefault = mode === 'read_only' || mode === 'shadow' || mode === 'live';
   return {
     mode,
     configured: Boolean(apiKey.trim() && String(source.PANCAKE_SHOP_ID || '').trim()),
@@ -89,9 +106,12 @@ function pancakeConfig(source = process.env) {
     warehouseId: String(source.PANCAKE_WAREHOUSE_ID || '').trim(),
     orderSourceId: String(source.PANCAKE_ORDER_SOURCE_ID || '').trim(),
     webhookSecret: String(source.PANCAKE_WEBHOOK_SECRET || ''),
-    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 8000,
+    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 20000,
     catalogPageSize: catalogInteger('PANCAKE_CATALOG_PAGE_SIZE', 100, 100),
-    catalogMaxPages: catalogInteger('PANCAKE_CATALOG_MAX_PAGES', 100, 500)
+    catalogMaxPages: catalogInteger('PANCAKE_CATALOG_MAX_PAGES', 100, 500),
+    autoSyncEnabled: autoSyncBoolean('PANCAKE_AUTO_SYNC_ENABLED', autoSyncDefault),
+    autoSyncIntervalMs: autoSyncInteger('PANCAKE_AUTO_SYNC_INTERVAL_MS', 10 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000),
+    autoSyncStartupDelayMs: autoSyncInteger('PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS', 15 * 1000, 0, 5 * 60 * 1000)
   };
 }
 

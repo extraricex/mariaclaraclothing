@@ -18,7 +18,7 @@ class PancakeApiError extends Error {
 }
 
 function createPancakeClient(config, fetchImpl = fetch) {
-  async function request(pathname, query = {}) {
+  async function request(pathname, query = {}, options = {}) {
     const url = new URL(`${config.apiBaseUrl}${pathname}`);
     url.searchParams.set('api_key', config.apiKey);
     Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, String(value)));
@@ -27,8 +27,9 @@ function createPancakeClient(config, fetchImpl = fetch) {
     let response;
     try {
       response = await fetchImpl(url.toString(), {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
+        method: options.method || 'GET',
+        headers: { Accept: 'application/json', ...(options.headers || {}) },
+        body: options.body,
         signal: controller.signal
       });
     } catch (error) {
@@ -95,7 +96,21 @@ function createPancakeClient(config, fetchImpl = fetch) {
     return body;
   }
 
+  async function createOrder(shopId, payload) {
+    const body = await request(shopPath(shopId, '/orders'), {}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {})
+    });
+    const id = body.id ?? body.data?.id ?? body.order?.id;
+    if (id === undefined || id === null || String(id).trim() === '') {
+      throw new PancakeApiError('pancake_invalid_response');
+    }
+    return { pancakeOrderId: String(id), body };
+  }
+
   return {
+    createOrder,
     listShops: () => request('/shops'),
     listWarehouses: (shopId) => listData(shopId, '/warehouses'),
     listOrderSources: (shopId) => listData(shopId, '/order_source'),

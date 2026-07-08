@@ -4,8 +4,9 @@ const { hasDatabaseUrl, query, transaction } = require('../db/postgres');
 const { resolveRuntimeDataFile } = require('../db/runtimeDataFile');
 
 const DEFAULT_MOVEMENTS_FILE = path.join(__dirname, '..', '..', 'data', 'inventory-movements.json');
-const VALID_REASONS = new Set(['order_created', 'order_cancelled', 'admin_stock_correction']);
-const REASON_ORDER = ['order_created', 'order_cancelled', 'admin_stock_correction'];
+const VALID_REASONS = new Set(['order_created', 'order_cancelled', 'admin_stock_correction', 'pancake_reconcile']);
+const CORE_REASON_ORDER = ['order_created', 'order_cancelled', 'admin_stock_correction'];
+const REASON_ORDER = [...CORE_REASON_ORDER, 'pancake_reconcile'];
 const VALID_SORTS = new Set(['newest', 'oldest']);
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
 
@@ -126,7 +127,7 @@ function normalizeInventoryMovementQuery(filters = {}, { paginate = true, now = 
   const sort = String(filters.sort || 'newest').trim();
 
   if (reason && !VALID_REASONS.has(reason)) {
-    throw badRequest('reason must be order_created, order_cancelled, or admin_stock_correction');
+    throw badRequest('reason must be order_created, order_cancelled, admin_stock_correction, or pancake_reconcile');
   }
   if (!VALID_SORTS.has(sort)) {
     throw badRequest('sort must be newest or oldest');
@@ -358,7 +359,11 @@ function fillReasonBreakdown(rows) {
     movementCount: Number(row.movementCount ?? row.movement_count ?? 0),
     quantityMagnitude: Number(row.quantityMagnitude ?? row.quantity_magnitude ?? 0)
   }]));
-  return REASON_ORDER.map((reason) => byReason.get(reason) || { reason, movementCount: 0, quantityMagnitude: 0 });
+  const output = CORE_REASON_ORDER.map((reason) => byReason.get(reason) || { reason, movementCount: 0, quantityMagnitude: 0 });
+  for (const reason of REASON_ORDER) {
+    if (!CORE_REASON_ORDER.includes(reason) && byReason.has(reason)) output.push(byReason.get(reason));
+  }
+  return output;
 }
 
 function utcDateKey(date) {

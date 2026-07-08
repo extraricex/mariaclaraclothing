@@ -25,4 +25,8 @@ test('admin orders page supports date filters, summaries, richer columns, and fi
   assert.match(source, /fulfillmentStatusLabel/);
   assert.match(source, /shippingRegionLabel/);
   assert.match(source, /itemCount/);
+  assert.match(source, /admin-page-header/);
+  assert.match(source, /admin-metric-card/);
+  assert.match(source, /admin-table-shell/);
+  assert.match(source, /admin-status-/);
 });
