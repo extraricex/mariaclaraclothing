@@ -48,6 +48,28 @@ test('checkout idempotency key is stable for one quote and resets after success'
   assert.equal(getCheckoutIdempotencyKey('quote-2', storage, () => 'uuid-3'), 'uuid-3');
 });
 
+test('checkout idempotency key falls back when crypto.randomUUID is unavailable', () => {
+  const storage = memoryStorage();
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  Object.defineProperty(globalThis, 'crypto', {
+    configurable: true,
+    value: {
+      getRandomValues(bytes) {
+        for (let index = 0; index < bytes.length; index += 1) bytes[index] = index + 1;
+        return bytes;
+      }
+    }
+  });
+
+  try {
+    const key = getCheckoutIdempotencyKey('quote-no-randomuuid', storage);
+    assert.match(key, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'crypto', descriptor);
+    else delete globalThis.crypto;
+  }
+});
+
 test('order request excludes browser totals and sends quote identity', () => {
   const request = buildOrderRequest({
     cartSessionId: 'cart-1',

@@ -86,7 +86,7 @@ function defaultStoreSettings() {
       contactEmail: '',
       contactNumber: '',
       storeAddress: '',
-      messengerUrl: '',
+      messengerUrl: 'https://m.me/mariaclaraclothing',
       socialLinks: { facebook: '', instagram: '', tiktok: '' }
     },
     shipping: {
@@ -116,6 +116,16 @@ function defaultStoreSettings() {
         title: 'Maria Clara Clothing — Premium Philippine Streetwear',
         description: 'Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items.',
         imageUrl: ''
+      },
+      hero: {
+        eyebrow: 'Philippine Streetwear - Imus Cavite',
+        title: 'Premium',
+        highlight: 'Cotton',
+        subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
+        primaryButtonText: 'Shop new arrivals',
+        primaryButtonLink: '#new-arrivals',
+        secondaryButtonText: 'Freedom of Mind',
+        secondaryButtonLink: '#freedom-of-mind'
       },
       maintenanceMode: false,
       infoPages: {
@@ -202,6 +212,7 @@ function normalizeMessengerUrl(value) {
 
 function normalizeGeneral(general) {
   const value = general && typeof general === 'object' ? general : {};
+  const defaults = defaultStoreSettings().general;
   const socialLinks = value.socialLinks && typeof value.socialLinks === 'object' ? value.socialLinks : {};
   const contactEmail = String(value.contactEmail || '').trim();
   if (contactEmail && !contactEmail.includes('@')) {
@@ -212,7 +223,7 @@ function normalizeGeneral(general) {
     contactEmail,
     contactNumber: String(value.contactNumber || '').trim(),
     storeAddress: String(value.storeAddress || '').trim(),
-    messengerUrl: normalizeMessengerUrl(value.messengerUrl),
+    messengerUrl: normalizeMessengerUrl(value.messengerUrl === undefined ? defaults.messengerUrl : value.messengerUrl),
     socialLinks: {
       facebook: String(socialLinks.facebook || '').trim(),
       instagram: String(socialLinks.instagram || '').trim(),
@@ -310,6 +321,44 @@ function normalizeSeo(seo, current) {
   };
 }
 
+function normalizeHeroButtonLink(value, fallback) {
+  const input = String(value === undefined ? fallback : value).trim();
+  if (!input) return fallback;
+  if (input.startsWith('#') || input.startsWith('/')) return input;
+  let parsed;
+  try {
+    parsed = new URL(input);
+  } catch (_error) {
+    throw badRequest('Hero button links must be HTTPS, a site path, or an in-page anchor.');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw badRequest('Hero button links must be HTTPS, a site path, or an in-page anchor.');
+  }
+  return parsed.toString();
+}
+
+function normalizeHeroText(value, fallback, label, maxLength, required = true) {
+  const text = String(value === undefined ? fallback : value).trim().replace(/\s+/g, ' ');
+  if (required && !text) throw badRequest(`${label} is required.`);
+  if (text.length > maxLength) throw badRequest(`${label} must be ${maxLength} characters or fewer.`);
+  return text;
+}
+
+function normalizeHero(hero, current) {
+  const value = hero && typeof hero === 'object' ? hero : {};
+  const fallback = current || defaultStoreSettings().website.hero;
+  return {
+    eyebrow: normalizeHeroText(value.eyebrow, fallback.eyebrow, 'Hero small text', 80),
+    title: normalizeHeroText(value.title, fallback.title, 'Hero title', 48),
+    highlight: normalizeHeroText(value.highlight, fallback.highlight, 'Hero highlight text', 48),
+    subtitle: normalizeHeroText(value.subtitle, fallback.subtitle, 'Hero subtitle', 220, false),
+    primaryButtonText: normalizeHeroText(value.primaryButtonText, fallback.primaryButtonText, 'Primary hero button text', 40),
+    primaryButtonLink: normalizeHeroButtonLink(value.primaryButtonLink, fallback.primaryButtonLink),
+    secondaryButtonText: normalizeHeroText(value.secondaryButtonText, fallback.secondaryButtonText, 'Secondary hero button text', 40),
+    secondaryButtonLink: normalizeHeroButtonLink(value.secondaryButtonLink, fallback.secondaryButtonLink)
+  };
+}
+
 function normalizeInfoPages(infoPages, current) {
   const value = infoPages && typeof infoPages === 'object' ? infoPages : {};
   const unknownPage = Object.keys(value).find((key) => !WEBSITE_INFO_PAGE_KEYS.includes(key));
@@ -343,6 +392,7 @@ function normalizeWebsite(website, current = defaultStoreSettings().website) {
   return {
     ticker: value.ticker === undefined ? current.ticker : normalizeTicker(value.ticker),
     seo: value.seo === undefined ? current.seo : normalizeSeo(value.seo, current.seo),
+    hero: value.hero === undefined ? normalizeHero(current.hero, defaultStoreSettings().website.hero) : normalizeHero(value.hero, current.hero),
     maintenanceMode: value.maintenanceMode === undefined ? current.maintenanceMode : Boolean(value.maintenanceMode),
     infoPages: value.infoPages === undefined ? current.infoPages : normalizeInfoPages(value.infoPages, current.infoPages)
   };

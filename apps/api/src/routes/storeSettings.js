@@ -22,6 +22,7 @@ router.get('/', async (_req, res, next) => {
         shipping: settings.shipping,
         ticker: settings.website.ticker,
         seo: settings.website.seo,
+        hero: settings.website.hero,
         maintenanceMode: settings.website.maintenanceMode,
         infoPages: settings.website.infoPages,
         inventory: settings.inventory,

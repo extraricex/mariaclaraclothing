@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { CART_DRAWER_EVENT, cartQuantity, getCartSessionId, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
-import { createCheckoutQuote, fetchActivePromoNotification, fetchProducts, fetchSiteContent } from '../lib/api.js';
+import { createCheckoutQuote, fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { setMetaTrackingConsent, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
@@ -41,31 +41,6 @@ function Ticker({ items }) {
             ))}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function promoDismissalKey(notification) {
-  return `maria-clara-promo-notification-dismissed:${notification?.promoId || 'current'}`;
-}
-
-function PromoNotification({ notification, onClose }) {
-  if (!notification) return null;
-  return (
-    <div className="promo-notification border-b border-accent/30 bg-accent/10 text-ink">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-2.5 lg:px-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] leading-relaxed">
-          {notification.text}
-        </p>
-        <button
-          type="button"
-          className="text-action touch-target shrink-0 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep hover:text-ink"
-          aria-label="Close promo notification"
-          onClick={onClose}
-        >
-          Close
-        </button>
       </div>
     </div>
   );
@@ -129,14 +104,16 @@ function ProductRecommendation({ product, onClose, onNavigate }) {
 function OfferDock({ offer, product, offerCount, mobileOffersOpen, dockRef, onToggle, onNavigate, onCloseOffer, onCloseProduct }) {
   if (!offerCount) return null;
   return (
-    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] w-[min(15rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:w-72">
-      <div id="storefront-offer-cards" className={`${mobileOffersOpen ? 'grid' : 'hidden'} pointer-events-auto mb-2 gap-2 sm:grid`}>
-        <ProductRecommendation product={product} onClose={onCloseProduct} onNavigate={onNavigate} />
+    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] w-[min(13.5rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:w-72">
+      <div id="storefront-offer-cards" className={`${mobileOffersOpen ? 'grid' : 'hidden'} pointer-events-auto mb-2 gap-1.5 sm:grid sm:gap-2`}>
+        <div className={offer ? 'hidden sm:block' : ''}>
+          <ProductRecommendation product={product} onClose={onCloseProduct} onNavigate={onNavigate} />
+        </div>
         <FreeShippingAside offer={offer} onClose={onCloseOffer} />
       </div>
       <button
         type="button"
-        className="pointer-events-auto inline-flex h-11 items-center rounded-full bg-ink px-4 text-[10px] font-bold uppercase tracking-[0.13em] text-paper shadow-2xl sm:hidden"
+        className={`${mobileOffersOpen ? 'hidden' : 'inline-flex'} pointer-events-auto h-10 items-center rounded-full bg-ink px-3 text-[9px] font-bold uppercase tracking-[0.13em] text-paper shadow-2xl sm:hidden`}
         aria-expanded={mobileOffersOpen}
         aria-controls="storefront-offer-cards"
         onClick={onToggle}
@@ -226,7 +203,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
         {!items.length ? (
           <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
             <p className="display text-3xl">Your cart is empty</p>
-            <button type="button" className="btn-ink mt-6" onClick={onClose}>Continue shopping</button>
+            <button type="button" className="btn-ink customer-compact-button mt-6" onClick={onClose}>Continue shopping</button>
           </div>
         ) : (
           <>
@@ -281,8 +258,8 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                 <div className="flex justify-between border-t border-line pt-3 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(displayTotal)}</dd></div>
               </dl>
               <div className="mt-5 grid gap-2">
-                <Link to="/checkout" className="btn-ink text-center" onClick={checkout}>Checkout</Link>
-                <Link to="/cart" className="btn-ghost text-center" onClick={onClose}>View cart</Link>
+                <Link to="/checkout" className="btn-ink customer-compact-button text-center" onClick={checkout}>Checkout</Link>
+                <Link to="/cart" className="btn-ghost customer-compact-button text-center" onClick={onClose}>View cart</Link>
               </div>
             </div>
           </>
@@ -304,10 +281,9 @@ export default function Shell() {
   const [headerLogo, setHeaderLogo] = useState(null);
   const [footerLogo, setFooterLogo] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
-  const [promoNotification, setPromoNotification] = useState(null);
   const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
   const [recommendation, setRecommendation] = useState(null);
-  const [mobileOffersOpen, setMobileOffersOpen] = useState(false);
+  const [mobileOffersOpen, setMobileOffersOpen] = useState(true);
   const [recommendationDismissed, setRecommendationDismissed] = useState(() => {
     try {
       return window.sessionStorage.getItem(RECOMMENDATION_DISMISSED) === 'true';
@@ -371,10 +347,6 @@ export default function Shell() {
   }, []);
 
   useEffect(() => {
-    setMobileOffersOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
     if (!mobileOffersOpen) return undefined;
     function closeMobileOffers(event) {
       if (event.type === 'keydown' && event.key !== 'Escape') return;
@@ -388,28 +360,6 @@ export default function Shell() {
       document.removeEventListener('pointerdown', closeMobileOffers);
     };
   }, [mobileOffersOpen]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchActivePromoNotification()
-      .then((body) => {
-        if (cancelled) return;
-        const notification = body.notification || null;
-        if (!notification) {
-          setPromoNotification(null);
-          return;
-        }
-        if (window.sessionStorage.getItem(promoDismissalKey(notification)) === 'true') {
-          setPromoNotification(null);
-          return;
-        }
-        setPromoNotification(notification);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     applySeoTags(storeInfo?.seo);
@@ -455,13 +405,6 @@ export default function Shell() {
     </span>
   );
 
-  function closePromoNotification() {
-    if (promoNotification) {
-      window.sessionStorage.setItem(promoDismissalKey(promoNotification), 'true');
-    }
-    setPromoNotification(null);
-  }
-
   function chooseTrackingConsent(value) {
     setMetaTrackingConsent(value);
     setPrivacyDialogOpen(false);
@@ -493,19 +436,22 @@ export default function Shell() {
   return (
     <div className="flex min-h-screen flex-col">
       <Ticker items={storeInfo?.ticker || TICKER_ITEMS} />
-      <PromoNotification notification={promoNotification} onClose={closePromoNotification} />
       <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl min-w-0 items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-5 lg:gap-6 lg:px-8">
           <button
             ref={menuButtonRef}
             type="button"
-            className="text-action touch-target text-[12px] font-semibold uppercase tracking-[0.18em] lg:hidden"
+            className="touch-target inline-flex items-center justify-center text-ink transition-colors hover:text-accent lg:hidden"
             onClick={() => setMenuOpen((open) => !open)}
             aria-expanded={menuOpen}
             aria-controls="storefront-mobile-menu"
             aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
           >
-            {menuOpen ? 'Close' : 'Menu'}
+            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M4 7h16" />
+              <path d="M4 12h16" />
+              <path d="M4 17h16" />
+            </svg>
           </button>
           <Link to="/" className="flex min-w-0 shrink items-center lg:shrink-0">
             {logoMarkup}
@@ -529,7 +475,7 @@ export default function Shell() {
           <Link to="/cart" className="relative flex h-9 w-9 items-center justify-center hover:text-accent" aria-label="Cart">
             <CartIcon />
             {count > 0 && (
-              <span className="absolute -right-4 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-paper">
+              <span className="cart-count-badge absolute right-0 top-0 flex h-4 min-w-4 translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-[#d71920] px-1 text-[10px] font-bold leading-none text-white ring-2 ring-paper">
                 {count}
               </span>
             )}

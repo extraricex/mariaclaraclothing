@@ -28,7 +28,7 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   contactEmail: '',
   contactNumber: '',
   storeAddress: '',
-  messengerUrl: '',
+  messengerUrl: 'https://m.me/mariaclaraclothing',
   socialLinks: { facebook: '', instagram: '', tiktok: '' },
   shipping: {
     regions: [
@@ -52,6 +52,16 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     title: 'Maria Clara Clothing — Premium Philippine Streetwear',
     description: 'Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items.',
     imageUrl: ''
+  },
+  hero: {
+    eyebrow: 'Philippine Streetwear - Imus Cavite',
+    title: 'Premium',
+    highlight: 'Cotton',
+    subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
+    primaryButtonText: 'Shop new arrivals',
+    primaryButtonLink: '#new-arrivals',
+    secondaryButtonText: 'Freedom of Mind',
+    secondaryButtonLink: '#freedom-of-mind'
   },
   maintenanceMode: false,
   infoPages: DEFAULT_INFO_PAGES,

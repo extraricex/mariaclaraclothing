@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
+const fs = require('node:fs');
+const path = require('node:path');
 const { createCheckoutRouter } = require('../src/routes/checkout');
 const { createOrderRouter } = require('../src/routes/orders');
 const { errorHandler } = require('../src/app');
@@ -229,6 +231,14 @@ test('V2 order still succeeds when realtime Pancake export fails', async () => {
     assert.equal(response.status, 201);
     assert.equal(body.orderNumber, 'MCC-2');
   });
+});
+
+test('legacy order path queues and attempts realtime Pancake export', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'orders.js'), 'utf8');
+
+  assert.match(source, /await enqueueOrderExport\(persistedOrder\)/);
+  assert.match(source, /req\.exportPancakeOrderNow = dependencies\.exportPancakeOrderNow/);
+  assert.match(source, /await \(req\.exportPancakeOrderNow \|\| exportPancakeOrderNow\)\(completedOrder\.orderNumber\)/);
 });
 
 test('public lookup returns no PII and private confirmation requires its header token', async () => {

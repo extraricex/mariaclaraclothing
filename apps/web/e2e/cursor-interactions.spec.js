@@ -25,7 +25,15 @@ test('disabled controls keep a not-allowed cursor', async ({ page }) => {
 });
 
 test('native clickable form controls keep interaction cursors', async ({ page }) => {
-  await page.goto('/checkout');
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.removeItem('maria-clara-cart');
+    localStorage.removeItem('maria-clara-cart-session-id');
+    sessionStorage.clear();
+  });
+  await page.goto(`/product/${PRODUCT_SLUG}`);
+  await page.getByRole('button', { name: /add to cart/i }).click();
+  await page.getByRole('dialog', { name: /your cart/i }).getByRole('link', { name: /^checkout$/i }).click();
   await expect(page.locator('select').first()).toHaveCSS('cursor', 'pointer');
 
   await page.evaluate(() => {

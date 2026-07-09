@@ -196,7 +196,7 @@ export default function Orders() {
         </ul>
       )}
 
-      <div className="admin-panel mt-6 flex flex-wrap gap-3">
+      <div className="admin-panel admin-mobile-stack mt-6">
         <select className="field max-w-44" value={status} onChange={(e) => setStatus(e.target.value)}>
           {STATUS_OPTIONS.map((option) => (
             <option key={option} value={option}>{option ? humanize(option) : 'All statuses'}</option>

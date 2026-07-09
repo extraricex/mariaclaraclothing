@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchOrderConfirmation } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
+import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 
 function storedConfirmation() {
   try {
@@ -16,6 +17,7 @@ export default function ThankYou() {
   const orderNumber = params.get('order') || '';
   const [order, setOrder] = useState(null);
   const [confirmation] = useState(storedConfirmation);
+  const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
 
   useEffect(() => {
     if (orderNumber && confirmation?.orderNumber === orderNumber && confirmation.confirmationToken) {
@@ -24,6 +26,10 @@ export default function ThankYou() {
         .catch(() => {});
     }
   }, [orderNumber, confirmation]);
+
+  useEffect(() => {
+    loadStorefrontSettings().then(setSettings);
+  }, []);
 
   const summary = order;
 
@@ -59,7 +65,36 @@ export default function ThankYou() {
         )}
       </dl>
 
-      <Link to="/" className="btn-ink mt-10">Continue shopping</Link>
+      {summary.items?.length > 0 && (
+        <section className="mx-auto mt-5 max-w-md border border-line bg-white p-5 text-left">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-clay">Items ordered</h2>
+          <div className="mt-4 space-y-3">
+            {summary.items.map((item, index) => (
+              <article key={`${item.variantId || item.productName || 'item'}-${index}`} className="flex min-w-0 justify-between gap-4 border-b border-line/60 pb-3 last:border-0 last:pb-0">
+                <div className="min-w-0">
+                  <h3 className="break-words text-sm font-semibold">{item.productName || 'Product'}</h3>
+                  <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">
+                    Qty {item.quantity}{item.size ? ` · Size ${item.size}` : ''}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right text-sm">
+                  <p className="font-semibold">{formatMoney(Number(item.unitPriceCents || 0) * Number(item.quantity || 0))}</p>
+                  <p className="text-xs text-clay">{formatMoney(Number(item.unitPriceCents || 0))} each</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <Link to="/" className="btn-ink customer-compact-button">Continue shopping</Link>
+        {settings.messengerUrl && (
+          <a href={settings.messengerUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost customer-compact-button">
+            Message Us About Your Order
+          </a>
+        )}
+      </div>
     </div>
   );
 }

@@ -415,7 +415,7 @@ export default function Settings() {
   if (!settings) return <p className="text-sm text-clay">Loading settings…</p>;
 
   return (
-    <div className="max-w-3xl">
+    <div className="admin-content-shell">
       <p className="eyebrow">Settings</p>
       <h1 className="display mt-1 text-3xl">Store settings</h1>
       <p className="mt-2 text-sm text-ink-soft">

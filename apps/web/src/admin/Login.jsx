@@ -37,8 +37,8 @@ export default function Login() {
   );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink px-5">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm border border-paper/15 bg-paper p-8">
+    <div className="admin-login-shell flex items-center justify-center bg-ink px-4 py-8 sm:px-5">
+      <form onSubmit={handleSubmit} className="admin-login-card border border-paper/15 bg-paper p-6 sm:p-8">
         {brandMarkup}
         <p className="eyebrow mt-1">Admin workspace</p>
         <label className="mt-8 block text-sm font-semibold" htmlFor="admin-password">Password</label>

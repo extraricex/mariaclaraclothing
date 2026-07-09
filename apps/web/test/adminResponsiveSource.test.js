@@ -57,3 +57,30 @@ test('admin product preview photos stay visible on dark Grafana surfaces', async
   assert.match(css, /\.admin-main \.product-photo-blend[\s\S]+background/);
   assert.match(css, /\.admin-main :is\(img\.product-photo-blend\)/);
 });
+
+test('admin dashboard, login, and list pages expose mobile-first responsive helpers', async () => {
+  const [css, login, dashboard, orders, products, customers, discounts, banners, settings] = await Promise.all([
+    readFile(path.join(import.meta.dirname, '..', 'src', 'index.css'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Login.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Dashboard.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Orders.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Products.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Customers.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Discounts.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Banners.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'Settings.jsx'), 'utf8')
+  ]);
+
+  assert.match(css, /\.admin-mobile-stack/);
+  assert.match(css, /@media \(max-width:\s*639px\)[\s\S]*\.admin-main main/);
+  assert.match(css, /\.admin-main table[\s\S]*white-space:\s*nowrap/);
+  assert.match(login, /admin-login-shell/);
+  assert.match(login, /admin-login-card/);
+  assert.match(dashboard, /admin-dashboard-grid/);
+  assert.match(orders, /admin-mobile-stack/);
+  assert.match(products, /admin-mobile-stack/);
+  assert.match(customers, /admin-table-shell/);
+  assert.match(discounts, /admin-table-shell/);
+  assert.match(banners, /admin-content-shell/);
+  assert.match(settings, /admin-content-shell/);
+});

@@ -198,7 +198,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div>
+    <div className="admin-dashboard-grid">
       <div className="admin-page-header">
         <div>
           <p className="eyebrow">Dashboard</p>

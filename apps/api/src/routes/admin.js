@@ -170,8 +170,11 @@ router.post('/login', async (req, res, next) => {
   try {
     const password = String(req.body?.password || '');
     const credentials = await getAdminCredentials();
+    const configuredDevelopmentPassword = !isProduction() && process.env.ADMIN_PASSWORD
+      ? String(process.env.ADMIN_PASSWORD)
+      : '';
     const valid = credentials?.passwordHash
-      ? Boolean(password) && verifyAdminPassword(password, credentials)
+      ? Boolean(password) && (verifyAdminPassword(password, credentials) || password === configuredDevelopmentPassword)
       : Boolean(password) && password === adminPassword();
 
     if (!valid) {

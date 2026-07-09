@@ -21,7 +21,8 @@ test('text actions reveal an underline without layout movement', async () => {
 test('storefront navigation and footer opt into text actions', async () => {
   const shell = await source('src/components/Shell.jsx');
 
-  assert.match(shell, /className="text-action touch-target text-\[12px\][^"]*lg:hidden"/);
+  assert.match(shell, /className="touch-target inline-flex items-center justify-center[^"]*lg:hidden"/);
+  assert.match(shell, /<svg[^>]*viewBox="0 0 24 24"[^>]*aria-hidden="true"[\s\S]*M4 7h16[\s\S]*M4 12h16[\s\S]*M4 17h16/);
   assert.match(shell, /transition-colors text-action hover:text-accent/);
   assert.match(shell, /text-action hidden text-\[12px\]/);
   assert.match(shell, /className="text-action border-b border-line px-5 py-4/);

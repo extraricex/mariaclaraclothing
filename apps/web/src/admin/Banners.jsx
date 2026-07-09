@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
 import TickerEditor from './TickerEditor.jsx';
 import InfoPagesEditor from './InfoPagesEditor.jsx';
+import HeroTextEditor from './HeroTextEditor.jsx';
 
 function notifySiteContentChanged() {
   window.dispatchEvent(new Event('maria-clara-site-content-changed'));
@@ -117,7 +118,7 @@ export default function Banners() {
   }
 
   return (
-    <div className="max-w-3xl">
+    <div className="admin-content-shell">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Website content</p>
@@ -201,6 +202,7 @@ export default function Banners() {
         {!banners.length && <p className="border border-line bg-paper p-6 text-sm text-clay">No banners yet. Upload one to get started.</p>}
       </div>
 
+      {website && <HeroTextEditor initial={website.hero} />}
       {website && <TickerEditor initial={website.ticker} />}
       {website && <InfoPagesEditor initial={website.infoPages} />}
     </div>

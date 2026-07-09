@@ -60,7 +60,7 @@ export default function Customers() {
         onChange={(e) => setQuery(e.target.value)}
       />
 
-      <div className="mt-6 overflow-x-auto border border-line bg-paper">
+      <div className="admin-table-shell mt-6">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-clay">

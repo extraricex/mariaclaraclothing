@@ -19,7 +19,8 @@ test('Pancake admin page is simplified, responsive, and can test the safe connec
   assert.match(page, /\/api\/admin\/integrations\/pancake\/test-connection/);
   assert.match(page, /Test connection/);
   assert.match(page, /Live mode sends new website orders to Pancake immediately/);
-  assert.match(page, /Run sync now/);
+  assert.match(page, /Background polling keeps catalog and inventory aligned automatically/);
+  assert.match(page, /Refresh status/);
   assert.match(page, /Advanced mapping and reference settings/);
   assert.match(page, /admin-page-header/);
   assert.match(page, /admin-metric-card/);
@@ -49,10 +50,11 @@ test('Pancake admin page exposes inventory reconciliation controls', async () =>
   for (const endpoint of ['/inventory/status', '/inventory/reconcile']) {
     assert.match(page, new RegExp(endpoint.replaceAll('/', '\\/')));
   }
-  for (const label of ['Run sync now', 'Catalog & inventory', 'Inventory checked', 'Stock updates']) {
+  for (const label of ['Auto sync', 'Catalog & inventory', 'Inventory checked', 'Stock updates']) {
     assert.match(page, new RegExp(label, 'i'));
   }
   assert.match(page, /adminSend\('POST', `\$\{base\}\/inventory\/reconcile`/);
+  assert.doesNotMatch(page, />Run sync now</);
   assert.doesNotMatch(page, /create Pancake order now|PANCAKE_API_KEY|PANCAKE_WEBHOOK_SECRET|type="password"/i);
 });
 

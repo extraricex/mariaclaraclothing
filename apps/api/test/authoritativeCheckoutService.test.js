@@ -26,6 +26,7 @@ function storedResponse() {
 
 function createDependencies({ idempotency, quoteOverrides, refreshOverrides } = {}) {
   const calls = [];
+  const refreshInputs = [];
   const quote = {
     id: 'quote-1',
     cartSessionId: 'cart-1',
@@ -61,6 +62,8 @@ function createDependencies({ idempotency, quoteOverrides, refreshOverrides } = 
   };
   const dependencies = {
     calls,
+    quote,
+    refreshInputs,
     now: () => new Date('2026-06-28T04:00:00.000Z'),
     confirmationSecret: 'x'.repeat(32),
     idempotencyTtlMs: 86400000,
@@ -73,7 +76,11 @@ function createDependencies({ idempotency, quoteOverrides, refreshOverrides } = 
       return idempotency || { status: 'in_progress', requestHash: 'same' };
     },
     loadQuote: async () => { calls.push('loadQuote'); return quote; },
-    refreshQuote: async () => { calls.push('refreshQuote'); return { ...quote.snapshot, ...refreshOverrides }; },
+    refreshQuote: async (input) => {
+      refreshInputs.push(input);
+      calls.push('refreshQuote');
+      return { ...quote.snapshot, ...refreshOverrides };
+    },
     deductStock: async () => calls.push('deductStock'),
     saveOrder: async () => calls.push('saveOrder'),
     appendMovements: async () => calls.push('appendMovements'),
@@ -144,6 +151,27 @@ test('successful checkout performs every commerce write in one transaction', asy
   assert.equal(result.confirmationToken, 'derived-confirmation-token');
   assert.equal(result.totalCents, 72900);
   assert.equal(result.status, 'confirmed');
+});
+
+test('automatic promo checkout refreshes without replaying it as a discount code', async () => {
+  const deps = createDependencies();
+  deps.quote.snapshot.discountCode = 'BUY2FREESHIP';
+  deps.quote.snapshot.discountSnapshot = {
+    promoId: 'BUY2FREESHIP',
+    code: '',
+    method: 'automatic',
+    name: 'Buy 2 Free Shipping',
+    freeShippingApplied: true
+  };
+  deps.quote.snapshot.freeShippingUnlocked = true;
+  deps.quote.snapshot.shippingFeeCents = 0;
+  deps.quote.snapshot.totalCents = 64900;
+
+  const result = await placeAuthoritativeCheckout(requestFixture(), deps);
+
+  assert.equal(deps.refreshInputs[0].discountCode, '');
+  assert.equal(deps.calls.includes('claimPromo'), false);
+  assert.equal(result.freeShippingUnlocked, true);
 });
 
 test('idempotency repository hashes keys, locks claims, and stores token-free responses', async () => {

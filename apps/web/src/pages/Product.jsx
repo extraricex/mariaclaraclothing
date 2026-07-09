@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart, openCartDrawer } from '../lib/cart.js';
@@ -21,6 +21,7 @@ export default function Product() {
   const [added, setAdded] = useState(false);
   const [activeDetailTab, setActiveDetailTab] = useState(0);
   const [recommendations, setRecommendations] = useState([]);
+  const imageTouchStartX = useRef(null);
 
   useEffect(() => {
     setProduct(null);
@@ -116,6 +117,20 @@ export default function Product() {
     setActiveImage((index) => (index + 1) % product.images.length);
   }
 
+  function handleImageTouchStart(event) {
+    imageTouchStartX.current = event.touches[0]?.clientX ?? null;
+  }
+
+  function handleImageTouchEnd(event) {
+    if (imageTouchStartX.current === null || product.images.length < 2) return;
+    const endX = event.changedTouches[0]?.clientX ?? imageTouchStartX.current;
+    const delta = endX - imageTouchStartX.current;
+    imageTouchStartX.current = null;
+    if (Math.abs(delta) < 40) return;
+    if (delta < 0) showNextImage();
+    else showPreviousImage();
+  }
+
   function handleAdd() {
     if (!variant || soldOut) return;
     const cartItem = {
@@ -144,7 +159,11 @@ export default function Product() {
       </p>
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
         <div className="min-w-0">
-          <div className="media-zoom relative aspect-[4/5] overflow-hidden bg-transparent">
+          <div
+            className="media-zoom relative aspect-[4/5] max-h-[72svh] overflow-hidden bg-transparent"
+            onTouchStart={handleImageTouchStart}
+            onTouchEnd={handleImageTouchEnd}
+          >
             {image && (
               <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" />
             )}
@@ -154,7 +173,7 @@ export default function Product() {
                   type="button"
                   aria-label="Previous product image"
                   onClick={showPreviousImage}
-                  className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-2xl leading-none shadow-sm transition-colors hover:bg-ink hover:text-paper"
+                  className="absolute left-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-xl leading-none text-ink/70 transition-colors hover:text-ink sm:left-3 sm:h-9 sm:w-9"
                 >
                   ‹
                 </button>
@@ -162,7 +181,7 @@ export default function Product() {
                   type="button"
                   aria-label="Next product image"
                   onClick={showNextImage}
-                  className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-2xl leading-none shadow-sm transition-colors hover:bg-ink hover:text-paper"
+                  className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-xl leading-none text-ink/70 transition-colors hover:text-ink sm:right-3 sm:h-9 sm:w-9"
                 >
                   ›
                 </button>
@@ -192,9 +211,9 @@ export default function Product() {
 
         <div className="min-w-0">
           <div className="customer-buy-panel lg:sticky lg:top-24">
-            <h1 className="display text-3xl leading-tight sm:text-4xl">{product.name}</h1>
-          <div className="mt-4 flex items-baseline gap-3">
-            <p className={`text-2xl font-semibold ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
+            <h1 className="display text-2xl leading-tight sm:text-4xl">{product.name}</h1>
+          <div className="mt-3 flex items-baseline gap-3 sm:mt-4">
+            <p className={`text-xl font-semibold sm:text-2xl ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>
 
@@ -202,7 +221,7 @@ export default function Product() {
             <CollectionCountdown collectionName={countdown.collectionName} config={countdown.config} />
           )}
 
-          <div className="mt-8">
+          <div className="mt-6 sm:mt-8">
             <p className="eyebrow">Size</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {product.variants.map((candidate) => {
@@ -214,7 +233,7 @@ export default function Product() {
                     type="button"
                     disabled={out}
                     onClick={() => setVariantId(candidate.id)}
-                    className={`min-w-14 rounded border border-line px-4 py-3 text-sm font-semibold uppercase transition-colors ${
+                    className={`min-w-11 rounded border border-line px-3 py-2.5 text-xs font-semibold uppercase transition-colors sm:min-w-14 sm:px-4 sm:py-3 sm:text-sm ${
                       selected ? '!border-ink bg-ink text-paper' : 'hover:border-ink'
                     } ${out ? 'cursor-not-allowed text-clay line-through hover:border-line' : ''}`}
                   >
@@ -232,11 +251,11 @@ export default function Product() {
 
           <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
             <div className="flex items-center rounded border border-line bg-white">
-              <button type="button" className="px-4 py-3 text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Decrease quantity">−</button>
+              <button type="button" className="px-3 py-2.5 text-base sm:px-4 sm:py-3 sm:text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Decrease quantity">−</button>
               <span className="min-w-10 text-center text-sm font-semibold">{quantity}</span>
-              <button type="button" className="px-4 py-3 text-lg" onClick={() => setQuantity((q) => q + 1)} aria-label="Increase quantity">+</button>
+              <button type="button" className="px-3 py-2.5 text-base sm:px-4 sm:py-3 sm:text-lg" onClick={() => setQuantity((q) => q + 1)} aria-label="Increase quantity">+</button>
             </div>
-            <button type="button" className="btn-ink min-w-44 flex-1 !rounded" disabled={soldOut || !variant} onClick={handleAdd}>
+            <button type="button" className="btn-ink customer-compact-button min-w-44 flex-1 !rounded" disabled={soldOut || !variant} onClick={handleAdd}>
               {soldOut ? (page.soldOutText || 'Sold out') : added ? 'Added ✓' : 'Add to cart'}
             </button>
           </div>

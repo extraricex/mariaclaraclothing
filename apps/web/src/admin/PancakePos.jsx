@@ -131,16 +131,7 @@ export default function PancakePos() {
     setMessage(body.orders.status === 'complete' ? 'Order sync check completed.' : `Order sync status: ${body.orders.status.replaceAll('_', ' ')}.`);
   });
 
-  const runAllSync = () => run('sync-all', async () => {
-    const catalogBody = await adminSend('POST', `${base}/catalog/import`, {});
-    const inventoryBody = await adminSend('POST', `${base}/inventory/reconcile`, {});
-    const orderBody = await adminSend('POST', `${base}/orders/shadow-build`, {});
-    setCatalog(catalogBody.catalog);
-    setInventory(inventoryBody.inventory);
-    setOrderExports(orderBody.orders);
-    await loadAll();
-    setMessage('Pancake sync completed.');
-  });
+  const refreshStatus = () => run('refresh', loadAll);
 
   const summary = catalog?.summary || {};
   const inventorySummary = inventory?.summary || {};
@@ -157,11 +148,11 @@ export default function PancakePos() {
         <div className="min-w-0">
           <p className="eyebrow">Integrations</p>
           <h1 className="display mt-1 text-3xl">Pancake POS</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">Live mode sends new website orders to Pancake immediately. Background sync keeps catalog and inventory aligned.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">Live mode sends new website orders to Pancake immediately. Background polling keeps catalog and inventory aligned automatically.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-outline" disabled={syncBusy || !pancake} onClick={testConnection}>{busy === 'connection' ? 'Checking...' : 'Test connection'}</button>
-          <button type="button" className="btn-ink" disabled={syncBusy || !pancake?.apiKeyConfigured} onClick={runAllSync}>{busy === 'sync-all' ? 'Syncing...' : 'Run sync now'}</button>
+          <button type="button" className="btn-ink" disabled={syncBusy || !pancake} onClick={refreshStatus}>{busy === 'refresh' ? 'Refreshing...' : 'Refresh status'}</button>
         </div>
       </div>
       {message && <p className="mt-4 text-sm text-[var(--admin-orange)]" role="status">{message}</p>}
@@ -221,9 +212,9 @@ export default function PancakePos() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-bold text-[var(--admin-text)]">Catalog & inventory</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">Pancake remains the source for stock. Website product mappings stay safe until conflicts are cleared.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">Pancake remains the source for stock. Automatic background sync updates website inventory from verified SKU and variation mappings.</p>
           </div>
-          <button type="button" className="btn-outline" disabled={syncBusy} onClick={syncInventory}>{busy === 'inventory' ? 'Syncing...' : 'Run sync now'}</button>
+          <StatusPill tone={inventory?.status === 'complete' ? 'good' : 'neutral'}>Auto sync</StatusPill>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

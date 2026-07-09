@@ -15,16 +15,23 @@ test('phase one provides accessible contrast and touch targets', async () => {
   assert.match(css, /\.carousel-dot\[aria-current="true"\]::after\s*{[^}]*background:\s*currentColor;/s);
 });
 
-test('homepage carousel is manual and adds no pause control', async () => {
+test('homepage carousel slides sideways with dots and mobile swipe support', async () => {
   const home = await source('src/pages/Home.jsx');
 
   assert.doesNotMatch(home, /setInterval|clearInterval/);
   assert.doesNotMatch(home, />\s*(Pause|Play)\s*</i);
-  assert.match(home, /className="mt-10 flex items-center justify-center"/);
+  assert.match(home, /heroTouchStartX/);
+  assert.match(home, /handleHeroTouchStart/);
+  assert.match(home, /handleHeroTouchEnd/);
+  assert.match(home, /showNextHero/);
+  assert.match(home, /showPreviousHero/);
+  assert.match(home, /translateX\(\$\{\(index - activeHeroIndex\) \* 100\}%\)/);
+  assert.match(home, /className="absolute bottom-3 left-1\/2 hidden -translate-x-1\/2 items-center justify-center lg:flex"/);
   assert.match(home, /className="carousel-dot"/);
   assert.match(home, /aria-label={`Show banner \$\{index \+ 1\}`}/);
   assert.match(home, /onClick=\{\(\) => setActiveHeroIndex\(index\)\}/);
   assert.match(home, /hero-slide absolute inset-0/);
+  assert.match(home, /transition-transform duration-700/);
 });
 
 test('cart drawer exposes modal keyboard behavior', async () => {

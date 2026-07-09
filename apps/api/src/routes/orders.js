@@ -123,6 +123,13 @@ legacyRouter.post('/', async (req, res, next) => {
       if (persistedOrder.discountCode) {
         await incrementDiscountUsage(persistedOrder.discountCode);
       }
+      await enqueueOrderExport(persistedOrder);
+    }
+
+    try {
+      await (req.exportPancakeOrderNow || exportPancakeOrderNow)(completedOrder.orderNumber);
+    } catch (error) {
+      console.error('Realtime Pancake order export failed:', error?.message || error);
     }
 
     res.status(201).json({
@@ -502,6 +509,7 @@ function createOrderRouter(overrides = {}) {
           code: 'checkout_upgrade_required', status: 409
         });
       }
+      req.exportPancakeOrderNow = dependencies.exportPancakeOrderNow;
       return legacyRouter.handle(req, res, next);
     } catch (error) {
       return next(error);

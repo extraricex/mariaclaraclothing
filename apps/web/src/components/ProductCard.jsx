@@ -48,12 +48,12 @@ export default function ProductCard({ product, index }) {
             </CustomerBadge>
           )}
         </div>
-        <div className="mt-3 flex min-h-[132px] flex-col items-center justify-between gap-3 px-2 pb-2 pt-1">
+        <div className="mt-2 flex flex-col items-center gap-1 px-1 pb-1 pt-0.5">
           <div>
             <p className="eyebrow">{String(index + 1).padStart(2, '0')}</p>
-            <h3 className="mt-1 text-sm font-semibold leading-snug group-hover:text-accent">{product.name}</h3>
+            <h3 className="mt-1 text-[12px] font-semibold leading-snug sm:text-sm group-hover:text-accent">{product.name}</h3>
           </div>
-          <div className="text-sm">
+          <div className="text-[12px] sm:text-sm">
             <p className={onSale ? 'font-semibold text-accent' : 'font-semibold'}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-xs text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>

@@ -27,6 +27,11 @@ function currentTotals(snapshot) {
   };
 }
 
+function manualDiscountCode(snapshot) {
+  const method = snapshot?.discountSnapshot?.method || (snapshot?.discountCode ? 'code' : '');
+  return method === 'code' ? snapshot.discountCode || '' : '';
+}
+
 function buildOrder(input, quote, orderNumber, tokenHash, now) {
   const snapshot = quote.snapshot;
   const customer = normalizedRequest(input).customer;
@@ -130,7 +135,7 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
       cartSessionId: request.cartSessionId,
       items: quote.snapshot.items.map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
       address: quote.snapshot.address,
-      discountCode: quote.snapshot.discountCode
+      discountCode: manualDiscountCode(quote.snapshot)
     }, { client });
     if (refreshed.pricingFingerprint !== quote.snapshot.pricingFingerprint) {
       fail('Checkout totals changed. Review the updated quote.', 'quote_changed', 409, currentTotals(refreshed));
@@ -161,7 +166,7 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     await deps.saveOrder(order, { client });
     await deps.appendMovements(movements, { client });
     await deps.convertCart(request.cartSessionId, orderNumber, { client });
-    if (order.discountCode) await deps.claimPromo(order.discountCode, { client });
+    if (manualDiscountCode(order)) await deps.claimPromo(order.discountCode, { client });
     await deps.insertMeta(client, order, input.requestContext || {});
     if (deps.enqueueOrderExport) await deps.enqueueOrderExport(order, { client });
     await deps.consumeQuote(client, quote.id, orderNumber);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
@@ -19,7 +19,7 @@ function CollectionSection({ id, index, title, blurb, products }) {
         </div>
         <p className="max-w-xs text-sm text-ink-soft">{blurb}</p>
       </div>
-      <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:mt-8 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
         {products.map((product, i) => (
           <ProductCard key={product.id} product={product} index={i} />
         ))}
@@ -32,8 +32,10 @@ export default function Home() {
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState([]);
   const [collectionNames, setCollectionNames] = useState(DEFAULT_STOREFRONT_SETTINGS.storefrontCollections);
+  const [storefrontSettings, setStorefrontSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const [error, setError] = useState('');
+  const heroTouchStartX = useRef(null);
 
   useEffect(() => {
     fetchProducts()
@@ -43,39 +45,90 @@ export default function Home() {
       .then((body) => setBanners(body.siteContent?.homepageBanners || []))
       .catch(() => {});
     loadStorefrontSettings()
-      .then((settings) => setCollectionNames(settings.storefrontCollections || DEFAULT_STOREFRONT_SETTINGS.storefrontCollections));
+      .then((settings) => {
+        setStorefrontSettings(settings);
+        setCollectionNames(settings.storefrontCollections || DEFAULT_STOREFRONT_SETTINGS.storefrontCollections);
+      });
   }, []);
 
   const collectionSections = buildStorefrontCollectionSections(products, collectionNames);
+  const activeBanner = banners[activeHeroIndex] || banners[0] || null;
+  const heroCopy = storefrontSettings.hero || DEFAULT_STOREFRONT_SETTINGS.hero;
+
+  useEffect(() => {
+    if (activeHeroIndex >= banners.length) setActiveHeroIndex(0);
+  }, [activeHeroIndex, banners.length]);
+
+  function showPreviousHero() {
+    if (banners.length < 2) return;
+    setActiveHeroIndex((index) => (index - 1 + banners.length) % banners.length);
+  }
+
+  function showNextHero() {
+    if (banners.length < 2) return;
+    setActiveHeroIndex((index) => (index + 1) % banners.length);
+  }
+
+  function handleHeroTouchStart(event) {
+    heroTouchStartX.current = event.touches[0]?.clientX ?? null;
+  }
+
+  function handleHeroTouchEnd(event) {
+    if (heroTouchStartX.current === null || banners.length < 2) return;
+    const endX = event.changedTouches[0]?.clientX ?? heroTouchStartX.current;
+    const delta = endX - heroTouchStartX.current;
+    heroTouchStartX.current = null;
+    if (Math.abs(delta) < 42) return;
+    if (delta < 0) showNextHero();
+    else showPreviousHero();
+  }
 
   return (
     <div className="customer-page pb-4">
-      <section className="customer-hero grain relative flex min-h-[520px] items-center justify-center overflow-hidden bg-ink px-5 py-20 text-center text-paper sm:min-h-[620px] lg:px-8">
-        {banners.map((banner, index) => (
+      <section
+        className="customer-hero grain relative touch-pan-y overflow-hidden bg-ink text-center text-paper"
+        onTouchStart={handleHeroTouchStart}
+        onTouchEnd={handleHeroTouchEnd}
+      >
+        {activeBanner ? (
           <img
-            key={`${banner.url}-${index}`}
-            src={banner.url}
-            alt={index === activeHeroIndex ? banner.altText || 'Maria Clara Clothing' : ''}
-            aria-hidden={index !== activeHeroIndex}
-            className={`hero-slide absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${index === activeHeroIndex ? 'opacity-100' : 'opacity-0'}`}
+            src={activeBanner.url}
+            alt=""
+            aria-hidden="true"
+            className="block h-auto w-full select-none opacity-0"
           />
-        ))}
-        <div className="absolute inset-0 bg-ink/55" />
-        <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center">
-          <CustomerBadge tone="warm" className="reveal reveal-1">Philippine streetwear · Imus, Cavite</CustomerBadge>
-          <h1 className="display reveal reveal-2 mt-4 text-5xl leading-[0.9] sm:text-6xl lg:text-7xl">
-            100%<br />Pure<br /><span className="text-[var(--customer-accent-soft)]">Cotton</span>
-          </h1>
-          <p className="reveal reveal-3 mt-6 max-w-sm text-sm leading-relaxed text-paper/80">
-            Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it
-            arrives — free shipping when you grab two.
-          </p>
-          <div className="reveal reveal-4 mt-8 flex flex-wrap justify-center gap-3">
-            <CustomerButton as="a" href="#new-arrivals" className="!bg-accent hover:!bg-accent-deep">Shop new arrivals</CustomerButton>
-            <CustomerButton as="a" href="#freedom-of-mind" variant="inverse">Freedom of Mind</CustomerButton>
+        ) : (
+          <div className="aspect-[2200/825] w-full" aria-hidden="true" />
+        )}
+        <div className="absolute inset-0 overflow-hidden">
+          {banners.map((banner, index) => (
+            <img
+              key={`${banner.url}-${index}`}
+              src={banner.url}
+              alt={index === activeHeroIndex ? banner.altText || 'Maria Clara Clothing' : ''}
+              aria-hidden={index !== activeHeroIndex}
+              className="hero-slide absolute inset-0 h-full w-full object-contain sm:object-cover object-center opacity-100 contrast-[1.05] saturate-[1.04] transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+              style={{ transform: `translateX(${(index - activeHeroIndex) * 100}%)` }}
+            />
+          ))}
+        </div>
+        <div className="absolute inset-0 bg-ink/35 sm:bg-ink/40" />
+        <div className="absolute inset-0 z-10 flex items-center justify-center px-3 py-2 sm:px-5 sm:py-10 lg:px-8">
+          <div className="mx-auto flex max-w-3xl flex-col items-center">
+            <CustomerBadge tone="warm" className="reveal reveal-1 !px-1.5 !py-0.5 text-[7px] sm:!px-2.5 sm:!py-1 sm:text-[10px]">{heroCopy.eyebrow}</CustomerBadge>
+            <h1 className="display reveal reveal-2 mt-1 text-[clamp(1.45rem,7vw,2rem)] leading-[0.9] sm:mt-4 sm:text-6xl lg:text-7xl">
+              {heroCopy.title}<br /><span className="text-[var(--customer-accent-soft)]">{heroCopy.highlight}</span>
+            </h1>
+            <p className="reveal reveal-3 mt-4 hidden max-w-xs text-[13px] leading-relaxed text-paper/85 lg:mt-6 lg:block lg:max-w-sm lg:text-sm">
+              {heroCopy.subtitle}
+            </p>
+            <div className="reveal reveal-4 mt-2 flex flex-wrap justify-center gap-1.5 sm:mt-8 sm:gap-3">
+              <CustomerButton as="a" href={heroCopy.primaryButtonLink} className="customer-compact-button !bg-accent hover:!bg-accent-deep">{heroCopy.primaryButtonText}</CustomerButton>
+              <CustomerButton as="a" href={heroCopy.secondaryButtonLink} variant="inverse" className="customer-compact-button">{heroCopy.secondaryButtonText}</CustomerButton>
+            </div>
           </div>
           {banners.length > 1 && (
-            <div className="mt-10 flex items-center justify-center" aria-label="Homepage banner slides">
+            <div className="absolute bottom-3 left-1/2 hidden -translate-x-1/2 items-center justify-center lg:flex" aria-label="Homepage banner slides">
               {banners.map((banner, index) => (
                 <button
                   key={`${banner.url}-dot-${index}`}
