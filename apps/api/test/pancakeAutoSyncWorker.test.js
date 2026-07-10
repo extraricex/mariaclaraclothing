@@ -84,6 +84,27 @@ test('Pancake auto sync runOnce sends live order exports only in live mode', asy
   assert.equal(result.orders.sent, 1);
 });
 
+test('auto sync worker runs inbound and outbound Pancake order sync after live export', async () => {
+  const calls = [];
+  const worker = createPancakeAutoSyncWorker({
+    config: { mode: 'live', autoSyncEnabled: true, apiKeyConfigured: true, autoSyncIntervalMs: 60000 },
+    client: {},
+    catalogService: { runCatalogImport: async () => ({ status: 'complete' }) },
+    inventoryService: { runInventoryReconciliation: async () => ({ status: 'complete' }) },
+    orderService: { runOrderLiveExport: async () => ({ status: 'complete' }) },
+    orderSyncService: {
+      pollInboundPancakeOrders: async () => { calls.push('inbound'); return { status: 'complete' }; },
+      processOutboundOrderEvents: async () => { calls.push('outbound'); return { status: 'complete' }; }
+    },
+    logger: { info() {}, error() {} }
+  });
+
+  const result = await worker.runOnce();
+  assert.equal(result.orderInbound.status, 'complete');
+  assert.equal(result.orderOutbound.status, 'complete');
+  assert.deepEqual(calls, ['inbound', 'outbound']);
+});
+
 test('Pancake auto sync skips work when disabled', async () => {
   let called = false;
   const worker = createPancakeAutoSyncWorker({

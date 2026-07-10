@@ -6,6 +6,8 @@ const inventoryRepositoryDefault = require('./pancakeInventoryRepository');
 const inventoryServiceDefault = require('./pancakeInventoryService');
 const orderRepositoryDefault = require('./pancakeOrderExportRepository');
 const orderServiceDefault = require('./pancakeOrderExportService');
+const orderSyncRepositoryDefault = require('./pancakeOrderSyncRepository');
+const orderSyncServiceDefault = require('./pancakeOrderSyncService');
 
 function shouldRunPancakeAutoSync(config = {}) {
   return Boolean(
@@ -35,6 +37,8 @@ function createPancakeAutoSyncWorker({
   inventoryService = inventoryServiceDefault,
   orderRepository = orderRepositoryDefault,
   orderService = orderServiceDefault,
+  orderSyncRepository = orderSyncRepositoryDefault,
+  orderSyncService = orderSyncServiceDefault,
   setTimeoutFn = setTimeout,
   setIntervalFn = setInterval,
   clearTimeoutFn = clearTimeout,
@@ -73,7 +77,9 @@ function createPancakeAutoSyncWorker({
           repository: catalogRepository
         })),
         inventory: null,
-        orders: null
+        orders: null,
+        orderInbound: null,
+        orderOutbound: null
       };
       result.inventory = await guardedStep('inventory reconciliation', () => inventoryService.runInventoryReconciliation({
         config: readOnlyConfig,
@@ -90,10 +96,22 @@ function createPancakeAutoSyncWorker({
           config,
           repository: orderRepository
         }));
+      result.orderInbound = await guardedStep('inbound order sync', () => orderSyncService.pollInboundPancakeOrders({
+        config,
+        client,
+        syncRepository: orderSyncRepository
+      }));
+      result.orderOutbound = await guardedStep('outbound order sync', () => orderSyncService.processOutboundOrderEvents({
+        config,
+        client,
+        syncRepository: orderSyncRepository
+      }));
       logger.info?.('Pancake auto sync completed', {
         catalog: result.catalog?.status,
         inventory: result.inventory?.status,
-        orders: result.orders?.status
+        orders: result.orders?.status,
+        orderInbound: result.orderInbound?.status,
+        orderOutbound: result.orderOutbound?.status
       });
       return result;
     } finally {
