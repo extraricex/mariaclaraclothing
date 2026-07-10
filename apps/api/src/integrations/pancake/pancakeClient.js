@@ -109,12 +109,37 @@ function createPancakeClient(config, fetchImpl = fetch) {
     return { pancakeOrderId: String(id), body };
   }
 
+  async function listOrders(shopId, options = {}) {
+    const pageNumber = Number(options.pageNumber);
+    const pageSize = Number(options.pageSize);
+    if (!Number.isInteger(pageNumber) || pageNumber < 1 || !Number.isInteger(pageSize) || pageSize < 1) {
+      throw new PancakeApiError('pancake_invalid_request');
+    }
+    const params = { page_number: pageNumber, page_size: pageSize };
+    if (options.updatedSince) params.updated_since = options.updatedSince;
+    const body = await request(shopPath(shopId, '/orders'), params);
+    if (!Array.isArray(body.data)) throw new PancakeApiError('pancake_invalid_response');
+    return body;
+  }
+
+  async function updateOrder(shopId, orderId, payload) {
+    const id = String(orderId || '').trim();
+    if (!id) throw new PancakeApiError('pancake_invalid_request');
+    return request(shopPath(shopId, `/orders/${encodeURIComponent(id)}`), {}, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {})
+    });
+  }
+
   return {
     createOrder,
+    listOrders,
     listShops: () => request('/shops'),
     listWarehouses: (shopId) => listData(shopId, '/warehouses'),
     listOrderSources: (shopId) => listData(shopId, '/order_source'),
-    listVariations
+    listVariations,
+    updateOrder
   };
 }
 
