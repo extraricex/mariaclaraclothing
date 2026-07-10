@@ -121,6 +121,16 @@ async function getOrderSyncDetail(orderNumber) {
   };
 }
 
+async function getOrderLinkByPancakeOrderId(pancakeOrderId) {
+  const normalized = String(pancakeOrderId || '').trim();
+  if (!normalized) return null;
+  if (!hasDatabaseUrl()) {
+    return rowLink(memory.links.find((item) => item.pancakeOrderId === normalized));
+  }
+  const result = await query('SELECT * FROM pancake_order_links WHERE pancake_order_id=$1', [normalized]);
+  return result.rows[0] ? rowLink(result.rows[0]) : null;
+}
+
 async function enqueueSyncEvent(input) {
   const event = {
     id: crypto.randomUUID(),
@@ -311,6 +321,7 @@ module.exports = {
   enqueueSyncEvent,
   getOrderSyncSummary,
   getOrderSyncDetail,
+  getOrderLinkByPancakeOrderId,
   getSyncEvent,
   markSyncEventBlocked,
   markSyncEventRetryable,

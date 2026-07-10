@@ -119,6 +119,7 @@ test('admin order detail renders Pancake sync diagnostics', async () => {
   assert.match(source, /pancakeSyncDetail/);
   assert.match(source, /Pancake POS order ID/);
   assert.match(source, /Last sync time/);
+  assert.match(source, /Last Pancake update time/);
   assert.match(source, /Last sync error/);
   assert.match(source, /Product mapping status/);
   assert.match(source, /Inventory sync status/);

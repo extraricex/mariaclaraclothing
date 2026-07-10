@@ -173,3 +173,26 @@ test('Pancake auto sync start runs after startup delay on an interval and stop c
     ['clear', intervalId]
   ]);
 });
+
+test('Pancake auto sync interval uses faster order polling cadence when configured', async () => {
+  const calls = [];
+  const worker = createPancakeAutoSyncWorker({
+    config: { ...runnableConfig, autoSyncIntervalMs: 600000, orderPollIntervalMs: 120000 },
+    catalogService: { runCatalogImport: async () => {} },
+    inventoryService: { runInventoryReconciliation: async () => {} },
+    orderService: { runOrderShadowBuild: async () => {} },
+    setTimeoutFn: () => ({ unref() {} }),
+    setIntervalFn: (_callback, intervalMs) => {
+      calls.push(intervalMs);
+      return { unref() {} };
+    },
+    clearTimeoutFn: () => {},
+    clearIntervalFn: () => {},
+    logger: { info: () => {}, error: () => {} }
+  });
+
+  worker.start();
+  worker.stop();
+
+  assert.deepEqual(calls, [120000]);
+});

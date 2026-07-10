@@ -11,12 +11,13 @@ function hashObject(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
 }
 
-function inboundEventKey(normalized) {
+function inboundEventKey(normalized, payloadHash) {
   return [
     normalized.pancakeOrderId,
     normalized.pancakeUpdatedAt || '',
     normalized.status || '',
-    normalized.trackingNumber || ''
+    normalized.trackingNumber || '',
+    payloadHash
   ].join(':');
 }
 
@@ -38,6 +39,7 @@ function importedOrder(normalized, now) {
     items: normalized.items,
     subtotalCents: normalized.subtotalCents,
     discountTotalCents: normalized.discountTotalCents,
+    codAmountCents: normalized.codAmountCents,
     discountCode: '',
     discountSnapshot: {},
     shippingFeeCents: normalized.shippingFeeCents,
@@ -56,6 +58,8 @@ function importedOrder(normalized, now) {
     deliveryStatus: normalized.deliveryStatus,
     deliveryMethod: normalized.deliveryMethod,
     trackingNumber: normalized.trackingNumber,
+    estimatedDeliveryAt: normalized.estimatedDeliveryAt,
+    deliveryNotes: normalized.deliveryNotes,
     tags: ['pancake-pos'],
     notes: normalized.notes,
     exportedToJnt: false,
@@ -63,6 +67,40 @@ function importedOrder(normalized, now) {
     placedAt,
     updatedAt: placedAt
   };
+}
+
+function inboundOrderPatch(normalized, existing = {}) {
+  const patch = {
+    customer: normalized.customer,
+    address: normalized.address,
+    items: normalized.items,
+    subtotalCents: normalized.subtotalCents,
+    discountTotalCents: normalized.discountTotalCents,
+    shippingFeeCents: normalized.shippingFeeCents,
+    freeShippingUnlocked: normalized.shippingFeeCents === 0,
+    totalCents: normalized.totalCents,
+    codAmountCents: normalized.codAmountCents,
+    cartSnapshot: normalized.items,
+    paymentMethod: normalized.paymentMethod,
+    status: normalized.status,
+    fulfillmentStatus: normalized.fulfillmentStatus,
+    paymentStatus: normalized.paymentStatus,
+    codConfirmationStatus: normalized.codConfirmationStatus,
+    deliveryStatus: normalized.deliveryStatus,
+    deliveryMethod: normalized.deliveryMethod,
+    trackingNumber: normalized.trackingNumber,
+    estimatedDeliveryAt: normalized.estimatedDeliveryAt || existing.estimatedDeliveryAt || '',
+    deliveryNotes: normalized.deliveryNotes || existing.deliveryNotes || '',
+    notes: normalized.notes || existing.notes || ''
+  };
+  return patch;
+}
+
+function isOlderPancakeUpdate(normalized, link) {
+  if (!normalized.pancakeUpdatedAt || !link?.lastPancakeUpdatedAt) return false;
+  const incoming = new Date(normalized.pancakeUpdatedAt).getTime();
+  const previous = new Date(link.lastPancakeUpdatedAt).getTime();
+  return Number.isFinite(incoming) && Number.isFinite(previous) && incoming < previous;
 }
 
 async function processInboundPancakeOrder({
@@ -73,7 +111,24 @@ async function processInboundPancakeOrder({
 }) {
   const normalized = normalizePancakeOrder(pancakeOrder);
   if (!normalized.pancakeOrderId) return { status: 'blocked', safeErrorCode: 'pancake_order_id_missing' };
-  if (!normalized.orderNumber) return { status: 'blocked', safeErrorCode: 'pancake_order_match_low_confidence' };
+  const linked = await syncRepository.getOrderLinkByPancakeOrderId?.(normalized.pancakeOrderId);
+  const orderNumber = normalized.orderNumber || linked?.orderNumber || '';
+  if (!orderNumber) return { status: 'blocked', safeErrorCode: 'pancake_order_match_low_confidence' };
+  normalized.orderNumber = orderNumber;
+  const existingLink = linked || await syncRepository.getOrderSyncDetail(orderNumber);
+  if (isOlderPancakeUpdate(normalized, existingLink)) {
+    await syncRepository.appendSyncLog({
+      direction: 'inbound',
+      entityType: 'order',
+      entityId: normalized.pancakeOrderId,
+      orderNumber,
+      pancakeOrderId: normalized.pancakeOrderId,
+      level: 'warning',
+      code: 'pancake_stale_update_ignored',
+      message: 'Ignored older Pancake order update.'
+    });
+    return { status: 'stale', orderNumber };
+  }
 
   const payloadHash = hashObject(pancakeOrder);
   const event = await syncRepository.enqueueSyncEvent({
@@ -82,7 +137,7 @@ async function processInboundPancakeOrder({
     entityId: normalized.pancakeOrderId,
     orderNumber: normalized.orderNumber,
     pancakeOrderId: normalized.pancakeOrderId,
-    eventKey: inboundEventKey(normalized),
+    eventKey: inboundEventKey(normalized, payloadHash),
     payloadHash,
     payload: { pancakeOrder }
   });
@@ -112,18 +167,7 @@ async function processInboundPancakeOrder({
     return { status: 'imported', orderNumber: normalized.orderNumber };
   }
 
-  await orderRepository.updateOrder(normalized.orderNumber, {
-    customer: normalized.customer,
-    address: normalized.address,
-    status: normalized.status,
-    fulfillmentStatus: normalized.fulfillmentStatus,
-    paymentStatus: normalized.paymentStatus,
-    codConfirmationStatus: normalized.codConfirmationStatus,
-    deliveryStatus: normalized.deliveryStatus,
-    deliveryMethod: normalized.deliveryMethod,
-    trackingNumber: normalized.trackingNumber,
-    notes: normalized.notes || existing.notes || ''
-  });
+  await orderRepository.updateOrder(normalized.orderNumber, inboundOrderPatch(normalized, existing));
   await syncRepository.upsertOrderLink({
     orderNumber: normalized.orderNumber,
     pancakeOrderId: normalized.pancakeOrderId,
@@ -132,6 +176,16 @@ async function processInboundPancakeOrder({
     lastPancakeUpdatedAt: normalized.pancakeUpdatedAt || null
   });
   await syncRepository.markSyncEventSucceeded(event.id);
+  await syncRepository.appendSyncLog({
+    direction: 'inbound',
+    entityType: 'order',
+    entityId: normalized.pancakeOrderId,
+    orderNumber: normalized.orderNumber,
+    pancakeOrderId: normalized.pancakeOrderId,
+    level: 'info',
+    code: normalized.trackingNumber ? 'pancake_order_tracking_synced' : 'pancake_order_updated',
+    message: 'Pancake order update synced to admin.'
+  });
   return { status: 'updated', orderNumber: normalized.orderNumber };
 }
 
@@ -153,14 +207,31 @@ async function pollInboundPancakeOrders({
   }
   const updatedSince = new Date(now().getTime() - Number(config.orderPollLookbackMs || 15 * 60 * 1000)).toISOString();
   const pageSize = Number(config.orderPollPageSize || 50);
-  const body = await client.listOrders(config.shopId, { pageNumber: 1, pageSize, updatedSince });
   const summary = { status: 'complete', importedCount: 0, updatedCount: 0, duplicateCount: 0, blockedCount: 0 };
-  for (const pancakeOrder of body.data || []) {
-    const result = await processInboundPancakeOrder({ pancakeOrder, orderRepository, syncRepository, now });
-    if (result.status === 'imported') summary.importedCount += 1;
-    else if (result.status === 'updated') summary.updatedCount += 1;
-    else if (result.status === 'duplicate') summary.duplicateCount += 1;
-    else if (result.status === 'blocked') summary.blockedCount += 1;
+  let pageNumber = 1;
+  let totalPages = 1;
+  do {
+    const body = await client.listOrders(config.shopId, { pageNumber, pageSize, updatedSince });
+    totalPages = Math.max(1, Math.min(100, Number(body.total_pages || body.totalPages || pageNumber)));
+    for (const pancakeOrder of body.data || []) {
+      const result = await processInboundPancakeOrder({ pancakeOrder, orderRepository, syncRepository, now });
+      if (result.status === 'imported') summary.importedCount += 1;
+      else if (result.status === 'updated') summary.updatedCount += 1;
+      else if (result.status === 'duplicate') summary.duplicateCount += 1;
+      else if (result.status === 'blocked') summary.blockedCount += 1;
+    }
+    pageNumber += 1;
+  } while (pageNumber <= totalPages);
+  if (summary.importedCount || summary.updatedCount || summary.blockedCount) {
+    await syncRepository.appendSyncLog({
+      direction: 'inbound',
+      entityType: 'order',
+      entityId: '',
+      level: summary.blockedCount ? 'warning' : 'info',
+      code: 'pancake_order_poll_complete',
+      message: 'Pancake order polling completed.',
+      metadata: summary
+    });
   }
   return summary;
 }

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 test('maps known Pancake status names to local status fields', () => {
   const { mapPancakeStatus } = require('../src/integrations/pancake/pancakeOrderMapper');
   assert.deepEqual(mapPancakeStatus('New'), { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' });
+  assert.deepEqual(mapPancakeStatus('shipping'), { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' });
   assert.deepEqual(mapPancakeStatus('Packing'), { status: 'packed', fulfillmentStatus: 'packed', deliveryStatus: 'ready' });
   assert.deepEqual(mapPancakeStatus('Delivered'), { status: 'delivered', fulfillmentStatus: 'delivered', deliveryStatus: 'delivered' });
   assert.deepEqual(mapPancakeStatus('Cancelled'), { status: 'cancelled', fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' });
@@ -43,6 +44,31 @@ test('normalizes Pancake order payload into local order fields', () => {
   assert.equal(order.status, 'delivered');
   assert.equal(order.totalCents, 184800);
   assert.equal(order.shippingFeeCents, 10000);
+});
+
+test('normalizes Pancake shipping payment and tracking fields', () => {
+  const { normalizePancakeOrder } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const order = normalizePancakeOrder({
+    id: 'PK-2',
+    custom_id: 'MCC-2',
+    status: 'Confirmed',
+    shipping_status: 'shipping',
+    payment_method: 'gcash',
+    payment_status: 'paid',
+    shipping_partner: 'J&T Express',
+    tracking_number: 'TRACK-2',
+    estimated_delivery_date: '2026-07-12',
+    delivery_notes: 'Leave with guard'
+  });
+
+  assert.equal(order.status, 'confirmed');
+  assert.equal(order.deliveryStatus, 'out_for_delivery');
+  assert.equal(order.paymentMethod, 'gcash');
+  assert.equal(order.paymentStatus, 'paid');
+  assert.equal(order.deliveryMethod, 'J&T Express');
+  assert.equal(order.trackingNumber, 'TRACK-2');
+  assert.equal(order.estimatedDeliveryAt, '2026-07-12');
+  assert.equal(order.deliveryNotes, 'Leave with guard');
 });
 
 test('builds outbound Pancake order update payload from local order changes', () => {

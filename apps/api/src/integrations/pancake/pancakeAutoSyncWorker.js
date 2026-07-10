@@ -23,6 +23,13 @@ function skipReason(config = {}) {
   return 'pancake_mode_not_allowed';
 }
 
+function workerIntervalMs(config = {}) {
+  const autoInterval = Number(config.autoSyncIntervalMs || 0);
+  const orderInterval = Number(config.orderPollIntervalMs || 0);
+  if (autoInterval > 0 && orderInterval > 0) return Math.min(autoInterval, orderInterval);
+  return autoInterval || orderInterval || 60 * 1000;
+}
+
 function safeCode(error) {
   const code = String(error?.code || '');
   return /^pancake_[a-z_]+$/.test(code) ? code : 'pancake_auto_sync_failed';
@@ -133,7 +140,7 @@ function createPancakeAutoSyncWorker({
     stopped = false;
     startupTimer = setTimeoutFn(() => void tick(), config.autoSyncStartupDelayMs || 0);
     startupTimer?.unref?.();
-    intervalTimer = setIntervalFn(() => void tick(), config.autoSyncIntervalMs);
+    intervalTimer = setIntervalFn(() => void tick(), workerIntervalMs(config));
     intervalTimer?.unref?.();
   }
 
@@ -148,4 +155,4 @@ function createPancakeAutoSyncWorker({
   return { runOnce, start, stop };
 }
 
-module.exports = { createPancakeAutoSyncWorker, shouldRunPancakeAutoSync };
+module.exports = { createPancakeAutoSyncWorker, shouldRunPancakeAutoSync, workerIntervalMs };

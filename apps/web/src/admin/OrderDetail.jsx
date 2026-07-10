@@ -816,6 +816,7 @@ export default function OrderDetail() {
                 <InfoRow label="Pancake POS order ID" value={fallback(pancakeSyncDetail.pancakeOrderId, 'Not linked to Pancake POS')} strong={Boolean(pancakeSyncDetail.pancakeOrderId)} />
                 <InfoRow label="Sync status" value={pancakeSyncLabel} strong />
                 <InfoRow label="Last sync time" value={pancakeSyncDetail.lastSyncedAt ? new Date(pancakeSyncDetail.lastSyncedAt).toLocaleString('en-PH') : 'Never synced'} />
+                <InfoRow label="Last Pancake update time" value={pancakeSyncDetail.lastPancakeUpdatedAt ? new Date(pancakeSyncDetail.lastPancakeUpdatedAt).toLocaleString('en-PH') : 'No Pancake update recorded'} />
                 <InfoRow label="Last sync error" value={fallback(pancakeSyncDetail.safeErrorCode, 'No sync error')} />
                 <InfoRow label="Product mapping status" value={pancakeProductMappingStatus} />
                 <InfoRow label="Inventory sync status" value={pancakeInventorySyncStatus} />

@@ -4,6 +4,9 @@ const STATUS_MAP = new Map([
   ['confirmed', { status: 'confirmed', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
   ['packing', { status: 'packed', fulfillmentStatus: 'packed', deliveryStatus: 'ready' }],
   ['packed', { status: 'packed', fulfillmentStatus: 'packed', deliveryStatus: 'ready' }],
+  ['shipping', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
+  ['to ship', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
+  ['in transit', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
   ['shipped', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
   ['delivered', { status: 'delivered', fulfillmentStatus: 'delivered', deliveryStatus: 'delivered' }],
   ['cancelled', { status: 'cancelled', fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' }],
@@ -60,6 +63,9 @@ function normalizePancakeOrder(payload = {}) {
   const pancakeOrderId = String(payload.id ?? payload.order_id ?? '').trim();
   const shipping = payload.shipping_address || {};
   const statusFields = mapPancakeStatus(payload.status_name || payload.status);
+  const shippingStatusFields = payload.shipping_status || payload.delivery_status
+    ? mapPancakeStatus(payload.shipping_status || payload.delivery_status)
+    : null;
   const noteMatch = typeof payload.note === 'string' ? payload.note.match(/Website order ([^\s]+)/) : null;
   const orderNumber = String(payload.custom_id || payload.order_number || noteMatch?.[1] || '').trim();
   const updatedAt = payload.updated_at || payload.modified_at || payload.last_updated_at || '';
@@ -92,14 +98,19 @@ function normalizePancakeOrder(payload = {}) {
     discountTotalCents,
     shippingFeeCents,
     totalCents,
-    paymentMethod: 'cash_on_delivery',
-    paymentStatus: payload.is_paid || payload.payment_status === 'paid' ? 'paid' : 'cod_pending',
+    codAmountCents: centsFromPesos(payload.cod_amount || payload.cod || payload.cash_on_delivery_amount || 0),
+    paymentMethod: String(payload.payment_method || payload.payment?.method || 'cash_on_delivery').trim(),
+    paymentStatus: payload.is_paid || normalizedKey(payload.payment_status || payload.payment?.status) === 'paid' ? 'paid' : 'cod_pending',
     codConfirmationStatus: 'pending',
     deliveryMethod: String(payload.shipping_partner || payload.delivery_method || 'Standard shipping').trim(),
     trackingNumber: String(payload.tracking_number || payload.shipping_code || '').trim(),
+    estimatedDeliveryAt: payload.estimated_delivery_at || payload.estimated_delivery_date || '',
+    deliveryNotes: String(payload.delivery_note || payload.delivery_notes || '').trim(),
     notes: String(payload.note_print || payload.note || '').trim(),
     channel: 'Pancake POS',
-    ...statusFields
+    status: statusFields.status,
+    fulfillmentStatus: statusFields.fulfillmentStatus,
+    deliveryStatus: shippingStatusFields?.deliveryStatus || statusFields.deliveryStatus
   };
 }
 
