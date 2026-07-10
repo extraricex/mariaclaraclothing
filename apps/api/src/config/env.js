@@ -96,6 +96,10 @@ function pancakeConfig(source = process.env) {
     return value;
   };
   const autoSyncDefault = mode === 'read_only' || mode === 'shadow' || mode === 'live';
+  const orderPollIntervalMs = autoSyncInteger('PANCAKE_ORDER_POLL_INTERVAL_MS', 5 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000);
+  const orderPollPageSize = autoSyncInteger('PANCAKE_ORDER_POLL_PAGE_SIZE', 50, 1, 100);
+  const orderPollLookbackMs = autoSyncInteger('PANCAKE_ORDER_POLL_LOOKBACK_MS', 15 * 60 * 1000, 60 * 1000, 7 * 24 * 60 * 60 * 1000);
+  const syncMaxAttempts = autoSyncInteger('PANCAKE_SYNC_MAX_ATTEMPTS', 10, 1, 100);
   return {
     mode,
     configured: Boolean(apiKey.trim() && String(source.PANCAKE_SHOP_ID || '').trim()),
@@ -111,7 +115,11 @@ function pancakeConfig(source = process.env) {
     catalogMaxPages: catalogInteger('PANCAKE_CATALOG_MAX_PAGES', 100, 500),
     autoSyncEnabled: autoSyncBoolean('PANCAKE_AUTO_SYNC_ENABLED', autoSyncDefault),
     autoSyncIntervalMs: autoSyncInteger('PANCAKE_AUTO_SYNC_INTERVAL_MS', 10 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000),
-    autoSyncStartupDelayMs: autoSyncInteger('PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS', 15 * 1000, 0, 5 * 60 * 1000)
+    autoSyncStartupDelayMs: autoSyncInteger('PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS', 15 * 1000, 0, 5 * 60 * 1000),
+    orderPollIntervalMs,
+    orderPollPageSize,
+    orderPollLookbackMs,
+    syncMaxAttempts
   };
 }
 

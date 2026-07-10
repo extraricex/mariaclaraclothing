@@ -19,7 +19,11 @@ test('Pancake defaults to disabled without credentials', () => {
     catalogMaxPages: 100,
     autoSyncEnabled: false,
     autoSyncIntervalMs: 600000,
-    autoSyncStartupDelayMs: 15000
+    autoSyncStartupDelayMs: 15000,
+    orderPollIntervalMs: 300000,
+    orderPollPageSize: 50,
+    orderPollLookbackMs: 900000,
+    syncMaxAttempts: 10
   });
 });
 
@@ -66,6 +70,33 @@ test('Pancake auto sync can be disabled and validates interval bounds', () => {
     { PANCAKE_AUTO_SYNC_INTERVAL_MS: '86400001' },
     { PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS: '-1' },
     { PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS: '300001' }
+  ]) assert.throws(() => pancakeConfig({ PANCAKE_MODE: 'read_only', ...source }), /Pancake auto sync/);
+});
+
+test('Pancake config exposes order polling and retry settings', () => {
+  const value = pancakeConfig({
+    PANCAKE_MODE: 'live',
+    PANCAKE_API_KEY: 'secret-key',
+    PANCAKE_SHOP_ID: '1234',
+    PANCAKE_ORDER_POLL_INTERVAL_MS: '120000',
+    PANCAKE_ORDER_POLL_PAGE_SIZE: '25',
+    PANCAKE_ORDER_POLL_LOOKBACK_MS: '900000',
+    PANCAKE_SYNC_MAX_ATTEMPTS: '7'
+  });
+  assert.equal(value.orderPollIntervalMs, 120000);
+  assert.equal(value.orderPollPageSize, 25);
+  assert.equal(value.orderPollLookbackMs, 900000);
+  assert.equal(value.syncMaxAttempts, 7);
+
+  for (const source of [
+    { PANCAKE_ORDER_POLL_INTERVAL_MS: '59999' },
+    { PANCAKE_ORDER_POLL_INTERVAL_MS: '86400001' },
+    { PANCAKE_ORDER_POLL_PAGE_SIZE: '0' },
+    { PANCAKE_ORDER_POLL_PAGE_SIZE: '101' },
+    { PANCAKE_ORDER_POLL_LOOKBACK_MS: '59999' },
+    { PANCAKE_ORDER_POLL_LOOKBACK_MS: '604800001' },
+    { PANCAKE_SYNC_MAX_ATTEMPTS: '0' },
+    { PANCAKE_SYNC_MAX_ATTEMPTS: '101' }
   ]) assert.throws(() => pancakeConfig({ PANCAKE_MODE: 'read_only', ...source }), /Pancake auto sync/);
 });
 
