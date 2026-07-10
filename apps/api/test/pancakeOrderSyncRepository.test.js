@@ -89,3 +89,31 @@ test('memory sync repository claims due events and marks retryable failure with 
     restore();
   }
 });
+
+test('memory sync repository summarizes order sync state', async () => {
+  const { repo, restore } = memoryRepo();
+  try {
+    await repo.upsertOrderLink({ orderNumber: 'MCC-1', pancakeOrderId: 'PK-1', syncStatus: 'synced' });
+    const event = await repo.enqueueSyncEvent({
+      direction: 'outbound',
+      entityType: 'order',
+      entityId: 'MCC-1',
+      orderNumber: 'MCC-1',
+      pancakeOrderId: 'PK-1',
+      eventKey: 'MCC-1:status',
+      payloadHash: 'hash',
+      payload: {}
+    });
+    await repo.claimDueSyncEvents({ direction: 'outbound', now: '2026-07-10T00:00:00.000Z' });
+    await repo.markSyncEventRetryable(event.id, { safeErrorCode: 'pancake_network_error', nextAttemptAt: '2026-07-10T00:05:00.000Z' });
+
+    assert.deepEqual(await repo.getOrderSyncSummary(), {
+      pendingCount: 0,
+      failedCount: 1,
+      blockedCount: 0,
+      linkedCount: 1
+    });
+  } finally {
+    restore();
+  }
+});

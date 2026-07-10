@@ -8,6 +8,7 @@ const inventoryRepositoryDefault = require('../integrations/pancake/pancakeInven
 const inventoryServiceDefault = require('../integrations/pancake/pancakeInventoryService');
 const orderExportRepositoryDefault = require('../integrations/pancake/pancakeOrderExportRepository');
 const orderExportServiceDefault = require('../integrations/pancake/pancakeOrderExportService');
+const orderSyncRepositoryDefault = require('../integrations/pancake/pancakeOrderSyncRepository');
 const {
   getPancakeConnectionStatus,
   testPancakeConnection
@@ -24,11 +25,13 @@ function createAdminPancakeRouter(dependencies = {}) {
   const inventoryService = dependencies.inventoryService || dependencies.catalogService || inventoryServiceDefault;
   const orderRepository = dependencies.orderRepository || orderExportRepositoryDefault;
   const orderService = dependencies.orderService || orderExportServiceDefault;
+  const orderSyncRepository = dependencies.orderSyncRepository || orderSyncRepositoryDefault;
 
   router.get('/status', async (_req, res, next) => {
     try {
       const pancake = await getPancakeConnectionStatus({ config, repository });
-      return res.json({ pancake });
+      const orderSync = await orderSyncRepository.getOrderSyncSummary();
+      return res.json({ pancake: { ...pancake, orderSync } });
     } catch (error) {
       return next(error);
     }

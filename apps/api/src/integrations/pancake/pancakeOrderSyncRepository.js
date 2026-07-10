@@ -285,10 +285,31 @@ async function appendSyncLog(input) {
   return log;
 }
 
+async function getOrderSyncSummary() {
+  if (!hasDatabaseUrl()) {
+    return {
+      pendingCount: memory.events.filter((event) => event.status === 'pending').length,
+      failedCount: memory.events.filter((event) => event.status === 'failed_retryable').length,
+      blockedCount: memory.events.filter((event) => event.status === 'blocked').length,
+      linkedCount: memory.links.length
+    };
+  }
+  const events = await query('SELECT status,count(*)::integer AS count FROM pancake_sync_events GROUP BY status');
+  const links = await query('SELECT count(*)::integer AS count FROM pancake_order_links');
+  const count = (status) => events.rows.find((row) => row.status === status)?.count || 0;
+  return {
+    pendingCount: count('pending'),
+    failedCount: count('failed_retryable'),
+    blockedCount: count('blocked'),
+    linkedCount: links.rows[0]?.count || 0
+  };
+}
+
 module.exports = {
   appendSyncLog,
   claimDueSyncEvents,
   enqueueSyncEvent,
+  getOrderSyncSummary,
   getOrderSyncDetail,
   getSyncEvent,
   markSyncEventBlocked,

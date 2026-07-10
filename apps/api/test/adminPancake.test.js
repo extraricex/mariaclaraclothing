@@ -109,6 +109,38 @@ test('Pancake admin subrouter can report an injected successful connection', asy
   });
 });
 
+test('Pancake admin status includes bidirectional sync summary', async () => {
+  const { createAdminPancakeRouter } = require('../src/routes/adminPancake');
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminPancakeRouter({
+    config: {
+      mode: 'read_only', configured: true, apiKeyConfigured: true, apiBaseUrl: 'https://pos.pages.fm/api/v1',
+      apiKey: 'secret', webhookSecret: '', shopId: '123'
+    },
+    repository: { getConnectionStatus: async () => ({ healthStatus: 'connected' }), recordConnectionCheck: async () => {} },
+    orderSyncRepository: {
+      getOrderSyncSummary: async () => ({
+        pendingCount: 1,
+        failedCount: 2,
+        blockedCount: 3,
+        linkedCount: 4
+      })
+    }
+  }));
+  await listen(app, async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/status`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.pancake.orderSync, {
+      pendingCount: 1,
+      failedCount: 2,
+      blockedCount: 3,
+      linkedCount: 4
+    });
+  });
+});
+
 test('Pancake admin subrouter exposes validated catalog import mapping and selection APIs', async () => {
   const { createAdminPancakeRouter } = require('../src/routes/adminPancake');
   const calls = [];
