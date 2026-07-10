@@ -72,6 +72,7 @@ const {
   setSessionCookies
 } = require('../auth/sessionHttp');
 const { createAdminPancakeRouter } = require('./adminPancake');
+const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
 
 const router = express.Router();
 
@@ -797,6 +798,7 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
 
     await restoreCancelledOrderStock(existingOrder, order);
     await appendStatusEventIfChanged(existingOrder, order, 'admin');
+    await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
     await enqueueDeliveredOrderNotifications(existingOrder, order);
     const refreshedOrder = await findOrderByNumber(orderNumber);
     return res.json({ order: { ...refreshedOrder, notifications: await listOrderNotifications(orderNumber) } });
@@ -1348,6 +1350,46 @@ async function appendStatusEventIfChanged(previousOrder, nextOrder, source, note
   });
 }
 
+function changedPancakeFields(previousOrder, nextOrder) {
+  const fields = [];
+  for (const field of [
+    'status',
+    'fulfillmentStatus',
+    'paymentStatus',
+    'codConfirmationStatus',
+    'deliveryStatus',
+    'trackingNumber',
+    'notes'
+  ]) {
+    if (String(previousOrder?.[field] ?? '') !== String(nextOrder?.[field] ?? '')) fields.push(field);
+  }
+  if (JSON.stringify(previousOrder?.customer || {}) !== JSON.stringify(nextOrder?.customer || {})) fields.push('customer');
+  if (JSON.stringify(previousOrder?.address || {}) !== JSON.stringify(nextOrder?.address || {})) fields.push('address');
+  return fields;
+}
+
+async function enqueuePancakeOrderUpdateIfLinked(previousOrder, nextOrder, { syncRepository = pancakeOrderSyncRepository } = {}) {
+  const changedFields = changedPancakeFields(previousOrder, nextOrder);
+  if (!changedFields.length || !nextOrder?.orderNumber) return null;
+  const detail = await syncRepository.getOrderSyncDetail(nextOrder.orderNumber);
+  if (!detail?.pancakeOrderId) return null;
+  const sortedFields = changedFields.sort();
+  const payloadHash = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({ changedFields: sortedFields, updatedAt: nextOrder.updatedAt || '' }))
+    .digest('hex');
+  return syncRepository.enqueueSyncEvent({
+    direction: 'outbound',
+    entityType: 'order',
+    entityId: nextOrder.orderNumber,
+    orderNumber: nextOrder.orderNumber,
+    pancakeOrderId: detail.pancakeOrderId,
+    eventKey: `${nextOrder.orderNumber}:${sortedFields.join(',')}:${nextOrder.updatedAt || Date.now()}`,
+    payloadHash,
+    payload: { changedFields: sortedFields }
+  });
+}
+
 function normalizeOrderCustomerUpdate(customer) {
   const fullName = String(customer?.fullName || '').trim();
   const phone = String(customer?.phone || '').trim();
@@ -1680,4 +1722,4 @@ router.delete('/discounts/:code', async (req, res, next) => {
   }
 });
 
-module.exports = { adminRouter: router };
+module.exports = { adminRouter: router, normalizeOrderUpdate, enqueuePancakeOrderUpdateIfLinked };

@@ -585,6 +585,40 @@ test('admin cancellation restores order stock and records restock movement', asy
   }
 });
 
+test('admin order updates enqueue Pancake outbound sync events for linked orders', async () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  const pancakeSync = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  pancakeSync.resetMemoryForTests();
+  await pancakeSync.upsertOrderLink({ orderNumber: 'MCC-ADMIN-SYNC', pancakeOrderId: 'PK-ADMIN-1', syncStatus: 'synced' });
+
+  const previous = {
+    orderNumber: 'MCC-ADMIN-SYNC',
+    status: 'confirmed',
+    fulfillmentStatus: 'unfulfilled',
+    paymentStatus: 'cod_pending',
+    codConfirmationStatus: 'pending',
+    deliveryStatus: 'pending',
+    trackingNumber: '',
+    customer: { fullName: 'A', phone: '1', email: '' },
+    address: { addressLine: 'Old' },
+    items: [],
+    notes: ''
+  };
+  const next = { ...previous, status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery', trackingNumber: 'TRACK-1' };
+
+  try {
+    const { enqueuePancakeOrderUpdateIfLinked } = require('../src/routes/admin');
+    const result = await enqueuePancakeOrderUpdateIfLinked(previous, next, { syncRepository: pancakeSync });
+
+    assert.equal(result?.status, 'pending');
+    assert.equal(result.pancakeOrderId, 'PK-ADMIN-1');
+  } finally {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
+  }
+});
+
 test('admin order status updates reject unsupported statuses', async () => {
   const previousOrdersDataFile = process.env.ORDERS_DATA_FILE;
   const previousAdminPassword = process.env.ADMIN_PASSWORD;
