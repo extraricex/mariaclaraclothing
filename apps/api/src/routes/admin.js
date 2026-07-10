@@ -736,7 +736,13 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    return res.json({ order: { ...order, notifications: await listOrderNotifications(order.orderNumber) } });
+    return res.json({
+      order: {
+        ...order,
+        notifications: await listOrderNotifications(order.orderNumber),
+        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(order.orderNumber)
+      }
+    });
   } catch (error) {
     return next(error);
   }
@@ -801,7 +807,13 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
     await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
     await enqueueDeliveredOrderNotifications(existingOrder, order);
     const refreshedOrder = await findOrderByNumber(orderNumber);
-    return res.json({ order: { ...refreshedOrder, notifications: await listOrderNotifications(orderNumber) } });
+    return res.json({
+      order: {
+        ...refreshedOrder,
+        notifications: await listOrderNotifications(orderNumber),
+        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(orderNumber)
+      }
+    });
   } catch (error) {
     return next(error);
   }

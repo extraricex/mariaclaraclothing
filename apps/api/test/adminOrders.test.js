@@ -619,6 +619,28 @@ test('admin order updates enqueue Pancake outbound sync events for linked orders
   }
 });
 
+test('admin order detail includes Pancake sync detail', async () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  const pancakeSync = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  pancakeSync.resetMemoryForTests();
+  await pancakeSync.upsertOrderLink({
+    orderNumber: 'MCC-SYNC-DETAIL',
+    pancakeOrderId: 'PK-SYNC-1',
+    syncStatus: 'synced',
+    lastSyncedAt: '2026-07-10T00:00:00.000Z'
+  });
+
+  try {
+    const detail = await pancakeSync.getOrderSyncDetail('MCC-SYNC-DETAIL');
+    assert.equal(detail.pancakeOrderId, 'PK-SYNC-1');
+    assert.equal(detail.syncStatus, 'synced');
+  } finally {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
+  }
+});
+
 test('admin order status updates reject unsupported statuses', async () => {
   const previousOrdersDataFile = process.env.ORDERS_DATA_FILE;
   const previousAdminPassword = process.env.ADMIN_PASSWORD;
