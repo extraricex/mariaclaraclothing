@@ -683,7 +683,7 @@ There is no tsconfig, ESLint, Prettier, Playwright config, or MCP configuration 
 
 | File | Notes |
 |---|---|
-| `data/products.json` | Canonical catalog (15 products). Pretty-printed, trailing newline. Edited by the admin API in JSON mode. **Tests pin exact contents**: product count 15, specific slugs (`oranges-mcc-box-tee`, the long `oversized-fit-shirt-mc-curiosity-*` slugs), prices 64900/92900, SKUs (`ORANGE01S`, `BLOOM-001M`), stock values, image URLs, productPage text. Editing this file ⇒ update `test/catalog.test.js` + `test/health.test.js` fixtures. |
+| `data/products.json` | Canonical catalog (15 products). Pretty-printed, trailing newline. Edited by the admin API in JSON mode. **Tests pin exact contents**: product count 15, specific slugs (`oranges-mcc-box-tee`, the long `oversized-fit-shirt-mc-curiosity-*` slugs), prices 64900/92900, SKUs (`ORANGE01S`, `BLOOMBLACK-M`), stock values, image URLs, productPage text. Editing this file ⇒ update `test/catalog.test.js` + `test/health.test.js` fixtures. |
 | `data/orders.json` | `{ "orders": [...] }`. Demo orders; safe to clear locally. |
 | `data/site-content.json` | `{ "homepageBanners": [...] }`. |
 | `data/jnt/jntexportfile.xlsx` | **J&T template — treat as binary fixture.** Sheets `List` (headers row 8, data row 9+, range `A1:M5098`), `Addressing guide` (province/city/barangay rows, `A1:D42989`), `Dịch vụ`. Source for both the export and the generated address guide. The `.xls` sibling is an artifact; the `.xlsx` is what code reads. |

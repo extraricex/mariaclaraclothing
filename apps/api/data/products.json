@@ -51,12 +51,6 @@
         "sku": "WANNADIE-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
-      },
-      {
-        "size": "3XLarge",
-        "sku": "WANNADIE-3XL",
-        "stockQuantity": 0,
-        "externalPosVariantId": ""
       }
     ],
     "merchandisingStatus": "sale",
@@ -129,12 +123,6 @@
         "sku": "GOODSHIRT-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
-      },
-      {
-        "size": "3XLarge",
-        "sku": "GOODSHIRT-3XL",
-        "stockQuantity": 0,
-        "externalPosVariantId": ""
       }
     ]
   },
@@ -189,12 +177,6 @@
       {
         "size": "2XLarge",
         "sku": "IMPERIALCHOCO-2XL",
-        "stockQuantity": 0,
-        "externalPosVariantId": ""
-      },
-      {
-        "size": "3XLarge",
-        "sku": "IMPERIALCHOCO-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -368,12 +350,6 @@
         "sku": "MANDALAWHITE-2XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
-      },
-      {
-        "size": "3XLarge",
-        "sku": "MANDALAWHITE-3XL",
-        "stockQuantity": 0,
-        "externalPosVariantId": ""
       }
     ]
   },
@@ -408,37 +384,37 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "CURIOSITYOFF-S",
+        "sku": "ARISOFF-S",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "CURIOSITYOFF-M",
+        "sku": "ARISOFF-M",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "CURIOSITYOFF-L",
+        "sku": "ARISOFF-L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "CURIOSITYOFF-XL",
+        "sku": "ARISOFF-XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "CURIOSITYOFF-2XL",
+        "sku": "ARISOFF-2XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "3XLarge",
-        "sku": "CURIOSITYOFF-3XL",
+        "sku": "ARISOFF-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -509,37 +485,37 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "BLOOM-001S",
+        "sku": "BLOOMBLACK-S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "BLOOM-001M",
+        "sku": "BLOOMBLACK-M",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "BLOOM-001L",
+        "sku": "BLOOMBLACK-L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "BLOOM-001XL",
+        "sku": "BLOOMBLACK-XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "BLOOM-001XXL",
+        "sku": "BLOOMBLACK-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "3XLarge",
-        "sku": "BLOOM-001XXXL",
+        "sku": "BLOOMBLACK-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -571,37 +547,37 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "INFINITE-S",
+        "sku": "MCINFINITE-S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "INFINITE-M",
+        "sku": "MCINFINITE-M",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "INFINITE-L",
+        "sku": "MCINFINITE-L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "INFINITE-XL",
+        "sku": "MCINFINITE-XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "INFINITE-2XL",
+        "sku": "MCINFINITE-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "3XLarge",
-        "sku": "INFINITE-3XL",
+        "sku": "MCINFINITE-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -633,37 +609,37 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "CURIOSITYBLACK-S",
+        "sku": "MCCURIOSITY-S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "CURIOSITYBLACK-M",
+        "sku": "MCCURIOSITY-M",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "CURIOSITYBLACK-L",
+        "sku": "MCCURIOSITY-L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "CURIOSITYBLACK-XL",
+        "sku": "MCCURIOSITY-XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "CURIOSITYBLACK-2XL",
+        "sku": "MCCURIOSITY-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "3XLarge",
-        "sku": "CURIOSITYBLACK-3XL",
+        "sku": "MCCURIOSITY-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -695,37 +671,37 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "KAMALAYANEYE-S",
+        "sku": "BLACKEYE-S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "KAMALAYANEYE-M",
+        "sku": "BLACKEYE-M",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "KAMALAYANEYE-L",
+        "sku": "BLACKEYE-L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "KAMALAYANEYE-XL",
+        "sku": "BLACKEYE-XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "KAMALAYANEYE-2XL",
+        "sku": "BLACKEYE-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "3XLarge",
-        "sku": "KAMALAYANEYE-3XL",
+        "sku": "BLACKEYE-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -757,37 +733,37 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "MCACIDOFF-S",
+        "sku": "ACIDOFFWHITE-S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "MCACIDOFF-M",
+        "sku": "ACIDOFFWHITE-M",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "MCACIDOFF-L",
+        "sku": "ACIDOFFWHITE-L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "MCACIDOFF-XL",
+        "sku": "ACIDOFFWHITE-XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "MCACIDOFF-2XL",
+        "sku": "ACIDOFFWHITE-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "3XLarge",
-        "sku": "MCACIDOFF-3XL",
+        "sku": "ACIDOFFWHITE-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -819,37 +795,37 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "MCACIDBLACK-S",
+        "sku": "ACIDBLACK-S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "MCACIDBLACK-M",
+        "sku": "ACIDBLACK-M",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "MCACIDBLACK-L",
+        "sku": "ACIDBLACK-L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "MCACIDBLACK-XL",
+        "sku": "ACIDBLACK-XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "MCACIDBLACK-2XL",
+        "sku": "ACIDBLACK-2XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "3XLarge",
-        "sku": "MCACIDBLACK-3XL",
+        "sku": "ACIDBLACK-3XL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -881,31 +857,31 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "TIYOW003-S",
+        "sku": "TIYOW003S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "TIYOW003-M",
+        "sku": "TIYOW003M",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "TIYOW003-L",
+        "sku": "TIYOW003L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "TIYOW003-XL",
+        "sku": "TIYOW003XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "TIYOW003-2XL",
+        "sku": "TIYOW003XXL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -937,31 +913,31 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "TIYOW002-S",
+        "sku": "TIYOW002S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "TIYOW002-M",
+        "sku": "TIYOW002M",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "TIYOW002-L",
+        "sku": "TIYOW002L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "TIYOW002-XL",
+        "sku": "TIYOW002XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "TIYOW002-2XL",
+        "sku": "TIYOW002XXL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }
@@ -993,31 +969,31 @@
     "variants": [
       {
         "size": "Small",
-        "sku": "TIYOW001-S",
+        "sku": "TIYOW001S",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Medium",
-        "sku": "TIYOW001-M",
+        "sku": "TIYOW001M",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       },
       {
         "size": "Large",
-        "sku": "TIYOW001-L",
+        "sku": "TIYOW001L",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "XLarge",
-        "sku": "TIYOW001-XL",
+        "sku": "TIYOW001XL",
         "stockQuantity": 12,
         "externalPosVariantId": ""
       },
       {
         "size": "2XLarge",
-        "sku": "TIYOW001-2XL",
+        "sku": "TIYOW001XXL",
         "stockQuantity": 0,
         "externalPosVariantId": ""
       }

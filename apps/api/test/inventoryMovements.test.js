@@ -46,7 +46,7 @@ test('successful order creation records inventory movement deductions', async ()
     assert.equal(movements[0].reason, 'order_created');
     assert.equal(movements[0].productSlug, 'oversized-fit-shirt-mc-curiosity-black-maria-clara-clothing-oversized-fit-100-cotton-copy-1');
     assert.equal(movements[0].productName, 'CURIOSITY OFFWHITE — Oversized 240 GSM Shirt');
-    assert.equal(movements[0].sku, 'CURIOSITYOFF-S');
+    assert.equal(movements[0].sku, 'ARISOFF-S');
     assert.equal(movements[0].size, 's');
     assert.equal(movements[0].quantityChange, -2);
     assert.match(movements[0].createdAt, /^\d{4}-\d{2}-\d{2}T/);
