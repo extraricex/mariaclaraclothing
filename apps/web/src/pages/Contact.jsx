@@ -15,6 +15,16 @@ function ContactLink({ href, label, value }) {
   );
 }
 
+function ContactDetail({ label, value }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start justify-between gap-4 border-t border-line py-4 text-sm">
+      <span className="font-semibold uppercase tracking-[0.12em]">{label}</span>
+      <span className="min-w-0 text-right leading-relaxed text-ink-soft">{value}</span>
+    </div>
+  );
+}
+
 export default function Contact() {
   const settings = useStorefrontSettings();
   const facebook = settings.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
@@ -22,6 +32,7 @@ export default function Contact() {
   const messenger = settings.messengerUrl || 'https://m.me/mariaclaraclothing';
   const email = settings.contactEmail || '';
   const phone = settings.contactNumber || '';
+  const address = settings.storeAddress || '';
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-14 lg:px-8">
@@ -37,6 +48,7 @@ export default function Contact() {
         <ContactLink href={instagram} label="Instagram" value="Maria Clara Clothing Instagram" />
         <ContactLink href={email ? `mailto:${email}` : ''} label="Email" value={email} />
         <ContactLink href={phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : ''} label="Phone" value={phone} />
+        <ContactDetail label="Returns address" value={address} />
       </div>
     </div>
   );
