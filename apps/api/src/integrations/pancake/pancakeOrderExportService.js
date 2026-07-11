@@ -159,9 +159,9 @@ async function runOrderShadowBuild({ config, repository, now = () => new Date(),
   }
   const readiness = await repository.loadOrderExportReadiness();
   if (repository.enqueueMissingOrderExports) {
-    await repository.enqueueMissingOrderExports({ limit });
+    await repository.enqueueMissingOrderExports({ limit, placedAfter: config.orderExportCutoffAt || '' });
   }
-  const exports = await repository.listQueuedOrderExports({ limit });
+  const exports = await repository.listQueuedOrderExports({ limit, placedAfter: config.orderExportCutoffAt || '' });
   const summary = { checkedCount: exports.length, builtCount: 0, blockedCount: 0, failedCount: 0 };
   const builtAt = now().toISOString();
 
@@ -201,11 +201,11 @@ async function runOrderLiveExport({ config, client, repository, syncRepository =
   await syncRepository.backfillSentOrderExportLinks?.({ limit });
   const readiness = await repository.loadOrderExportReadiness();
   if (!orderNumber && repository.enqueueMissingOrderExports) {
-    await repository.enqueueMissingOrderExports({ limit });
+    await repository.enqueueMissingOrderExports({ limit, placedAfter: config.orderExportCutoffAt || '' });
   }
   const exports = orderNumber
-    ? [await repository.loadOrderExportWorkItem(orderNumber)].filter(Boolean)
-    : await repository.listQueuedOrderExports({ limit });
+    ? [await repository.loadOrderExportWorkItem(orderNumber, { placedAfter: config.orderExportCutoffAt || '' })].filter(Boolean)
+    : await repository.listQueuedOrderExports({ limit, placedAfter: config.orderExportCutoffAt || '' });
   if (orderNumber && exports.length === 0) {
     return { status: 'skipped', reason: 'pancake_order_export_not_queued', summary: emptySummary };
   }

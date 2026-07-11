@@ -144,6 +144,14 @@ function pancakeConfig(source = process.env) {
     return value;
   };
   const autoSyncDefault = mode === 'read_only' || mode === 'shadow' || mode === 'live';
+  const orderExportCutoffRaw = String(source.PANCAKE_ORDER_EXPORT_CUTOFF_AT || '').trim();
+  const orderExportCutoffAt = orderExportCutoffRaw ? new Date(orderExportCutoffRaw) : null;
+  if (orderExportCutoffRaw && Number.isNaN(orderExportCutoffAt.getTime())) {
+    throw new Error('PANCAKE_ORDER_EXPORT_CUTOFF_AT must be a valid ISO timestamp');
+  }
+  if (mode === 'live' && !orderExportCutoffAt) {
+    throw new Error('PANCAKE_ORDER_EXPORT_CUTOFF_AT is required in live mode');
+  }
   const orderPollIntervalMs = autoSyncInteger('PANCAKE_ORDER_POLL_INTERVAL_MS', 5 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000);
   const orderPollPageSize = autoSyncInteger('PANCAKE_ORDER_POLL_PAGE_SIZE', 50, 1, 100);
   const orderPollLookbackMs = autoSyncInteger('PANCAKE_ORDER_POLL_LOOKBACK_MS', 15 * 60 * 1000, 60 * 1000, 7 * 24 * 60 * 60 * 1000);
@@ -167,7 +175,8 @@ function pancakeConfig(source = process.env) {
     orderPollIntervalMs,
     orderPollPageSize,
     orderPollLookbackMs,
-    syncMaxAttempts
+    syncMaxAttempts,
+    orderExportCutoffAt: orderExportCutoffAt ? orderExportCutoffAt.toISOString() : ''
   };
 }
 

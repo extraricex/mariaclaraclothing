@@ -75,6 +75,7 @@ const {
 } = require('../auth/sessionHttp');
 const { createAdminPancakeRouter } = require('./adminPancake');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
+const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const {
   deleteIssueReport,
   findIssueReportById,
@@ -913,6 +914,9 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
     }
 
     await restoreCancelledOrderStock(existingOrder, order);
+    if (existingOrder.status !== 'cancelled' && order.status === 'cancelled') {
+      await pancakeOrderExportRepository.markOrderExportSkipped(order.orderNumber);
+    }
     await appendStatusEventIfChanged(existingOrder, order, 'admin');
     await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
     await enqueueDeliveredOrderNotifications(existingOrder, order);

@@ -146,4 +146,18 @@ test('order export repository prioritizes newest unsent website orders', async (
   }
 
   assert.match(calls[0].sql, /ORDER BY o\.placed_at DESC, e\.queued_at DESC/);
+  assert.match(calls[0].sql, /o\.status <> 'cancelled'/);
+});
+
+test('order export repository skips cancelled and pre-cutover orders', async () => {
+  const repository = loadRepositoryWithoutDatabase();
+  repository.resetMemoryForTests();
+  await repository.enqueueOrderExport({ orderNumber: 'MCC-OLD', status: 'confirmed', placedAt: '2026-07-11T00:00:00Z', items: [] });
+  await repository.enqueueOrderExport({ orderNumber: 'MCC-NEW', status: 'confirmed', placedAt: '2026-07-12T01:00:00Z', items: [] });
+  await repository.enqueueOrderExport({ orderNumber: 'MCC-CANCELLED', status: 'cancelled', placedAt: '2026-07-12T02:00:00Z', items: [] });
+
+  const queued = await repository.listQueuedOrderExports({ placedAfter: '2026-07-12T00:00:00Z' });
+  assert.deepEqual(queued.map((item) => item.orderNumber), ['MCC-NEW']);
+  await repository.markOrderExportSkipped('MCC-NEW');
+  assert.deepEqual(await repository.listQueuedOrderExports({ placedAfter: '2026-07-12T00:00:00Z' }), []);
 });

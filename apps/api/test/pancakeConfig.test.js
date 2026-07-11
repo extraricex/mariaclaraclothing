@@ -23,7 +23,8 @@ test('Pancake defaults to disabled without credentials', () => {
     orderPollIntervalMs: 300000,
     orderPollPageSize: 50,
     orderPollLookbackMs: 900000,
-    syncMaxAttempts: 10
+    syncMaxAttempts: 10,
+    orderExportCutoffAt: ''
   });
 });
 
@@ -63,7 +64,10 @@ test('Pancake auto sync can be disabled and validates interval bounds', () => {
   assert.equal(custom.autoSyncEnabled, true);
   assert.equal(custom.autoSyncIntervalMs, 120000);
   assert.equal(custom.autoSyncStartupDelayMs, 0);
-  assert.equal(pancakeConfig({ PANCAKE_MODE: 'live' }).autoSyncEnabled, true);
+  assert.equal(pancakeConfig({
+    PANCAKE_MODE: 'live',
+    PANCAKE_ORDER_EXPORT_CUTOFF_AT: '2026-07-12T00:00:00Z'
+  }).autoSyncEnabled, true);
 
   for (const source of [
     { PANCAKE_AUTO_SYNC_INTERVAL_MS: '59999' },
@@ -76,6 +80,7 @@ test('Pancake auto sync can be disabled and validates interval bounds', () => {
 test('Pancake config exposes order polling and retry settings', () => {
   const value = pancakeConfig({
     PANCAKE_MODE: 'live',
+    PANCAKE_ORDER_EXPORT_CUTOFF_AT: '2026-07-12T00:00:00Z',
     PANCAKE_API_KEY: 'secret-key',
     PANCAKE_SHOP_ID: '1234',
     PANCAKE_ORDER_POLL_INTERVAL_MS: '120000',
@@ -87,6 +92,7 @@ test('Pancake config exposes order polling and retry settings', () => {
   assert.equal(value.orderPollPageSize, 25);
   assert.equal(value.orderPollLookbackMs, 900000);
   assert.equal(value.syncMaxAttempts, 7);
+  assert.equal(value.orderExportCutoffAt, '2026-07-12T00:00:00.000Z');
 
   for (const source of [
     { PANCAKE_ORDER_POLL_INTERVAL_MS: '59999' },
@@ -98,6 +104,14 @@ test('Pancake config exposes order polling and retry settings', () => {
     { PANCAKE_SYNC_MAX_ATTEMPTS: '0' },
     { PANCAKE_SYNC_MAX_ATTEMPTS: '101' }
   ]) assert.throws(() => pancakeConfig({ PANCAKE_MODE: 'read_only', ...source }), /Pancake auto sync/);
+});
+
+test('Pancake live mode requires a valid order export cutover timestamp', () => {
+  assert.throws(() => pancakeConfig({ PANCAKE_MODE: 'live' }), /PANCAKE_ORDER_EXPORT_CUTOFF_AT is required/);
+  assert.throws(() => pancakeConfig({
+    PANCAKE_MODE: 'live',
+    PANCAKE_ORDER_EXPORT_CUTOFF_AT: 'not-a-date'
+  }), /valid ISO timestamp/);
 });
 
 test('Pancake catalog bounds accept safe integers and reject invalid values', () => {

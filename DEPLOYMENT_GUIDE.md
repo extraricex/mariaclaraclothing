@@ -1079,12 +1079,20 @@ Only after Stage A/B passes, set:
 ```dotenv
 PANCAKE_MODE=live
 PANCAKE_AUTO_SYNC_ENABLED=true
+# Record this immediately before enabling live mode. Historical orders before
+# this UTC instant will not be backfilled or exported.
+PANCAKE_ORDER_EXPORT_CUTOFF_AT=YYYY-MM-DDTHH:MM:SSZ
 PANCAKE_AUTO_SYNC_INTERVAL_MS=600000
 PANCAKE_ORDER_POLL_INTERVAL_MS=300000
 PANCAKE_ORDER_POLL_PAGE_SIZE=50
 PANCAKE_ORDER_POLL_LOOKBACK_MS=900000
 PANCAKE_SYNC_MAX_ATTEMPTS=10
 ```
+
+`PANCAKE_ORDER_EXPORT_CUTOFF_AT` is mandatory in live mode. Never move it
+backward to import old website orders unless each order has been checked for an
+existing manually-created Pancake order. Cancelled orders are excluded and a
+queued export is marked skipped when its website order is cancelled.
 
 ```bash
 docker compose --env-file deploy/production.env \

@@ -510,6 +510,7 @@ test('admin cancellation restores order stock and records restock movement', asy
   const app = createFreshApp();
   const { findEditableProductBySlug } = require('../src/products/catalogRepository');
   const { listInventoryMovements } = require('../src/inventory/inventoryMovementRepository');
+  const pancakeOrderExportRepository = require('../src/integrations/pancake/pancakeOrderExportRepository');
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
     listener.on('error', reject);
@@ -547,12 +548,16 @@ test('admin cancellation restores order stock and records restock movement', asy
     const afterCancelProduct = await findEditableProductBySlug(slug);
     const afterCancelStock = Number(afterCancelProduct.variants.find((variant) => variant.sku === 'ARISOFF-S').stockQuantity);
     const movements = await listInventoryMovements({ orderNumber });
+    const exportStatus = await pancakeOrderExportRepository.getOrderExportStatus();
+    const cancelledExport = exportStatus.recent.find((item) => item.orderNumber === orderNumber);
 
     assert.equal(cancelResponse.status, 200);
     assert.equal(cancelBody.order.status, 'cancelled');
     assert.equal(afterCancelStock, afterOrderStock + ORDER_ITEM.quantity);
     assert.ok(movements.some((movement) => movement.reason === 'order_created' && movement.quantityChange === -ORDER_ITEM.quantity));
     assert.ok(movements.some((movement) => movement.reason === 'order_cancelled' && movement.quantityChange === ORDER_ITEM.quantity));
+    assert.equal(cancelledExport?.status, 'skipped');
+    assert.equal(cancelledExport?.safeErrorCode, 'pancake_order_cancelled_before_export');
 
     const reopenResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
       method: 'PATCH',

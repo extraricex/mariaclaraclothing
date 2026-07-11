@@ -30,6 +30,7 @@ function toPublicRow(row) {
 async function enqueueOrderExport(order, options = {}) {
   const orderNumber = String(order?.orderNumber || '').trim();
   if (!orderNumber) return null;
+  if (String(order?.status || '').toLowerCase() === 'cancelled') return null;
   if (!hasDatabaseUrl()) {
     const existing = memory.exports.find((item) => item.orderNumber === orderNumber);
     if (existing) {
@@ -64,7 +65,7 @@ async function enqueueOrderExport(order, options = {}) {
   return toPublicRow(result.rows[0]);
 }
 
-async function enqueueMissingOrderExports({ limit = 100 } = {}) {
+async function enqueueMissingOrderExports({ limit = 100, placedAfter = '' } = {}) {
   const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
   if (!hasDatabaseUrl()) return 0;
   const missing = await query(
@@ -72,9 +73,11 @@ async function enqueueMissingOrderExports({ limit = 100 } = {}) {
      FROM orders o
      LEFT JOIN pancake_order_exports e ON e.order_number=o.order_number
      WHERE e.order_number IS NULL
+       AND o.status <> 'cancelled'
+       AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)
      ORDER BY o.placed_at DESC
      LIMIT $1`,
-    [safeLimit]
+    [safeLimit, placedAfter || null]
   );
   for (const row of missing.rows) {
     await enqueueOrderExport({ orderNumber: row.order_number });
@@ -133,11 +136,14 @@ async function loadOrderExportReadiness(config = {}) {
   };
 }
 
-async function listQueuedOrderExports({ limit = 50 } = {}) {
+async function listQueuedOrderExports({ limit = 50, placedAfter = '' } = {}) {
   const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
   if (!hasDatabaseUrl()) {
+    const cutoff = placedAfter ? new Date(placedAfter).getTime() : 0;
     return memory.exports
-      .filter((item) => ['queued', 'blocked', 'failed'].includes(item.status))
+      .filter((item) => ['queued', 'blocked', 'failed'].includes(item.status)
+        && String(item.order?.status || '') !== 'cancelled'
+        && (!cutoff || new Date(item.order?.placedAt || 0).getTime() >= cutoff))
       .slice(0, safeLimit)
       .map((item) => ({ orderNumber: item.orderNumber, order: item.order }));
   }
@@ -146,9 +152,11 @@ async function listQueuedOrderExports({ limit = 50 } = {}) {
      FROM pancake_order_exports e
      JOIN orders o ON o.order_number=e.order_number
      WHERE e.status IN ('queued','blocked','failed')
+       AND o.status <> 'cancelled'
+       AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)
      ORDER BY o.placed_at DESC, e.queued_at DESC
      LIMIT $1`,
-    [safeLimit]
+    [safeLimit, placedAfter || null]
   );
   return result.rows.map((row) => ({
     orderNumber: row.order_number,
@@ -168,20 +176,25 @@ async function listQueuedOrderExports({ limit = 50 } = {}) {
   }));
 }
 
-async function loadOrderExportWorkItem(orderNumber) {
+async function loadOrderExportWorkItem(orderNumber, { placedAfter = '' } = {}) {
   const normalized = String(orderNumber || '').trim();
   if (!normalized) return null;
   if (!hasDatabaseUrl()) {
-    const item = memory.exports.find((candidate) => candidate.orderNumber === normalized && candidate.status !== 'sent');
+    const cutoff = placedAfter ? new Date(placedAfter).getTime() : 0;
+    const item = memory.exports.find((candidate) => candidate.orderNumber === normalized
+      && candidate.status !== 'sent'
+      && String(candidate.order?.status || '') !== 'cancelled'
+      && (!cutoff || new Date(candidate.order?.placedAt || 0).getTime() >= cutoff));
     return item ? { orderNumber: item.orderNumber, order: item.order } : null;
   }
   const result = await query(
     `SELECT e.order_number,o.*
      FROM pancake_order_exports e
      JOIN orders o ON o.order_number=e.order_number
-     WHERE e.order_number=$1 AND e.status <> 'sent'
+     WHERE e.order_number=$1 AND e.status <> 'sent' AND o.status <> 'cancelled'
+       AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)
      LIMIT 1`,
-    [normalized]
+    [normalized, placedAfter || null]
   );
   const row = result.rows[0];
   if (!row) return null;
@@ -306,6 +319,26 @@ async function markOrderExportFailed(orderNumber, safeErrorCode) {
   return result.rows[0] ? toPublicRow(result.rows[0]) : null;
 }
 
+async function markOrderExportSkipped(orderNumber, safeErrorCode = 'pancake_order_cancelled_before_export') {
+  const normalized = String(orderNumber || '').trim();
+  if (!normalized) return null;
+  if (!hasDatabaseUrl()) {
+    const existing = memory.exports.find((item) => item.orderNumber === normalized);
+    if (existing && existing.status !== 'sent') Object.assign(existing, {
+      status: 'skipped', safeErrorCode, updatedAt: new Date().toISOString()
+    });
+    return existing || null;
+  }
+  const result = await query(
+    `UPDATE pancake_order_exports
+     SET status='skipped',safe_error_code=$2,updated_at=now()
+     WHERE order_number=$1 AND status <> 'sent'
+     RETURNING *`,
+    [normalized, safeErrorCode]
+  );
+  return result.rows[0] ? toPublicRow(result.rows[0]) : null;
+}
+
 async function getOrderExportStatus() {
   if (!hasDatabaseUrl()) {
     const summary = summarize(memory.exports);
@@ -372,6 +405,7 @@ module.exports = {
   loadOrderExportWorkItem,
   loadOrderExportReadiness,
   markOrderExportFailed,
+  markOrderExportSkipped,
   markOrderExportSent,
   resetMemoryForTests
 };
