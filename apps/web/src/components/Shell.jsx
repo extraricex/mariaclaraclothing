@@ -658,15 +658,17 @@ export default function Shell() {
             <div>
               <p className="eyebrow text-paper/60">Product details</p>
               <p className="mt-3 max-w-xs text-sm text-paper/80">
-                Premium 240 GSM cotton, cut oversized. Cash on delivery anywhere in the Philippines —
-                we text before we ship.
+                Premium 240 GSM cotton, cut oversized. Cash on delivery nationwide, with every order reviewed before shipment.
               </p>
-              {storeInfo && (storeInfo.contactEmail || storeInfo.contactNumber) && (
+              {storeInfo && (storeInfo.contactEmail || storeInfo.contactNumber || storeInfo.storeAddress) && (
                 <ul className="mt-4 space-y-1 text-sm text-paper/80">
                   {storeInfo.contactEmail && (
                     <li><a className="text-action hover:text-accent" href={`mailto:${storeInfo.contactEmail}`}>{storeInfo.contactEmail}</a></li>
                   )}
-                  {storeInfo.contactNumber && <li>{storeInfo.contactNumber}</li>}
+                  {storeInfo.contactNumber && (
+                    <li><a className="text-action hover:text-accent" href={`tel:${storeInfo.contactNumber.replace(/[^\d+]/g, '')}`}>{storeInfo.contactNumber}</a></li>
+                  )}
+                  {storeInfo.storeAddress && <li>{storeInfo.storeAddress}</li>}
                 </ul>
               )}
               {storeInfo && Object.values(storeInfo.socialLinks || {}).some(Boolean) && (

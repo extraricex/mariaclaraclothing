@@ -39,7 +39,15 @@ test('storefront footer shows contact info from store settings', async () => {
   assert.match(source, /loadStorefrontSettings/);
   assert.match(source, /contactEmail/);
   assert.match(source, /contactNumber/);
+  assert.match(source, /storeAddress/);
   assert.match(source, /socialLinks/);
+});
+
+test('contact page shows the configured returns address', async () => {
+  const source = await readFile(path.join(root, 'pages', 'Contact.jsx'), 'utf8');
+
+  assert.match(source, /storeAddress/);
+  assert.match(source, /Returns address/);
 });
 
 test('store settings lib carries website defaults and an SEO applier', async () => {
