@@ -251,7 +251,7 @@ test('public storefront settings expose only the safe subset', async () => {
     const body = await response.json();
     assert.equal(body.settings.storeName, 'Maria Clara Clothing');
     assert.equal(body.settings.messengerUrl, 'https://m.me/mariaclaraclothing');
-    assert.equal(body.settings.hero.title, 'Premium');
+    assert.equal(body.settings.hero.title, 'Maria Clara');
     assert.equal(body.settings.hero.primaryButtonText, 'Shop new arrivals');
     assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals']);
     assert.ok(body.settings.sizeChart.imageUrl);
