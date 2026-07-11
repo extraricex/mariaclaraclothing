@@ -542,7 +542,8 @@ export default function Shell() {
           aria-label="Shop categories"
           className={`overflow-x-auto border-t border-line bg-paper transition-[max-height,opacity] duration-300 ${headerSolid ? 'max-h-12 opacity-100' : 'max-h-0 opacity-0'}`}
         >
-          <div className="mx-auto flex max-w-7xl gap-5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-clay sm:px-5 lg:px-8">
+          <div className="mx-auto flex max-w-7xl items-center gap-5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-clay sm:px-5 lg:px-8">
+            <span className="shrink-0 border-r border-line pr-5 font-bold text-ink">Shop Categories</span>
             {CATEGORY_LINKS.map((link) => (
               <a key={link.label} href={link.href} className="text-action shrink-0 hover:text-accent">
                 {link.label}

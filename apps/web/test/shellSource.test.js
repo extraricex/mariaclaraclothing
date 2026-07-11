@@ -44,6 +44,7 @@ test('shell uses a transparent homepage header until the page scrolls', async ()
   assert.match(source, /const headerSolid = !isHomePage \|\| headerScrolled \|\| menuOpen;/);
   assert.match(source, /headerSolid \? 'border-line bg-paper text-ink shadow-\[0_12px_30px_rgba\(0,0,0,0\.08\)\]' : 'border-transparent bg-transparent text-paper shadow-none'/);
   assert.match(source, /aria-label="Shop categories"/);
+  assert.match(source, />Shop Categories<\/span>/);
   assert.match(source, /max-h-12 opacity-100/);
   assert.match(source, /New/);
   assert.match(source, /label: 'Tees'/);
