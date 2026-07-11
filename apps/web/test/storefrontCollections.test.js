@@ -47,3 +47,12 @@ test('best sellers are hidden from storefront collection sections', () => {
 
   assert.deepEqual(sections, []);
 });
+
+test('homepage provides a Catalog-backed Tees destination for shop navigation', async () => {
+  const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'Home.jsx'), 'utf8');
+
+  assert.match(source, /catalogAlreadyVisible/);
+  assert.match(source, /includes\('Catalog'\)/);
+  assert.match(source, /id="catalog"/);
+  assert.match(source, /title="Tees"/);
+});

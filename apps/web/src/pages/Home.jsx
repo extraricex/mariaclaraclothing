@@ -62,6 +62,8 @@ export default function Home() {
   }, []);
 
   const collectionSections = buildStorefrontCollectionSections(products, collectionNames);
+  const catalogAlreadyVisible = collectionSections.some((section) => section.id === 'catalog');
+  const tees = products.filter((product) => (product.collections || []).includes('Catalog'));
   const bestSellers = bestSellerProducts(products);
   const activeBanner = banners[activeHeroIndex] || banners[0] || null;
   const heroCopy = storefrontSettings.hero || DEFAULT_STOREFRONT_SETTINGS.hero;
@@ -168,9 +170,19 @@ export default function Home() {
 
       {collectionSections.map((section) => <CollectionSection key={section.title} {...section} />)}
 
+      {!catalogAlreadyVisible && (
+        <CollectionSection
+          id="catalog"
+          index={String(collectionSections.length + 1).padStart(2, '0')}
+          title="Tees"
+          blurb="Premium cotton tees in oversized and crop-box silhouettes."
+          products={tees}
+        />
+      )}
+
       <CollectionSection
         id="best-sellers"
-        index={String(collectionSections.length + 1).padStart(2, '0')}
+        index={String(collectionSections.length + (catalogAlreadyVisible ? 1 : 2)).padStart(2, '0')}
         title="Best Seller"
         blurb="The pieces customers choose most, ranked from successful orders."
         products={bestSellers}

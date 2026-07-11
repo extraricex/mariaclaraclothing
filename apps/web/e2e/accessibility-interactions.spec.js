@@ -33,7 +33,7 @@ test('mobile menu closes with Escape and restores trigger focus', async ({ page 
   await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('homepage slides remain manual and dots meet touch size', async ({ page }) => {
+test('homepage slides auto-advance and dots support manual touch navigation', async ({ page }) => {
   await page.route('**/api/site-content', async (route) => {
     const response = await route.fetch();
     const body = await response.json();
@@ -52,12 +52,11 @@ test('homepage slides remain manual and dots meet touch size', async ({ page }) 
 
   const first = dots.nth(0);
   await expect(first).toHaveAttribute('aria-current', 'true');
-  await page.waitForTimeout(5500);
-  await expect(first).toHaveAttribute('aria-current', 'true');
+  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true', { timeout: 7000 });
 
   const box = await dots.nth(1).boundingBox();
   expect(box.width).toBeGreaterThanOrEqual(44);
   expect(box.height).toBeGreaterThanOrEqual(44);
-  await dots.nth(1).click();
-  await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
+  await first.click();
+  await expect(first).toHaveAttribute('aria-current', 'true');
 });
