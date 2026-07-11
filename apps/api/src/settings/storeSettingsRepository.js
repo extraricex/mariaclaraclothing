@@ -83,9 +83,9 @@ function defaultStoreSettings() {
   return {
     general: {
       storeName: 'Maria Clara Clothing',
-      contactEmail: '',
-      contactNumber: '',
-      storeAddress: '',
+      contactEmail: 'mariaclaraclothing@gmail.com',
+      contactNumber: '09155003061',
+      storeAddress: 'Bucandala IV, Imus City, Cavite',
       messengerUrl: 'https://m.me/mariaclaraclothing',
       socialLinks: {
         facebook: 'https://www.facebook.com/mariaclaraclothing',
@@ -163,7 +163,7 @@ function defaultStoreSettings() {
         buttonLabel: 'Report Issue',
         mobileButtonLabel: 'Issue?',
         position: 'bottom-right',
-        notificationEmail: '',
+        notificationEmail: 'asparedestrends@gmail.com',
         webhookUrl: '',
         pushNotificationsEnabled: false
       }
