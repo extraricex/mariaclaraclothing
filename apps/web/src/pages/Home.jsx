@@ -32,6 +32,12 @@ function visibleStorefrontCollections(collections) {
     .filter((name) => String(name || '').trim().toLowerCase() !== 'best sellers');
 }
 
+function bestSellerProducts(products) {
+  return [...(Array.isArray(products) ? products : [])]
+    .sort((left, right) => Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0))
+    .slice(0, 4);
+}
+
 export default function Home() {
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState([]);
@@ -56,6 +62,7 @@ export default function Home() {
   }, []);
 
   const collectionSections = buildStorefrontCollectionSections(products, collectionNames);
+  const bestSellers = bestSellerProducts(products);
   const activeBanner = banners[activeHeroIndex] || banners[0] || null;
   const heroCopy = storefrontSettings.hero || DEFAULT_STOREFRONT_SETTINGS.hero;
 
@@ -160,6 +167,14 @@ export default function Home() {
       )}
 
       {collectionSections.map((section) => <CollectionSection key={section.title} {...section} />)}
+
+      <CollectionSection
+        id="best-sellers"
+        index={String(collectionSections.length + 1).padStart(2, '0')}
+        title="Best Seller"
+        blurb="The pieces customers choose most, ranked from successful orders."
+        products={bestSellers}
+      />
 
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

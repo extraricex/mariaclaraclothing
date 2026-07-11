@@ -46,7 +46,12 @@ test('shell uses a transparent homepage header until the page scrolls', async ()
   assert.match(source, /aria-label="Shop categories"/);
   assert.match(source, /max-h-12 opacity-100/);
   assert.match(source, /New/);
-  assert.doesNotMatch(source, /Best Sellers/);
+  assert.match(source, /label: 'Tees'/);
+  assert.match(source, /label: 'Freedom of Mind'/);
+  assert.match(source, /label: 'Best Seller'/);
+  assert.match(source, /href: '\/#catalog'/);
+  assert.match(source, /href: '\/#freedom-of-mind'/);
+  assert.match(source, /href: '\/#best-sellers'/);
   assert.doesNotMatch(source, /Restocked/);
   assert.doesNotMatch(source, /Long Sleeves/);
   assert.doesNotMatch(source, /Cotton'/);

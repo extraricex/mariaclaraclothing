@@ -25,7 +25,10 @@ const NAV_LINKS = [
   { to: '/contact', label: 'Contact' }
 ];
 const CATEGORY_LINKS = [
-  { href: '/#new-arrivals', label: 'New' }
+  { href: '/#new-arrivals', label: 'New' },
+  { href: '/#catalog', label: 'Tees' },
+  { href: '/#freedom-of-mind', label: 'Freedom of Mind' },
+  { href: '/#best-sellers', label: 'Best Seller' }
 ];
 const MENU_LINKS = [
   { href: '/', label: 'Shop' },
