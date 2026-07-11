@@ -1,3 +1,5 @@
+const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
+
 class PancakeOrderExportError extends Error {
   constructor(code) {
     super(code);
@@ -191,11 +193,12 @@ function safeProviderCode(error) {
   return /^pancake_[a-z_]+$/.test(code) ? code : 'pancake_order_live_export_failed';
 }
 
-async function runOrderLiveExport({ config, client, repository, now = () => new Date(), limit = 50, orderNumber = '' }) {
+async function runOrderLiveExport({ config, client, repository, syncRepository = syncRepositoryDefault, now = () => new Date(), limit = 50, orderNumber = '' }) {
   const emptySummary = { checkedCount: 0, sentCount: 0, blockedCount: 0, failedCount: 0 };
   if (config.mode !== 'live') {
     return { status: 'blocked', lastErrorCode: 'pancake_mode_not_allowed', summary: emptySummary };
   }
+  await syncRepository.backfillSentOrderExportLinks?.({ limit });
   const readiness = await repository.loadOrderExportReadiness();
   if (!orderNumber && repository.enqueueMissingOrderExports) {
     await repository.enqueueMissingOrderExports({ limit });
@@ -221,6 +224,7 @@ async function runOrderLiveExport({ config, client, repository, now = () => new 
 
     try {
       const response = await client.createOrder(readiness.shopId, request);
+      const sentAt = now().toISOString();
       await repository.markOrderExportSent({
         orderNumber: item.orderNumber,
         mode: 'live',
@@ -229,7 +233,14 @@ async function runOrderLiveExport({ config, client, repository, now = () => new 
         orderSourceId: String(readiness.orderSourceId || ''),
         pancakeOrderId: response.pancakeOrderId,
         requestPayload: redactPancakeOrderPayload(request),
-        sentAt: now().toISOString()
+        sentAt
+      });
+      await syncRepository.upsertOrderLink?.({
+        orderNumber: item.orderNumber,
+        pancakeOrderId: response.pancakeOrderId,
+        shopId: String(readiness.shopId || ''),
+        syncStatus: 'synced',
+        lastSyncedAt: sentAt
       });
       summary.sentCount += 1;
     } catch (error) {

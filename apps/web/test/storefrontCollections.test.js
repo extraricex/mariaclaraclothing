@@ -13,7 +13,7 @@ test('homepage renders registered non-empty collections dynamically', async () =
   assert.match(home, /collectionSections\.map/);
   assert.doesNotMatch(home, /const newArrivals =/);
   assert.doesNotMatch(home, /const freedom =/);
-  assert.match(settings, /storefrontCollections:\s*\['New Arrivals', 'Freedom of Mind'\]/);
+  assert.match(settings, /storefrontCollections:\s*\['New Arrivals'\]/);
 });
 
 test('collection sections preserve existing copy and hide empty registered collections', () => {
@@ -35,4 +35,15 @@ test('collection sections preserve existing copy and hide empty registered colle
   assert.match(sections[1].blurb, /statement line/);
   assert.equal(sections[2].blurb, 'Explore the latest pieces in Summer Drop.');
   assert.deepEqual(sections[2].products.map((product) => product.id), ['one']);
+});
+
+test('best sellers are hidden from storefront collection sections', () => {
+  const products = [
+    { id: 'new', collections: ['New Arrivals'], successfulOrderCount: 0 },
+    { id: 'slow', collections: [], successfulOrderCount: 2 },
+    { id: 'top', collections: [], successfulOrderCount: 9 }
+  ];
+  const sections = buildStorefrontCollectionSections(products, ['Best Sellers']);
+
+  assert.deepEqual(sections, []);
 });

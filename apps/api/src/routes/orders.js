@@ -168,7 +168,7 @@ function checkoutSourceUrl(req) {
 }
 
 function createOrderNumber() {
-  return `DEMO-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+  return `MCC-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 }
 
 function orderConfirmationPayload(order) {
@@ -484,6 +484,15 @@ function createOrderRouter(overrides = {}) {
         return res.status(503).json({ error: 'Store is under maintenance.' });
       }
       if (req.body?.quoteId) {
+        const paymentMethod = String(req.body?.paymentMethod || 'cash_on_delivery').trim();
+        const enabledPaymentMethods = Array.isArray(settings.payments?.methods)
+          ? settings.payments.methods.filter((method) => method.enabled).map((method) => method.id)
+          : ['cash_on_delivery'];
+        if (!enabledPaymentMethods.includes(paymentMethod)) {
+          throw new CommerceError('Payment method is not available.', {
+            code: 'payment_method_unavailable', status: 400
+          });
+        }
         const customerAccountId = await dependencies.resolveCustomerAccountId(req);
         const cookies = parseMetaCookies(req.headers.cookie);
         const result = await dependencies.placeAuthoritativeCheckout({

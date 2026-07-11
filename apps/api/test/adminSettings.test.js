@@ -253,7 +253,8 @@ test('public storefront settings expose only the safe subset', async () => {
     assert.equal(body.settings.messengerUrl, 'https://m.me/mariaclaraclothing');
     assert.equal(body.settings.hero.title, 'Premium');
     assert.equal(body.settings.hero.primaryButtonText, 'Shop new arrivals');
-    assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals', 'Freedom of Mind']);
+    assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals']);
+    assert.ok(body.settings.sizeChart.imageUrl);
     assert.equal(body.settings.shipping.regions.length, 3);
     assert.deepEqual(
       body.settings.paymentMethods.map((method) => method.id),
@@ -276,14 +277,14 @@ test('admin can create and list persistent storefront collections', async () => 
 
     const before = await fetch(`http://127.0.0.1:${port}/api/admin/collections`, adminRequest());
     assert.equal(before.status, 200);
-    assert.deepEqual((await before.json()).collections, ['New Arrivals', 'Freedom of Mind']);
+    assert.deepEqual((await before.json()).collections, ['New Arrivals']);
 
     const created = await fetch(
       `http://127.0.0.1:${port}/api/admin/collections`,
       adminRequest('POST', { name: '  Summer   Drop  ' })
     );
     assert.equal(created.status, 201);
-    assert.deepEqual((await created.json()).collections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.deepEqual((await created.json()).collections, ['New Arrivals', 'Summer Drop']);
 
     const duplicate = await fetch(
       `http://127.0.0.1:${port}/api/admin/collections`,
@@ -293,7 +294,7 @@ test('admin can create and list persistent storefront collections', async () => 
     assert.match((await duplicate.json()).error, /already exists/i);
 
     const publicBody = await (await fetch(`http://127.0.0.1:${port}/api/storefront-settings`)).json();
-    assert.deepEqual(publicBody.settings.storefrontCollections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.deepEqual(publicBody.settings.storefrontCollections, ['New Arrivals', 'Summer Drop']);
     assert.ok(publicBody.settings.collectionCountdowns['Summer Drop']);
   });
 });

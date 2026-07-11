@@ -283,14 +283,33 @@ export default function Checkout() {
       productName: product.name,
       size: variant.size,
       quantity: 1,
+      maxStock: Number(variant.stockQuantity || 0),
       unitPriceCents: variant.priceCents ?? product.priceCents,
       imageUrl: product.images?.[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''
     };
-    addToCart(cartItem);
+    const result = addToCart(cartItem);
+    if (result?.limited) {
+      setStatus({ tone: 'error', message: 'Maximum available quantity added.' });
+      return;
+    }
     trackFacebookAddToCart(cartItem);
     setStatus({ tone: 'neutral', message: `${product.name} was added to your cart.` });
+  }
+
+  function increaseItem(item) {
+    const result = updateQuantity(item.variantId, Number(item.quantity) + 1);
+    if (result?.limited) {
+      setStatus({ tone: 'error', message: 'Maximum available quantity added.' });
+      return;
+    }
+    setStatus({ tone: 'neutral', message: '' });
+  }
+
+  function decreaseItem(item) {
+    setStatus({ tone: 'neutral', message: '' });
+    updateQuantity(item.variantId, Number(item.quantity) - 1);
   }
 
   function fieldClass(fieldName) {
@@ -589,8 +608,8 @@ export default function Checkout() {
                       <h3 className="break-words text-sm font-semibold leading-snug">{item.productName}</h3>
                       <p className="text-xs uppercase tracking-[0.12em] text-clay">{item.size}</p>
                       <div className="mt-1 flex items-center gap-3 text-xs">
-                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)} aria-label="Decrease quantity">−</button>
-                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)} aria-label="Increase quantity">+</button>
+                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => decreaseItem(item)} aria-label="Decrease quantity">−</button>
+                        <button type="button" className="touch-target border border-line px-2 py-0.5 disabled:cursor-not-allowed disabled:text-clay" disabled={Number(item.maxStock) > 0 && Number(item.quantity) >= Number(item.maxStock)} onClick={() => increaseItem(item)} aria-label="Increase quantity">+</button>
                         <button type="button" className="text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>Remove</button>
                       </div>
                     </div>

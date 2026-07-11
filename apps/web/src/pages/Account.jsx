@@ -73,6 +73,7 @@ export default function Account() {
           productName: product.name,
           size: variant.size,
           quantity: Number(item.quantity),
+          maxStock: Number(variant.stockQuantity || 0),
           unitPriceCents: product.priceCents,
           imageUrl: product.images[0]?.url || '',
           externalPosProductId: product.externalPosProductId || '',

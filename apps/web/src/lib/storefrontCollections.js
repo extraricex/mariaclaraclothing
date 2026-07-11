@@ -16,7 +16,8 @@ export function buildStorefrontCollectionSections(products, collectionNames) {
   const catalog = Array.isArray(products) ? products : [];
   const names = Array.isArray(collectionNames) ? collectionNames : [];
   return names.reduce((sections, name) => {
-    const members = catalog.filter((product) => (product.collections || []).includes(name));
+    if (String(name || '').trim().toLowerCase() === 'best sellers') return sections;
+    const members = collectionMembers(catalog, name);
     if (!members.length) return sections;
     sections.push({
       id: sectionId(name),
@@ -27,4 +28,8 @@ export function buildStorefrontCollectionSections(products, collectionNames) {
     });
     return sections;
   }, []);
+}
+
+function collectionMembers(catalog, name) {
+  return catalog.filter((product) => (product.collections || []).includes(name));
 }

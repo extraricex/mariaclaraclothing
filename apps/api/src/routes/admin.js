@@ -26,8 +26,10 @@ const {
 const {
   appendHomepageBanners,
   getSiteContent,
+  updateBlackLogo,
   updateFooterLogo,
   updateLogo,
+  updateMenuLogo,
   updateHomepageBanners
 } = require('../siteContent/siteContentRepository');
 const {
@@ -73,6 +75,13 @@ const {
 } = require('../auth/sessionHttp');
 const { createAdminPancakeRouter } = require('./adminPancake');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
+const {
+  deleteIssueReport,
+  findIssueReportById,
+  issueReportCounts,
+  listIssueReports,
+  updateIssueReport
+} = require('../issueReports/issueReportRepository');
 
 const router = express.Router();
 
@@ -228,6 +237,66 @@ router.post('/collections', async (req, res, next) => {
   }
 });
 
+router.get('/issue-reports', async (req, res, next) => {
+  try {
+    const reports = await listIssueReports({
+      status: req.query.status,
+      issueType: req.query.issueType,
+      search: req.query.search
+    });
+    const counts = await issueReportCounts();
+    return res.json({ reports, counts });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/issue-reports/counts', async (_req, res, next) => {
+  try {
+    return res.json({ counts: await issueReportCounts() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/issue-reports/:id/screenshot', async (req, res, next) => {
+  try {
+    const report = await findIssueReportById(req.params.id);
+    if (!report?.screenshotUrl) return res.status(404).json({ error: 'Issue screenshot not found.' });
+    return res.sendFile(path.basename(report.screenshotUrl), {
+      root: issueUploadDir(),
+      dotfiles: 'deny'
+    }, (error) => {
+      if (error && !res.headersSent) next(error);
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch('/issue-reports/:id', async (req, res, next) => {
+  try {
+    const report = await updateIssueReport(req.params.id, {
+      status: req.body?.status,
+      adminNote: req.body?.adminNote
+    });
+    if (!report) return res.status(404).json({ error: 'Issue report not found.' });
+    return res.json({ report });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete('/issue-reports/:id', async (req, res, next) => {
+  try {
+    const deleted = await deleteIssueReport(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Issue report not found.' });
+    return res.status(204).end();
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/inventory-movements', async (req, res, next) => {
   try {
     const filters = inventoryMovementFilters(req.query, true);
@@ -310,6 +379,40 @@ router.post('/site-content/logo/image', logoUpload.single('image'), async (req, 
     });
 
     return res.status(201).json({ siteContent, logo: siteContent.logo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/site-content/black-logo/image', logoUpload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'A black logo image is required' });
+    }
+
+    const siteContent = await updateBlackLogo({
+      url: logoUploadUrl(req.file.filename),
+      altText: 'Maria Clara Clothing black logo'
+    });
+
+    return res.status(201).json({ siteContent, blackLogo: siteContent.blackLogo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/site-content/menu-logo/image', logoUpload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'A menu logo image is required' });
+    }
+
+    const siteContent = await updateMenuLogo({
+      url: logoUploadUrl(req.file.filename),
+      altText: 'Maria Clara Clothing menu logo'
+    });
+
+    return res.status(201).json({ siteContent, menuLogo: siteContent.menuLogo });
   } catch (error) {
     return next(error);
   }
@@ -413,7 +516,7 @@ router.get('/products/settings', async (req, res, next) => {
         statuses: ['active', 'draft', 'archived'],
         defaultStatus: 'active',
         lowStockThreshold: await activeLowStockThreshold(),
-        recommendedCollections: ['New Arrivals', 'Best Sellers', 'Maria Clara', 'Oversized Shirt', 'Sale'],
+        recommendedCollections: ['New Arrivals', 'Maria Clara', 'Oversized Shirt', 'Sale'],
         recommendedVariantSizes: ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'],
         imageGuidance: 'Use square or 4:5 product photos with clear alt text.'
       }
@@ -795,6 +898,13 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    if (req.body?.items !== undefined) {
+      return res.status(409).json({ error: 'Order items cannot be changed after checkout. Create a replacement order instead.' });
+    }
+    if (existingOrder.status === 'cancelled' && req.body?.status && req.body.status !== 'cancelled') {
+      return res.status(409).json({ error: 'Cancelled orders cannot be reopened. Create a replacement order instead.' });
+    }
+
     const changes = normalizeOrderUpdate(req.body || {}, existingOrder);
     const order = await updateOrder(orderNumber, changes);
 
@@ -846,6 +956,10 @@ async function restoreCancelledOrderStock(previousOrder, nextOrder) {
     size: item.size,
     quantityChange: item.quantity
   })));
+}
+
+function issueUploadDir() {
+  return process.env.ISSUE_UPLOAD_DIR || path.join(__dirname, '..', '..', 'private-uploads', 'issues');
 }
 
 function stockCorrectionMovements(previousProduct, nextProduct) {

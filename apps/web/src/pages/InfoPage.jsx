@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 
 export default function InfoPage({ title, pageKey }) {
@@ -28,6 +29,25 @@ export default function InfoPage({ title, pageKey }) {
               <span className="text-accent transition-transform group-open:rotate-45">+</span>
             </summary>
             <p className="mt-3 break-words text-sm leading-relaxed text-ink-soft">{section.body}</p>
+            {section.imageUrl && (
+              <img
+                src={section.imageUrl}
+                alt={section.imageAltText || section.heading}
+                className="mt-4 w-full rounded-sm border border-line bg-white object-contain"
+                loading="lazy"
+              />
+            )}
+            {section.linkHref && section.linkText && (
+              section.linkHref.startsWith('/') ? (
+                <Link to={section.linkHref} className="btn-ghost mt-4 inline-flex !px-4 !py-2 text-xs">
+                  {section.linkText}
+                </Link>
+              ) : (
+                <a href={section.linkHref} target="_blank" rel="noreferrer" className="btn-ghost mt-4 inline-flex !px-4 !py-2 text-xs">
+                  {section.linkText}
+                </a>
+              )
+            )}
           </details>
         ))}
         <div className="hairline" />

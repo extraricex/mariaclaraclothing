@@ -8,6 +8,8 @@ import Cart from './pages/Cart.jsx';
 import Checkout from './pages/Checkout.jsx';
 import ThankYou from './pages/ThankYou.jsx';
 import InfoPage from './pages/InfoPage.jsx';
+import Contact from './pages/Contact.jsx';
+import SizeChart from './pages/SizeChart.jsx';
 import { CustomerLogin, CustomerRegister } from './pages/CustomerAuth.jsx';
 import Account from './pages/Account.jsx';
 import AccountSettings from './pages/AccountSettings.jsx';
@@ -28,6 +30,7 @@ import DiscountDetail from './admin/DiscountDetail.jsx';
 import Banners from './admin/Banners.jsx';
 import Settings from './admin/Settings.jsx';
 import PancakePos from './admin/PancakePos.jsx';
+import IssueReports from './admin/IssueReports.jsx';
 
 export default function App() {
   return (
@@ -44,6 +47,8 @@ export default function App() {
         <Route path="/faq" element={<InfoPage title="Frequently asked questions" pageKey="faq" />} />
         <Route path="/shipping-returns" element={<InfoPage title="Shipping & returns" pageKey="shippingReturns" />} />
         <Route path="/terms" element={<InfoPage title="Terms of service" pageKey="terms" />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/size-chart" element={<SizeChart />} />
       </Route>
       <Route path="/checkout" element={<MaintenanceGate><PageTransition><Checkout /></PageTransition></MaintenanceGate>} />
       <Route path="/admin/login" element={<Login />} />
@@ -64,6 +69,7 @@ export default function App() {
         <Route path="banners" element={<Banners />} />
         <Route path="settings" element={<Settings />} />
         <Route path="pancake" element={<PancakePos />} />
+        <Route path="issue-reports" element={<IssueReports />} />
       </Route>
       <Route path="*" element={<MaintenanceGate><Shell /></MaintenanceGate>} />
     </Routes>

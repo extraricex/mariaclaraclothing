@@ -61,6 +61,12 @@ function normalizeImageUrl(product) {
   return String(first?.url || product.image || '');
 }
 
+function insufficientStockMessage(variant, availableQuantity) {
+  const size = String(variant.size || 'Selected size').trim() || 'Selected size';
+  const pieces = availableQuantity === 1 ? 'piece' : 'pieces';
+  return `${size} only has ${availableQuantity} ${pieces} left. Please update your cart quantity.`;
+}
+
 async function normalizeLine(input, deps) {
   const productId = String(input?.productId || '').trim();
   const variantId = String(input?.variantId || '').trim();
@@ -88,11 +94,13 @@ async function normalizeLine(input, deps) {
 
   const availableQuantity = Number(variant.stockQuantity || 0);
   if (availableQuantity < quantity) {
-    throw commerceError('A product variant does not have enough stock.', 'insufficient_stock', 409, {
+    throw commerceError(insufficientStockMessage(variant, availableQuantity), 'insufficient_stock', 409, {
       productId,
       variantId,
       sku: variant.sku || '',
-      availableQuantity
+      size: variant.size || '',
+      availableQuantity,
+      requestedQuantity: quantity
     });
   }
 
@@ -110,12 +118,30 @@ async function normalizeLine(input, deps) {
     size: variant.size || '',
     imageUrl: normalizeImageUrl(product),
     externalPosVariantId: variant.externalPosVariantId || '',
+    availableQuantity,
     quantity,
     unitPriceCents,
     lineTotalCents: unitPriceCents * quantity,
     unitWeightGrams: Number(product.parcelWeightGrams || 250),
     lineWeightGrams: Number(product.parcelWeightGrams || 250) * quantity
   };
+}
+
+function aggregateCartItems(items) {
+  const byVariant = new Map();
+  for (const item of items || []) {
+    const productId = String(item?.productId || '').trim();
+    const variantId = String(item?.variantId || '').trim();
+    const quantity = Number(item?.quantity);
+    const key = `${productId}\u0000${variantId}`;
+    if (!byVariant.has(key)) {
+      byVariant.set(key, { ...item, productId, variantId, quantity });
+    } else {
+      const existing = byVariant.get(key);
+      existing.quantity = Number(existing.quantity || 0) + quantity;
+    }
+  }
+  return [...byVariant.values()];
 }
 
 function shippingConfig(settings, address) {
@@ -154,7 +180,7 @@ async function buildAuthoritativeQuote(input = {}, dependencyOverrides = {}) {
     throw commerceError('Cart is empty.', 'cart_invalid');
   }
 
-  const items = await Promise.all(input.items.map((item) => normalizeLine(item, deps)));
+  const items = await Promise.all(aggregateCartItems(input.items).map((item) => normalizeLine(item, deps)));
   const address = input.address ? deps.resolveAddress(input.address) : null;
   const settings = await deps.getSettings();
   const shipping = shippingConfig(settings, address);

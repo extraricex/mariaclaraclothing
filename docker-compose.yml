@@ -69,13 +69,15 @@ services:
       - "3000:3000"
     volumes:
       - uploads:/app/public/uploads
+      - issue_uploads:/app/private-uploads
     depends_on:
       postgres:
         condition: service_healthy
 
   web:
     build:
-      context: ./apps/web
+      context: .
+      dockerfile: apps/web/Dockerfile
       args:
         VITE_FACEBOOK_META_PIXEL_ENABLED: ${VITE_FACEBOOK_META_PIXEL_ENABLED:-true}
         VITE_FACEBOOK_META_PIXEL_ID: ${VITE_FACEBOOK_META_PIXEL_ID:-595813035761213}
@@ -87,3 +89,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  issue_uploads:

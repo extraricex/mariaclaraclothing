@@ -20,6 +20,7 @@ const PRODUCT_SUBNAV = [
 const SECONDARY_NAV = [
   { to: '/admin/customers', label: 'Customers' },
   { to: '/admin/discounts', label: 'Discounts' },
+  { to: '/admin/issue-reports', label: 'Issue Reports', badge: true },
   { to: '/admin/banners', label: 'Website content' },
   { to: '/admin/pancake', label: 'Pancake POS' },
   { to: '/admin/settings', label: 'Settings' }
@@ -69,6 +70,7 @@ export default function AdminLayout() {
   const [adminLogo, setAdminLogo] = useState(null);
   const [ordersMenuOpen, setOrdersMenuOpen] = useState(false);
   const [productsMenuOpen, setProductsMenuOpen] = useState(false);
+  const [issueCount, setIssueCount] = useState(0);
 
   const ordersActive = location.pathname.startsWith('/admin/orders');
   const productsActive =
@@ -87,6 +89,12 @@ export default function AdminLayout() {
       .then((body) => setAdminLogo(body.siteContent?.logo || null))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    adminJson('/api/admin/issue-reports/counts')
+      .then((body) => setIssueCount(Number(body.counts?.new || 0)))
+      .catch(() => {});
+  }, [location.pathname]);
 
   // Auto-expand the section that matches the current route so the active
   // sub-page is always visible without an extra click.
@@ -164,7 +172,10 @@ export default function AdminLayout() {
 
           {SECONDARY_NAV.map((item) => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => topLinkClass(isActive)}>
-              {item.label}
+              <span className="flex items-center justify-between gap-2">
+                <span>{item.label}</span>
+                {item.badge && issueCount > 0 && <span className="rounded-full bg-accent-deep px-2 py-0.5 text-[10px] text-white">{issueCount}</span>}
+              </span>
             </NavLink>
           ))}
         </nav>
@@ -210,7 +221,7 @@ export default function AdminLayout() {
               end={item.end}
               className={({ isActive }) => `text-action whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-[var(--admin-orange)]' : 'text-[var(--admin-muted)]'}`}
             >
-              {item.label}
+              {item.label}{item.badge && issueCount > 0 ? ` (${issueCount})` : ''}
             </NavLink>
           ))}
         </div>

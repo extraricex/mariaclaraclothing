@@ -59,11 +59,12 @@ test('homepage renders hero text and buttons from storefront settings', async ()
   const source = await readFile(path.join(root, 'pages', 'Home.jsx'), 'utf8');
 
   assert.match(source, /heroCopy/);
-  assert.match(source, /heroCopy\.eyebrow/);
   assert.match(source, /heroCopy\.title/);
   assert.match(source, /heroCopy\.highlight/);
   assert.match(source, /heroCopy\.primaryButtonText/);
   assert.match(source, /heroCopy\.primaryButtonLink/);
+  assert.doesNotMatch(source, /heroCopy\.eyebrow/);
+  assert.doesNotMatch(source, /CustomerBadge/);
   assert.doesNotMatch(source, /Philippine Streetwear - Imus Cavite<\/CustomerBadge>/);
   assert.doesNotMatch(source, /Shop new arrivals<\/CustomerButton>/);
 });

@@ -38,20 +38,19 @@ export default function ProductCard({ product, index }) {
             />
           )}
           {soldOut && (
-            <CustomerBadge tone="dark" className="absolute left-1/2 top-3 -translate-x-1/2">
+            <CustomerBadge tone="dark" className="product-stock-alert absolute bottom-2 left-1/2 -translate-x-1/2">
               Sold out
             </CustomerBadge>
           )}
           {limited && (
-            <CustomerBadge tone="warm" className="absolute left-1/2 top-3 -translate-x-1/2">
+            <CustomerBadge tone="warm" className="product-stock-alert absolute bottom-2 left-1/2 -translate-x-1/2">
               Limited pieces
             </CustomerBadge>
           )}
         </div>
-        <div className="mt-2 flex flex-col items-center gap-1 px-1 pb-1 pt-0.5">
-          <div>
-            <p className="eyebrow">{String(index + 1).padStart(2, '0')}</p>
-            <h3 className="mt-1 text-[12px] font-semibold leading-snug sm:text-sm group-hover:text-accent">{product.name}</h3>
+        <div className="mt-2 flex flex-col items-center gap-0.5 px-1 pb-1 pt-0.5">
+          <div className="min-w-0">
+            <h3 className="line-clamp-2 text-[12px] font-semibold leading-snug sm:text-sm group-hover:text-accent">{product.name}</h3>
           </div>
           <div className="text-[12px] sm:text-sm">
             <p className={onSale ? 'font-semibold text-accent' : 'font-semibold'}>{formatMoney(product.priceCents)}</p>

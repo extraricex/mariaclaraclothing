@@ -375,25 +375,7 @@ test('admin order APIs require login and support list detail and status updates'
           city: 'IMUS',
           province: 'CAVITE',
           addressLine: '99 Edited Street, BUCANDALA IV, IMUS, CAVITE, Philippines'
-        },
-        items: [
-          {
-            productId: ORDER_ITEM.productId,
-            variantId: ORDER_ITEM.variantId,
-            productName: 'Edited CURIOSITY OFFWHITE Shirt',
-            size: 'Medium',
-            quantity: 2,
-            unitPriceCents: 70000
-          },
-          {
-            productId: 'manual-added-item',
-            variantId: 'manual-added-item-large',
-            productName: 'Manual Admin Added Item',
-            size: 'Large',
-            quantity: 1,
-            unitPriceCents: 50000
-          }
-        ]
+        }
       })
     });
     const updateBody = await updateResponse.json();
@@ -415,16 +397,10 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(updateBody.order.address.city, 'IMUS');
     assert.equal(updateBody.order.address.province, 'CAVITE');
     assert.equal(updateBody.order.address.addressLine, '99 Edited Street, BUCANDALA IV, IMUS, CAVITE, Philippines');
-    assert.equal(updateBody.order.items.length, 2);
-    assert.equal(updateBody.order.items[0].productName, 'Edited CURIOSITY OFFWHITE Shirt');
-    assert.equal(updateBody.order.items[0].size, 'Medium');
-    assert.equal(updateBody.order.items[0].quantity, 2);
-    assert.equal(updateBody.order.items[0].unitPriceCents, 70000);
-    assert.equal(updateBody.order.subtotalCents, 190000);
-    assert.equal(updateBody.order.totalCents, 198000);
-    assert.equal(updateBody.order.adminEditableTotals.subtotalCents, 190000);
-    assert.equal(updateBody.order.adminEditableTotals.totalCents, 198000);
-    assert.equal(updateBody.order.cartSnapshot.length, 2);
+    assert.equal(updateBody.order.items.length, 1);
+    assert.deepEqual(updateBody.order.items, detailBody.order.items);
+    assert.equal(updateBody.order.subtotalCents, detailBody.order.subtotalCents);
+    assert.equal(updateBody.order.totalCents, detailBody.order.totalCents);
     assert.equal(updateBody.order.statusEvents.length, 1);
     assert.equal(updateBody.order.statusEvents[0].orderNumber, orderNumber);
     assert.equal(updateBody.order.statusEvents[0].source, 'admin');
@@ -577,6 +553,34 @@ test('admin cancellation restores order stock and records restock movement', asy
     assert.equal(afterCancelStock, afterOrderStock + ORDER_ITEM.quantity);
     assert.ok(movements.some((movement) => movement.reason === 'order_created' && movement.quantityChange === -ORDER_ITEM.quantity));
     assert.ok(movements.some((movement) => movement.reason === 'order_cancelled' && movement.quantityChange === ORDER_ITEM.quantity));
+
+    const reopenResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
+      method: 'PATCH',
+      ...adminRequest('local-admin-token'),
+      headers: {
+        ...adminRequest('local-admin-token').headers,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ status: 'confirmed' })
+    });
+    assert.equal(reopenResponse.status, 409);
+
+    const itemEditResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
+      method: 'PATCH',
+      ...adminRequest('local-admin-token'),
+      headers: {
+        ...adminRequest('local-admin-token').headers,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ items: [ORDER_ITEM] })
+    });
+    assert.equal(itemEditResponse.status, 409);
+
+    const afterRejectedEdits = await findEditableProductBySlug(slug);
+    assert.equal(
+      Number(afterRejectedEdits.variants.find((variant) => variant.sku === 'CURIOSITYOFF-S').stockQuantity),
+      afterCancelStock
+    );
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('PRODUCTS_DATA_FILE', previousProductsDataFile);

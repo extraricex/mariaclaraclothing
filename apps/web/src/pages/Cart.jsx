@@ -15,6 +15,7 @@ export default function Cart() {
   const [products, setProducts] = useState([]);
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState('');
+  const [cartNotice, setCartNotice] = useState('');
   const quantity = cartQuantity(items);
   const subtotal = subtotalCents(items);
   const displaySubtotal = quote?.subtotalCents ?? subtotal;
@@ -65,13 +66,33 @@ export default function Cart() {
       productName: product.name,
       size: variant.size,
       quantity: 1,
+      maxStock: Number(variant.stockQuantity || 0),
       unitPriceCents: variant.priceCents ?? product.priceCents,
       imageUrl: product.images?.[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''
     };
-    addToCart(cartItem);
+    const result = addToCart(cartItem);
+    if (result?.limited) {
+      setCartNotice('Maximum available quantity added.');
+      return;
+    }
+    setCartNotice('');
     trackFacebookAddToCart(cartItem);
+  }
+
+  function increaseItem(item) {
+    const result = updateQuantity(item.variantId, Number(item.quantity) + 1);
+    if (result?.limited) {
+      setCartNotice(`Only ${item.maxStock} ${item.size} left in stock.`);
+      return;
+    }
+    setCartNotice('');
+  }
+
+  function decreaseItem(item) {
+    setCartNotice('');
+    updateQuantity(item.variantId, Number(item.quantity) - 1);
   }
 
   function trackCheckout() {
@@ -101,6 +122,7 @@ export default function Cart() {
         {quote?.freeShippingUnlocked ? 'Free shipping unlocked' : 'Shipping and promos refresh before checkout'}
       </p>
       {quoteError && <p className="mt-3 text-sm text-accent-deep" role="alert">{quoteError}</p>}
+      {cartNotice && <p className="mt-3 text-sm text-accent-deep" role="alert">{cartNotice}</p>}
 
       <div className="mt-8 divide-y divide-line border-y border-line">
         {items.map((item) => (
@@ -119,9 +141,9 @@ export default function Cart() {
               </div>
               <div className="mt-auto flex flex-wrap items-center gap-3 pt-3 sm:gap-4">
                 <div className="flex items-center rounded-[8px] border border-line bg-white">
-                  <button type="button" className="px-3 py-1.5" aria-label="Decrease quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)}>−</button>
+                  <button type="button" className="px-3 py-1.5" aria-label="Decrease quantity" onClick={() => decreaseItem(item)}>−</button>
                   <span className="min-w-8 text-center text-sm">{item.quantity}</span>
-                  <button type="button" className="px-3 py-1.5" aria-label="Increase quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)}>+</button>
+                  <button type="button" className="px-3 py-1.5 disabled:cursor-not-allowed disabled:text-clay" aria-label="Increase quantity" disabled={Number(item.maxStock) > 0 && Number(item.quantity) >= Number(item.maxStock)} onClick={() => increaseItem(item)}>+</button>
                 </div>
                 <button type="button" className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>
                   Remove

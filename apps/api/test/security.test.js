@@ -102,7 +102,7 @@ test('checkout is rate limited but order confirmation reads are not', async () =
 
       // GET confirmation must never be throttled by the checkout limiter.
       for (let i = 0; i < 5; i += 1) {
-        const read = await fetch(`http://127.0.0.1:${port}/api/orders/DEMO-does-not-exist`);
+        const read = await fetch(`http://127.0.0.1:${port}/api/orders/MCC-does-not-exist`);
         assert.notEqual(read.status, 429);
       }
     });

@@ -69,6 +69,10 @@ async function withServer(dependencies, callback) {
   }
 }
 
+function storeSettings(methods = [{ id: 'cash_on_delivery', enabled: true }]) {
+  return { website: { maintenanceMode: false }, payments: { methods } };
+}
+
 function routeDependencies(snapshot, overrides = {}) {
   return {
     hasDatabaseUrl: () => true,
@@ -181,7 +185,7 @@ test('V2 order ignores client money and forwards the idempotency key', async () 
   let input;
   const calls = [];
   await withOrderServer({
-    getStoreSettings: async () => ({ website: { maintenanceMode: false } }),
+    getStoreSettings: async () => storeSettings(),
     resolveCustomerAccountId: async () => '',
     placeAuthoritativeCheckout: async (value) => {
       input = value;
@@ -208,9 +212,67 @@ test('V2 order ignores client money and forwards the idempotency key', async () 
   });
 });
 
+test('V2 order rejects a payment method that is not enabled in server settings', async () => {
+  let checkoutCalled = false;
+  await withOrderServer({
+    getStoreSettings: async () => storeSettings(),
+    resolveCustomerAccountId: async () => '',
+    placeAuthoritativeCheckout: async () => {
+      checkoutCalled = true;
+      return { orderNumber: 'MCC-1' };
+    },
+    authoritativeDependencies: () => ({})
+  }, async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': 'idem-1234567890123456' },
+      body: JSON.stringify({
+        quoteId: 'quote-1', cartSessionId: 'cart-1',
+        customer: { fullName: 'Maria Test', phone: '09171234567' },
+        paymentMethod: 'gcash'
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.code, 'payment_method_unavailable');
+    assert.equal(checkoutCalled, false);
+  });
+});
+
+test('V2 order accepts a non-COD payment method only when server settings enable it', async () => {
+  let checkoutInput;
+  await withOrderServer({
+    getStoreSettings: async () => storeSettings([
+      { id: 'cash_on_delivery', enabled: true },
+      { id: 'gcash', enabled: true }
+    ]),
+    resolveCustomerAccountId: async () => '',
+    placeAuthoritativeCheckout: async (input) => {
+      checkoutInput = input;
+      return { orderNumber: 'MCC-2', totalCents: 72900 };
+    },
+    exportPancakeOrderNow: async () => {},
+    authoritativeDependencies: () => ({})
+  }, async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': 'idem-1234567890123456' },
+      body: JSON.stringify({
+        quoteId: 'quote-1', cartSessionId: 'cart-1',
+        customer: { fullName: 'Maria Test', phone: '09171234567' },
+        paymentMethod: 'gcash'
+      })
+    });
+
+    assert.equal(response.status, 201);
+    assert.equal(checkoutInput.paymentMethod, 'gcash');
+  });
+});
+
 test('V2 order still succeeds when realtime Pancake export fails', async () => {
   await withOrderServer({
-    getStoreSettings: async () => ({ website: { maintenanceMode: false } }),
+    getStoreSettings: async () => storeSettings(),
     resolveCustomerAccountId: async () => '',
     placeAuthoritativeCheckout: async () => ({ orderNumber: 'MCC-2', totalCents: 72900 }),
     exportPancakeOrderNow: async () => { throw new Error('Pancake unavailable'); },

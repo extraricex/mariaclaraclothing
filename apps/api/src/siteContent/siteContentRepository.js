@@ -20,6 +20,8 @@ function isPromise(value) {
 function defaultSiteContent() {
   return {
     logo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing logo' },
+    blackLogo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing black logo' },
+    menuLogo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing menu logo' },
     footerLogo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing footer logo' },
     homepageBanners: [
       { url: '/brand/hero1v2.jpg', altText: 'Maria Clara campaign', sortOrder: 0 },
@@ -99,6 +101,32 @@ function updateLogo(logo) {
   return saveSiteContent({ ...content, logo: normalizeLogo(logo) });
 }
 
+function updateBlackLogo(blackLogo) {
+  const content = getSiteContent();
+  if (isPromise(content)) {
+    return content.then((current) =>
+      saveSiteContent({ ...current, blackLogo: normalizeLogo(blackLogo, 'Maria Clara Clothing black logo') })
+    );
+  }
+  return saveSiteContent({
+    ...content,
+    blackLogo: normalizeLogo(blackLogo, 'Maria Clara Clothing black logo')
+  });
+}
+
+function updateMenuLogo(menuLogo) {
+  const content = getSiteContent();
+  if (isPromise(content)) {
+    return content.then((current) =>
+      saveSiteContent({ ...current, menuLogo: normalizeLogo(menuLogo, 'Maria Clara Clothing menu logo') })
+    );
+  }
+  return saveSiteContent({
+    ...content,
+    menuLogo: normalizeLogo(menuLogo, 'Maria Clara Clothing menu logo')
+  });
+}
+
 function updateFooterLogo(footerLogo) {
   const content = getSiteContent();
   if (isPromise(content)) {
@@ -116,6 +144,8 @@ function normalizeSiteContent(content) {
   const logo = normalizeLogo(content?.logo);
   return {
     logo,
+    blackLogo: normalizeLogo(content?.blackLogo || logo, 'Maria Clara Clothing black logo'),
+    menuLogo: normalizeLogo(content?.menuLogo || logo, 'Maria Clara Clothing menu logo'),
     footerLogo: normalizeLogo(content?.footerLogo || logo, 'Maria Clara Clothing footer logo'),
     homepageBanners: normalizeBanners(content?.homepageBanners)
   };
@@ -148,8 +178,10 @@ module.exports = {
   getSiteContent,
   normalizeLogo,
   saveSiteContent,
+  updateBlackLogo,
   updateFooterLogo,
   updateLogo,
+  updateMenuLogo,
   updateHomepageBanners,
   normalizeBanners
 };

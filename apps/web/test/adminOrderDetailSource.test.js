@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-test('admin order detail editor exposes contact, separated address, and item editing fields', async () => {
+test('admin order detail editor exposes contact and address editing while locking inventory items', async () => {
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'OrderDetail.jsx'), 'utf8');
 
   assert.match(source, /customer:\s*\{/);
@@ -12,16 +12,15 @@ test('admin order detail editor exposes contact, separated address, and item edi
   assert.match(source, /email:\s*order\.customer\?\.email/);
   assert.match(source, /items:\s*\(order\.items/);
   assert.match(source, /changes\.customer\s*=\s*form\.customer/);
-  assert.match(source, /changes\.items\s*=\s*form\.items/);
+  assert.doesNotMatch(source, /changes\.items\s*=/);
   assert.match(source, /House \/ Street/);
   assert.match(source, /City \/ Municipality/);
   assert.match(source, /Barangay/);
   assert.match(source, /Province/);
-  assert.match(source, /Product name/);
   assert.match(source, /Unit price/);
-  assert.match(source, /updateItem/);
-  assert.match(source, /removeItem/);
-  assert.match(source, /addItem/);
+  assert.doesNotMatch(source, /updateItem/);
+  assert.doesNotMatch(source, /removeItem/);
+  assert.doesNotMatch(source, /addItem/);
   assert.match(source, /order-detail-shell/);
   assert.match(source, /order-detail-grid/);
   assert.match(source, /order-status-badge/);
@@ -39,11 +38,8 @@ test('admin order detail editor exposes contact, separated address, and item edi
   assert.match(source, /Billing address/);
   assert.match(source, /Print/);
   assert.match(source, /More actions/);
-  assert.match(source, /productSearchQuery/);
-  assert.match(source, /\/api\/admin\/products\?\$\{params\}/);
-  assert.match(source, /Search products to add/);
-  assert.match(source, /selectCatalogVariant/);
-  assert.match(source, /variant\.sku/);
+  assert.doesNotMatch(source, /productSearchQuery/);
+  assert.doesNotMatch(source, /Search products to add/);
 });
 
 test('admin order detail uses Pancake-style operational sections with real order fields', async () => {

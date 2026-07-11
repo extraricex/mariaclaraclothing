@@ -131,6 +131,34 @@ async function getOrderLinkByPancakeOrderId(pancakeOrderId) {
   return result.rows[0] ? rowLink(result.rows[0]) : null;
 }
 
+async function backfillSentOrderExportLinks({ limit = 100 } = {}) {
+  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
+  if (!hasDatabaseUrl()) return { linkedCount: 0 };
+  const result = await query(
+    `SELECT e.order_number,e.pancake_order_id,e.shop_id,e.sent_at
+     FROM pancake_order_exports e
+     LEFT JOIN pancake_order_links l ON l.order_number=e.order_number
+     WHERE e.status='sent'
+       AND e.pancake_order_id <> ''
+       AND l.order_number IS NULL
+     ORDER BY e.sent_at DESC NULLS LAST,e.updated_at DESC
+     LIMIT $1`,
+    [safeLimit]
+  );
+  let linkedCount = 0;
+  for (const row of result.rows) {
+    const link = await upsertOrderLink({
+      orderNumber: row.order_number,
+      pancakeOrderId: row.pancake_order_id,
+      shopId: row.shop_id || '',
+      syncStatus: 'synced',
+      lastSyncedAt: row.sent_at ? new Date(row.sent_at).toISOString() : memoryNow()
+    });
+    if (link) linkedCount += 1;
+  }
+  return { linkedCount };
+}
+
 async function enqueueSyncEvent(input) {
   const event = {
     id: crypto.randomUUID(),
@@ -317,6 +345,7 @@ async function getOrderSyncSummary() {
 
 module.exports = {
   appendSyncLog,
+  backfillSentOrderExportLinks,
   claimDueSyncEvents,
   enqueueSyncEvent,
   getOrderSyncSummary,

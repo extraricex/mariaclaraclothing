@@ -124,7 +124,7 @@ test('website settings merge partial updates over the stored section', async () 
     assert.equal(defaults.website.ticker.length, 4);
     assert.equal(defaults.website.seo.title, 'Maria Clara Clothing — Premium Philippine Streetwear');
     assert.deepEqual(defaults.website.hero, {
-      eyebrow: 'Philippine Streetwear - Imus Cavite',
+      eyebrow: '',
       title: 'Premium',
       highlight: 'Cotton',
       subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
@@ -164,6 +164,10 @@ test('website settings merge partial updates over the stored section', async () 
     assert.equal(afterHero.website.hero.primaryButtonLink, '/products');
     assert.equal(afterHero.website.hero.secondaryButtonLink, 'https://m.me/mariaclaraclothing');
     assert.deepEqual(afterHero.website.ticker, ['Big drop Friday']);
+
+    const afterHiddenEyebrow = repository.updateSettingsSection('website', { hero: { eyebrow: '' } });
+    assert.equal(afterHiddenEyebrow.website.hero.eyebrow, '');
+    assert.equal(afterHiddenEyebrow.website.hero.title, 'New Drop');
 
     const afterFaq = repository.updateSettingsSection('website', {
       infoPages: { faq: [{ heading: 'New question', body: 'New answer.' }] }
@@ -236,12 +240,7 @@ test('collection countdown settings validate and increment server revisions', as
       durationSeconds: 7200,
       revision: 0
     });
-    assert.deepEqual(defaults.collectionCountdowns['Freedom of Mind'], {
-      enabled: false,
-      message: 'Hurry! Limited time left',
-      durationSeconds: 7200,
-      revision: 0
-    });
+    assert.equal(defaults.collectionCountdowns['Best Sellers'], undefined);
 
     const first = repository.updateCollectionCountdown('New Arrivals', {
       enabled: true,
@@ -289,10 +288,10 @@ test('storefront collections persist unique names and receive countdown defaults
 
   try {
     const repository = freshRepository();
-    assert.deepEqual(repository.getStoreSettings().storefrontCollections, ['New Arrivals', 'Freedom of Mind']);
+    assert.deepEqual(repository.getStoreSettings().storefrontCollections, ['New Arrivals']);
 
     const updated = await repository.addStorefrontCollection('  Summer   Drop  ');
-    assert.deepEqual(updated.storefrontCollections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.deepEqual(updated.storefrontCollections, ['New Arrivals', 'Summer Drop']);
     assert.deepEqual(updated.collectionCountdowns['Summer Drop'], {
       enabled: false,
       message: 'Hurry! Limited time left',

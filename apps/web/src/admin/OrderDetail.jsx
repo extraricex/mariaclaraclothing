@@ -65,20 +65,6 @@ function orderForm(order) {
   };
 }
 
-function emptyItem() {
-  return {
-    productId: '',
-    variantId: '',
-    sku: '',
-    slug: '',
-    productName: '',
-    size: '',
-    imageUrl: '',
-    quantity: 1,
-    unitPriceCents: 0
-  };
-}
-
 function pesoInputValue(cents) {
   return (Number(cents || 0) / 100).toFixed(2);
 }
@@ -184,10 +170,6 @@ export default function OrderDetail() {
   const [history, setHistory] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showActions, setShowActions] = useState(false);
-  const [showProductPicker, setShowProductPicker] = useState(false);
-  const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [productSearchResults, setProductSearchResults] = useState([]);
-  const [productSearchLoading, setProductSearchLoading] = useState(false);
   const [orderProductFilter, setOrderProductFilter] = useState('');
   const [noteTab, setNoteTab] = useState('All');
   const [jntPreview, setJntPreview] = useState(null);
@@ -223,29 +205,6 @@ export default function OrderDetail() {
     if (addressDraft.cityCode) loadBarangays(addressDraft.cityCode).then(setBarangays);
   }, [addressDraft.cityCode]);
 
-  useEffect(() => {
-    if (!showProductPicker) return;
-    const params = new URLSearchParams();
-    if (productSearchQuery.trim()) params.set('q', productSearchQuery.trim());
-    params.set('sort', 'name_asc');
-    let ignore = false;
-    setProductSearchLoading(true);
-    adminJson(`/api/admin/products?${params}`)
-      .then((body) => {
-        if (!ignore) setProductSearchResults(body.products || []);
-      })
-      .catch((err) => {
-        if (!ignore) {
-          setProductSearchResults([]);
-          setMessage(err.message);
-        }
-      })
-      .finally(() => {
-        if (!ignore) setProductSearchLoading(false);
-      });
-    return () => { ignore = true; };
-  }, [showProductPicker, productSearchQuery]);
-
   if (!order || !form) {
     return <p className="text-sm text-clay">{message || 'Loading order...'}</p>;
   }
@@ -256,54 +215,6 @@ export default function OrderDetail() {
       ...previous,
       customer: { ...previous.customer, [field]: value }
     }));
-  }
-
-  function updateItem(index, field, value) {
-    setIsEditing(true);
-    setForm((previous) => ({
-      ...previous,
-      items: previous.items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)
-    }));
-  }
-
-  function removeItem(index) {
-    setIsEditing(true);
-    setForm((previous) => ({
-      ...previous,
-      items: previous.items.filter((_item, itemIndex) => itemIndex !== index)
-    }));
-  }
-
-  function addItem() {
-    emptyItem();
-    setIsEditing(true);
-    setShowProductPicker(true);
-    setProductSearchQuery('');
-  }
-
-  function selectCatalogVariant(product, variant) {
-    setIsEditing(true);
-    setForm((previous) => ({
-      ...previous,
-      items: [
-        ...previous.items,
-        {
-          productId: product.id || product.slug || '',
-          variantId: variant.id || '',
-          sku: variant.sku || '',
-          slug: product.slug || '',
-          productName: product.name || '',
-          size: variant.size || '',
-          imageUrl: product.image || '',
-          quantity: 1,
-          unitPriceCents: Number(variant.priceCents || product.priceCents || 0),
-          stockQuantity: variant.stockQuantity || 0
-        }
-      ]
-    }));
-    setShowProductPicker(false);
-    setProductSearchQuery('');
-    setProductSearchResults([]);
   }
 
   async function startAddressEdit() {
@@ -340,11 +251,6 @@ export default function OrderDetail() {
     setMessage('');
     const changes = { ...form };
     changes.customer = form.customer;
-    changes.items = form.items.map((item) => ({
-      ...item,
-      quantity: Number(item.quantity || 0),
-      unitPriceCents: Number(item.unitPriceCents || 0)
-    }));
     if (editAddress) {
       const province = provinces.find((item) => item.code === addressDraft.provinceCode);
       const city = cities.find((item) => item.code === addressDraft.cityCode);
@@ -605,41 +511,24 @@ export default function OrderDetail() {
                           <span>Size: {fallback(size, 'No size')}</span>
                         </div>
                         {(item.discountCents || discountTotalCents) ? <p className="mt-1 text-[11px] font-medium text-[#7ee787]">Promotion applied</p> : null}
-                        {isEditing && (
-                          <label className="mt-2 block">
-                            <span className="sr-only">Product name</span>
-                            <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-sm !text-[var(--admin-text)]" value={item.productName} disabled={!isEditing} onChange={(e) => updateItem(index, 'productName', e.target.value)} />
-                          </label>
-                        )}
                       </div>
                       <div className="hidden min-w-0 text-center md:block">
-                        {!isEditing ? (
-                          <>
-                            <p className="truncate text-xs font-semibold text-[var(--admin-text)]" title={size || color}>{fallback(size, 'No size')}</p>
-                            <p className="mt-1 truncate text-[11px] text-[var(--admin-muted)]" title={color}>Color: {fallback(color, 'No color')}</p>
-                          </>
-                        ) : (
-                          <label className="block">
-                            <span className="eyebrow md:hidden">Size</span>
-                            <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-xs !text-[var(--admin-text)]" value={item.size} disabled={!isEditing} onChange={(e) => updateItem(index, 'size', e.target.value)} />
-                          </label>
-                        )}
+                        <p className="truncate text-xs font-semibold text-[var(--admin-text)]" title={size || color}>{fallback(size, 'No size')}</p>
+                        <p className="mt-1 truncate text-[11px] text-[var(--admin-muted)]" title={color}>Color: {fallback(color, 'No color')}</p>
                       </div>
                       <label className="block text-left md:text-center">
                         <span className="eyebrow md:hidden">Quantity</span>
-                        <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-center !text-xs !text-[var(--admin-text)]" type="number" min="1" value={item.quantity} disabled={!isEditing} onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))} />
+                        <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-center !text-xs !text-[var(--admin-text)]" type="number" min="1" value={item.quantity} disabled />
                       </label>
                       <label className="block text-right">
                         <span className="eyebrow md:hidden">Unit price</span>
-                        <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-right !text-xs !text-[var(--admin-text)]" type="number" min="0" step="0.01" value={pesoInputValue(item.unitPriceCents)} disabled={!isEditing} onChange={(e) => updateItem(index, 'unitPriceCents', Math.round(Number(e.target.value || 0) * 100))} />
+                        <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-right !text-xs !text-[var(--admin-text)]" type="number" min="0" step="0.01" value={pesoInputValue(item.unitPriceCents)} disabled />
                       </label>
                       <div className="flex items-center justify-between gap-3 text-right text-sm font-semibold text-[var(--admin-text)] md:block">
                         <span className="eyebrow md:hidden">Total</span>
                         <span className="block">{formatMoney(Number(item.unitPriceCents || 0) * Number(item.quantity || 0))}</span>
                       </div>
-                      <div className="flex justify-end">
-                        <button type="button" className="rounded-[var(--radius-admin)] border border-[var(--admin-red)]/40 px-2.5 py-1.5 text-xs font-semibold text-[#ff8b98] disabled:border-[var(--admin-line)] disabled:text-[var(--admin-muted)]" onClick={() => removeItem(index)} disabled={!isEditing || form.items.length <= 1}>Remove</button>
-                      </div>
+                      <div />
                     </div>
                       );
                     })()}
@@ -648,58 +537,8 @@ export default function OrderDetail() {
                 {!visibleItems.length && <p className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-4 text-sm text-[var(--admin-muted)]">No products match this filter.</p>}
               </div>
 
-              {showProductPicker && (
-                <div className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="min-w-0 flex-1">
-                      <span className="eyebrow !text-[var(--admin-muted)]">Search products to add</span>
-                      <input
-                        className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]"
-                        value={productSearchQuery}
-                        autoFocus
-                        placeholder="Type product name, SKU, collection, or category"
-                        onChange={(e) => setProductSearchQuery(e.target.value)}
-                      />
-                    </label>
-                    <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-xs !text-[var(--admin-text)]" onClick={() => setShowProductPicker(false)}>Cancel</button>
-                  </div>
-                  <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
-                    {productSearchLoading && <p className="text-sm text-[var(--admin-muted)]">Searching products...</p>}
-                    {!productSearchLoading && productSearchResults.map((product) => (
-                      <article key={product.slug} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
-                        <div className="flex gap-3">
-                          {product.image ? (
-                            <img src={product.image} alt="" className="product-photo-blend h-14 w-12 rounded-[var(--radius-admin)] border border-[var(--admin-line)] object-cover" />
-                          ) : (
-                            <span className="h-14 w-12 rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)]" aria-hidden="true" />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-sm font-semibold text-[var(--admin-text)]">{product.name}</h3>
-                            <p className="mt-1 text-xs text-[var(--admin-muted)]">{product.category || 'Uncategorized'} · {product.inventoryQuantity || 0} in stock</p>
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                              {(product.variants || []).map((variant) => (
-                                <button
-                                  type="button"
-                                  key={variant.id}
-                                  className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-2 text-left text-xs hover:border-[var(--admin-orange)] hover:bg-[var(--admin-panel-soft)]"
-                                  onClick={() => selectCatalogVariant(product, variant)}
-                                >
-                                  <span className="block font-semibold text-[var(--admin-text)]">{variant.size || 'Default'} · {formatMoney(variant.priceCents || product.priceCents || 0)}</span>
-                                  <span className="block text-[var(--admin-muted)]">SKU {variant.sku || '-'} · Stock {variant.stockQuantity || 0}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                    {!productSearchLoading && productSearchResults.length === 0 && <p className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-sm text-[var(--admin-muted)]">No products match.</p>}
-                  </div>
-                </div>
-              )}
-
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={addItem}>Add item</button>
+                <span />
                 <button type="button" className="btn-ink !py-2 !text-xs" onClick={markAsFulfilled}>Mark as fulfilled</button>
               </div>
             </DetailCard>

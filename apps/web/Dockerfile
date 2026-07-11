@@ -1,22 +1,25 @@
 FROM node:22-alpine AS build
 
-WORKDIR /app
+WORKDIR /workspace
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+RUN npm ci --workspace apps/web --include-workspace-root=false
 
 ARG VITE_FACEBOOK_META_PIXEL_ENABLED=false
 ARG VITE_FACEBOOK_META_PIXEL_ID=595813035761213
 ENV VITE_FACEBOOK_META_PIXEL_ENABLED=$VITE_FACEBOOK_META_PIXEL_ENABLED
 ENV VITE_FACEBOOK_META_PIXEL_ID=$VITE_FACEBOOK_META_PIXEL_ID
 
-COPY index.html vite.config.js ./
-COPY src ./src
+COPY apps/web/index.html apps/web/vite.config.js ./apps/web/
+COPY apps/web/src ./apps/web/src
+WORKDIR /workspace/apps/web
 RUN npm run build
 
 FROM nginx:alpine
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
 
 EXPOSE 80

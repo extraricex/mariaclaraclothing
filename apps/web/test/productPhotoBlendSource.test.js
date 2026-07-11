@@ -12,12 +12,12 @@ test('product photos blend into the site background without affecting brand medi
   const productFiles = new Map([
     ['src/components/ProductCard.jsx', 2],
     ['src/components/Shell.jsx', 1],
-    ['src/pages/Product.jsx', 2],
+    ['src/pages/Product.jsx', 1],
     ['src/pages/Cart.jsx', 2],
     ['src/pages/Checkout.jsx', 1],
     ['src/admin/Collections.jsx', 1],
     ['src/admin/Products.jsx', 1],
-    ['src/admin/OrderDetail.jsx', 2],
+    ['src/admin/OrderDetail.jsx', 1],
     ['src/admin/ProductEditor.jsx', 1]
   ]);
 

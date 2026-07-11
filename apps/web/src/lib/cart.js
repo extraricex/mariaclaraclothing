@@ -45,6 +45,21 @@ function saveCart(items) {
   syncCartSession({ items });
 }
 
+function normalizeMaxStock(value) {
+  const maxStock = Math.trunc(Number(value));
+  return Number.isInteger(maxStock) && maxStock >= 0 ? maxStock : null;
+}
+
+function stockLimitResult(quantity, maxStock, limited = false) {
+  return {
+    ok: !limited,
+    quantity,
+    maxStock,
+    limited,
+    reason: limited ? 'max_stock' : ''
+  };
+}
+
 export function getCartSessionId() {
   let sessionId = localStorage.getItem(CART_SESSION_KEY);
   if (!sessionId) {
@@ -92,13 +107,22 @@ export function syncCartSession(payload = {}) {
 
 export function addToCart(item) {
   const cart = getCart();
+  const requestedQuantity = Math.max(1, Math.trunc(Number(item.quantity || 1)));
+  const itemMaxStock = normalizeMaxStock(item.maxStock);
   const existing = cart.find((cartItem) => cartItem.variantId === item.variantId);
   if (existing) {
-    existing.quantity += item.quantity;
+    const maxStock = normalizeMaxStock(existing.maxStock) ?? itemMaxStock;
+    const nextQuantity = Number(existing.quantity || 0) + requestedQuantity;
+    existing.maxStock = maxStock ?? existing.maxStock;
+    existing.quantity = maxStock === null ? nextQuantity : Math.min(nextQuantity, maxStock);
+    saveCart(cart);
+    return stockLimitResult(existing.quantity, maxStock, maxStock !== null && nextQuantity > maxStock);
   } else {
-    cart.push(item);
+    const nextQuantity = itemMaxStock === null ? requestedQuantity : Math.min(requestedQuantity, itemMaxStock);
+    cart.push({ ...item, quantity: nextQuantity, maxStock: itemMaxStock ?? item.maxStock });
+    saveCart(cart);
+    return stockLimitResult(nextQuantity, itemMaxStock, itemMaxStock !== null && requestedQuantity > itemMaxStock);
   }
-  saveCart(cart);
 }
 
 export function openCartDrawer() {
@@ -108,9 +132,19 @@ export function openCartDrawer() {
 
 export function updateQuantity(variantId, quantity) {
   const nextQuantity = Number(quantity);
-  saveCart(getCart()
-    .map((item) => item.variantId === variantId ? { ...item, quantity: nextQuantity } : item)
-    .filter((item) => item.quantity > 0));
+  let result = { ok: true, quantity: nextQuantity, maxStock: null, limited: false, reason: '' };
+  const nextCart = getCart()
+    .map((item) => {
+      if (item.variantId !== variantId) return item;
+      const maxStock = normalizeMaxStock(item.maxStock);
+      const safeQuantity = Math.trunc(Number(nextQuantity));
+      const clampedQuantity = maxStock === null ? safeQuantity : Math.min(safeQuantity, maxStock);
+      result = stockLimitResult(clampedQuantity, maxStock, maxStock !== null && safeQuantity > maxStock);
+      return { ...item, quantity: clampedQuantity };
+    })
+    .filter((item) => item.quantity > 0);
+  saveCart(nextCart);
+  return result;
 }
 
 export function removeFromCart(variantId) {

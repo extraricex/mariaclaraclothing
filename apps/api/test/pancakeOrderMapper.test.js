@@ -71,6 +71,28 @@ test('normalizes Pancake shipping payment and tracking fields', () => {
   assert.equal(order.deliveryNotes, 'Leave with guard');
 });
 
+test('normalizes nested Pancake shipment tracking fields', () => {
+  const { normalizePancakeOrder } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const order = normalizePancakeOrder({
+    id: 'PK-TRACK',
+    custom_id: 'MCC-TRACK',
+    status: 'Confirmed',
+    shipping_info: {
+      carrier_name: 'J&T Express',
+      tracking_number: 'JT-123',
+      shipping_status: 'shipping',
+      estimated_delivery_date: '2026-07-15',
+      delivery_notes: 'Call before delivery'
+    }
+  });
+
+  assert.equal(order.deliveryMethod, 'J&T Express');
+  assert.equal(order.trackingNumber, 'JT-123');
+  assert.equal(order.deliveryStatus, 'out_for_delivery');
+  assert.equal(order.estimatedDeliveryAt, '2026-07-15');
+  assert.equal(order.deliveryNotes, 'Call before delivery');
+});
+
 test('builds outbound Pancake order update payload from local order changes', () => {
   const { buildPancakeOrderUpdatePayload } = require('../src/integrations/pancake/pancakeOrderMapper');
   const payload = buildPancakeOrderUpdatePayload({

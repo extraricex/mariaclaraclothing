@@ -45,6 +45,21 @@ function centsFromPesos(value) {
   return Math.round(amount * 100);
 }
 
+function firstText(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function firstObject(...values) {
+  for (const value of values) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  }
+  return {};
+}
+
 function normalizePancakeItem(item = {}) {
   const variation = item.variation_info || item.variation || {};
   return {
@@ -62,9 +77,28 @@ function normalizePancakeItem(item = {}) {
 function normalizePancakeOrder(payload = {}) {
   const pancakeOrderId = String(payload.id ?? payload.order_id ?? '').trim();
   const shipping = payload.shipping_address || {};
+  const shippingInfo = firstObject(
+    payload.shipping_info,
+    payload.shipping,
+    payload.shipment,
+    payload.shipment_info,
+    payload.delivery_info,
+    payload.delivery,
+    payload.logistics,
+    payload.logistics_info
+  );
+  const shippingStatus = firstText(
+    payload.shipping_status,
+    payload.delivery_status,
+    payload.shipment_status,
+    shippingInfo.shipping_status,
+    shippingInfo.delivery_status,
+    shippingInfo.shipment_status,
+    shippingInfo.status
+  );
   const statusFields = mapPancakeStatus(payload.status_name || payload.status);
-  const shippingStatusFields = payload.shipping_status || payload.delivery_status
-    ? mapPancakeStatus(payload.shipping_status || payload.delivery_status)
+  const shippingStatusFields = shippingStatus
+    ? mapPancakeStatus(shippingStatus)
     : null;
   const noteMatch = typeof payload.note === 'string' ? payload.note.match(/Website order ([^\s]+)/) : null;
   const orderNumber = String(payload.custom_id || payload.order_number || noteMatch?.[1] || '').trim();
@@ -102,10 +136,65 @@ function normalizePancakeOrder(payload = {}) {
     paymentMethod: String(payload.payment_method || payload.payment?.method || 'cash_on_delivery').trim(),
     paymentStatus: payload.is_paid || normalizedKey(payload.payment_status || payload.payment?.status) === 'paid' ? 'paid' : 'cod_pending',
     codConfirmationStatus: 'pending',
-    deliveryMethod: String(payload.shipping_partner || payload.delivery_method || 'Standard shipping').trim(),
-    trackingNumber: String(payload.tracking_number || payload.shipping_code || '').trim(),
-    estimatedDeliveryAt: payload.estimated_delivery_at || payload.estimated_delivery_date || '',
-    deliveryNotes: String(payload.delivery_note || payload.delivery_notes || '').trim(),
+    deliveryMethod: firstText(
+      payload.shipping_partner,
+      payload.delivery_method,
+      payload.courier,
+      payload.courier_name,
+      payload.carrier,
+      payload.carrier_name,
+      shippingInfo.shipping_partner,
+      shippingInfo.delivery_method,
+      shippingInfo.courier,
+      shippingInfo.courier_name,
+      shippingInfo.carrier,
+      shippingInfo.carrier_name,
+      'Standard shipping'
+    ),
+    trackingNumber: firstText(
+      payload.tracking_number,
+      payload.trackingNumber,
+      payload.shipping_code,
+      payload.shippingCode,
+      payload.tracking_code,
+      payload.trackingCode,
+      payload.tracking_id,
+      payload.trackingId,
+      payload.waybill,
+      payload.waybill_number,
+      payload.waybillNumber,
+      payload.bill_lading_id,
+      payload.billLadingId,
+      payload.bill_of_lading,
+      payload.billOfLading,
+      shippingInfo.tracking_number,
+      shippingInfo.trackingNumber,
+      shippingInfo.shipping_code,
+      shippingInfo.shippingCode,
+      shippingInfo.tracking_code,
+      shippingInfo.trackingCode,
+      shippingInfo.tracking_id,
+      shippingInfo.trackingId,
+      shippingInfo.waybill,
+      shippingInfo.waybill_number,
+      shippingInfo.waybillNumber,
+      shippingInfo.bill_lading_id,
+      shippingInfo.billLadingId,
+      shippingInfo.bill_of_lading,
+      shippingInfo.billOfLading
+    ),
+    estimatedDeliveryAt: firstText(
+      payload.estimated_delivery_at,
+      payload.estimated_delivery_date,
+      shippingInfo.estimated_delivery_at,
+      shippingInfo.estimated_delivery_date
+    ),
+    deliveryNotes: firstText(
+      payload.delivery_note,
+      payload.delivery_notes,
+      shippingInfo.delivery_note,
+      shippingInfo.delivery_notes
+    ),
     notes: String(payload.note_print || payload.note || '').trim(),
     channel: 'Pancake POS',
     status: statusFields.status,

@@ -11,7 +11,8 @@ const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'invent
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
-const DEFAULT_STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
+const DEFAULT_STOREFRONT_COLLECTIONS = ['New Arrivals'];
+const DEFAULT_SIZE_CHART_IMAGE_URL = 'https://cdn.shopify.com/s/files/1/0781/7979/5224/files/oversizedshirtchart.jpg?v=1776047669';
 const DEFAULT_COUNTDOWN_MESSAGE = 'Hurry! Limited time left';
 
 let postgresCredentialsCache = { loaded: false, value: null };
@@ -87,7 +88,11 @@ function defaultStoreSettings() {
       contactNumber: '',
       storeAddress: '',
       messengerUrl: 'https://m.me/mariaclaraclothing',
-      socialLinks: { facebook: '', instagram: '', tiktok: '' }
+      socialLinks: {
+        facebook: 'https://www.facebook.com/mariaclaraclothing',
+        instagram: 'https://www.instagram.com/mariaclaraclothing/',
+        tiktok: ''
+      }
     },
     shipping: {
       regions: [
@@ -118,7 +123,7 @@ function defaultStoreSettings() {
         imageUrl: ''
       },
       hero: {
-        eyebrow: 'Philippine Streetwear - Imus Cavite',
+        eyebrow: '',
         title: 'Premium',
         highlight: 'Cotton',
         subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
@@ -145,10 +150,23 @@ function defaultStoreSettings() {
         terms: [
           { heading: 'Orders', body: 'All orders are Cash on Delivery and are confirmed via text message before fulfillment. We reserve the right to cancel orders we cannot confirm.' },
           { heading: 'Pricing', body: 'Prices are in Philippine pesos and may change without notice. The price at the time of your order is what you pay.' },
-          { heading: 'Product', body: 'Colors may vary slightly from photos due to screen settings and photography lighting. Measurements in size charts have a ±2cm tolerance.' },
+          { heading: 'Size Chart', body: 'Check the size chart before ordering. Measurements have a ±2cm tolerance and size exchanges depend on available stock.', linkText: 'View Size Chart', linkHref: '/size-chart' },
           { heading: 'Privacy', body: 'We use your name, mobile number, and address to fulfill and deliver orders. The customer website also uses the Facebook Meta Pixel to send page visits and shopping actions to Meta for advertising measurement. When an order is completed, our server may send purchase details and hashed contact details to Meta through the Conversions API to match the purchase without sending your delivery address or order notes. Meta handles this information under its own privacy policy. We do not sell your personal information.' },
           { heading: 'Contact', body: 'Questions about these terms? Reach us through our social channels or the contact details on your order confirmation text.' }
         ]
+      },
+      sizeChart: {
+        imageUrl: DEFAULT_SIZE_CHART_IMAGE_URL,
+        altText: 'Maria Clara Clothing size chart'
+      },
+      reportIssue: {
+        enabled: true,
+        buttonLabel: 'Report Issue',
+        mobileButtonLabel: 'Issue?',
+        position: 'bottom-right',
+        notificationEmail: '',
+        webhookUrl: '',
+        pushNotificationsEnabled: false
       }
     },
     inventory: {
@@ -225,8 +243,8 @@ function normalizeGeneral(general) {
     storeAddress: String(value.storeAddress || '').trim(),
     messengerUrl: normalizeMessengerUrl(value.messengerUrl === undefined ? defaults.messengerUrl : value.messengerUrl),
     socialLinks: {
-      facebook: String(socialLinks.facebook || '').trim(),
-      instagram: String(socialLinks.instagram || '').trim(),
+      facebook: String(socialLinks.facebook === undefined ? defaults.socialLinks.facebook : socialLinks.facebook).trim(),
+      instagram: String(socialLinks.instagram === undefined ? defaults.socialLinks.instagram : socialLinks.instagram).trim(),
       tiktok: String(socialLinks.tiktok || '').trim()
     }
   };
@@ -348,7 +366,7 @@ function normalizeHero(hero, current) {
   const value = hero && typeof hero === 'object' ? hero : {};
   const fallback = current || defaultStoreSettings().website.hero;
   return {
-    eyebrow: normalizeHeroText(value.eyebrow, fallback.eyebrow, 'Hero small text', 80),
+    eyebrow: normalizeHeroText(value.eyebrow, fallback.eyebrow, 'Hero small text', 80, false),
     title: normalizeHeroText(value.title, fallback.title, 'Hero title', 48),
     highlight: normalizeHeroText(value.highlight, fallback.highlight, 'Hero highlight text', 48),
     subtitle: normalizeHeroText(value.subtitle, fallback.subtitle, 'Hero subtitle', 220, false),
@@ -381,10 +399,58 @@ function normalizeInfoPages(infoPages, current) {
       if (!heading || !body) {
         throw badRequest('Info page sections need a heading and body.');
       }
-      return { heading, body };
+      const normalized = { heading, body };
+      const linkText = String(row?.linkText || '').trim();
+      const linkHref = String(row?.linkHref || '').trim();
+      const imageUrl = String(row?.imageUrl || '').trim();
+      const imageAltText = String(row?.imageAltText || '').trim();
+      if (linkText && linkHref) {
+        normalized.linkText = linkText;
+        normalized.linkHref = normalizeHeroButtonLink(linkHref, linkHref);
+      }
+      if (imageUrl) {
+        normalized.imageUrl = normalizeHeroButtonLink(imageUrl, imageUrl);
+        normalized.imageAltText = imageAltText;
+      }
+      return normalized;
     });
   }
   return result;
+}
+
+function normalizeSizeChart(sizeChart, current = defaultStoreSettings().website.sizeChart) {
+  const value = sizeChart && typeof sizeChart === 'object' ? sizeChart : {};
+  const imageUrl = String(value.imageUrl === undefined ? current.imageUrl : value.imageUrl).trim();
+  const altText = String(value.altText === undefined ? current.altText : value.altText).trim();
+  return {
+    imageUrl: imageUrl ? normalizeHeroButtonLink(imageUrl, imageUrl) : '',
+    altText: altText || 'Maria Clara Clothing size chart'
+  };
+}
+
+function normalizeReportIssue(reportIssue, current = defaultStoreSettings().website.reportIssue) {
+  const value = reportIssue && typeof reportIssue === 'object' ? reportIssue : {};
+  const position = String(value.position === undefined ? current.position : value.position).trim();
+  if (!['bottom-right', 'bottom-left'].includes(position)) {
+    throw badRequest('Issue button position is invalid.');
+  }
+  const notificationEmail = String(value.notificationEmail === undefined ? current.notificationEmail : value.notificationEmail).trim();
+  if (notificationEmail && !notificationEmail.includes('@')) {
+    throw badRequest('Issue notification email is invalid.');
+  }
+  const webhookUrl = String(value.webhookUrl === undefined ? current.webhookUrl : value.webhookUrl).trim();
+  if (webhookUrl) normalizeHeroButtonLink(webhookUrl, webhookUrl);
+  return {
+    enabled: value.enabled === undefined ? Boolean(current.enabled) : Boolean(value.enabled),
+    buttonLabel: normalizeHeroText(value.buttonLabel, current.buttonLabel || 'Report Issue', 'Issue button label', 28),
+    mobileButtonLabel: normalizeHeroText(value.mobileButtonLabel, current.mobileButtonLabel || 'Issue?', 'Mobile issue button label', 16),
+    position,
+    notificationEmail,
+    webhookUrl,
+    pushNotificationsEnabled: value.pushNotificationsEnabled === undefined
+      ? Boolean(current.pushNotificationsEnabled)
+      : Boolean(value.pushNotificationsEnabled)
+  };
 }
 
 function normalizeWebsite(website, current = defaultStoreSettings().website) {
@@ -394,7 +460,9 @@ function normalizeWebsite(website, current = defaultStoreSettings().website) {
     seo: value.seo === undefined ? current.seo : normalizeSeo(value.seo, current.seo),
     hero: value.hero === undefined ? normalizeHero(current.hero, defaultStoreSettings().website.hero) : normalizeHero(value.hero, current.hero),
     maintenanceMode: value.maintenanceMode === undefined ? current.maintenanceMode : Boolean(value.maintenanceMode),
-    infoPages: value.infoPages === undefined ? current.infoPages : normalizeInfoPages(value.infoPages, current.infoPages)
+    infoPages: value.infoPages === undefined ? current.infoPages : normalizeInfoPages(value.infoPages, current.infoPages),
+    sizeChart: value.sizeChart === undefined ? normalizeSizeChart(current.sizeChart) : normalizeSizeChart(value.sizeChart, current.sizeChart),
+    reportIssue: value.reportIssue === undefined ? normalizeReportIssue(current.reportIssue) : normalizeReportIssue(value.reportIssue, current.reportIssue)
   };
 }
 

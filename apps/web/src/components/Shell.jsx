@@ -9,6 +9,7 @@ import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storefrontSupport.js';
 import useModalFocus from '../hooks/useModalFocus.js';
 import PageTransition from './PageTransition.jsx';
+import ReportIssueWidget from './ReportIssueWidget.jsx';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -20,8 +21,18 @@ const TICKER_ITEMS = [
 const NAV_LINKS = [
   { to: '/', label: 'Shop' },
   { to: '/faq', label: 'FAQ' },
-  { to: '/shipping-returns', label: 'Shipping & Returns' },
-  { to: '/terms', label: 'Terms' }
+  { to: '/terms', label: 'Terms' },
+  { to: '/contact', label: 'Contact' }
+];
+const CATEGORY_LINKS = [
+  { href: '/#new-arrivals', label: 'New' }
+];
+const MENU_LINKS = [
+  { href: '/', label: 'Shop' },
+  { href: '/#new-arrivals', label: 'New' },
+  { href: '/faq', label: 'FAQ' },
+  { href: '/terms', label: 'Terms' },
+  { href: '/contact', label: 'Contact' }
 ];
 const FREE_SHIPPING_OFFER_DISMISSED = 'maria-clara-free-shipping-offer-dismissed';
 const RECOMMENDATION_DISMISSED = 'maria-clara-new-arrival-recommendation-dismissed';
@@ -155,6 +166,7 @@ function CartIcon() {
 function CartDrawer({ items, quote, quoteError, open, onClose }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
+  const [quantityNotice, setQuantityNotice] = useState('');
   useModalFocus({ open, containerRef: dialogRef, initialFocusRef: closeButtonRef, onClose });
 
   const subtotal = items.reduce((sum, item) => sum + Number(item.unitPriceCents || 0) * Number(item.quantity || 0), 0);
@@ -170,6 +182,20 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
       `checkout:${getCartSessionId()}`
     );
     onClose();
+  }
+
+  function increaseItem(item) {
+    const result = updateQuantity(item.variantId, Number(item.quantity) + 1);
+    if (result?.limited) {
+      setQuantityNotice('Maximum available quantity added.');
+      return;
+    }
+    setQuantityNotice('');
+  }
+
+  function decreaseItem(item) {
+    setQuantityNotice('');
+    updateQuantity(item.variantId, Number(item.quantity) - 1);
   }
 
   return (
@@ -209,6 +235,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
           <>
             <div className="flex-1 overflow-y-auto px-5">
               {quoteError && <p className="mt-4 border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-deep">{quoteError}</p>}
+              {quantityNotice && <p className="mt-4 border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-deep" role="alert">{quantityNotice}</p>}
               <div className="divide-y divide-line">
                 {items.map((item) => (
                   <article key={item.variantId} className="flex gap-4 py-5">
@@ -236,9 +263,9 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <div className="flex items-center rounded-[8px] border border-line bg-white">
-                          <button type="button" className="touch-target px-3 py-1.5" aria-label="Decrease quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)}>−</button>
+                          <button type="button" className="touch-target px-3 py-1.5" aria-label="Decrease quantity" onClick={() => decreaseItem(item)}>−</button>
                           <span className="min-w-8 text-center text-sm">{item.quantity}</span>
-                          <button type="button" className="touch-target px-3 py-1.5" aria-label="Increase quantity" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)}>+</button>
+                          <button type="button" className="touch-target px-3 py-1.5 disabled:cursor-not-allowed disabled:text-clay" aria-label="Increase quantity" disabled={Number(item.maxStock) > 0 && Number(item.quantity) >= Number(item.maxStock)} onClick={() => increaseItem(item)}>+</button>
                         </div>
                         <button type="button" className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>
                           Remove
@@ -271,6 +298,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
 
 export default function Shell() {
   const location = useLocation();
+  const isHomePage = location.pathname === '/';
   const items = useCart();
   const count = cartQuantity(items);
   const loggedIn = useCustomerLoggedIn();
@@ -278,7 +306,9 @@ export default function Shell() {
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState('');
+  const [headerScrolled, setHeaderScrolled] = useState(false);
   const [headerLogo, setHeaderLogo] = useState(null);
+  const [blackLogo, setBlackLogo] = useState(null);
   const [footerLogo, setFooterLogo] = useState(null);
   const [storeInfo, setStoreInfo] = useState(null);
   const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
@@ -303,6 +333,21 @@ export default function Shell() {
   const closeCartDrawer = useCallback(() => setCartDrawerOpen(false), []);
 
   useEffect(() => {
+    if (!isHomePage) {
+      setHeaderScrolled(false);
+      return undefined;
+    }
+
+    function syncHeaderScroll() {
+      setHeaderScrolled(window.scrollY > 48);
+    }
+
+    syncHeaderScroll();
+    window.addEventListener('scroll', syncHeaderScroll, { passive: true });
+    return () => window.removeEventListener('scroll', syncHeaderScroll);
+  }, [isHomePage]);
+
+  useEffect(() => {
     if (!menuOpen) return undefined;
     function handleMenuKeyDown(event) {
       if (event.key === 'Escape') {
@@ -319,8 +364,10 @@ export default function Shell() {
     function loadSiteContent() {
       fetchSiteContent()
         .then((body) => {
-          setHeaderLogo(body.siteContent?.logo || null);
-          setFooterLogo(body.siteContent?.footerLogo || body.siteContent?.logo || null);
+          const defaultLogo = body.siteContent?.logo || null;
+          setHeaderLogo(defaultLogo);
+          setBlackLogo(body.siteContent?.blackLogo || defaultLogo);
+          setFooterLogo(body.siteContent?.footerLogo || defaultLogo);
         })
         .catch(() => {});
     }
@@ -397,8 +444,10 @@ export default function Shell() {
     };
   }, [cartDrawerOpen, items]);
 
-  const logoMarkup = headerLogo?.url ? (
-    <img src={headerLogo.url} alt={headerLogo.altText || 'Maria Clara Clothing'} className="h-[65px] max-w-[205px] object-contain lg:h-[73px] lg:max-w-[230px]" />
+  const headerSolid = !isHomePage || headerScrolled || menuOpen;
+  const activeHeaderLogo = headerSolid ? (blackLogo || headerLogo) : headerLogo;
+  const logoMarkup = activeHeaderLogo?.url ? (
+    <img src={activeHeaderLogo.url} alt={activeHeaderLogo.altText || 'Maria Clara Clothing'} className={`h-[65px] max-w-[205px] object-contain transition-[filter,opacity] duration-300 lg:h-[73px] lg:max-w-[230px] ${headerSolid ? '' : 'drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]'}`} />
   ) : (
     <span className="display truncate text-[32px] tracking-tight sm:text-[40px] lg:text-[49px]">
       Maria<span className="text-accent">Clara</span>
@@ -432,28 +481,32 @@ export default function Shell() {
   const visibleShippingOffer = freeShippingOfferDismissed ? null : shippingOffer;
   const visibleRecommendation = recommendationDismissed ? null : recommendation;
   const offerCount = Number(Boolean(visibleShippingOffer)) + Number(Boolean(visibleRecommendation));
+  const instagramUrl = storeInfo?.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothing/';
+  const facebookUrl = storeInfo?.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
 
   return (
     <div className="flex min-h-screen flex-col">
       <Ticker items={storeInfo?.ticker || TICKER_ITEMS} />
-      <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl min-w-0 items-center justify-between gap-2 px-4 py-4 sm:gap-4 sm:px-5 lg:gap-6 lg:px-8">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            className="touch-target inline-flex items-center justify-center text-ink transition-colors hover:text-accent lg:hidden"
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-expanded={menuOpen}
-            aria-controls="storefront-mobile-menu"
-            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <path d="M4 7h16" />
-              <path d="M4 12h16" />
-              <path d="M4 17h16" />
-            </svg>
-          </button>
-          <Link to="/" className="flex min-w-0 shrink items-center lg:shrink-0">
+      <header className={`sticky top-0 z-40 border-b transition-[background-color,border-color,box-shadow,color,backdrop-filter] duration-300 ${headerSolid ? 'border-line bg-paper text-ink shadow-[0_12px_30px_rgba(0,0,0,0.08)]' : 'border-transparent bg-transparent text-paper shadow-none'}`}>
+        <div className="mx-auto grid max-w-7xl min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-3 sm:gap-4 sm:px-5 lg:flex lg:gap-6 lg:px-8 lg:py-4">
+          <div className="flex items-center gap-1 lg:hidden">
+            <button
+              ref={menuButtonRef}
+              type="button"
+              className={`touch-target inline-flex items-center justify-center transition-colors lg:hidden ${headerSolid ? 'text-ink hover:text-accent' : 'text-paper drop-shadow hover:text-white'}`}
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-expanded={menuOpen}
+              aria-controls="storefront-mobile-menu"
+              aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M4 7h16" />
+                <path d="M4 12h16" />
+                <path d="M4 17h16" />
+              </svg>
+            </button>
+          </div>
+          <Link to="/" className="flex min-w-0 shrink items-center justify-self-center lg:shrink-0 lg:justify-self-auto">
             {logoMarkup}
           </Link>
           <nav className="hidden items-center gap-8 lg:flex">
@@ -462,48 +515,85 @@ export default function Shell() {
                 key={link.to}
                 to={link.to}
                 className={({ isActive }) =>
-                  `text-[12px] font-semibold uppercase tracking-[0.18em] transition-colors text-action hover:text-accent ${isActive ? 'text-accent' : 'text-ink'}`}
+                  `text-action text-[12px] font-semibold uppercase tracking-[0.18em] transition-colors hover:text-accent ${headerSolid ? (isActive ? 'text-accent' : 'text-ink') : (isActive ? 'text-white' : 'text-paper/90')}`}
               >
                 {link.label}
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-6">
-          <Link to={loggedIn ? '/account' : '/login'} className="text-action hidden text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent sm:block">
-            {loggedIn ? 'Account' : 'Log in'}
-          </Link>
-          <Link to="/cart" className="relative flex h-9 w-9 items-center justify-center hover:text-accent" aria-label="Cart">
-            <CartIcon />
-            {count > 0 && (
-              <span className="cart-count-badge absolute right-0 top-0 flex h-4 min-w-4 translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-[#d71920] px-1 text-[10px] font-bold leading-none text-white ring-2 ring-paper">
-                {count}
-              </span>
-            )}
-          </Link>
+          <div className="flex items-center justify-self-end gap-4 sm:gap-6 lg:ml-auto">
+            <Link to={loggedIn ? '/account' : '/login'} className={`text-action hidden text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent sm:block ${headerSolid ? 'text-ink' : 'text-paper/90 drop-shadow'}`}>
+              {loggedIn ? 'Account' : 'Log in'}
+            </Link>
+            <Link to="/cart" className={`relative flex h-9 w-9 items-center justify-center transition-colors hover:text-accent ${headerSolid ? 'text-ink' : 'text-paper drop-shadow'}`} aria-label="Cart">
+              <CartIcon />
+              {count > 0 && (
+                <span className={`cart-count-badge absolute right-0 top-0 flex h-4 min-w-4 translate-x-1/3 -translate-y-1/3 items-center justify-center rounded-full bg-[#d71920] px-1 text-[10px] font-bold leading-none text-white ring-2 ${headerSolid ? 'ring-paper' : 'ring-white/40'}`}>
+                  {count}
+                </span>
+              )}
+            </Link>
           </div>
         </div>
-        {menuOpen && (
-          <nav id="storefront-mobile-menu" className="flex flex-col border-t border-line lg:hidden">
-            {NAV_LINKS.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
+        <nav
+          aria-label="Shop categories"
+          className={`overflow-x-auto border-t border-line bg-paper transition-[max-height,opacity] duration-300 ${headerSolid ? 'max-h-12 opacity-100' : 'max-h-0 opacity-0'}`}
+        >
+          <div className="mx-auto flex max-w-7xl gap-5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-clay sm:px-5 lg:px-8">
+            {CATEGORY_LINKS.map((link) => (
+              <a key={link.label} href={link.href} className="text-action shrink-0 hover:text-accent">
+                {link.label}
+              </a>
+            ))}
+          </div>
+        </nav>
+      </header>
+
+      <div className={`fixed inset-0 z-[60] lg:hidden ${menuOpen ? '' : 'pointer-events-none'}`} aria-hidden={!menuOpen}>
+        <button
+          type="button"
+          className={`absolute inset-0 bg-ink/45 backdrop-blur-[2px] transition-opacity duration-300 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
+          aria-label="Close navigation menu"
+          onClick={() => setMenuOpen(false)}
+        />
+        <aside
+          id="storefront-mobile-menu"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu items"
+          className={`storefront-menu-panel absolute left-0 top-0 flex h-full w-[min(21rem,88vw)] flex-col bg-paper text-ink shadow-2xl transition-transform duration-300 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        >
+          <div className="flex items-center justify-between border-b border-line px-5 py-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-clay">Menu items</p>
+            <button type="button" className="touch-target text-2xl leading-none text-ink" aria-label="Close navigation menu" onClick={() => setMenuOpen(false)}>×</button>
+          </div>
+          <nav className="flex flex-col px-5" aria-label="Mobile menu">
+            {MENU_LINKS.map((link) => (
+              <a
+                key={link.label}
+                href={link.href}
                 onClick={() => setMenuOpen(false)}
-                className="text-action border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em]"
+                className="text-action border-b border-line py-3.5 text-[13px] font-semibold uppercase tracking-[0.18em]"
               >
                 {link.label}
-              </NavLink>
+              </a>
             ))}
-            <NavLink
+          </nav>
+          <div className="mt-auto border-t border-line px-5 py-5">
+            <Link
               to={loggedIn ? '/account' : '/login'}
               onClick={() => setMenuOpen(false)}
-              className="text-action border-b border-line px-5 py-4 text-[13px] font-semibold uppercase tracking-[0.18em] text-accent"
+              className="text-action text-[12px] font-semibold uppercase tracking-[0.18em] text-accent"
             >
-              {loggedIn ? 'My account' : 'Log in / Register'}
-            </NavLink>
-          </nav>
-        )}
-      </header>
+              {loggedIn ? 'Account' : 'Account'}
+            </Link>
+            <div className="mt-5 flex gap-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-clay">
+              <a href={instagramUrl} target="_blank" rel="noreferrer" className="text-action">Instagram</a>
+              <a href={facebookUrl} target="_blank" rel="noreferrer" className="text-action">Facebook</a>
+            </div>
+          </div>
+        </aside>
+      </div>
 
       <CartDrawer
         items={items}
@@ -525,6 +615,7 @@ export default function Shell() {
         onCloseProduct={dismissRecommendation}
       />
       <MessengerSupportLink href={storeInfo?.messengerUrl} />
+      <ReportIssueWidget settings={storeInfo} cartItems={items} />
       {privacyDialogOpen && <PrivacyDialog onChoice={chooseTrackingConsent} onClose={() => setPrivacyDialogOpen(false)} />}
 
       <main className="flex-1">
@@ -561,7 +652,7 @@ export default function Shell() {
               </ul>
             </div>
             <div>
-              <p className="eyebrow text-paper/60">Promise</p>
+              <p className="eyebrow text-paper/60">Product details</p>
               <p className="mt-3 max-w-xs text-sm text-paper/80">
                 Premium 240 GSM cotton, cut oversized. Cash on delivery anywhere in the Philippines —
                 we text before we ship.

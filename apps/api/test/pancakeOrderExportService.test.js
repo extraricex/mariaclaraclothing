@@ -166,6 +166,9 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
     markOrderExportFailed: async () => {},
     blockOrderExport: async () => {}
   };
+  const syncRepository = {
+    upsertOrderLink: async (record) => calls.push(['link', record])
+  };
   const client = {
     createOrder: async (shopId, payload) => {
       calls.push(['createOrder', shopId, payload.custom_id]);
@@ -177,6 +180,7 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
     config: { mode: 'live' },
     client,
     repository,
+    syncRepository,
     now: () => new Date('2026-07-08T00:00:00Z')
   });
 
@@ -188,6 +192,37 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
   assert.equal(calls[2][1].mode, 'live');
   assert.equal(calls[2][1].pancakeOrderId, '987654');
   assert.equal(calls[2][1].requestPayload.bill_phone_number, '0917****567');
+  assert.deepEqual(calls[3], ['link', {
+    orderNumber: 'MCC-1001',
+    pancakeOrderId: '987654',
+    shopId: '123',
+    syncStatus: 'synced',
+    lastSyncedAt: '2026-07-08T00:00:00.000Z'
+  }]);
+});
+
+test('live export backfills missing links for already sent Pancake exports', async () => {
+  const { runOrderLiveExport } = require('../src/integrations/pancake/pancakeOrderExportService');
+  const calls = [];
+  const syncRepository = {
+    backfillSentOrderExportLinks: async (options) => calls.push(['backfill', options.limit])
+  };
+  const repository = {
+    enqueueMissingOrderExports: async () => calls.push(['enqueueMissing']),
+    loadOrderExportReadiness: async () => readiness(),
+    listQueuedOrderExports: async () => []
+  };
+
+  const result = await runOrderLiveExport({
+    config: { mode: 'live' },
+    client: { createOrder: async () => { throw new Error('should not create'); } },
+    repository,
+    syncRepository,
+    limit: 25
+  });
+
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(calls, [['backfill', 25], ['enqueueMissing']]);
 });
 
 test('live export is blocked unless Pancake mode is live', async () => {
@@ -249,12 +284,15 @@ test('live export can send one specific queued order for realtime checkout', asy
     markOrderExportFailed: async () => {},
     blockOrderExport: async () => {}
   };
+  const syncRepository = {
+    upsertOrderLink: async (record) => calls.push(['link', record.orderNumber, record.pancakeOrderId])
+  };
   const client = { createOrder: async () => ({ pancakeOrderId: '12345' }) };
 
-  const result = await runOrderLiveExport({ config: { mode: 'live' }, client, repository, orderNumber: 'MCC-REALTIME' });
+  const result = await runOrderLiveExport({ config: { mode: 'live' }, client, repository, syncRepository, orderNumber: 'MCC-REALTIME' });
 
   assert.deepEqual(result.summary, { checkedCount: 1, sentCount: 1, blockedCount: 0, failedCount: 0 });
-  assert.deepEqual(calls, [['loadOne', 'MCC-REALTIME'], ['sent', 'MCC-REALTIME']]);
+  assert.deepEqual(calls, [['loadOne', 'MCC-REALTIME'], ['sent', 'MCC-REALTIME'], ['link', 'MCC-REALTIME', '12345']]);
 });
 
 test('live export skips a specific order when no unsent export row exists', async () => {

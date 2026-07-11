@@ -13,12 +13,13 @@ test('customer homepage and product grids use compact mobile luxury spacing', as
     source('index.css')
   ]);
 
-  assert.match(home, /object-contain sm:object-cover/);
+  assert.match(home, /h-full w-full object-cover/);
+  assert.match(home, /min-h-\[min\(58svh,430px\)\]/);
   assert.match(home, /className="block h-auto w-full select-none opacity-0/);
   assert.doesNotMatch(home, /min-h-\[clamp\(360px,64svh,560px\)\]/);
   assert.doesNotMatch(home, /max-h-\[560px\]/);
   assert.match(css, /\.customer-hero \.customer-compact-button/);
-  assert.match(productCard, /mt-2 flex flex-col items-center gap-1/);
+  assert.match(productCard, /mt-2 flex flex-col items-center gap-0\.5/);
   assert.doesNotMatch(productCard, /min-h-\[132px\]/);
   assert.match(css, /\.customer-compact-button/);
 });
@@ -29,6 +30,9 @@ test('customer shell exposes a svg mobile menu and immediately visible mobile of
   assert.match(shell, /const \[mobileOffersOpen, setMobileOffersOpen\] = useState\(true\)/);
   assert.doesNotMatch(shell, /setMobileOffersOpen\(false\);\n  }, \[location\.pathname\]\)/);
   assert.match(shell, /<svg[^>]*viewBox="0 0 24 24"[^>]*aria-hidden="true"[\s\S]*M4 7h16[\s\S]*M4 12h16[\s\S]*M4 17h16/);
+  assert.doesNotMatch(shell, /function SearchIcon/);
+  assert.doesNotMatch(shell, /aria-label="Search"/);
+  assert.match(shell, /storefront-menu-panel/);
   assert.doesNotMatch(shell, />\{menuOpen \? 'Close' : 'Menu'\}<\/button>/);
   assert.match(shell, /storefront-offer-cards/);
 });
@@ -41,9 +45,11 @@ test('product page gallery uses smaller arrows and touch swipe navigation', asyn
   assert.match(product, /handleImageTouchEnd/);
   assert.match(product, /onTouchStart=\{handleImageTouchStart\}/);
   assert.match(product, /onTouchEnd=\{handleImageTouchEnd\}/);
+  assert.match(product, /aria-label=\{`Show product image \$\{index \+ 1\}`\}/);
+  assert.match(product, /product-gallery-dot/);
   assert.match(product, /h-8 w-8/);
   assert.doesNotMatch(product, /rounded-full bg-white\/90 text-2xl/);
-  assert.match(product, /min-w-11 rounded border border-line px-3 py-2\.5 text-xs/);
+  assert.match(product, /min-w-10 rounded-full border border-line px-3 py-2 text-\[11px\]/);
 });
 
 test('checkout validates missing fields with scroll focus and red field styling', async () => {

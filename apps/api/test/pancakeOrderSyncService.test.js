@@ -140,6 +140,50 @@ test('processInboundPancakeOrder applies detail changes with the same Pancake up
   assert.equal(updated.trackingNumber, 'TRACK-NEW');
 });
 
+test('processInboundPancakeOrder syncs nested Pancake shipment tracking fields', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'MCC-TRACK',
+    status: 'confirmed',
+    fulfillmentStatus: 'unfulfilled',
+    deliveryStatus: 'pending',
+    customer: {},
+    address: {},
+    items: [],
+    trackingNumber: ''
+  });
+  await syncRepo.upsertOrderLink({
+    orderNumber: 'MCC-TRACK',
+    pancakeOrderId: 'PK-TRACK',
+    syncStatus: 'synced'
+  });
+
+  const result = await service.processInboundPancakeOrder({
+    pancakeOrder: {
+      id: 'PK-TRACK',
+      custom_id: 'MCC-TRACK',
+      status: 'Confirmed',
+      shipping_info: {
+        carrier_name: 'J&T Express',
+        tracking_number: 'JT-123',
+        shipping_status: 'shipping'
+      },
+      updated_at: '2026-07-10T00:07:00.000Z'
+    },
+    orderRepository: orders,
+    syncRepository: syncRepo
+  });
+
+  const updated = orders.orders.get('MCC-TRACK');
+  assert.equal(result.status, 'updated');
+  assert.equal(updated.deliveryMethod, 'J&T Express');
+  assert.equal(updated.trackingNumber, 'JT-123');
+  assert.equal(updated.deliveryStatus, 'out_for_delivery');
+});
+
 test('processInboundPancakeOrder ignores older Pancake updates for linked orders', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminJson } from '../lib/adminApi.js';
 
-export const DEFAULT_STOREFRONT_COLLECTIONS = ['New Arrivals', 'Freedom of Mind'];
+export const DEFAULT_STOREFRONT_COLLECTIONS = ['New Arrivals'];
 
 export default function useAdminCollections() {
   const [collections, setCollections] = useState(DEFAULT_STOREFRONT_COLLECTIONS);

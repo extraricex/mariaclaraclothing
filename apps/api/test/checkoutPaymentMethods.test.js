@@ -148,7 +148,7 @@ test('checkout rejects disabled payment methods and accepts enabled ones', async
 
 test('J&T export writes a zero COD amount for prepaid orders', () => {
   const order = {
-    orderNumber: 'DEMO-1765000000000-ab12',
+    orderNumber: 'MCC-1765000000000-AB12',
     customer: { fullName: 'Juan Dela Cruz', phone: '09171234567', email: '' },
     address: {
       addressLine: '12 Sampaguita St, BUCANDALA IV, IMUS, CAVITE, Philippines',

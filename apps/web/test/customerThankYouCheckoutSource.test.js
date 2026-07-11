@@ -82,15 +82,21 @@ test('homepage banner height is responsive without excessive mobile black space'
 
   assert.match(home, /activeBanner/);
   assert.match(home, /className="block h-auto w-full select-none opacity-0/);
-  assert.match(home, /object-contain sm:object-cover/);
+  assert.match(home, /min-h-\[min\(58svh,430px\)\]/);
+  assert.match(home, /sm:min-h-\[min\(68svh,560px\)\]/);
+  assert.match(home, /lg:min-h-\[min\(78vh,720px\)\]/);
+  assert.match(home, /-mt-\[97px\]/);
+  assert.match(home, /lg:-mt-\[105px\]/);
+  assert.match(home, /h-full w-full object-cover/);
   assert.match(home, /bg-ink\/35 sm:bg-ink\/40/);
   assert.match(home, /heroCopy\.title[\s\S]*heroCopy\.highlight/);
   assert.match(settings, /Premium[\s\S]*Cotton/);
-  assert.match(settings, /Philippine Streetwear - Imus Cavite/);
+  assert.match(settings, /eyebrow:\s*''/);
   assert.match(home, /reveal reveal-3 mt-4 hidden max-w-xs[\s\S]*lg:block/);
-  assert.match(home, /reveal reveal-4 mt-2 flex flex-wrap justify-center/);
+  assert.match(home, /reveal reveal-4 mt-3 flex flex-wrap justify-start/);
   assert.doesNotMatch(home, /Worldwide/);
   assert.doesNotMatch(home, /100%[\s\S]*Pure/);
+  assert.doesNotMatch(settings, /Philippine Streetwear - Imus Cavite/);
   assert.doesNotMatch(home, /Philippine streetwear · Imus, Cavite/i);
   assert.doesNotMatch(home, /min-h-\[min\(86svh,620px\)\]/);
 });

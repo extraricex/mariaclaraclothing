@@ -363,6 +363,122 @@ function SeoCard({ initial }) {
   );
 }
 
+function SizeChartCard({ initial }) {
+  const [form, setForm] = useState(initial || { imageUrl: '', altText: '' });
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function set(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/website', { sizeChart: form });
+      setForm(body.settings.website.sizeChart);
+      setStatus({ tone: 'ok', message: 'Size chart settings saved.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Size chart" hint="Global sizing image used on product pages and the size chart page.">
+      <div className="mt-4 space-y-3">
+        <Field label="Size chart image URL">
+          <input
+            className="field mt-1"
+            placeholder="https://… or /uploads/size-chart.jpg"
+            value={form.imageUrl || ''}
+            onChange={(e) => set('imageUrl', e.target.value)}
+          />
+        </Field>
+        <Field label="Image alt text">
+          <input className="field mt-1" value={form.altText || ''} onChange={(e) => set('altText', e.target.value)} />
+        </Field>
+        {form.imageUrl && (
+          <img src={form.imageUrl} alt={form.altText || 'Size chart preview'} className="max-h-80 w-full border border-line bg-white object-contain" loading="lazy" />
+        )}
+      </div>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save size chart'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
+function ReportIssueCard({ initial }) {
+  const [form, setForm] = useState(initial || {
+    enabled: true,
+    buttonLabel: 'Report Issue',
+    mobileButtonLabel: 'Issue?',
+    position: 'bottom-right',
+    notificationEmail: '',
+    webhookUrl: '',
+    pushNotificationsEnabled: false
+  });
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function set(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/website', { reportIssue: form });
+      setForm(body.settings.website.reportIssue);
+      setStatus({ tone: 'ok', message: 'Report Issue settings saved.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Report issue" hint="Customer issue report button and admin notification settings.">
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={Boolean(form.enabled)} onChange={(e) => set('enabled', e.target.checked)} />
+          Show the Report Issue button on the customer website
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Desktop button label"><input className="field mt-1" value={form.buttonLabel || ''} onChange={(e) => set('buttonLabel', e.target.value)} /></Field>
+          <Field label="Mobile button label"><input className="field mt-1" value={form.mobileButtonLabel || ''} onChange={(e) => set('mobileButtonLabel', e.target.value)} /></Field>
+        </div>
+        <Field label="Button position">
+          <select className="field mt-1" value={form.position || 'bottom-right'} onChange={(e) => set('position', e.target.value)}>
+            <option value="bottom-right">Bottom right</option>
+            <option value="bottom-left">Bottom left</option>
+          </select>
+        </Field>
+        <Field label="Notification email">
+          <input className="field mt-1" type="email" placeholder="admin@example.com" value={form.notificationEmail || ''} onChange={(e) => set('notificationEmail', e.target.value)} />
+        </Field>
+        <Field label="Optional webhook URL">
+          <input className="field mt-1" type="url" placeholder="https://…" value={form.webhookUrl || ''} onChange={(e) => set('webhookUrl', e.target.value)} />
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={Boolean(form.pushNotificationsEnabled)} onChange={(e) => set('pushNotificationsEnabled', e.target.checked)} />
+          Enable admin push notifications when browser push is configured
+        </label>
+      </div>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save report issue settings'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
 function MaintenanceCard({ initial }) {
   const [enabled, setEnabled] = useState(initial);
   const [status, setStatus] = useState(null);
@@ -427,6 +543,8 @@ export default function Settings() {
         <PaymentsCard initial={settings.payments} />
         <InventoryCard initial={settings.inventory} />
         <SeoCard initial={settings.website.seo} />
+        <SizeChartCard initial={settings.website.sizeChart} />
+        <ReportIssueCard initial={settings.website.reportIssue} />
         <MaintenanceCard initial={settings.website.maintenanceMode} />
         <SecurityCard />
       </div>

@@ -17,10 +17,15 @@ export const DEFAULT_INFO_PAGES = {
   terms: [
     { heading: 'Orders', body: 'All orders are Cash on Delivery and are confirmed via text message before fulfillment. We reserve the right to cancel orders we cannot confirm.' },
     { heading: 'Pricing', body: 'Prices are in Philippine pesos and may change without notice. The price at the time of your order is what you pay.' },
-    { heading: 'Product', body: 'Colors may vary slightly from photos due to screen settings and photography lighting. Measurements in size charts have a ±2cm tolerance.' },
+    { heading: 'Size Chart', body: 'Check the size chart before ordering. Measurements have a ±2cm tolerance and size exchanges depend on available stock.', linkText: 'View Size Chart', linkHref: '/size-chart' },
     { heading: 'Privacy', body: 'We use your name, mobile number, and address to fulfill and deliver orders. The customer website also uses the Facebook Meta Pixel to send page visits and shopping actions to Meta for advertising measurement. When an order is completed, our server may send purchase details and hashed contact details to Meta through the Conversions API to match the purchase without sending your delivery address or order notes. Meta handles this information under its own privacy policy. We do not sell your personal information.' },
     { heading: 'Contact', body: 'Questions about these terms? Reach us through our social channels or the contact details on your order confirmation text.' }
   ]
+};
+
+export const DEFAULT_SIZE_CHART = {
+  imageUrl: 'https://cdn.shopify.com/s/files/1/0781/7979/5224/files/oversizedshirtchart.jpg?v=1776047669',
+  altText: 'Maria Clara Clothing size chart'
 };
 
 export const DEFAULT_STOREFRONT_SETTINGS = {
@@ -29,7 +34,11 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   contactNumber: '',
   storeAddress: '',
   messengerUrl: 'https://m.me/mariaclaraclothing',
-  socialLinks: { facebook: '', instagram: '', tiktok: '' },
+  socialLinks: {
+    facebook: 'https://www.facebook.com/mariaclaraclothing',
+    instagram: 'https://www.instagram.com/mariaclaraclothing/',
+    tiktok: ''
+  },
   shipping: {
     regions: [
       { id: 'metro_manila_cavite', label: 'Metro Manila & Cavite', feeCents: 8000, deliveryEstimate: 'Estimated delivery: Metro Manila and Cavite 2-4 days.' },
@@ -54,7 +63,7 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     imageUrl: ''
   },
   hero: {
-    eyebrow: 'Philippine Streetwear - Imus Cavite',
+    eyebrow: '',
     title: 'Premium',
     highlight: 'Cotton',
     subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
@@ -65,8 +74,18 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   },
   maintenanceMode: false,
   infoPages: DEFAULT_INFO_PAGES,
+  sizeChart: DEFAULT_SIZE_CHART,
+  reportIssue: {
+    enabled: true,
+    buttonLabel: 'Report Issue',
+    mobileButtonLabel: 'Issue?',
+    position: 'bottom-right',
+    notificationEmail: '',
+    webhookUrl: '',
+    pushNotificationsEnabled: false
+  },
   inventory: { lowStockThreshold: 12 },
-  storefrontCollections: ['New Arrivals', 'Freedom of Mind'],
+  storefrontCollections: ['New Arrivals'],
   collectionCountdowns: {}
 };
 

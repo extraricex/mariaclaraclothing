@@ -43,11 +43,34 @@ test('deductVariantStock reduces the ordered variant stock', async () => {
   assert.equal(Number(after.stockQuantity), target.stock - 1);
 });
 
+test('deductVariantStock aggregates duplicate variant lines before deducting', async () => {
+  const target = pickInStock(loadEditableProducts());
+  await deductVariantStock([
+    { slug: target.slug, sku: target.sku, size: target.size, quantity: 1, productName: target.name },
+    { slug: target.slug, sku: target.sku, size: target.size, quantity: 1, productName: target.name }
+  ]);
+  const after = variantOf(loadEditableProducts(), target.slug, target.size);
+  assert.equal(Number(after.stockQuantity), target.stock - 2);
+});
+
 test('deductVariantStock blocks oversell and leaves stock unchanged', async () => {
   const target = pickInStock(loadEditableProducts());
   await assert.rejects(
     async () => deductVariantStock([{ slug: target.slug, sku: target.sku, size: target.size, quantity: target.stock + 1, productName: target.name }]),
     (err) => err.status === 409 && err.message === `${target.size} is sold out for ${target.name}`
+  );
+  const after = variantOf(loadEditableProducts(), target.slug, target.size);
+  assert.equal(Number(after.stockQuantity), target.stock);
+});
+
+test('deductVariantStock blocks duplicate variant lines that exceed combined stock', async () => {
+  const target = pickInStock(loadEditableProducts());
+  await assert.rejects(
+    async () => deductVariantStock([
+      { slug: target.slug, sku: target.sku, size: target.size, quantity: target.stock, productName: target.name },
+      { slug: target.slug, sku: target.sku, size: target.size, quantity: 1, productName: target.name }
+    ]),
+    (err) => err.status === 409
   );
   const after = variantOf(loadEditableProducts(), target.slug, target.size);
   assert.equal(Number(after.stockQuantity), target.stock);
@@ -119,8 +142,9 @@ test('creating an order deducts the ordered variant stock', async () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(checkoutBody(picked.item))
     });
-    assert.equal(response.status, 201);
-    const body = await response.json();
+    const responseText = await response.text();
+    assert.equal(response.status, 201, responseText);
+    const body = JSON.parse(responseText);
     assert.equal(body.currency, 'PHP');
     assert.equal(body.totalCents, picked.item.unitPriceCents + 8000);
     assert.equal(body.trackingEventId, `purchase:${body.orderNumber}`);
@@ -132,6 +156,29 @@ test('creating an order deducts the ordered variant stock', async () => {
     }]);
     const after = variantOf(loadEditableProducts(), picked.slug, picked.size);
     assert.equal(Number(after.stockQuantity), picked.stock - 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('creating an order with multiple quantity deducts only the requested quantity', async () => {
+  const server = await startServer();
+  const port = server.address().port;
+  try {
+    const picked = await firstInStock(port);
+    assert.ok(picked.stock >= 2, 'fixture needs at least two units for the selected variant');
+    const item = { ...picked.item, quantity: 2 };
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(checkoutBody(item))
+    });
+    const responseText = await response.text();
+    assert.equal(response.status, 201, responseText);
+    const body = JSON.parse(responseText);
+    assert.equal(body.items[0].quantity, 2);
+    const after = variantOf(loadEditableProducts(), picked.slug, picked.size);
+    assert.equal(Number(after.stockQuantity), picked.stock - 2);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
