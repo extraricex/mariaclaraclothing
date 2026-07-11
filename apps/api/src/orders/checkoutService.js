@@ -26,6 +26,9 @@ async function persistPostgresCheckout(input, deps) {
       const event = deps.buildMetaEvent({ order, requestContext: input.requestContext });
       await deps.insertOutbox(client, event);
     }
+    if (deps.enqueueOrderExport) {
+      await deps.enqueueOrderExport(order, { client });
+    }
     return order;
   });
 }

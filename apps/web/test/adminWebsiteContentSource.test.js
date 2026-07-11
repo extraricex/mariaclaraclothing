@@ -22,7 +22,17 @@ test('info pages editor saves one page at a time', async () => {
 
 test('website content page hosts the ticker and info-page editors', async () => {
   const source = await readFile(path.join(adminRoot, 'Banners.jsx'), 'utf8');
+  assert.match(source, /HeroTextEditor/);
   assert.match(source, /TickerEditor/);
   assert.match(source, /InfoPagesEditor/);
   assert.match(source, /\/api\/admin\/settings/);
+});
+
+test('hero text editor saves homepage hero copy and buttons', async () => {
+  const source = await readFile(path.join(adminRoot, 'HeroTextEditor.jsx'), 'utf8');
+  assert.match(source, /\/api\/admin\/settings\/website/);
+  assert.match(source, /hero: form/);
+  assert.match(source, /Main banner title/);
+  assert.match(source, /Button text/);
+  assert.match(source, /Button link/);
 });

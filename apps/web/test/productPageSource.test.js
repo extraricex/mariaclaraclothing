@@ -8,14 +8,20 @@ test('product page includes reference-style gallery, tabs, and upsell markers', 
 
   assert.match(source, /aria-label="Previous product image"/);
   assert.match(source, /aria-label="Next product image"/);
+  assert.match(source, /product-gallery-dot/);
+  assert.match(source, /aria-label=\{`Show product image \$\{index \+ 1\}`\}/);
   assert.match(source, /object-contain/);
   assert.match(source, /You May Also Like/);
   assert.match(source, /Add 2 or more items and get free shipping/);
   assert.match(source, /activeDetailTab/);
   assert.match(source, /title: 'Size Chart'/);
-  assert.match(source, /min-w-14 rounded border/);
+  assert.match(source, /View Size Chart/);
+  assert.match(source, /sizeChartOpen/);
+  assert.match(source, /aria-label="Size chart"/);
+  assert.match(source, /displaySectionTitle/);
+  assert.match(source, /min-w-10 rounded-full border/);
   assert.match(source, /rounded border border-line/);
-  assert.match(source, /btn-ink min-w-44 flex-1 !rounded/);
+  assert.match(source, /btn-ink customer-compact-button min-w-44 flex-1 !rounded/);
   assert.doesNotMatch(source, /border border-ink bg-white text-2xl/);
   assert.doesNotMatch(source, /aspect-\[4\/5\] overflow-hidden border border-line bg-white/);
   assert.doesNotMatch(source, /<details key=\{index\}/);

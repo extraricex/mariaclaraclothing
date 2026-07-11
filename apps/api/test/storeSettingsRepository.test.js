@@ -27,7 +27,7 @@ test('store settings expose defaults, save sections, and validate input', async 
 
     const defaults = repository.getStoreSettings();
     assert.equal(defaults.general.storeName, 'Maria Clara Clothing');
-    assert.equal(defaults.general.messengerUrl, '');
+  assert.equal(defaults.general.messengerUrl, 'https://m.me/mariaclaraclothing');
     assert.equal(defaults.shipping.regions.length, 3);
     assert.equal(defaults.shipping.regions.find((region) => region.id === 'metro_manila_cavite').feeCents, 8000);
     assert.equal(defaults.shipping.freeShippingMinimumItems, 2);
@@ -123,6 +123,16 @@ test('website settings merge partial updates over the stored section', async () 
     assert.equal(defaults.website.maintenanceMode, false);
     assert.equal(defaults.website.ticker.length, 4);
     assert.equal(defaults.website.seo.title, 'Maria Clara Clothing — Premium Philippine Streetwear');
+    assert.deepEqual(defaults.website.hero, {
+      eyebrow: '',
+      title: 'Premium',
+      highlight: 'Cotton',
+      subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
+      primaryButtonText: 'Shop new arrivals',
+      primaryButtonLink: '#new-arrivals',
+      secondaryButtonText: 'Freedom of Mind',
+      secondaryButtonLink: '#freedom-of-mind'
+    });
     assert.ok(defaults.website.infoPages.faq.length >= 3);
     assert.ok(defaults.website.infoPages.shippingReturns.length >= 3);
     assert.ok(defaults.website.infoPages.terms.length >= 3);
@@ -135,7 +145,29 @@ test('website settings merge partial updates over the stored section', async () 
     const afterTicker = repository.updateSettingsSection('website', { ticker: ['Big drop Friday'] });
     assert.deepEqual(afterTicker.website.ticker, ['Big drop Friday']);
     assert.equal(afterTicker.website.seo.title, defaults.website.seo.title);
+    assert.deepEqual(afterTicker.website.hero, defaults.website.hero);
     assert.deepEqual(afterTicker.website.infoPages.terms, defaults.website.infoPages.terms);
+
+    const afterHero = repository.updateSettingsSection('website', {
+      hero: {
+        eyebrow: 'Worldwide',
+        title: 'New Drop',
+        highlight: 'Premium Cotton',
+        subtitle: 'Fresh pieces are ready for COD delivery.',
+        primaryButtonText: 'Shop now',
+        primaryButtonLink: '/products',
+        secondaryButtonText: 'Ask us',
+        secondaryButtonLink: 'https://m.me/mariaclaraclothing'
+      }
+    });
+    assert.equal(afterHero.website.hero.eyebrow, 'Worldwide');
+    assert.equal(afterHero.website.hero.primaryButtonLink, '/products');
+    assert.equal(afterHero.website.hero.secondaryButtonLink, 'https://m.me/mariaclaraclothing');
+    assert.deepEqual(afterHero.website.ticker, ['Big drop Friday']);
+
+    const afterHiddenEyebrow = repository.updateSettingsSection('website', { hero: { eyebrow: '' } });
+    assert.equal(afterHiddenEyebrow.website.hero.eyebrow, '');
+    assert.equal(afterHiddenEyebrow.website.hero.title, 'New Drop');
 
     const afterFaq = repository.updateSettingsSection('website', {
       infoPages: { faq: [{ heading: 'New question', body: 'New answer.' }] }
@@ -158,6 +190,10 @@ test('website settings merge partial updates over the stored section', async () 
       /Info page sections need a heading and body\./);
     assert.throws(() => repository.updateSettingsSection('website', { infoPages: { faq: [] } }),
       /Info pages must have 1 to 30 sections\./);
+    assert.throws(() => repository.updateSettingsSection('website', { hero: { title: '' } }),
+      /Hero title is required\./);
+    assert.throws(() => repository.updateSettingsSection('website', { hero: { primaryButtonLink: 'javascript:alert(1)' } }),
+      /Hero button links must be HTTPS, a site path, or an in-page anchor\./);
   } finally {
     restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
     await fs.rm(tempDir, { recursive: true, force: true });
@@ -204,12 +240,7 @@ test('collection countdown settings validate and increment server revisions', as
       durationSeconds: 7200,
       revision: 0
     });
-    assert.deepEqual(defaults.collectionCountdowns['Freedom of Mind'], {
-      enabled: false,
-      message: 'Hurry! Limited time left',
-      durationSeconds: 7200,
-      revision: 0
-    });
+    assert.equal(defaults.collectionCountdowns['Best Sellers'], undefined);
 
     const first = repository.updateCollectionCountdown('New Arrivals', {
       enabled: true,
@@ -257,10 +288,10 @@ test('storefront collections persist unique names and receive countdown defaults
 
   try {
     const repository = freshRepository();
-    assert.deepEqual(repository.getStoreSettings().storefrontCollections, ['New Arrivals', 'Freedom of Mind']);
+    assert.deepEqual(repository.getStoreSettings().storefrontCollections, ['New Arrivals']);
 
     const updated = await repository.addStorefrontCollection('  Summer   Drop  ');
-    assert.deepEqual(updated.storefrontCollections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.deepEqual(updated.storefrontCollections, ['New Arrivals', 'Summer Drop']);
     assert.deepEqual(updated.collectionCountdowns['Summer Drop'], {
       enabled: false,
       message: 'Hurry! Limited time left',

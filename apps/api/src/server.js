@@ -3,6 +3,10 @@ const { env } = require('./config/env');
 const { closePool, getPool } = require('./db/postgres');
 const { createMetaConversionsWorker } = require('./marketing/metaConversionsWorker');
 const { createOrderNotificationWorker } = require('./notifications/orderNotificationWorker');
+const {
+  createPancakeAutoSyncWorker,
+  shouldRunPancakeAutoSync
+} = require('./integrations/pancake/pancakeAutoSyncWorker');
 
 function closeHttpServer(server) {
   return new Promise((resolve, reject) => {
@@ -15,6 +19,7 @@ function startServer({
   config = env,
   createWorker = createMetaConversionsWorker,
   createNotificationWorker = createOrderNotificationWorker,
+  createPancakeWorker = createPancakeAutoSyncWorker,
   pool,
   closeDatabase = closePool,
   registerSignals = true,
@@ -31,6 +36,10 @@ function startServer({
     ? createNotificationWorker({ client: process.env.DATABASE_URL ? (pool || getPool()) : undefined, config: config.notifications, logger })
     : null;
   notificationWorker?.start();
+  const pancakeWorker = shouldRunPancakeAutoSync(config.pancake)
+    ? createPancakeWorker({ config: config.pancake, logger })
+    : null;
+  pancakeWorker?.start();
   let shutdownPromise;
 
   function shutdown() {
@@ -38,6 +47,7 @@ function startServer({
       shutdownPromise = (async () => {
         worker?.stop();
         notificationWorker?.stop();
+        pancakeWorker?.stop();
         await closeHttpServer(server);
         await closeDatabase();
       })();
@@ -56,7 +66,7 @@ function startServer({
     }
   }
 
-  return { server, worker, notificationWorker, shutdown };
+  return { server, worker, notificationWorker, pancakeWorker, shutdown };
 }
 
 if (require.main === module) startServer();

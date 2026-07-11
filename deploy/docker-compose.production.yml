@@ -1,0 +1,129 @@
+# Maria Clara Clothing production stack.
+#
+# Run from the repository root:
+#   docker compose --env-file deploy/production.env -f deploy/docker-compose.production.yml up -d --build
+#
+# The web service is the public entrypoint on port 80. Keep the api and postgres
+# services private to this Docker network.
+
+name: maria-clara-clothing
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  api:
+    build: ../apps/api
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      CUSTOMER_AUTH_SECRET: ${CUSTOMER_AUTH_SECRET:?CUSTOMER_AUTH_SECRET is required}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      CHECKOUT_V2_REQUIRED: ${CHECKOUT_V2_REQUIRED:-true}
+      ORDER_CONFIRMATION_SECRET: ${ORDER_CONFIRMATION_SECRET:?ORDER_CONFIRMATION_SECRET is required}
+      PANCAKE_MODE: ${PANCAKE_MODE:-disabled}
+      PANCAKE_API_BASE_URL: ${PANCAKE_API_BASE_URL:-https://pos.pages.fm/api/v1}
+      PANCAKE_API_KEY: ${PANCAKE_API_KEY:-}
+      PANCAKE_SHOP_ID: ${PANCAKE_SHOP_ID:-}
+      PANCAKE_WAREHOUSE_ID: ${PANCAKE_WAREHOUSE_ID:-}
+      PANCAKE_ORDER_SOURCE_ID: ${PANCAKE_ORDER_SOURCE_ID:-}
+      PANCAKE_WEBHOOK_SECRET: ${PANCAKE_WEBHOOK_SECRET:-}
+      PANCAKE_REQUEST_TIMEOUT_MS: ${PANCAKE_REQUEST_TIMEOUT_MS:-20000}
+      PANCAKE_CATALOG_PAGE_SIZE: ${PANCAKE_CATALOG_PAGE_SIZE:-100}
+      PANCAKE_CATALOG_MAX_PAGES: ${PANCAKE_CATALOG_MAX_PAGES:-100}
+      PANCAKE_AUTO_SYNC_ENABLED: ${PANCAKE_AUTO_SYNC_ENABLED:-}
+      PANCAKE_AUTO_SYNC_INTERVAL_MS: ${PANCAKE_AUTO_SYNC_INTERVAL_MS:-600000}
+      PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS: ${PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS:-15000}
+      PANCAKE_ORDER_POLL_INTERVAL_MS: ${PANCAKE_ORDER_POLL_INTERVAL_MS:-300000}
+      PANCAKE_ORDER_POLL_PAGE_SIZE: ${PANCAKE_ORDER_POLL_PAGE_SIZE:-50}
+      PANCAKE_ORDER_POLL_LOOKBACK_MS: ${PANCAKE_ORDER_POLL_LOOKBACK_MS:-900000}
+      PANCAKE_SYNC_MAX_ATTEMPTS: ${PANCAKE_SYNC_MAX_ATTEMPTS:-10}
+      META_CONVERSIONS_API_ENABLED: ${META_CONVERSIONS_API_ENABLED:-false}
+      META_PIXEL_ID: ${META_PIXEL_ID:-595813035761213}
+      META_CONVERSIONS_API_ACCESS_TOKEN: ${META_CONVERSIONS_API_ACCESS_TOKEN:-}
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-}
+      META_CONVERSIONS_API_TEST_EVENT_CODE: ${META_CONVERSIONS_API_TEST_EVENT_CODE:-}
+      ORDER_NOTIFICATIONS_ENABLED: ${ORDER_NOTIFICATIONS_ENABLED:-false}
+      SEMAPHORE_API_KEY: ${SEMAPHORE_API_KEY:-}
+      SEMAPHORE_SENDER_NAME: ${SEMAPHORE_SENDER_NAME:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      ORDER_NOTIFICATION_FROM_EMAIL: ${ORDER_NOTIFICATION_FROM_EMAIL:-}
+      JNT_INTEGRATION_MODE: ${JNT_INTEGRATION_MODE:-dry_run}
+      JNT_API_BASE_URL: ${JNT_API_BASE_URL:-}
+      JNT_API_CUSTOMER_CODE: ${JNT_API_CUSTOMER_CODE:-}
+      JNT_API_KEY: ${JNT_API_KEY:-}
+      ADMIN_LOGIN_RATE_LIMIT_MAX: ${ADMIN_LOGIN_RATE_LIMIT_MAX:-50}
+      ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS:-900000}
+      CHECKOUT_RATE_LIMIT_MAX: ${CHECKOUT_RATE_LIMIT_MAX:-100}
+      CHECKOUT_RATE_LIMIT_WINDOW_MS: ${CHECKOUT_RATE_LIMIT_WINDOW_MS:-600000}
+      CUSTOMER_AUTH_RATE_LIMIT_MAX: ${CUSTOMER_AUTH_RATE_LIMIT_MAX:-30}
+      CUSTOMER_AUTH_RATE_LIMIT_WINDOW_MS: ${CUSTOMER_AUTH_RATE_LIMIT_WINDOW_MS:-900000}
+      QUOTE_RATE_LIMIT_MAX: ${QUOTE_RATE_LIMIT_MAX:-120}
+      QUOTE_RATE_LIMIT_WINDOW_MS: ${QUOTE_RATE_LIMIT_WINDOW_MS:-600000}
+      CART_RATE_LIMIT_MAX: ${CART_RATE_LIMIT_MAX:-180}
+      CART_RATE_LIMIT_WINDOW_MS: ${CART_RATE_LIMIT_WINDOW_MS:-600000}
+      ORDER_LOOKUP_RATE_LIMIT_MAX: ${ORDER_LOOKUP_RATE_LIMIT_MAX:-120}
+      ORDER_LOOKUP_RATE_LIMIT_WINDOW_MS: ${ORDER_LOOKUP_RATE_LIMIT_WINDOW_MS:-600000}
+      ADMIN_SENSITIVE_RATE_LIMIT_MAX: ${ADMIN_SENSITIVE_RATE_LIMIT_MAX:-40}
+      ADMIN_SENSITIVE_RATE_LIMIT_WINDOW_MS: ${ADMIN_SENSITIVE_RATE_LIMIT_WINDOW_MS:-900000}
+      ISSUE_REPORT_RATE_LIMIT_MAX: ${ISSUE_REPORT_RATE_LIMIT_MAX:-20}
+      ISSUE_REPORT_RATE_LIMIT_WINDOW_MS: ${ISSUE_REPORT_RATE_LIMIT_WINDOW_MS:-600000}
+      ISSUE_UPLOAD_DIR: /app/private-uploads/issues
+    volumes:
+      - uploads:/app/public/uploads
+      - issue_uploads:/app/private-uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_FACEBOOK_META_PIXEL_ENABLED: ${VITE_FACEBOOK_META_PIXEL_ENABLED:-true}
+        VITE_FACEBOOK_META_PIXEL_ID: ${VITE_FACEBOOK_META_PIXEL_ID:?VITE_FACEBOOK_META_PIXEL_ID is required}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+    name: maria_clara_postgres_data
+  uploads:
+    name: maria_clara_uploads
+  issue_uploads:
+    name: maria_clara_issue_uploads

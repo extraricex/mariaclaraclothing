@@ -15,7 +15,7 @@ test('storeSettings lib fetches the public endpoint with safe fallbacks', async 
   assert.match(source, /export function regionEstimate/);
   assert.match(source, /export function isFreeShipping/);
   assert.match(source, /export function freeShippingHint/);
-  assert.match(source, /messengerUrl:\s*''/);
+  assert.match(source, /messengerUrl:\s*'https:\/\/m\.me\/mariaclaraclothing'/);
 });
 
 test('checkout uses store settings for shipping and payment methods', async () => {
@@ -50,7 +50,23 @@ test('store settings lib carries website defaults and an SEO applier', async () 
   assert.match(source, /Facebook Meta Pixel/);
   assert.match(source, /hashed contact details/);
   assert.match(source, /maintenanceMode: false/);
+  assert.match(source, /hero:/);
+  assert.match(source, /primaryButtonText: 'Shop new arrivals'/);
   assert.match(source, /export function applySeoTags/);
+});
+
+test('homepage renders hero text and buttons from storefront settings', async () => {
+  const source = await readFile(path.join(root, 'pages', 'Home.jsx'), 'utf8');
+
+  assert.match(source, /heroCopy/);
+  assert.match(source, /heroCopy\.title/);
+  assert.match(source, /heroCopy\.highlight/);
+  assert.match(source, /heroCopy\.primaryButtonText/);
+  assert.match(source, /heroCopy\.primaryButtonLink/);
+  assert.doesNotMatch(source, /heroCopy\.eyebrow/);
+  assert.doesNotMatch(source, /CustomerBadge/);
+  assert.doesNotMatch(source, /Philippine Streetwear - Imus Cavite<\/CustomerBadge>/);
+  assert.doesNotMatch(source, /Shop new arrivals<\/CustomerButton>/);
 });
 
 test('shell renders the ticker and SEO tags from settings', async () => {

@@ -17,7 +17,9 @@ test('product add-to-cart opens the cart drawer', async () => {
   const source = await readFile(path.join(root, 'pages', 'Product.jsx'), 'utf8');
 
   assert.match(source, /openCartDrawer/);
-  assert.match(source, /addToCart\(\{[\s\S]*?\}\);\s*openCartDrawer\(\);/);
+  assert.match(source, /const result = addToCart\(\{ \.\.\.cartItem \}\);/);
+  assert.match(source, /if \(result\?\.limited\)/);
+  assert.match(source, /openCartDrawer\(\);/);
 });
 
 test('shell renders a quote-backed cart drawer', async () => {
@@ -35,6 +37,7 @@ test('shell renders a quote-backed cart drawer', async () => {
   assert.match(source, /quote\?\.discountTotalCents/);
   assert.match(source, /quote\?\.shippingFeeCents/);
   assert.match(source, /quote\?\.totalCents/);
-  assert.match(source, /updateQuantity\(item\.variantId/);
+  assert.match(source, /increaseItem\(item\)/);
+  assert.match(source, /decreaseItem\(item\)/);
   assert.match(source, /removeFromCart\(item\.variantId\)/);
 });

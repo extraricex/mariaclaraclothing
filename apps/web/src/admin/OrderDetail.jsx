@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
 import { loadBarangays, loadCities, loadProvinces } from '../lib/addressGuide.js';
+import { adminProductDisplayParts, truncateAdminProductCode } from './adminProductDisplay.js';
 
 const ENUMS = {
   status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'],
@@ -20,6 +21,17 @@ const ENUM_LABELS = {
   deliveryStatus: 'Delivery'
 };
 
+const ORDER_ACTION_STATUSES = [
+  ['received', 'New'],
+  ['confirmed', 'Confirmed'],
+  ['packed', 'Packing'],
+  ['shipped', 'Shipped'],
+  ['delivered', 'Delivered'],
+  ['cancelled', 'Cancelled']
+];
+
+const NOTE_TABS = ['All', 'Internal', 'Printing', 'Conversation'];
+
 function orderForm(order) {
   return {
     status: order.status,
@@ -29,6 +41,8 @@ function orderForm(order) {
     deliveryStatus: order.deliveryStatus,
     trackingNumber: order.trackingNumber || '',
     notes: order.notes || '',
+    tags: Array.isArray(order.tags) ? order.tags : [],
+    deliveryMethod: order.deliveryMethod || 'Standard shipping',
     parcelWeightOverrideGrams: order.parcelWeightOverrideGrams ?? '',
     customer: {
       fullName: order.customer?.fullName || '',
@@ -44,22 +58,10 @@ function orderForm(order) {
       size: item.size || '',
       imageUrl: item.imageUrl || '',
       quantity: Number(item.quantity || 1),
-      unitPriceCents: Number(item.unitPriceCents || 0)
+      unitPriceCents: Number(item.unitPriceCents || 0),
+      discountCents: Number(item.discountCents || 0),
+      stockQuantity: item.stockQuantity
     }))
-  };
-}
-
-function emptyItem() {
-  return {
-    productId: '',
-    variantId: '',
-    sku: '',
-    slug: '',
-    productName: '',
-    size: '',
-    imageUrl: '',
-    quantity: 1,
-    unitPriceCents: 0
   };
 }
 
@@ -69,6 +71,17 @@ function pesoInputValue(cents) {
 
 function titleCase(value) {
   return String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function displayOrderStatus(value) {
+  if (value === 'received') return 'New';
+  if (value === 'packed') return 'Packing';
+  return titleCase(value || 'new');
+}
+
+function fallback(value, emptyLabel) {
+  const text = String(value || '').trim();
+  return text || emptyLabel;
 }
 
 function promoTypeLabel(value) {
@@ -86,14 +99,62 @@ function appliedRuleLabel(rule) {
   return parts.join(' · ') || 'Tier rule saved';
 }
 
+function stockStatusForItem(item) {
+  const stock = Number(item.stockQuantity ?? item.inventoryQuantity ?? item.availableQuantity ?? NaN);
+  if (Number.isFinite(stock)) {
+    if (stock <= 0) return 'Sold out';
+    if (stock <= 3) return `Low stock (${stock})`;
+    return `In stock (${stock})`;
+  }
+  return 'Stock not linked';
+}
+
 function orderStatusBadge(value, tone = 'neutral') {
   const tones = {
-    warning: 'border-amber-200 bg-amber-50 text-amber-800',
-    success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-    danger: 'border-red-200 bg-red-50 text-red-800',
-    neutral: 'border-line bg-cream text-ink-soft'
+    warning: 'border-[var(--admin-yellow)]/50 bg-[var(--admin-yellow)]/12 text-[#ffd166]',
+    success: 'border-[var(--admin-green)]/50 bg-[var(--admin-green)]/12 text-[#7ee787]',
+    danger: 'border-[var(--admin-red)]/50 bg-[var(--admin-red)]/12 text-[#ff8b98]',
+    neutral: 'border-[var(--admin-blue)]/45 bg-[var(--admin-blue)]/12 text-[#9ecbff]'
   };
-  return `order-status-badge inline-flex rounded-[var(--radius-admin)] border px-2.5 py-1 text-xs font-bold uppercase tracking-[0.08em] ${tones[tone] || tones.neutral}`;
+  return `order-status-badge inline-flex rounded-[var(--radius-admin)] border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] ${tones[tone] || tones.neutral}`;
+}
+
+function DetailCard({ title, eyebrow, children, className = '' }) {
+  return (
+    <section className={`admin-order-panel rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel)] p-4 shadow-[0_18px_45px_rgba(0,0,0,0.24)] ${className}`}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          {eyebrow && <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--admin-muted)]">{eyebrow}</p>}
+          <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-[var(--admin-text)]">{title}</h2>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InfoRow({ label, value, strong = false }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-[var(--admin-line)]/70 py-2 last:border-b-0">
+      <dt className="text-xs font-medium text-[var(--admin-muted)]">{label}</dt>
+      <dd className={`max-w-[62%] break-words whitespace-normal text-right text-xs ${strong ? 'font-semibold text-[var(--admin-text)]' : 'text-[var(--admin-text)]/80'}`}>{value}</dd>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, tone = 'info' }) {
+  const tones = {
+    info: 'border-[var(--admin-blue)]/45 bg-[var(--admin-blue)]/10 text-[#9ecbff]',
+    success: 'border-[var(--admin-green)]/45 bg-[var(--admin-green)]/10 text-[#7ee787]',
+    warning: 'border-[var(--admin-yellow)]/45 bg-[var(--admin-yellow)]/10 text-[#ffd166]',
+    danger: 'border-[var(--admin-red)]/45 bg-[var(--admin-red)]/10 text-[#ff8b98]'
+  };
+  return (
+    <article className={`admin-order-metric rounded-[var(--radius-admin)] border p-3 shadow-[0_12px_30px_rgba(0,0,0,0.18)] ${tones[tone] || tones.info}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-80">{label}</p>
+      <p className="mt-2 truncate text-lg font-semibold text-[var(--admin-text)]">{value}</p>
+    </article>
+  );
 }
 
 export default function OrderDetail() {
@@ -109,10 +170,8 @@ export default function OrderDetail() {
   const [history, setHistory] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showActions, setShowActions] = useState(false);
-  const [showProductPicker, setShowProductPicker] = useState(false);
-  const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [productSearchResults, setProductSearchResults] = useState([]);
-  const [productSearchLoading, setProductSearchLoading] = useState(false);
+  const [orderProductFilter, setOrderProductFilter] = useState('');
+  const [noteTab, setNoteTab] = useState('All');
   const [jntPreview, setJntPreview] = useState(null);
 
   useEffect(() => {
@@ -146,82 +205,16 @@ export default function OrderDetail() {
     if (addressDraft.cityCode) loadBarangays(addressDraft.cityCode).then(setBarangays);
   }, [addressDraft.cityCode]);
 
-  useEffect(() => {
-    if (!showProductPicker) return;
-    const params = new URLSearchParams();
-    if (productSearchQuery.trim()) params.set('q', productSearchQuery.trim());
-    params.set('sort', 'name_asc');
-    let ignore = false;
-    setProductSearchLoading(true);
-    adminJson(`/api/admin/products?${params}`)
-      .then((body) => {
-        if (!ignore) setProductSearchResults(body.products || []);
-      })
-      .catch((err) => {
-        if (!ignore) {
-          setProductSearchResults([]);
-          setMessage(err.message);
-        }
-      })
-      .finally(() => {
-        if (!ignore) setProductSearchLoading(false);
-      });
-    return () => { ignore = true; };
-  }, [showProductPicker, productSearchQuery]);
-
   if (!order || !form) {
-    return <p className="text-sm text-clay">{message || 'Loading order…'}</p>;
+    return <p className="text-sm text-clay">{message || 'Loading order...'}</p>;
   }
 
   function updateCustomer(field, value) {
+    setIsEditing(true);
     setForm((previous) => ({
       ...previous,
       customer: { ...previous.customer, [field]: value }
     }));
-  }
-
-  function updateItem(index, field, value) {
-    setForm((previous) => ({
-      ...previous,
-      items: previous.items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)
-    }));
-  }
-
-  function removeItem(index) {
-    setForm((previous) => ({
-      ...previous,
-      items: previous.items.filter((_item, itemIndex) => itemIndex !== index)
-    }));
-  }
-
-  function addItem() {
-    setIsEditing(true);
-    setShowProductPicker(true);
-    setProductSearchQuery('');
-  }
-
-  function selectCatalogVariant(product, variant) {
-    setIsEditing(true);
-    setForm((previous) => ({
-      ...previous,
-      items: [
-        ...previous.items,
-        {
-          productId: product.id || product.slug || '',
-          variantId: variant.id || '',
-          sku: variant.sku || '',
-          slug: product.slug || '',
-          productName: product.name || '',
-          size: variant.size || '',
-          imageUrl: product.image || '',
-          quantity: 1,
-          unitPriceCents: Number(variant.priceCents || product.priceCents || 0)
-        }
-      ]
-    }));
-    setShowProductPicker(false);
-    setProductSearchQuery('');
-    setProductSearchResults([]);
   }
 
   async function startAddressEdit() {
@@ -258,11 +251,6 @@ export default function OrderDetail() {
     setMessage('');
     const changes = { ...form };
     changes.customer = form.customer;
-    changes.items = form.items.map((item) => ({
-      ...item,
-      quantity: Number(item.quantity || 0),
-      unitPriceCents: Number(item.unitPriceCents || 0)
-    }));
     if (editAddress) {
       const province = provinces.find((item) => item.code === addressDraft.provinceCode);
       const city = cities.find((item) => item.code === addressDraft.cityCode);
@@ -312,6 +300,33 @@ export default function OrderDetail() {
     }));
   }
 
+  function setOrderStatusFromAction(nextStatus) {
+    setIsEditing(true);
+    setForm((previous) => ({
+      ...previous,
+      status: nextStatus,
+      fulfillmentStatus: nextStatus === 'packed'
+        ? 'packed'
+        : ['shipped', 'delivered', 'cancelled'].includes(nextStatus)
+          ? nextStatus
+          : previous.fulfillmentStatus,
+      deliveryStatus: nextStatus === 'delivered'
+        ? 'delivered'
+        : nextStatus === 'cancelled'
+          ? 'cancelled'
+          : previous.deliveryStatus
+    }));
+  }
+
+  function markAsReturned() {
+    setIsEditing(true);
+    setForm((previous) => ({
+      ...previous,
+      deliveryStatus: 'returned',
+      fulfillmentStatus: previous.fulfillmentStatus === 'delivered' ? 'delivered' : 'shipped'
+    }));
+  }
+
   function resetChanges() {
     setForm(orderForm(order));
     setEditAddress(false);
@@ -356,14 +371,34 @@ export default function OrderDetail() {
   }
 
   const itemCount = form.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const variationCount = new Set(form.items.map((item) => item.variantId || item.sku || item.size || item.productName).filter(Boolean)).size;
   const subtotalCents = form.items.reduce((sum, item) => sum + Number(item.unitPriceCents || 0) * Number(item.quantity || 0), 0);
   const promoSnapshot = order.discountSnapshot || {};
   const discountTotalCents = Math.min(subtotalCents, Math.max(0, Number(order.discountTotalCents || promoSnapshot.discountAmountCents || 0)));
-  const totalCents = Math.max(0, subtotalCents - discountTotalCents + Number(order.shippingFeeCents || 0));
+  const shippingFeeCents = Number(order.shippingFeeCents || 0);
+  const surchargeCents = Number(order.surchargeCents || 0);
+  const discountAwareOrderTotalCents = subtotalCents - discountTotalCents + Number(order.shippingFeeCents || 0);
+  const totalCents = Math.max(0, discountAwareOrderTotalCents + surchargeCents);
   const paidCents = form.paymentStatus === 'paid' ? totalCents : 0;
   const balanceCents = Math.max(totalCents - paidCents, 0);
   const paymentPending = form.paymentStatus !== 'paid';
   const unfulfilled = !['shipped', 'delivered', 'cancelled'].includes(form.fulfillmentStatus);
+  const isCod = order.paymentMethod === 'cash_on_delivery' || !order.paymentMethod;
+  const codAmountCents = isCod ? balanceCents : 0;
+  const customerPurchaseValueCents = Number(history?.totalPurchaseValueCents || history?.totalCents || totalCents || 0);
+  const previousOrders = Number(history?.ordersCount || 0);
+  const lastPurchaseDate = history?.lastPurchaseAt || history?.lastOrderAt || order.placedAt;
+  const statusEvents = Array.isArray(order.statusEvents) ? order.statusEvents : [];
+  const trackingNotifications = Array.isArray(order.trackingNotifications) ? order.trackingNotifications : [];
+  const deliveryNotifications = Array.isArray(order.notifications) ? order.notifications : [];
+  const searchNeedle = orderProductFilter.trim().toLowerCase();
+  const visibleItems = searchNeedle
+    ? form.items.filter((item) => [item.productName, item.sku, item.size, item.slug].join(' ').toLowerCase().includes(searchNeedle))
+    : form.items;
+  const canSendTrackingNotification = Boolean(order.exportedToJnt)
+    || form.status === 'shipped'
+    || form.fulfillmentStatus === 'shipped'
+    || form.deliveryStatus === 'out_for_delivery';
   const addressLines = [
     form.customer.fullName,
     order.address?.houseAddress,
@@ -373,412 +408,452 @@ export default function OrderDetail() {
     order.address?.country || 'Philippines',
     form.customer.phone
   ].filter(Boolean);
-  const statusEvents = Array.isArray(order.statusEvents) ? order.statusEvents : [];
-  const trackingNotifications = Array.isArray(order.trackingNotifications) ? order.trackingNotifications : [];
-  const deliveryNotifications = Array.isArray(order.notifications) ? order.notifications : [];
-  const canSendTrackingNotification = Boolean(order.exportedToJnt)
-    || form.status === 'shipped'
-    || form.fulfillmentStatus === 'shipped'
-    || form.deliveryStatus === 'out_for_delivery';
+  const fullAddress = order.address?.addressLine || addressLines.join(', ');
+  const pancakeSyncDetail = order.pancakeSyncDetail || {};
+  const pancakeSyncStatus = pancakeSyncDetail.syncStatus || order.pancakeSyncStatus || order.pancakeOrderSyncStatus || order.pancakeExportStatus || order.syncStatus || '';
+  const pancakeSyncLabel = pancakeSyncStatus ? titleCase(pancakeSyncStatus) : 'Not synced to Pancake POS';
+  const pancakeProductMappingStatus = pancakeSyncDetail.productMappingStatus || (pancakeSyncDetail.pancakeOrderId ? 'Mapped by saved order link' : 'Not linked to Pancake POS');
+  const pancakeInventorySyncStatus = pancakeSyncDetail.inventorySyncStatus || (pancakeSyncStatus === 'synced' ? 'Synced with order' : pancakeSyncLabel);
+  const orderMetricCards = [
+    ['Order status', displayOrderStatus(form.status), form.status === 'cancelled' ? 'danger' : form.status === 'delivered' ? 'success' : 'info'],
+    ['Amount due', formatMoney(balanceCents), balanceCents > 0 ? 'warning' : 'success'],
+    ['Total quantity', itemCount, itemCount > 0 ? 'info' : 'warning'],
+    ['Payment status', titleCase(form.paymentStatus || 'pending'), paymentPending ? 'danger' : 'success'],
+    ['Shipping status', titleCase(form.deliveryStatus || 'pending'), ['delivered', 'out_for_delivery'].includes(form.deliveryStatus) ? 'success' : 'warning'],
+    ['Pancake POS sync', pancakeSyncLabel, pancakeSyncStatus ? 'success' : 'warning']
+  ];
 
   return (
-    <div className="order-detail-shell mx-auto w-full max-w-[1380px]">
-      <Link to="/admin/orders" className="text-xs font-semibold uppercase tracking-[0.12em] text-clay hover:text-accent">Orders</Link>
-      <div className="mt-3 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="display text-2xl sm:text-3xl">{order.orderNumber}</h1>
-            {paymentPending && <span className={orderStatusBadge(form.paymentStatus, 'warning')}>Payment pending</span>}
-            {!paymentPending && <span className={orderStatusBadge(form.paymentStatus, 'success')}>Paid</span>}
-            {unfulfilled && <span className={orderStatusBadge(form.fulfillmentStatus, 'warning')}>Unfulfilled</span>}
-            {!unfulfilled && <span className={orderStatusBadge(form.fulfillmentStatus, 'success')}>{titleCase(form.fulfillmentStatus)}</span>}
+    <div className="admin-order-dashboard order-detail-shell order-detail-workspace -m-4 min-h-[calc(100vh-5rem)] bg-[var(--admin-bg)] p-4 pb-36 text-[var(--admin-text)] sm:-m-6 sm:p-6 sm:pb-32">
+      <div className="mx-auto w-full max-w-[1540px]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <Link to="/admin/orders" className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)] hover:text-[var(--admin-orange)]">Orders</Link>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight text-[var(--admin-text)] sm:text-3xl">{order.orderNumber}</h1>
+              <span className={orderStatusBadge(form.status, form.status === 'cancelled' ? 'danger' : 'neutral')}>{displayOrderStatus(form.status)}</span>
+              <span className={orderStatusBadge(form.paymentStatus, paymentPending ? 'warning' : 'success')}>{paymentPending ? 'Payment pending' : 'Paid'}</span>
+              <span className={orderStatusBadge(form.fulfillmentStatus, unfulfilled ? 'warning' : 'success')}>{unfulfilled ? 'Unfulfilled' : titleCase(form.fulfillmentStatus)}</span>
+            </div>
+            <p className="mt-1 text-sm text-[var(--admin-muted)]">
+              {order.placedAt ? new Date(order.placedAt).toLocaleString('en-PH') : 'Date unavailable'} from {order.channel || 'Online Store'}
+            </p>
           </div>
-          <p className="mt-2 text-sm text-clay">
-            {order.placedAt ? new Date(order.placedAt).toLocaleString('en-PH') : 'Date unavailable'} from {order.channel || 'Online Store'}
-          </p>
+          <div className="relative flex flex-wrap gap-2">
+            <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => window.print()}>Print</button>
+            <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => setShowActions((value) => !value)}>More actions</button>
+            {showActions && (
+              <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-2 text-sm text-[var(--admin-text)] shadow-xl">
+                <button type="button" className="block w-full rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-[var(--admin-panel)]" onClick={copyOrderNumber}>Copy order number</button>
+                <button type="button" className="block w-full rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-[var(--admin-panel)]" onClick={resetChanges}>Discard unsaved changes</button>
+                <Link className="block rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-[var(--admin-panel)]" to="/admin/orders" onClick={() => setShowActions(false)}>View all orders</Link>
+              </div>
+            )}
+            <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => setIsEditing(true)}>{isEditing ? 'Editing' : 'Edit'}</button>
+            <button type="button" className="btn-ink !px-5 !py-2 text-xs" onClick={save}>Save</button>
+          </div>
         </div>
-        <div className="relative flex flex-wrap gap-2">
-          <button type="button" className="btn-secondary" onClick={() => window.print()}>Print</button>
-          <button type="button" className="btn-secondary" onClick={() => setShowActions((value) => !value)}>More actions</button>
-          {showActions && (
-            <div className="absolute right-0 top-full z-20 mt-2 w-48 rounded-[var(--radius-admin)] border border-line bg-paper p-2 text-sm shadow-lg">
-              <button type="button" className="block w-full rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-cream" onClick={copyOrderNumber}>Copy order number</button>
-              <button type="button" className="block w-full rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-cream" onClick={resetChanges}>Discard unsaved changes</button>
-              <Link className="block rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-cream" to="/admin/orders" onClick={() => setShowActions(false)}>View all orders</Link>
-            </div>
-          )}
-          <button type="button" className="btn-secondary" onClick={() => setIsEditing(true)}>{isEditing ? 'Editing' : 'Edit'}</button>
-          <button type="button" className="btn-ink !px-5 !py-2.5 text-xs" onClick={save}>Save changes</button>
-        </div>
-      </div>
-      {message && <p className="mt-3 text-sm text-accent-deep" role="status">{message}</p>}
 
-      <div className="order-detail-grid mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
-        <div className="space-y-5">
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={orderStatusBadge(form.fulfillmentStatus, unfulfilled ? 'warning' : 'success')}>
-                {unfulfilled ? 'Unfulfilled' : titleCase(form.fulfillmentStatus)}
-              </span>
-              <span className={orderStatusBadge(form.deliveryStatus)}>{titleCase(form.deliveryStatus || 'pending')}</span>
-              <span className="text-sm text-clay">{order.shippingRegionLabel || order.deliveryMethod || 'Standard shipping'}</span>
-            </div>
-            <div className="mt-4 rounded-[var(--radius-admin)] border border-line bg-white p-4 text-sm font-semibold text-ink">
-              {order.shippingRegionLabel || order.deliveryMethod || 'Shipping'}
-            </div>
-            <div className="mt-4 space-y-3">
-              {form.items.map((item, index) => (
-                <div key={index} className="rounded-[var(--radius-admin)] border border-line bg-white p-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                    {item.imageUrl ? (
-                      <img src={item.imageUrl} alt="" className="product-photo-blend h-14 w-14 rounded-[var(--radius-admin)] border border-line object-cover" />
-                    ) : (
-                      <span className="h-14 w-14 rounded-[var(--radius-admin)] border border-line bg-cream" aria-hidden="true" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <label className="block">
-                        <span className="eyebrow">Product name</span>
-                        <input className="field mt-1" value={item.productName} disabled={!isEditing} onChange={(e) => updateItem(index, 'productName', e.target.value)} />
-                      </label>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                        <label className="block">
-                          <span className="eyebrow">Size</span>
-                          <input className="field mt-1" value={item.size} disabled={!isEditing} onChange={(e) => updateItem(index, 'size', e.target.value)} />
-                        </label>
-                        <label className="block">
-                          <span className="eyebrow">Quantity</span>
-                          <input className="field mt-1" type="number" min="1" value={item.quantity} disabled={!isEditing} onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))} />
-                        </label>
-                        <label className="block">
-                          <span className="eyebrow">Unit price</span>
-                          <input className="field mt-1" type="number" min="0" step="0.01" value={pesoInputValue(item.unitPriceCents)} disabled={!isEditing} onChange={(e) => updateItem(index, 'unitPriceCents', Math.round(Number(e.target.value || 0) * 100))} />
-                        </label>
+        {message && <p className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-yellow)]/40 bg-[var(--admin-yellow)]/10 px-3 py-2 text-sm text-[#ffd166]" role="status">{message}</p>}
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          {orderMetricCards.map(([label, value, tone]) => (
+            <MetricCard key={label} label={label} value={value} tone={tone} />
+          ))}
+        </div>
+
+        <div className="order-detail-grid order-detail-main-grid mt-5 grid grid-flow-row-dense gap-4 lg:grid-cols-2 xl:grid-cols-12">
+          <main className="space-y-4 xl:col-span-7">
+            <DetailCard title="Products" className="overflow-hidden">
+              <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                <input
+                  className="field !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]"
+                  placeholder="Search products in this order"
+                  value={orderProductFilter}
+                  onChange={(event) => setOrderProductFilter(event.target.value)}
+                />
+                <span className="rounded-full border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-3 py-2 text-xs font-semibold text-[var(--admin-muted)]">Number of variations: {variationCount}</span>
+                <span className="rounded-full border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-3 py-2 text-xs font-semibold text-[var(--admin-muted)]">Total quantity: {itemCount}</span>
+              </div>
+
+              <div className="hidden md:grid rounded-t-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)] md:grid-cols-[64px_minmax(0,1.6fr)_112px_72px_96px_96px_84px] md:gap-3">
+                <span>Photo</span>
+                <span>Product name</span>
+                <span className="text-center">Variant</span>
+                <span className="text-center">Qty</span>
+                <span className="text-right">Unit price</span>
+                <span className="text-right">Total</span>
+                <span className="text-right">Action</span>
+              </div>
+              <div className="space-y-2 md:space-y-0">
+                {visibleItems.map((item, index) => (
+                  <article key={`${item.sku}-${index}`} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 md:rounded-none md:border-t-0">
+                    {(() => {
+                      const { cleanName, color, size, sku, productCode } = adminProductDisplayParts(item);
+                      const fallbackProductCode = truncateAdminProductCode(item.productId || item.slug || '');
+                      const stockLabel = stockStatusForItem(item);
+                      return (
+                    <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-3 md:grid-cols-[64px_minmax(0,1.6fr)_112px_72px_96px_96px_84px] md:items-center">
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt="" className="product-photo-blend h-14 w-14 rounded-[var(--radius-admin)] border border-[var(--admin-line)] object-cover" />
+                      ) : (
+                        <span className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] text-[10px] uppercase text-[var(--admin-muted)]">No image</span>
+                      )}
+                      <div className="min-w-0">
+                        <p title={item.productName} className="line-clamp-2 text-sm font-semibold leading-5 text-[var(--admin-text)]">{cleanName}</p>
+                        <div className="mt-1 grid min-w-0 gap-1 text-[11px] text-[var(--admin-muted)] sm:grid-cols-2">
+                          <span className="min-w-0 truncate" title={sku || 'No SKU'}>SKU {fallback(sku, 'No SKU')}</span>
+                          <span className="hidden min-w-0 truncate sm:block" title={item.productId || item.slug || ''}>Product code {fallback(productCode || fallbackProductCode, 'No code')}</span>
+                          <span className={`min-w-0 truncate sm:col-span-2 ${stockLabel.includes('Low') || stockLabel.includes('Sold') ? 'text-[#ffd166]' : ''}`} title={stockLabel}>{stockLabel}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--admin-muted)] md:hidden">
+                          <span>Color: {fallback(color, 'No color')}</span>
+                          <span>Size: {fallback(size, 'No size')}</span>
+                        </div>
+                        {(item.discountCents || discountTotalCents) ? <p className="mt-1 text-[11px] font-medium text-[#7ee787]">Promotion applied</p> : null}
                       </div>
+                      <div className="hidden min-w-0 text-center md:block">
+                        <p className="truncate text-xs font-semibold text-[var(--admin-text)]" title={size || color}>{fallback(size, 'No size')}</p>
+                        <p className="mt-1 truncate text-[11px] text-[var(--admin-muted)]" title={color}>Color: {fallback(color, 'No color')}</p>
+                      </div>
+                      <label className="block text-left md:text-center">
+                        <span className="eyebrow md:hidden">Quantity</span>
+                        <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-center !text-xs !text-[var(--admin-text)]" type="number" min="1" value={item.quantity} disabled />
+                      </label>
+                      <label className="block text-right">
+                        <span className="eyebrow md:hidden">Unit price</span>
+                        <input className="field !border-[var(--admin-line)] !bg-[var(--admin-panel)] !text-right !text-xs !text-[var(--admin-text)]" type="number" min="0" step="0.01" value={pesoInputValue(item.unitPriceCents)} disabled />
+                      </label>
+                      <div className="flex items-center justify-between gap-3 text-right text-sm font-semibold text-[var(--admin-text)] md:block">
+                        <span className="eyebrow md:hidden">Total</span>
+                        <span className="block">{formatMoney(Number(item.unitPriceCents || 0) * Number(item.quantity || 0))}</span>
+                      </div>
+                      <div />
                     </div>
-                    <div className="text-right text-sm font-semibold">
-                      <p>{formatMoney(Number(item.unitPriceCents || 0) * Number(item.quantity || 0))}</p>
-                      <button type="button" className="mt-2 text-xs text-accent underline disabled:text-clay disabled:no-underline" onClick={() => removeItem(index)} disabled={!isEditing || form.items.length <= 1}>Remove item</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {showProductPicker && (
-                <div className="rounded-[var(--radius-admin)] border border-line bg-cream p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="min-w-0 flex-1">
-                      <span className="eyebrow">Search products to add</span>
-                      <input
-                        className="field mt-1"
-                        value={productSearchQuery}
-                        autoFocus
-                        placeholder="Type product name, SKU, collection, or category"
-                        onChange={(e) => setProductSearchQuery(e.target.value)}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="btn-secondary self-start sm:self-end"
-                      onClick={() => {
-                        setShowProductPicker(false);
-                        setProductSearchQuery('');
-                        setProductSearchResults([]);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1">
-                    {productSearchLoading && <p className="text-sm text-clay">Searching products...</p>}
-                    {!productSearchLoading && productSearchResults.map((product) => (
-                      <article key={product.slug} className="rounded-[var(--radius-admin)] border border-line bg-white p-3">
-                        <div className="flex gap-3">
-                          {product.image ? (
-                            <img src={product.image} alt="" className="product-photo-blend h-14 w-12 rounded-[var(--radius-admin)] border border-line object-cover" />
-                          ) : (
-                            <span className="h-14 w-12 rounded-[var(--radius-admin)] border border-line bg-cream" aria-hidden="true" />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-sm font-semibold text-ink">{product.name}</h3>
-                              <span className={orderStatusBadge(product.status)}>{product.status}</span>
-                            </div>
-                            <p className="mt-1 text-xs text-clay">{product.category || 'Uncategorized'} · {product.inventoryQuantity || 0} in stock</p>
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                              {(product.variants || []).map((variant) => (
-                                <button
-                                  type="button"
-                                  key={variant.id}
-                                  className="rounded-[var(--radius-admin)] border border-line bg-paper p-2 text-left text-xs hover:border-accent hover:bg-cream"
-                                  onClick={() => selectCatalogVariant(product, variant)}
-                                >
-                                  <span className="block font-semibold text-ink">{variant.size || 'Default'} · {formatMoney(variant.priceCents || product.priceCents || 0)}</span>
-                                  <span className="block text-clay">SKU {variant.sku || '-'} · Stock {variant.stockQuantity || 0}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                    {!productSearchLoading && showProductPicker && productSearchResults.length === 0 && (
-                      <p className="rounded-[var(--radius-admin)] border border-line bg-white p-3 text-sm text-clay">No products match.</p>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <button type="button" className="btn-ghost !py-2" onClick={addItem}>Add item</button>
-                <button type="button" className="btn-ink !py-2" onClick={markAsFulfilled}>Mark as fulfilled</button>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className={orderStatusBadge(form.paymentStatus, paymentPending ? 'warning' : 'success')}>
-                {paymentPending ? 'Payment pending' : 'Paid'}
-              </span>
-              <button type="button" className="btn-ink !py-2" onClick={markAsPaid}>Mark as paid</button>
-            </div>
-            <dl className="mt-4 space-y-2 rounded-[var(--radius-admin)] border border-line bg-white p-4 text-sm">
-              <div className="flex justify-between gap-4"><dt className="text-clay">Subtotal</dt><dd>{itemCount} item{itemCount === 1 ? '' : 's'} · {formatMoney(subtotalCents)}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-clay">Discount</dt><dd>{discountTotalCents ? `-${formatMoney(discountTotalCents)}` : formatMoney(0)}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-clay">Shipping</dt><dd>{order.shippingFeeCents ? formatMoney(order.shippingFeeCents) : 'Free'}</dd></div>
-              <div className="flex justify-between gap-4 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(totalCents)}</dd></div>
-              <div className="border-t border-line pt-2">
-                <div className="flex justify-between gap-4"><dt className="text-clay">Paid</dt><dd>{formatMoney(paidCents)}</dd></div>
-                <div className="flex justify-between gap-4 font-semibold"><dt>Balance</dt><dd>{formatMoney(balanceCents)}</dd></div>
-              </div>
-            </dl>
-          </section>
-
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Timeline</h2>
-            <label className="mt-4 block">
-              <span className="eyebrow">Leave a comment</span>
-              <textarea className="field mt-1" rows="3" placeholder="Leave a comment..." value={form.notes} disabled={!isEditing} onChange={(e) => setForm((previous) => ({ ...previous, notes: e.target.value }))} />
-            </label>
-            <p className="mt-3 text-xs text-clay">Only admin users can see timeline comments. Notes are saved to the order record.</p>
-          </section>
-
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Status history</h2>
-            {statusEvents.length ? (
-              <div className="mt-4 space-y-3">
-                {statusEvents.map((event) => (
-                  <article key={event.id || `${event.source}-${event.createdAt}`} className="rounded-[var(--radius-admin)] border border-line bg-white p-4 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="font-semibold text-ink">{titleCase(event.source || 'admin')}</p>
-                      <time className="text-xs text-clay" dateTime={event.createdAt || ''}>
-                        {event.createdAt ? new Date(event.createdAt).toLocaleString('en-PH') : 'Date unavailable'}
-                      </time>
-                    </div>
-                    <dl className="mt-3 space-y-2">
-                      {Object.entries(event.changes || {}).map(([field, change]) => (
-                        <div key={field} className="grid gap-1 sm:grid-cols-[140px_1fr]">
-                          <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-clay">{ENUM_LABELS[field] || titleCase(field)}</dt>
-                          <dd className="text-ink-soft">
-                            {titleCase(change.from || 'blank')} <span className="text-clay">to</span> {titleCase(change.to || 'blank')}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                    {event.note && <p className="mt-3 text-xs text-clay">{event.note}</p>}
+                      );
+                    })()}
                   </article>
                 ))}
+                {!visibleItems.length && <p className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-4 text-sm text-[var(--admin-muted)]">No products match this filter.</p>}
               </div>
-            ) : (
-              <p className="mt-3 text-sm text-clay">No status changes recorded yet.</p>
-            )}
-          </section>
-        </div>
 
-        <div className="space-y-5">
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Notes</h2>
-            <label className="mt-4 block">
-              <span className="eyebrow">Internal notes</span>
-              <textarea className="field mt-1" rows="4" value={form.notes} disabled={!isEditing} onChange={(e) => setForm((previous) => ({ ...previous, notes: e.target.value }))} />
-            </label>
-          </section>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span />
+                <button type="button" className="btn-ink !py-2 !text-xs" onClick={markAsFulfilled}>Mark as fulfilled</button>
+              </div>
+            </DetailCard>
 
-          <section className="border border-line bg-paper p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Customer</h2>
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="eyebrow">Full name</span>
-                <input className="field mt-1" value={form.customer.fullName} disabled={!isEditing} onChange={(e) => updateCustomer('fullName', e.target.value)} />
+            <DetailCard title="Order value">
+              <dl className="space-y-1 text-sm">
+                <InfoRow label="Subtotal" value={`${itemCount} item${itemCount === 1 ? '' : 's'} · ${formatMoney(subtotalCents)}`} />
+                <InfoRow label="Discount" value={discountTotalCents ? `-${formatMoney(discountTotalCents)}` : formatMoney(0)} />
+                <InfoRow label="Shipping fee" value={shippingFeeCents ? formatMoney(shippingFeeCents) : 'Free'} />
+                <InfoRow label="Surcharge" value={surchargeCents ? formatMoney(surchargeCents) : formatMoney(0)} />
+                <InfoRow label="Free shipping" value={order.freeShippingUnlocked || shippingFeeCents === 0 ? 'Applied' : 'Not applied'} />
+                <InfoRow label="COD amount" value={formatMoney(codAmountCents)} />
+                <div className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-orange)]/35 bg-[var(--admin-orange)]/12 px-4 py-3 text-[var(--admin-text)]">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">Total amount due</span>
+                    <strong className="text-xl">{formatMoney(totalCents)}</strong>
+                  </div>
+                </div>
+              </dl>
+            </DetailCard>
+          </main>
+
+          <aside className="space-y-4 xl:col-span-5 xl:grid xl:grid-cols-5 xl:content-start xl:gap-4 xl:space-y-0">
+            <DetailCard title="Payments" className="xl:col-span-2">
+              <div className={`rounded-[var(--radius-admin)] border p-3 ${paymentPending ? 'border-[var(--admin-red)]/45 bg-[var(--admin-red)]/10' : 'border-[var(--admin-green)]/45 bg-[var(--admin-green)]/10'}`}>
+                <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${paymentPending ? 'text-[#ff8b98]' : 'text-[#7ee787]'}`}>
+                  {paymentPending ? 'Payment incomplete' : 'Payment received'}
+                </p>
+                <p className="mt-1 text-sm text-[var(--admin-text)]/85">{titleCase(order.paymentMethod || 'cash_on_delivery')}</p>
+              </div>
+              <dl className="mt-3">
+                <InfoRow label="Payment method" value={titleCase(order.paymentMethod || 'cash_on_delivery')} />
+                <InfoRow label="Payment status" value={titleCase(form.paymentStatus)} />
+                <InfoRow label="Paid amount" value={formatMoney(paidCents)} />
+                <InfoRow label="Missing balance" value={formatMoney(balanceCents)} strong={paymentPending} />
+                <InfoRow label="Amount due" value={formatMoney(totalCents)} strong />
+              </dl>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={markAsPaid}>Mark as paid</button>
+                <select className="field !w-auto !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" value={form.paymentStatus} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, paymentStatus: e.target.value })); }}>
+                  {ENUMS.paymentStatus.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
+                </select>
+              </div>
+            </DetailCard>
+
+            <DetailCard title="Notes" eyebrow="Extra notes" className="xl:col-span-3">
+              <div className="flex gap-1 overflow-x-auto rounded-[var(--radius-admin)] bg-[var(--admin-panel-soft)] p-1">
+                {NOTE_TABS.map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={`rounded-[var(--radius-admin)] px-3 py-1.5 text-xs font-semibold ${noteTab === tab ? 'bg-[var(--admin-blue)]/18 text-[#9ecbff] shadow-sm' : 'text-[var(--admin-muted)]'}`}
+                    onClick={() => setNoteTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              <label className="mt-3 block">
+                <span className="eyebrow !text-[var(--admin-muted)]">{noteTab === 'All' ? 'Message / Checkout note' : `${noteTab} note`}</span>
+                <textarea className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" rows="5" placeholder="No note" value={form.notes} disabled={!isEditing} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, notes: e.target.value })); }} />
               </label>
+              <p className="mt-2 text-xs text-[var(--admin-muted)]">Timeline comments and internal notes are saved to the order record.</p>
+            </DetailCard>
+
+            <DetailCard title="Status history" className="xl:col-span-5">
               <label className="block">
-                <span className="eyebrow">Contact number</span>
-                <input className="field mt-1" value={form.customer.phone} disabled={!isEditing} onChange={(e) => updateCustomer('phone', e.target.value)} />
+                <span className="eyebrow !text-[var(--admin-muted)]">Leave a comment</span>
+                <textarea className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" rows="3" placeholder="Leave a comment..." value={form.notes} disabled={!isEditing} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, notes: e.target.value })); }} />
               </label>
-              <label className="block">
-                <span className="eyebrow">Email</span>
-                <input className="field mt-1" type="email" value={form.customer.email} disabled={!isEditing} onChange={(e) => updateCustomer('email', e.target.value)} />
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">Timeline</p>
+              <div className="mt-3 space-y-2">
+                {statusEvents.slice(0, 4).map((event) => (
+                  <article key={event.id || `${event.source}-${event.createdAt}`} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <strong>{titleCase(event.source || 'admin')}</strong>
+                      <time className="text-[var(--admin-muted)]">{event.createdAt ? new Date(event.createdAt).toLocaleString('en-PH') : 'Date unavailable'}</time>
+                    </div>
+                    {Object.entries(event.changes || {}).map(([field, change]) => (
+                      <p key={field} className="mt-1 text-[var(--admin-muted)]">{ENUM_LABELS[field] || titleCase(field)}: {titleCase(change.from || 'blank')} to {titleCase(change.to || 'blank')}</p>
+                    ))}
+                  </article>
+                ))}
+                {!statusEvents.length && <p className="text-sm text-[var(--admin-muted)]">No status changes recorded yet.</p>}
+              </div>
+            </DetailCard>
+          </aside>
+
+          <aside className="space-y-4 lg:col-span-2 xl:col-span-12 xl:grid xl:grid-cols-12 xl:content-start xl:gap-4 xl:space-y-0">
+            <DetailCard title="Information" className="xl:col-span-4">
+              <dl>
+                <InfoRow label="Order number" value={order.orderNumber} strong />
+                <InfoRow label="Created date" value={order.placedAt ? new Date(order.placedAt).toLocaleString('en-PH') : 'Date unavailable'} />
+                <InfoRow label="Customer care staff" value="Unassigned" />
+                <InfoRow label="Marketer" value="Unassigned" />
+                <InfoRow label="Order status" value={displayOrderStatus(form.status)} strong />
+              </dl>
+              <label className="mt-3 block">
+                <span className="eyebrow !text-[var(--admin-muted)]">Tags</span>
+                <input
+                  className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]"
+                  placeholder="vip, repeat, urgent"
+                  value={form.tags.join(', ')}
+                  onChange={(e) => {
+                    setIsEditing(true);
+                    setForm((previous) => ({ ...previous, tags: e.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) }));
+                  }}
+                />
               </label>
-            </div>
-            {history && (
-              <p className={`mt-2 inline-block px-2 py-1 text-xs font-semibold ${
-                history.cancelledCount === 0 && history.unreachableCount === 0 && history.deliveredCount > 0
-                  ? 'bg-[#2f7d32]/10 text-[#2f7d32]'
-                  : history.cancelledCount > 0 || history.unreachableCount > 0
-                    ? 'bg-[#b8860b]/10 text-[#8a6508]'
-                    : 'bg-cream text-ink-soft'
-              }`}>
-                COD history: {history.ordersCount} order{history.ordersCount === 1 ? '' : 's'} ·{' '}
-                {history.deliveredCount} delivered · {history.cancelledCount} cancelled · {history.unreachableCount} unreachable
-              </p>
-            )}
-            <div className="mt-4 border-t border-line pt-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Shipping address</h3>
-                <button type="button" className="text-xs text-accent underline" onClick={() => editAddress ? setEditAddress(false) : startAddressEdit()}>
-                  {editAddress ? 'Cancel edit' : 'Edit'}
-                </button>
+            </DetailCard>
+
+            <DetailCard title="Pancake POS sync details" className="xl:col-span-4">
+              <dl>
+                <InfoRow label="Pancake POS order ID" value={fallback(pancakeSyncDetail.pancakeOrderId, 'Not linked to Pancake POS')} strong={Boolean(pancakeSyncDetail.pancakeOrderId)} />
+                <InfoRow label="Sync status" value={pancakeSyncLabel} strong />
+                <InfoRow label="Last sync time" value={pancakeSyncDetail.lastSyncedAt ? new Date(pancakeSyncDetail.lastSyncedAt).toLocaleString('en-PH') : 'Never synced'} />
+                <InfoRow label="Last Pancake update time" value={pancakeSyncDetail.lastPancakeUpdatedAt ? new Date(pancakeSyncDetail.lastPancakeUpdatedAt).toLocaleString('en-PH') : 'No Pancake update recorded'} />
+                <InfoRow label="Last sync error" value={fallback(pancakeSyncDetail.safeErrorCode, 'No sync error')} />
+                <InfoRow label="Product mapping status" value={pancakeProductMappingStatus} />
+                <InfoRow label="Inventory sync status" value={pancakeInventorySyncStatus} />
+              </dl>
+              {Array.isArray(pancakeSyncDetail.recentLogs) && pancakeSyncDetail.recentLogs.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-[var(--admin-line)] pt-3">
+                  {pancakeSyncDetail.recentLogs.slice(0, 2).map((log) => (
+                    <article key={log.id || `${log.code}-${log.createdAt}`} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-2 text-xs">
+                      <p className="font-semibold text-[var(--admin-text)]">{titleCase(log.level || 'info')} · {fallback(log.code, 'sync_log')}</p>
+                      <p className="mt-1 text-[var(--admin-muted)]">{fallback(log.message, 'Pancake sync event recorded.')}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </DetailCard>
+
+            <DetailCard title="Customer" className="xl:col-span-4">
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="eyebrow !text-[var(--admin-muted)]">Full name</span>
+                  <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={form.customer.fullName} disabled={!isEditing} onChange={(e) => updateCustomer('fullName', e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="eyebrow !text-[var(--admin-muted)]">Phone number</span>
+                  <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={form.customer.phone} disabled={!isEditing} onChange={(e) => updateCustomer('phone', e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="eyebrow !text-[var(--admin-muted)]">Email</span>
+                  <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" type="email" value={form.customer.email} disabled={!isEditing} placeholder="No email provided" onChange={(e) => updateCustomer('email', e.target.value)} />
+                </label>
+              </div>
+              <dl className="mt-3 border-t border-[var(--admin-line)] pt-2">
+                <InfoRow label="Gender" value="Not provided" />
+                <InfoRow label="Date of birth" value="Not provided" />
+                <InfoRow label="Total purchase value" value={formatMoney(customerPurchaseValueCents)} />
+                <InfoRow label="Previous orders" value={previousOrders || 'First known order'} />
+                <InfoRow label="Last purchase date" value={lastPurchaseDate ? new Date(lastPurchaseDate).toLocaleDateString('en-PH') : 'No previous purchase'} />
+              </dl>
+            </DetailCard>
+
+            <DetailCard title="Delivery" className="xl:col-span-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className={orderStatusBadge(form.deliveryStatus)}>{titleCase(form.deliveryStatus || 'pending')}</span>
+                <button type="button" className="text-xs font-semibold text-[var(--admin-orange)] underline" onClick={() => editAddress ? setEditAddress(false) : startAddressEdit()}>{editAddress ? 'Cancel edit' : 'Edit address'}</button>
               </div>
               {!editAddress ? (
-                <dl className="mt-3 grid gap-2 text-sm">
-                  <div><dt className="eyebrow">House / Street</dt><dd className="text-ink-soft">{order.address?.houseAddress || '-'}</dd></div>
-                  <div><dt className="eyebrow">Barangay</dt><dd className="text-ink-soft">{order.address?.barangay || '-'}</dd></div>
-                  <div><dt className="eyebrow">City / Municipality</dt><dd className="text-ink-soft">{order.address?.city || '-'}</dd></div>
-                  <div><dt className="eyebrow">Province</dt><dd className="text-ink-soft">{order.address?.province || '-'}</dd></div>
+                <dl className="mt-3">
+                  <InfoRow label="Customer name" value={fallback(form.customer.fullName, 'No name provided')} />
+                  <InfoRow label="Phone number" value={fallback(form.customer.phone, 'No phone provided')} />
+                  <InfoRow label="Complete address" value={fallback(fullAddress, 'No address provided')} />
+                  <InfoRow label="House / Street" value={fallback(order.address?.houseAddress, 'No house / street')} />
+                  <InfoRow label="Barangay" value={fallback(order.address?.barangay, 'No barangay')} />
+                  <InfoRow label="City / Municipality" value={fallback(order.address?.city, 'No city')} />
+                  <InfoRow label="Province" value={fallback(order.address?.province, 'No province')} />
+                  <InfoRow label="ZIP code" value={fallback(order.address?.postalCode || order.address?.zipCode, 'No ZIP code')} />
+                  <InfoRow label="Estimated delivery" value={order.estimatedDeliveryAt ? new Date(order.estimatedDeliveryAt).toLocaleDateString('en-PH') : 'Not scheduled'} />
+                  <InfoRow label="Delivery notes" value={fallback(order.deliveryNotes || order.notes, 'No note')} />
                 </dl>
               ) : (
                 <div className="mt-3 space-y-3">
                   <label className="block">
-                    <span className="eyebrow">House / Street</span>
-                    <input className="field mt-1" placeholder="House / street / unit" value={addressDraft.house} disabled={!isEditing} onChange={(e) => setAddressDraft((d) => ({ ...d, house: e.target.value }))} />
+                    <span className="eyebrow !text-[var(--admin-muted)]">House / Street</span>
+                    <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" placeholder="House / street / unit" value={addressDraft.house} disabled={!isEditing} onChange={(e) => setAddressDraft((d) => ({ ...d, house: e.target.value }))} />
                   </label>
-                  <select className="field" value={addressDraft.provinceCode} disabled={!isEditing} onChange={(e) => setAddressDraft((d) => ({ ...d, provinceCode: e.target.value, cityCode: '', barangayCode: '' }))}>
-                    <option value="">Select province</option>
+                  <select className="field !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={addressDraft.provinceCode} disabled={!isEditing} onChange={(e) => setAddressDraft((d) => ({ ...d, provinceCode: e.target.value, cityCode: '', barangayCode: '' }))}>
+                    <option value="">Province</option>
                     {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                   </select>
-                  <select className="field" value={addressDraft.cityCode} disabled={!isEditing || !cities.length} onChange={(e) => setAddressDraft((d) => ({ ...d, cityCode: e.target.value, barangayCode: '' }))}>
-                    <option value="">Select city / municipality</option>
+                  <select className="field !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={addressDraft.cityCode} disabled={!isEditing || !cities.length} onChange={(e) => setAddressDraft((d) => ({ ...d, cityCode: e.target.value, barangayCode: '' }))}>
+                    <option value="">City / Municipality</option>
                     {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                   </select>
-                  <select className="field" value={addressDraft.barangayCode} disabled={!isEditing || !barangays.length} onChange={(e) => setAddressDraft((d) => ({ ...d, barangayCode: e.target.value }))}>
-                    <option value="">Select barangay</option>
+                  <select className="field !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={addressDraft.barangayCode} disabled={!isEditing || !barangays.length} onChange={(e) => setAddressDraft((d) => ({ ...d, barangayCode: e.target.value }))}>
+                    <option value="">Barangay</option>
                     {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                   </select>
                 </div>
               )}
-            </div>
-            <div className="mt-4 border-t border-line pt-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Billing address</h3>
-              <p className="mt-2 text-sm text-ink-soft">Same as shipping address</p>
-              <p className="mt-1 text-sm text-clay">{addressLines.join(', ') || '-'}</p>
-            </div>
-          </section>
+              <div className="mt-3 border-t border-[var(--admin-line)] pt-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">Billing address</h3>
+                <p className="mt-1 text-sm text-[var(--admin-text)]/85">Same as shipping address</p>
+              </div>
+            </DetailCard>
 
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Promo snapshot</h2>
-            {promoSnapshot.promoId || order.discountCode || discountTotalCents ? (
-              <dl className="mt-4 space-y-2 text-sm">
-                <div className="flex justify-between gap-4"><dt className="text-clay">Name</dt><dd className="text-right font-semibold">{promoSnapshot.name || promoSnapshot.promoId || order.discountCode}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-clay">Code</dt><dd className="text-right">{promoSnapshot.promoId || order.discountCode || '-'}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-clay">Type</dt><dd className="text-right">{promoTypeLabel(promoSnapshot.type)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-clay">Discount</dt><dd className="text-right">-{formatMoney(discountTotalCents)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-clay">Free shipping</dt><dd className="text-right">{promoSnapshot.freeShippingApplied ? 'Applied' : 'Not applied'}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-clay">Savings</dt><dd className="text-right">{formatMoney(promoSnapshot.savingsCents || discountTotalCents)}</dd></div>
-                <div><dt className="text-clay">Applied rule</dt><dd className="mt-1 text-ink-soft">{appliedRuleLabel(promoSnapshot.appliedRule)}</dd></div>
+            <DetailCard title="Shipping" className="xl:col-span-4">
+              <label className="block">
+                <span className="eyebrow !text-[var(--admin-muted)]">Courier</span>
+                <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={form.deliveryMethod} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, deliveryMethod: e.target.value })); }} />
+              </label>
+              <label className="mt-3 block">
+                <span className="eyebrow !text-[var(--admin-muted)]">Tracking number</span>
+                <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" placeholder="No tracking number yet" value={form.trackingNumber} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, trackingNumber: e.target.value })); }} />
+              </label>
+              <dl className="mt-3">
+                <InfoRow label="Package size" value={`${order.parcelWeightGrams || 0} g`} />
+                <InfoRow label="Calculated parcel weight" value={`${order.parcelWeightGrams || 0} g`} />
+                <InfoRow label="Shipping fee" value={shippingFeeCents ? formatMoney(shippingFeeCents) : 'Free'} />
+                <InfoRow label="Shipping status" value={titleCase(form.deliveryStatus || 'pending')} />
               </dl>
-            ) : (
-              <p className="mt-3 text-sm text-clay">No promo was applied to this order.</p>
-            )}
-          </section>
+              <label className="mt-3 block">
+                <span className="eyebrow !text-[var(--admin-muted)]">Parcel weight override (grams)</span>
+                <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" type="number" min="1" value={form.parcelWeightOverrideGrams} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, parcelWeightOverrideGrams: e.target.value })); }} placeholder="Use calculated weight" />
+              </label>
+              <div className="mt-3 grid gap-2">
+                <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={previewJnt}>Preview J&T parcel</button>
+                {canSendTrackingNotification && (
+                  <button type="button" className="btn-ink !py-2 !text-xs" onClick={sendTrackingNotification}>
+                    {trackingNotifications.length ? 'Resend tracking notification' : 'Send tracking notification'}
+                  </button>
+                )}
+              </div>
+              {jntPreview && (
+                <div className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-xs">
+                  <p className="font-semibold uppercase tracking-[0.1em]">Dry run · J&T readiness · {jntPreview.ready ? 'Ready' : 'Needs information'}</p>
+                  {jntPreview.missingFields?.length > 0 && <p className="mt-2 text-[#ff8b98]">Missing: {jntPreview.missingFields.join(', ')}</p>}
+                  <p className="mt-2 text-[var(--admin-muted)]">COD {formatMoney(jntPreview.parcel.codAmountCents)} · {jntPreview.parcel.weightKg} kg</p>
+                </div>
+              )}
+            </DetailCard>
 
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Conversion summary</h2>
-            <div className="mt-3 space-y-2 text-sm text-ink-soft">
-              <p>This is their {history?.ordersCount ? `${history.ordersCount}${history.ordersCount === 1 ? 'st' : ' total'} order` : 'first known order'}.</p>
-              <p>{history?.deliveredCount || 0} delivered · {history?.cancelledCount || 0} cancelled · {history?.unreachableCount || 0} unreachable</p>
-            </div>
-          </section>
+            <DetailCard title="Conversion summary" className="xl:col-span-4">
+              <p className="text-sm text-[var(--admin-text)]/85">This is their {previousOrders ? `${previousOrders} total order${previousOrders === 1 ? '' : 's'}` : 'first known order'}.</p>
+              <p className="mt-1 text-sm text-[var(--admin-muted)]">{history?.deliveredCount || 0} delivered · {history?.cancelledCount || 0} cancelled · {history?.unreachableCount || 0} unreachable</p>
+            </DetailCard>
 
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order risk</h2>
-            <p className={`mt-3 inline-flex rounded-[var(--radius-admin)] px-2 py-1 text-xs font-semibold ${
-              history?.cancelledCount > 0 || history?.unreachableCount > 0 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'
-            }`}>
-              {history?.cancelledCount > 0 || history?.unreachableCount > 0 ? 'Review COD history' : 'No risk flags'}
-            </p>
-          </section>
-
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">J&T readiness</h2>
-            <p className="mt-3 text-sm text-ink-soft">Calculated parcel weight: <strong>{order.parcelWeightGrams || 0} g</strong></p>
-            <label className="mt-3 block">
-              <span className="eyebrow">Parcel weight override (grams)</span>
-              <input className="field mt-1" type="number" min="1" value={form.parcelWeightOverrideGrams} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, parcelWeightOverrideGrams: e.target.value })); }} placeholder="Use calculated weight" />
-            </label>
-            <p className="mt-3 text-sm text-ink-soft">{order.jntExportStatus === 'ready' ? 'Ready for J&T export.' : order.jntExportStatus === 'exported' ? 'Exported to J&T.' : 'Missing export fields.'}</p>
-            {Array.isArray(order.jntMissingFields) && order.jntMissingFields.length > 0 && (
-              <ul className="mt-2 list-disc pl-5 text-sm text-accent-deep">
-                {order.jntMissingFields.map((field) => <li key={field}>{field}</li>)}
-              </ul>
-            )}
-            {order.exportedToJnt && (
-              <p className="mt-3 text-xs uppercase tracking-[0.1em] text-clay">
-                Exported to J&T {order.jntExportedAt ? new Date(order.jntExportedAt).toLocaleString('en-PH') : ''}
+            <DetailCard title="Order risk" className="xl:col-span-4">
+              <p className={`inline-flex rounded-[var(--radius-admin)] px-2 py-1 text-xs font-semibold ${history?.cancelledCount > 0 || history?.unreachableCount > 0 ? 'bg-[var(--admin-yellow)]/12 text-[#ffd166]' : 'bg-[var(--admin-green)]/12 text-[#7ee787]'}`}>
+                {history?.cancelledCount > 0 || history?.unreachableCount > 0 ? 'Review COD history' : 'No risk flags'}
               </p>
-            )}
-            <button type="button" className="btn-secondary mt-4 w-full !py-2" onClick={previewJnt}>Preview J&T parcel</button>
-            {jntPreview && (
-              <div className="mt-4 rounded-[var(--radius-admin)] border border-line bg-white p-3 text-xs">
-                <p className="font-semibold uppercase tracking-[0.1em]">Dry run · {jntPreview.ready ? 'Ready' : 'Needs information'}</p>
-                {jntPreview.missingFields?.length > 0 && <p className="mt-2 text-red-700">Missing: {jntPreview.missingFields.join(', ')}</p>}
-                <dl className="mt-3 space-y-1 text-ink-soft">
-                  <div className="flex justify-between"><dt>Weight</dt><dd>{jntPreview.parcel.weightKg} kg</dd></div>
-                  <div className="flex justify-between"><dt>Parcels</dt><dd>{jntPreview.parcel.parcelCount}</dd></div>
-                  <div className="flex justify-between"><dt>COD</dt><dd>{formatMoney(jntPreview.parcel.codAmountCents)}</dd></div>
+            </DetailCard>
+
+            <DetailCard title="Delivery confirmations" className="xl:col-span-6">
+              {deliveryNotifications.length ? deliveryNotifications.map((notification) => (
+                <article key={notification.id} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-sm">
+                  <p className="font-semibold">{titleCase(notification.channel)} · {titleCase(notification.status)}</p>
+                  <p className="mt-1 text-xs text-[var(--admin-muted)]">{notification.recipient}</p>
+                  {notification.lastError && <p className="mt-2 text-xs text-[#ff8b98]">{notification.lastError}</p>}
+                </article>
+              )) : <p className="text-sm text-[var(--admin-muted)]">Created automatically when the order is first marked delivered.</p>}
+            </DetailCard>
+
+            <DetailCard title="Tracking notifications" className="xl:col-span-6">
+              {trackingNotifications.length ? (
+                <div className="space-y-2">
+                  {trackingNotifications.map((notification) => (
+                    <article key={notification.id || notification.createdAt} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-semibold text-[var(--admin-text)]">{titleCase(notification.channel || 'sms')} · {titleCase(notification.status || 'recorded')}</p>
+                        <time className="text-xs text-[var(--admin-muted)]" dateTime={notification.createdAt || ''}>
+                          {notification.createdAt ? new Date(notification.createdAt).toLocaleString('en-PH') : 'Date unavailable'}
+                        </time>
+                      </div>
+                      <p className="mt-2 text-[var(--admin-muted)]">{notification.message || 'Tracking notification recorded.'}</p>
+                      {notification.trackingNumber && <p className="mt-2 text-xs uppercase tracking-[0.1em] text-[var(--admin-muted)]">Tracking {notification.trackingNumber}</p>}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--admin-muted)]">No tracking notifications recorded yet.</p>
+              )}
+            </DetailCard>
+
+            <DetailCard title="Promo snapshot" className="xl:col-span-12">
+              {promoSnapshot.promoId || order.discountCode || discountTotalCents ? (
+                <dl>
+                  <InfoRow label="Name" value={promoSnapshot.name || promoSnapshot.promoId || order.discountCode} />
+                  <InfoRow label="Type" value={promoTypeLabel(promoSnapshot.type)} />
+                  <InfoRow label="Discount" value={`-${formatMoney(discountTotalCents)}`} strong />
+                  <InfoRow label="Free shipping" value={promoSnapshot.freeShippingApplied ? 'Applied' : 'Not applied'} />
+                  <InfoRow label="Applied rule" value={appliedRuleLabel(promoSnapshot.appliedRule)} />
                 </dl>
-              </div>
-            )}
-            {canSendTrackingNotification && (
-              <button type="button" className="btn-ink mt-4 w-full !py-2" onClick={sendTrackingNotification}>
-                {trackingNotifications.length ? 'Resend tracking notification' : 'Send tracking notification'}
-              </button>
-            )}
-          </section>
+              ) : <p className="text-sm text-[var(--admin-muted)]">No promo was applied to this order.</p>}
+            </DetailCard>
+          </aside>
+        </div>
+      </div>
 
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Delivery confirmations</h2>
-            {deliveryNotifications.length ? (
-              <div className="mt-4 space-y-3">
-                {deliveryNotifications.map((notification) => (
-                  <article key={notification.id} className="rounded-[var(--radius-admin)] border border-line bg-white p-3 text-sm">
-                    <p className="font-semibold">{titleCase(notification.channel)} · {titleCase(notification.status)}</p>
-                    <p className="mt-1 text-xs text-clay">{notification.recipient}</p>
-                    {notification.lastError && <p className="mt-2 text-xs text-red-700">{notification.lastError}</p>}
-                  </article>
-                ))}
-              </div>
-            ) : <p className="mt-3 text-sm text-clay">Created automatically when the order is first marked delivered.</p>}
-          </section>
-
-          <section className="rounded-[var(--radius-admin)] border border-line bg-paper p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Tracking notifications</h2>
-            {trackingNotifications.length ? (
-              <div className="mt-4 space-y-3">
-                {trackingNotifications.map((notification) => (
-                  <article key={notification.id || notification.createdAt} className="rounded-[var(--radius-admin)] border border-line bg-white p-3 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="font-semibold text-ink">{titleCase(notification.channel || 'sms')} · {titleCase(notification.status || 'recorded')}</p>
-                      <time className="text-xs text-clay" dateTime={notification.createdAt || ''}>
-                        {notification.createdAt ? new Date(notification.createdAt).toLocaleString('en-PH') : 'Date unavailable'}
-                      </time>
-                    </div>
-                    <p className="mt-2 text-ink-soft">{notification.message || 'Tracking notification recorded.'}</p>
-                    {notification.trackingNumber && <p className="mt-2 text-xs uppercase tracking-[0.1em] text-clay">Tracking {notification.trackingNumber}</p>}
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-clay">No tracking notifications recorded yet.</p>
-            )}
-          </section>
+      <div className="order-detail-sticky-actions fixed inset-x-0 bottom-0 z-30 border-t border-[var(--admin-line)] bg-[var(--admin-panel)]/95 px-4 py-3 shadow-[0_-12px_30px_rgba(15,23,42,0.12)] backdrop-blur">
+        <div className="mx-auto flex max-w-[1540px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid grid-cols-2 gap-3 text-sm sm:flex sm:items-center">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">Amount due</p>
+              <p className="font-semibold text-[var(--admin-text)]">{formatMoney(balanceCents)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">COD amount</p>
+              <p className="font-semibold text-[var(--admin-text)]">{formatMoney(codAmountCents)}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/admin/orders" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]">Back to Orders</Link>
+            <select className="field !w-auto !min-w-36 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" value={form.status || 'received'} onChange={(e) => setOrderStatusFromAction(e.target.value)}>
+              {ORDER_ACTION_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={markAsReturned}>Returned</button>
+            <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => window.print()}>Print</button>
+            <button type="button" className="btn-ink !px-5 !py-2 !text-xs" onClick={save}>Save</button>
+          </div>
         </div>
       </div>
     </div>

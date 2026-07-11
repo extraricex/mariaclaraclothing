@@ -17,6 +17,9 @@ const { env } = require('../config/env');
 const { persistPostgresCheckout } = require('../orders/checkoutService');
 const { buildMetaPurchaseEvent, parseMetaCookies } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
+const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
+const { createPancakeClient } = require('../integrations/pancake/pancakeClient');
+const { runOrderLiveExport } = require('../integrations/pancake/pancakeOrderExportService');
 const { placeAuthoritativeCheckout } = require('../checkout/authoritativeCheckoutService');
 const { claimIdempotency, completeIdempotency, hashIdempotencyKey } = require('../checkout/checkoutIdempotencyRepository');
 const { findCheckoutQuoteForUpdate, consumeCheckoutQuote } = require('../checkout/checkoutQuoteRepository');
@@ -24,6 +27,8 @@ const { buildAuthoritativeQuote } = require('../checkout/checkoutQuoteService');
 const { deriveConfirmationToken, hashConfirmationToken, verifyConfirmationToken } = require('../checkout/confirmationToken');
 const { sha256Object } = require('../checkout/requestHash');
 const { CommerceError } = require('../checkout/commerceError');
+
+const { enqueueOrderExport } = pancakeOrderExportRepository;
 
 const legacyRouter = express.Router();
 
@@ -102,10 +107,11 @@ legacyRouter.post('/', async (req, res, next) => {
         findByIdempotencyKey: findOrderByIdempotencyKey,
         deductStock: deductVariantStock,
         saveOrder,
-        appendMovements: appendInventoryMovements,
-        convertCart: markCartSessionConverted,
-        incrementDiscount: incrementDiscountUsage,
-        buildMetaEvent: buildMetaPurchaseEvent,
+      appendMovements: appendInventoryMovements,
+      convertCart: markCartSessionConverted,
+      incrementDiscount: incrementDiscountUsage,
+      enqueueOrderExport,
+      buildMetaEvent: buildMetaPurchaseEvent,
         insertOutbox: insertMetaPurchaseOutbox,
         metaEnabled: env.meta.enabled
       });
@@ -117,6 +123,13 @@ legacyRouter.post('/', async (req, res, next) => {
       if (persistedOrder.discountCode) {
         await incrementDiscountUsage(persistedOrder.discountCode);
       }
+      await enqueueOrderExport(persistedOrder);
+    }
+
+    try {
+      await (req.exportPancakeOrderNow || exportPancakeOrderNow)(completedOrder.orderNumber);
+    } catch (error) {
+      console.error('Realtime Pancake order export failed:', error?.message || error);
     }
 
     res.status(201).json({
@@ -155,7 +168,7 @@ function checkoutSourceUrl(req) {
 }
 
 function createOrderNumber() {
-  return `DEMO-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+  return `MCC-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 }
 
 function orderConfirmationPayload(order) {
@@ -405,6 +418,7 @@ function defaultAuthoritativeDependencies(req) {
       if (!env.meta.enabled) return null;
       return insertMetaPurchaseOutbox(client, buildMetaPurchaseEvent({ order, requestContext }));
     },
+    enqueueOrderExport,
     consumeQuote: consumeCheckoutQuote,
     completeIdempotency,
     deriveToken: deriveConfirmationToken,
@@ -412,10 +426,24 @@ function defaultAuthoritativeDependencies(req) {
   };
 }
 
+async function exportPancakeOrderNow(orderNumber) {
+  if (env.pancake.mode !== 'live') {
+    return { status: 'skipped', reason: 'pancake_mode_not_live' };
+  }
+  return runOrderLiveExport({
+    config: env.pancake,
+    client: createPancakeClient(env.pancake),
+    repository: pancakeOrderExportRepository,
+    orderNumber
+  });
+}
+
 const DEFAULT_ROUTE_DEPENDENCIES = {
   authoritativeDependencies: defaultAuthoritativeDependencies,
+  exportPancakeOrderNow,
   findOrderByNumber,
   getStoreSettings,
+  logger: console,
   placeAuthoritativeCheckout,
   resolveCustomerAccountId,
   verifyConfirmationToken,
@@ -456,6 +484,15 @@ function createOrderRouter(overrides = {}) {
         return res.status(503).json({ error: 'Store is under maintenance.' });
       }
       if (req.body?.quoteId) {
+        const paymentMethod = String(req.body?.paymentMethod || 'cash_on_delivery').trim();
+        const enabledPaymentMethods = Array.isArray(settings.payments?.methods)
+          ? settings.payments.methods.filter((method) => method.enabled).map((method) => method.id)
+          : ['cash_on_delivery'];
+        if (!enabledPaymentMethods.includes(paymentMethod)) {
+          throw new CommerceError('Payment method is not available.', {
+            code: 'payment_method_unavailable', status: 400
+          });
+        }
         const customerAccountId = await dependencies.resolveCustomerAccountId(req);
         const cookies = parseMetaCookies(req.headers.cookie);
         const result = await dependencies.placeAuthoritativeCheckout({
@@ -469,6 +506,11 @@ function createOrderRouter(overrides = {}) {
             sourceUrl: checkoutSourceUrl(req)
           }
         }, dependencies.authoritativeDependencies(req));
+        try {
+          await dependencies.exportPancakeOrderNow(result.orderNumber);
+        } catch (error) {
+          dependencies.logger?.error?.('Realtime Pancake order export failed:', error?.message || error);
+        }
         return res.status(201).json(result);
       }
       if (dependencies.v2Required) {
@@ -476,6 +518,7 @@ function createOrderRouter(overrides = {}) {
           code: 'checkout_upgrade_required', status: 409
         });
       }
+      req.exportPancakeOrderNow = dependencies.exportPancakeOrderNow;
       return legacyRouter.handle(req, res, next);
     } catch (error) {
       return next(error);

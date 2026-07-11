@@ -195,6 +195,31 @@ test('request hash excludes client-controlled names and prices', async () => {
   assert.equal(first.pricingFingerprint, second.pricingFingerprint);
 });
 
+test('quote aggregates duplicate variant lines before stock validation', async () => {
+  const quote = await buildAuthoritativeQuote(quoteInput({
+    items: [
+      { productId: 'catalog-shirt', variantId: 'catalog-shirt-0', quantity: 2 },
+      { productId: 'catalog-shirt', variantId: 'catalog-shirt-0', quantity: 3 }
+    ]
+  }), quoteDependencies());
+
+  assert.equal(quote.items.length, 1);
+  assert.equal(quote.items[0].quantity, 5);
+  assert.equal(quote.items[0].lineTotalCents, 350000);
+
+  await assert.rejects(
+    buildAuthoritativeQuote(quoteInput({
+      items: [
+        { productId: 'catalog-shirt', variantId: 'catalog-shirt-0', quantity: 5 },
+        { productId: 'catalog-shirt', variantId: 'catalog-shirt-0', quantity: 1 }
+      ]
+    }), quoteDependencies()),
+    (error) => error.code === 'insufficient_stock'
+      && error.details.availableQuantity === 5
+      && error.details.requestedQuantity === 6
+  );
+});
+
 test('quote rejects invalid cart, product, variant, quantity, and stock', async () => {
   await assert.rejects(
     buildAuthoritativeQuote(quoteInput({ cartSessionId: '' }), quoteDependencies()),
@@ -224,7 +249,9 @@ test('quote rejects invalid cart, product, variant, quantity, and stock', async 
     buildAuthoritativeQuote(quoteInput({
       items: [{ productId: 'catalog-shirt', variantId: 'catalog-shirt-0', quantity: 6 }]
     }), quoteDependencies()),
-    (error) => error.code === 'insufficient_stock' && error.details.sku === 'SHIRT-S'
+    (error) => error.code === 'insufficient_stock'
+      && error.details.sku === 'SHIRT-S'
+      && error.message === 'Small only has 5 pieces left. Please update your cart quantity.'
   );
 });
 

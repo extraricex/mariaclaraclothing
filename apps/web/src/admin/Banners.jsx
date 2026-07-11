@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
 import TickerEditor from './TickerEditor.jsx';
 import InfoPagesEditor from './InfoPagesEditor.jsx';
+import HeroTextEditor from './HeroTextEditor.jsx';
 
 function notifySiteContentChanged() {
   window.dispatchEvent(new Event('maria-clara-site-content-changed'));
@@ -9,6 +10,8 @@ function notifySiteContentChanged() {
 
 export default function Banners() {
   const [logo, setLogo] = useState(null);
+  const [blackLogo, setBlackLogo] = useState(null);
+  const [menuLogo, setMenuLogo] = useState(null);
   const [footerLogo, setFooterLogo] = useState(null);
   const [banners, setBanners] = useState([]);
   const [message, setMessage] = useState('');
@@ -18,6 +21,8 @@ export default function Banners() {
     adminJson('/api/admin/site-content')
       .then((body) => {
         setLogo(body.siteContent?.logo || null);
+        setBlackLogo(body.siteContent?.blackLogo || body.siteContent?.logo || null);
+        setMenuLogo(body.siteContent?.menuLogo || body.siteContent?.logo || null);
         setFooterLogo(body.siteContent?.footerLogo || body.siteContent?.logo || null);
         setBanners(body.siteContent?.homepageBanners || []);
       })
@@ -116,8 +121,46 @@ export default function Banners() {
     }
   }
 
+  async function uploadBlackLogo(files) {
+    if (!files.length) return;
+    const formData = new FormData();
+    formData.append('image', files[0]);
+    try {
+      const response = await adminFetch('/api/admin/site-content/black-logo/image', {
+        method: 'POST',
+        body: formData
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Upload failed.');
+      setBlackLogo(body.siteContent?.blackLogo || null);
+      notifySiteContentChanged();
+      setMessage('Black navbar logo uploaded.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function uploadMenuLogo(files) {
+    if (!files.length) return;
+    const formData = new FormData();
+    formData.append('image', files[0]);
+    try {
+      const response = await adminFetch('/api/admin/site-content/menu-logo/image', {
+        method: 'POST',
+        body: formData
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Upload failed.');
+      setMenuLogo(body.siteContent?.menuLogo || null);
+      notifySiteContentChanged();
+      setMessage('Mobile menu drawer logo uploaded.');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
   return (
-    <div className="max-w-3xl">
+    <div className="admin-content-shell">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Website content</p>
@@ -136,11 +179,11 @@ export default function Banners() {
       <section className="mt-8 border border-line bg-paper p-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="eyebrow">Header logo</p>
-            <p className="mt-1 text-sm text-ink-soft">Used in the customer website header and admin brand areas.</p>
+            <p className="eyebrow">Default / light navbar logo</p>
+            <p className="mt-1 text-sm text-ink-soft">Used on the transparent homepage navbar over the banner.</p>
           </div>
           <label className="btn-ghost cursor-pointer">
-            Upload header logo
+            Upload light logo
             <input type="file" accept="image/*" hidden onChange={(e) => uploadLogo(e.target.files)} />
           </label>
         </div>
@@ -152,6 +195,52 @@ export default function Banners() {
           )}
           <div className="text-xs text-clay">
             <p>{logo?.url || '/brand/logo.png'}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-4 border border-line bg-paper p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="eyebrow">Black navbar logo</p>
+            <p className="mt-1 text-sm text-ink-soft">Used when the customer navbar changes to a white background after scrolling.</p>
+          </div>
+          <label className="btn-ghost cursor-pointer">
+            Upload black logo
+            <input type="file" accept="image/*" hidden onChange={(e) => uploadBlackLogo(e.target.files)} />
+          </label>
+        </div>
+        <div className="mt-4 flex items-center gap-4 border border-line p-4">
+          {blackLogo?.url ? (
+            <img src={blackLogo.url} alt={blackLogo.altText || 'Maria Clara Clothing black logo'} className="max-h-20 max-w-64 object-contain" />
+          ) : (
+            <p className="text-sm text-clay">No black logo uploaded yet.</p>
+          )}
+          <div className="text-xs text-clay">
+            <p>{blackLogo?.url || logo?.url || '/brand/logo.png'}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-4 border border-line bg-paper p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="eyebrow">Mobile menu drawer logo</p>
+            <p className="mt-1 text-sm text-ink-soft">Used inside the mobile slide-out navigation drawer.</p>
+          </div>
+          <label className="btn-ghost cursor-pointer">
+            Upload menu logo
+            <input type="file" accept="image/*" hidden onChange={(e) => uploadMenuLogo(e.target.files)} />
+          </label>
+        </div>
+        <div className="mt-4 flex items-center gap-4 border border-line p-4">
+          {menuLogo?.url ? (
+            <img src={menuLogo.url} alt={menuLogo.altText || 'Maria Clara Clothing menu logo'} className="max-h-20 max-w-64 object-contain" />
+          ) : (
+            <p className="text-sm text-clay">No menu drawer logo uploaded yet.</p>
+          )}
+          <div className="text-xs text-clay">
+            <p>{menuLogo?.url || logo?.url || '/brand/logo.png'}</p>
           </div>
         </div>
       </section>
@@ -201,6 +290,7 @@ export default function Banners() {
         {!banners.length && <p className="border border-line bg-paper p-6 text-sm text-clay">No banners yet. Upload one to get started.</p>}
       </div>
 
+      {website && <HeroTextEditor initial={website.hero} />}
       {website && <TickerEditor initial={website.ticker} />}
       {website && <InfoPagesEditor initial={website.infoPages} />}
     </div>

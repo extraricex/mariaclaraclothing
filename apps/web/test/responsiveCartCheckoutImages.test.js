@@ -15,7 +15,7 @@ test('cart drawer and checkout keep complete product photos in responsive frames
 
   assert.match(
     shell,
-    /className="aspect-\[4\/5\] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20"/
+    /className="aspect-\[4\/5\] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20"/
   );
   assert.match(
     shell,
@@ -28,7 +28,7 @@ test('cart drawer and checkout keep complete product photos in responsive frames
 
   assert.match(
     checkout,
-    /className="relative aspect-\[4\/5\] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20"/
+    /className="relative aspect-\[4\/5\] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20"/
   );
   assert.match(
     checkout,

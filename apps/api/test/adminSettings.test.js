@@ -38,8 +38,9 @@ function adminRequest(method = 'GET', body, token = ADMIN_TOKEN) {
   };
 }
 
-async function withSettingsServer(run) {
+async function withSettingsServer(run, envOverrides = {}) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-admin-settings-'));
+  const previousAppEnv = process.env.APP_ENV;
   const previousSettingsFile = process.env.STORE_SETTINGS_FILE;
   const previousCredentialsFile = process.env.ADMIN_CREDENTIALS_FILE;
   const previousAdminToken = process.env.ADMIN_TOKEN;
@@ -49,6 +50,7 @@ async function withSettingsServer(run) {
   process.env.ADMIN_CREDENTIALS_FILE = path.join(tempDir, 'admin-credentials.json');
   delete process.env.ADMIN_TOKEN;
   delete process.env.ADMIN_PASSWORD;
+  Object.assign(process.env, envOverrides);
 
   const app = createFreshApp();
   const server = await new Promise((resolve) => {
@@ -60,6 +62,7 @@ async function withSettingsServer(run) {
     await run(port);
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    restoreEnv('APP_ENV', previousAppEnv);
     restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
     restoreEnv('ADMIN_CREDENTIALS_FILE', previousCredentialsFile);
     restoreEnv('ADMIN_TOKEN', previousAdminToken);
@@ -188,6 +191,24 @@ test('admin can change the password and the token rotates', async () => {
   });
 });
 
+test('development admin login accepts configured local password even after stored credentials exist', async () => {
+  await withSettingsServer(async (port) => {
+    const changed = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/security/password`,
+      adminRequest('POST', { currentPassword: 'admin', newPassword: 'brand-new-password' })
+    );
+    assert.equal(changed.status, 200);
+
+    const login = await fetch(`http://127.0.0.1:${port}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'admin' })
+    });
+    assert.equal(login.status, 200);
+    assert.ok((await login.json()).csrfToken);
+  }, { APP_ENV: 'development', ADMIN_PASSWORD: 'admin' });
+});
+
 test('admin can rotate the token without changing the password', async () => {
   await withSettingsServer(async (port) => {
     const rotated = await fetch(
@@ -229,14 +250,18 @@ test('public storefront settings expose only the safe subset', async () => {
 
     const body = await response.json();
     assert.equal(body.settings.storeName, 'Maria Clara Clothing');
-    assert.equal(body.settings.messengerUrl, '');
-    assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals', 'Freedom of Mind']);
+    assert.equal(body.settings.messengerUrl, 'https://m.me/mariaclaraclothing');
+    assert.equal(body.settings.hero.title, 'Premium');
+    assert.equal(body.settings.hero.primaryButtonText, 'Shop new arrivals');
+    assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals']);
+    assert.ok(body.settings.sizeChart.imageUrl);
     assert.equal(body.settings.shipping.regions.length, 3);
     assert.deepEqual(
       body.settings.paymentMethods.map((method) => method.id),
       ['cash_on_delivery', 'gcash']
     );
     assert.equal(body.settings.paymentMethods.find((method) => method.id === 'gcash').instructions, 'Send to 0917 000 0000.');
+    assert.equal(body.settings.hero.secondaryButtonLink, '#freedom-of-mind');
 
     const raw = JSON.stringify(body);
     assert.equal(raw.includes('bank_transfer'), false);
@@ -252,14 +277,14 @@ test('admin can create and list persistent storefront collections', async () => 
 
     const before = await fetch(`http://127.0.0.1:${port}/api/admin/collections`, adminRequest());
     assert.equal(before.status, 200);
-    assert.deepEqual((await before.json()).collections, ['New Arrivals', 'Freedom of Mind']);
+    assert.deepEqual((await before.json()).collections, ['New Arrivals']);
 
     const created = await fetch(
       `http://127.0.0.1:${port}/api/admin/collections`,
       adminRequest('POST', { name: '  Summer   Drop  ' })
     );
     assert.equal(created.status, 201);
-    assert.deepEqual((await created.json()).collections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.deepEqual((await created.json()).collections, ['New Arrivals', 'Summer Drop']);
 
     const duplicate = await fetch(
       `http://127.0.0.1:${port}/api/admin/collections`,
@@ -269,7 +294,7 @@ test('admin can create and list persistent storefront collections', async () => 
     assert.match((await duplicate.json()).error, /already exists/i);
 
     const publicBody = await (await fetch(`http://127.0.0.1:${port}/api/storefront-settings`)).json();
-    assert.deepEqual(publicBody.settings.storefrontCollections, ['New Arrivals', 'Freedom of Mind', 'Summer Drop']);
+    assert.deepEqual(publicBody.settings.storefrontCollections, ['New Arrivals', 'Summer Drop']);
     assert.ok(publicBody.settings.collectionCountdowns['Summer Drop']);
   });
 });

@@ -9,6 +9,7 @@ const { discountRouter } = require('./routes/discounts');
 const { customerRouter } = require('./routes/customer');
 const { storeSettingsRouter } = require('./routes/storeSettings');
 const { checkoutRouter } = require('./routes/checkout');
+const { issueReportsRouter } = require('./routes/issueReports');
 const { methodOnly, postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
@@ -48,6 +49,15 @@ const cartRateLimit = methodOnly(['PUT'], rateLimit({
   keyPrefix: 'cart-session', maxEnv: 'CART_RATE_LIMIT_MAX',
   windowEnv: 'CART_RATE_LIMIT_WINDOW_MS', defaultMax: 180, defaultWindowMs: 10 * 60 * 1000,
   message: 'Too many cart updates. Please slow down and try again shortly.'
+}));
+
+const issueReportRateLimit = postOnly(rateLimit({
+  keyPrefix: 'issue-report',
+  maxEnv: 'ISSUE_REPORT_RATE_LIMIT_MAX',
+  windowEnv: 'ISSUE_REPORT_RATE_LIMIT_WINDOW_MS',
+  defaultMax: 20,
+  defaultWindowMs: 10 * 60 * 1000,
+  message: 'Too many issue reports. Please try again shortly.'
 }));
 
 const orderLookupRateLimit = methodOnly(['GET'], rateLimit({
@@ -126,9 +136,11 @@ function createApp() {
   app.use('/api/orders', orderLookupRateLimit);
   app.use('/api/checkout/quotes', quoteRateLimit);
   app.use('/api/cart-sessions', cartRateLimit);
+  app.use('/api/issue-reports', issueReportRateLimit);
   app.use('/api/customer/login', customerAuthRateLimit);
   app.use('/api/customer/register', customerAuthRateLimit);
   app.use('/api/admin/settings/security', adminSensitiveRateLimit);
+  app.use('/api/admin/integrations/pancake', adminSensitiveRateLimit);
   app.use('/api/admin/products', adminSensitiveRateLimit);
   app.use('/api/admin/site-content', adminSensitiveRateLimit);
 
@@ -137,6 +149,7 @@ function createApp() {
   app.use('/api/orders', orderRouter);
   app.use('/api/checkout', checkoutRouter);
   app.use('/api/cart-sessions', cartSessionRouter);
+  app.use('/api/issue-reports', issueReportsRouter);
   app.use('/api/discounts', discountRouter);
   app.use('/api/customer', customerRouter);
   app.use('/api/storefront-settings', storeSettingsRouter);

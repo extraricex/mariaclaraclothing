@@ -290,3 +290,284 @@ CREATE TABLE IF NOT EXISTS marketing_event_outbox (
 
 CREATE INDEX IF NOT EXISTS marketing_event_outbox_pending_idx
   ON marketing_event_outbox(status, next_attempt_at, created_at);
+
+CREATE TABLE IF NOT EXISTS pancake_connections (
+  connection_key text PRIMARY KEY DEFAULT 'primary',
+  shop_id text NOT NULL DEFAULT '',
+  warehouse_id text NOT NULL DEFAULT '',
+  order_source_id text NOT NULL DEFAULT '',
+  mode text NOT NULL DEFAULT 'disabled' CHECK (mode IN ('disabled', 'read_only', 'shadow', 'live')),
+  health_status text NOT NULL DEFAULT 'never_checked',
+  last_checked_at timestamptz,
+  last_connected_at timestamptz,
+  last_error_code text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS pancake_connection_checks (
+  id text PRIMARY KEY,
+  connection_key text NOT NULL DEFAULT 'primary' REFERENCES pancake_connections(connection_key) ON DELETE CASCADE,
+  status text NOT NULL,
+  duration_ms integer NOT NULL DEFAULT 0 CHECK (duration_ms >= 0),
+  shop_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+  error_code text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS pancake_connection_checks_created_at_idx
+  ON pancake_connection_checks(connection_key, created_at DESC);
+
+ALTER TABLE pancake_connections ADD COLUMN IF NOT EXISTS currency_code text NOT NULL DEFAULT '';
+ALTER TABLE pancake_connections ADD COLUMN IF NOT EXISTS currency_status text NOT NULL DEFAULT 'unknown';
+ALTER TABLE pancake_connections ADD COLUMN IF NOT EXISTS price_unit_status text NOT NULL DEFAULT 'unknown';
+ALTER TABLE pancake_connections ADD COLUMN IF NOT EXISTS shop_locked boolean NOT NULL DEFAULT false;
+ALTER TABLE pancake_connections ADD COLUMN IF NOT EXISTS warehouse_locked boolean NOT NULL DEFAULT false;
+ALTER TABLE pancake_connections ADD COLUMN IF NOT EXISTS order_source_locked boolean NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS pancake_shops (
+  shop_id text PRIMARY KEY,
+  name text NOT NULL DEFAULT '',
+  safe_digest text NOT NULL,
+  last_seen_at timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pancake_warehouses (
+  shop_id text NOT NULL,
+  warehouse_id text NOT NULL,
+  name text NOT NULL DEFAULT '',
+  allow_create_order boolean NOT NULL DEFAULT false,
+  source_updated_at timestamptz,
+  last_seen_at timestamptz NOT NULL,
+  PRIMARY KEY (shop_id, warehouse_id)
+);
+
+CREATE TABLE IF NOT EXISTS pancake_order_sources (
+  shop_id text NOT NULL,
+  order_source_id text NOT NULL,
+  parent_id text,
+  name text NOT NULL DEFAULT '',
+  source_updated_at timestamptz,
+  last_seen_at timestamptz NOT NULL,
+  PRIMARY KEY (shop_id, order_source_id)
+);
+
+CREATE TABLE IF NOT EXISTS pancake_catalog_imports (
+  id text PRIMARY KEY,
+  shop_id text NOT NULL DEFAULT '',
+  status text NOT NULL CHECK (status IN ('running','shop_selection_required','complete','failed')),
+  page_count integer NOT NULL DEFAULT 0 CHECK (page_count >= 0),
+  pancake_variation_count integer NOT NULL DEFAULT 0 CHECK (pancake_variation_count >= 0),
+  local_variant_count integer NOT NULL DEFAULT 0 CHECK (local_variant_count >= 0),
+  verified_count integer NOT NULL DEFAULT 0 CHECK (verified_count >= 0),
+  conflict_count integer NOT NULL DEFAULT 0 CHECK (conflict_count >= 0),
+  price_unit_status text NOT NULL DEFAULT 'unknown',
+  safe_error_code text NOT NULL DEFAULT '',
+  started_at timestamptz NOT NULL,
+  finished_at timestamptz,
+  duration_ms integer NOT NULL DEFAULT 0 CHECK (duration_ms >= 0)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS pancake_one_running_catalog_import_idx
+  ON pancake_catalog_imports ((1)) WHERE status = 'running';
+CREATE INDEX IF NOT EXISTS pancake_catalog_imports_started_idx ON pancake_catalog_imports(started_at DESC);
+
+CREATE TABLE IF NOT EXISTS pancake_catalog_variations (
+  shop_id text NOT NULL,
+  pancake_product_id text NOT NULL,
+  pancake_variation_id text NOT NULL,
+  display_id text NOT NULL DEFAULT '',
+  normalized_sku text NOT NULL DEFAULT '',
+  product_name text NOT NULL DEFAULT '',
+  retail_price_raw bigint,
+  is_hidden boolean NOT NULL DEFAULT false,
+  is_locked boolean NOT NULL DEFAULT false,
+  source_updated_at timestamptz,
+  payload_digest text NOT NULL,
+  last_seen_import_id text NOT NULL REFERENCES pancake_catalog_imports(id),
+  last_seen_at timestamptz NOT NULL,
+  UNIQUE (shop_id, pancake_variation_id)
+);
+
+CREATE INDEX IF NOT EXISTS pancake_catalog_variations_sku_idx ON pancake_catalog_variations(shop_id, normalized_sku);
+
+CREATE TABLE IF NOT EXISTS pancake_variant_mappings (
+  id text PRIMARY KEY,
+  local_variant_id bigint,
+  product_slug text NOT NULL,
+  local_sku text NOT NULL DEFAULT '',
+  normalized_sku text NOT NULL DEFAULT '',
+  pancake_product_id text NOT NULL DEFAULT '',
+  pancake_variation_id text NOT NULL DEFAULT '',
+  warehouse_id text NOT NULL DEFAULT '',
+  status text NOT NULL CHECK (status IN ('verified','missing','duplicate_local','duplicate_pancake','inactive')),
+  last_verified_import_id text REFERENCES pancake_catalog_imports(id),
+  last_verified_at timestamptz,
+  payload_digest text NOT NULL DEFAULT '',
+  UNIQUE (local_variant_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS pancake_variant_mappings_variation_idx
+  ON pancake_variant_mappings(pancake_variation_id) WHERE status = 'verified';
+CREATE INDEX IF NOT EXISTS pancake_variant_mappings_status_idx ON pancake_variant_mappings(status, normalized_sku);
+
+CREATE TABLE IF NOT EXISTS pancake_sync_conflicts (
+  id text PRIMARY KEY,
+  conflict_key text NOT NULL UNIQUE,
+  entity_type text NOT NULL,
+  entity_id text NOT NULL DEFAULT '',
+  code text NOT NULL,
+  severity text NOT NULL DEFAULT 'blocking',
+  context jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved')),
+  occurrence_count integer NOT NULL DEFAULT 1 CHECK (occurrence_count > 0),
+  first_seen_at timestamptz NOT NULL,
+  last_seen_at timestamptz NOT NULL,
+  resolved_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS pancake_sync_conflicts_open_idx ON pancake_sync_conflicts(status, code, last_seen_at DESC);
+
+CREATE TABLE IF NOT EXISTS pancake_inventory_reconciliations (
+  id text PRIMARY KEY,
+  shop_id text NOT NULL DEFAULT '',
+  warehouse_id text NOT NULL DEFAULT '',
+  status text NOT NULL CHECK (status IN ('running','complete','blocked','failed')),
+  checked_count integer NOT NULL DEFAULT 0 CHECK (checked_count >= 0),
+  updated_count integer NOT NULL DEFAULT 0 CHECK (updated_count >= 0),
+  unchanged_count integer NOT NULL DEFAULT 0 CHECK (unchanged_count >= 0),
+  skipped_count integer NOT NULL DEFAULT 0 CHECK (skipped_count >= 0),
+  conflict_count integer NOT NULL DEFAULT 0 CHECK (conflict_count >= 0),
+  safe_error_code text NOT NULL DEFAULT '',
+  started_at timestamptz NOT NULL,
+  finished_at timestamptz,
+  duration_ms integer NOT NULL DEFAULT 0 CHECK (duration_ms >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS pancake_inventory_reconciliations_started_idx
+  ON pancake_inventory_reconciliations(started_at DESC);
+
+-- Inventory movements may use reason 'pancake_reconcile' for absolute stock snapshots.
+
+CREATE TABLE IF NOT EXISTS pancake_order_exports (
+  id text PRIMARY KEY,
+  order_number text NOT NULL REFERENCES orders(order_number) ON DELETE CASCADE,
+  mode text NOT NULL DEFAULT 'shadow' CHECK (mode IN ('read_only','shadow','live')),
+  status text NOT NULL CHECK (status IN ('queued','shadow_built','blocked','failed','sent')),
+  shop_id text NOT NULL DEFAULT '',
+  warehouse_id text NOT NULL DEFAULT '',
+  order_source_id text NOT NULL DEFAULT '',
+  pancake_order_id text NOT NULL DEFAULT '',
+  request_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  response_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  safe_error_code text NOT NULL DEFAULT '',
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  duration_ms integer NOT NULL DEFAULT 0 CHECK (duration_ms >= 0),
+  queued_at timestamptz NOT NULL DEFAULT now(),
+  built_at timestamptz,
+  sent_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT pancake_order_exports_order_number_key UNIQUE (order_number)
+);
+
+CREATE INDEX IF NOT EXISTS pancake_order_exports_status_idx
+  ON pancake_order_exports(status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS pancake_order_links (
+  id text PRIMARY KEY,
+  order_number text NOT NULL REFERENCES orders(order_number) ON DELETE CASCADE,
+  pancake_order_id text NOT NULL,
+  shop_id text NOT NULL DEFAULT '',
+  sync_status text NOT NULL DEFAULT 'pending_sync' CHECK (sync_status IN ('synced','pending_sync','sync_failed','blocked','not_linked')),
+  last_synced_at timestamptz,
+  last_pancake_updated_at timestamptz,
+  last_local_updated_at timestamptz,
+  safe_error_code text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (order_number),
+  UNIQUE (pancake_order_id)
+);
+
+CREATE INDEX IF NOT EXISTS pancake_order_links_status_idx ON pancake_order_links(sync_status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS pancake_sync_events (
+  id text PRIMARY KEY,
+  direction text NOT NULL CHECK (direction IN ('inbound','outbound')),
+  entity_type text NOT NULL CHECK (entity_type IN ('order','inventory')),
+  entity_id text NOT NULL,
+  order_number text NOT NULL DEFAULT '',
+  pancake_order_id text NOT NULL DEFAULT '',
+  event_key text NOT NULL,
+  status text NOT NULL CHECK (status IN ('pending','processing','succeeded','failed_retryable','blocked','duplicate')),
+  payload_hash text NOT NULL DEFAULT '',
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  safe_error_code text NOT NULL DEFAULT '',
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  locked_at timestamptz,
+  processed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (direction, entity_type, entity_id, event_key)
+);
+
+CREATE INDEX IF NOT EXISTS pancake_sync_events_due_idx ON pancake_sync_events(status, next_attempt_at, created_at);
+CREATE INDEX IF NOT EXISTS pancake_sync_events_order_idx ON pancake_sync_events(order_number, created_at DESC);
+CREATE INDEX IF NOT EXISTS pancake_sync_events_pancake_order_idx ON pancake_sync_events(pancake_order_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS pancake_sync_logs (
+  id text PRIMARY KEY,
+  direction text NOT NULL DEFAULT '',
+  entity_type text NOT NULL DEFAULT '',
+  entity_id text NOT NULL DEFAULT '',
+  order_number text NOT NULL DEFAULT '',
+  pancake_order_id text NOT NULL DEFAULT '',
+  level text NOT NULL CHECK (level IN ('info','warning','error')),
+  code text NOT NULL DEFAULT '',
+  message text NOT NULL DEFAULT '',
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS pancake_sync_logs_order_idx ON pancake_sync_logs(order_number, created_at DESC);
+CREATE INDEX IF NOT EXISTS pancake_sync_logs_created_idx ON pancake_sync_logs(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS pancake_order_snapshots (
+  pancake_order_id text PRIMARY KEY,
+  order_number text NOT NULL DEFAULT '',
+  shop_id text NOT NULL DEFAULT '',
+  normalized jsonb NOT NULL DEFAULT '{}'::jsonb,
+  payload_hash text NOT NULL DEFAULT '',
+  pancake_updated_at timestamptz,
+  last_seen_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS pancake_order_snapshots_order_idx ON pancake_order_snapshots(order_number);
+
+CREATE TABLE IF NOT EXISTS issue_reports (
+  id text PRIMARY KEY,
+  name text NOT NULL DEFAULT '',
+  email text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  issue_type text NOT NULL,
+  message text NOT NULL,
+  page_url text NOT NULL DEFAULT '',
+  device_info jsonb NOT NULL DEFAULT '{}'::jsonb,
+  browser_info text NOT NULL DEFAULT '',
+  screen_size text NOT NULL DEFAULT '',
+  user_agent text NOT NULL DEFAULT '',
+  customer_id text NOT NULL DEFAULT '',
+  cart_snapshot jsonb NOT NULL DEFAULT '[]'::jsonb,
+  order_number text NOT NULL DEFAULT '',
+  error_message text NOT NULL DEFAULT '',
+  screenshot_url text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'new',
+  admin_note text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS issue_reports_status_created_idx ON issue_reports (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS issue_reports_issue_type_created_idx ON issue_reports (issue_type, created_at DESC);

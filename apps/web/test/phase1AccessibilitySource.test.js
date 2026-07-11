@@ -15,16 +15,24 @@ test('phase one provides accessible contrast and touch targets', async () => {
   assert.match(css, /\.carousel-dot\[aria-current="true"\]::after\s*{[^}]*background:\s*currentColor;/s);
 });
 
-test('homepage carousel is manual and adds no pause control', async () => {
+test('homepage carousel slides sideways with dots and mobile swipe support', async () => {
   const home = await source('src/pages/Home.jsx');
 
-  assert.doesNotMatch(home, /setInterval|clearInterval/);
+  assert.match(home, /window\.setInterval/);
+  assert.match(home, /window\.clearInterval/);
   assert.doesNotMatch(home, />\s*(Pause|Play)\s*</i);
-  assert.match(home, /className="mt-10 flex items-center justify-center"/);
+  assert.match(home, /heroTouchStartX/);
+  assert.match(home, /handleHeroTouchStart/);
+  assert.match(home, /handleHeroTouchEnd/);
+  assert.match(home, /showNextHero/);
+  assert.match(home, /showPreviousHero/);
+  assert.match(home, /translateX\(\$\{\(index - activeHeroIndex\) \* 100\}%\)/);
+  assert.match(home, /className="absolute bottom-2 left-1\/2 flex -translate-x-1\/2 items-center justify-center sm:bottom-3"/);
   assert.match(home, /className="carousel-dot"/);
   assert.match(home, /aria-label={`Show banner \$\{index \+ 1\}`}/);
   assert.match(home, /onClick=\{\(\) => setActiveHeroIndex\(index\)\}/);
   assert.match(home, /hero-slide absolute inset-0/);
+  assert.match(home, /transition-transform duration-700/);
 });
 
 test('cart drawer exposes modal keyboard behavior', async () => {
@@ -50,8 +58,8 @@ test('mobile menu and compact storefront controls use phase one behavior', async
   assert.match(shell, /aria-controls="storefront-mobile-menu"/);
   assert.match(shell, /aria-label=\{menuOpen \? 'Close navigation menu' : 'Open navigation menu'\}/);
   assert.match(shell, /id="storefront-mobile-menu"/);
-  assert.match(shell, /className="touch-target px-3 py-1\.5" aria-label="Decrease quantity"/);
-  assert.match(shell, /className="touch-target px-3 py-1\.5" aria-label="Increase quantity"/);
+  assert.match(shell, /className="touch-target px-3 py-1\.5" aria-label="Decrease quantity" onClick=\{\(\) => decreaseItem\(item\)\}/);
+  assert.match(shell, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
   assert.match(checkout, /className="touch-target border border-line px-2 py-0\.5"[^\n]*aria-label="Decrease quantity"/);
-  assert.match(checkout, /className="touch-target border border-line px-2 py-0\.5"[^\n]*aria-label="Increase quantity"/);
+  assert.match(checkout, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
 });

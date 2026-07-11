@@ -134,18 +134,33 @@ function deductVariantStock(items, options = {}) {
   // Match on sku (stored verbatim and unique), NOT size: the storefront/presenter
   // abbreviates size (Large -> l) while product_variants.size keeps the full label, so
   // size cannot be matched against the stored row. `size` is kept only for the error copy.
-  const deductions = (Array.isArray(items) ? items : []).map((item) => ({
+  const deductions = aggregateStockItems((Array.isArray(items) ? items : []).map((item) => ({
     slug: String(item.slug || '').trim(),
     sku: String(item.sku || '').trim(),
     size: String(item.size || '').trim(),
     quantity: Number(item.quantity),
     productName: String(item.productName || '').trim()
-  }));
+  })));
 
   if (usePostgresProducts()) {
     return deductPostgresVariantStock(deductions, options.client);
   }
   return deductJsonVariantStock(deductions);
+}
+
+function aggregateStockItems(items) {
+  const bySku = new Map();
+  for (const item of items) {
+    const key = item.sku || `${item.slug}\u0000${item.size}`;
+    if (!key) continue;
+    const existing = bySku.get(key);
+    if (existing) {
+      existing.quantity += Number(item.quantity || 0);
+    } else {
+      bySku.set(key, { ...item, quantity: Number(item.quantity || 0) });
+    }
+  }
+  return [...bySku.values()].filter((item) => item.sku && item.quantity > 0);
 }
 
 function restockVariantStock(items) {

@@ -118,7 +118,8 @@ test('storefront APIs run from in-project catalog only', async () => {
     assert.equal(productsBody.products.length, 15);
     assert.equal(productsBody.source, 'catalog');
     assert.equal(orderResponse.status, 201);
-    assert.match(orderBody.orderNumber, /^DEMO-/);
+    assert.match(orderBody.orderNumber, /^MCC-/);
+    assert.doesNotMatch(orderBody.orderNumber, /^DEMO-/);
     assert.equal(orderBody.syncStatus, 'frontend_only');
     assert.equal(orderBody.checkoutChannel, 'storefront_checkout');
     assert.equal(orderBody.paymentMethod, 'cash_on_delivery');

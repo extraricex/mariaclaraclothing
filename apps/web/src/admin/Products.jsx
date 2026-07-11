@@ -124,7 +124,7 @@ export default function Products() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="admin-mobile-stack items-start justify-between">
         <div>
           <p className="eyebrow">Products</p>
           <h1 className="display mt-1 text-3xl">Products</h1>

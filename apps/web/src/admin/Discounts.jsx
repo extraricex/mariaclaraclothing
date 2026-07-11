@@ -457,7 +457,7 @@ export default function Discounts() {
           </div>
         )}
 
-        <div className="overflow-x-auto border-t border-line">
+        <div className="admin-table-shell overflow-x-auto border-t border-line">
           <table className="w-full min-w-[920px] text-left text-sm">
             <thead>
               <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-clay">

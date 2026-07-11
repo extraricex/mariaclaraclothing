@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createCheckoutQuote, createQuoteBackedOrder } from '../lib/api.js';
+import { createCheckoutQuote, createQuoteBackedOrder, fetchProducts } from '../lib/api.js';
 import { customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
-import { cartQuantity, clearCart, clearCheckoutIdempotencyKey, getCartSessionId, getCheckoutIdempotencyKey, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
+import { addToCart, cartQuantity, clearCart, clearCheckoutIdempotencyKey, getCartSessionId, getCheckoutIdempotencyKey, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
-import { trackFacebookPurchase } from '../lib/metaPixel.js';
+import { trackFacebookAddToCart, trackFacebookPurchase } from '../lib/metaPixel.js';
 import {
   loadBarangays,
   loadCities,
@@ -79,13 +79,44 @@ export default function Checkout() {
   const [saveAddress, setSaveAddress] = useState(true);
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
   const [paymentMethod, setPaymentMethod] = useState('cash_on_delivery');
+  const [missingFields, setMissingFields] = useState({});
+  const [suggestedProducts, setSuggestedProducts] = useState([]);
+  const placingOrderRef = useRef(false);
+  const checkoutFieldRefs = {
+    fullName: useRef(null),
+    phone: useRef(null),
+    house: useRef(null),
+    province: useRef(null),
+    city: useRef(null),
+    barangay: useRef(null)
+  };
 
   useEffect(() => {
     loadProvinces().then(setProvinces);
   }, []);
 
   useEffect(() => {
+    if (!items.length && !placingOrderRef.current) {
+      navigate('/cart', { replace: true, state: { message: 'Your cart is empty. Please add an item before checking out.' } });
+    }
+  }, [items.length, navigate]);
+
+  useEffect(() => {
     loadStorefrontSettings().then(setSettings);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchProducts()
+      .then((body) => {
+        if (!cancelled) setSuggestedProducts(body.products || []);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestedProducts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // if an admin disables the chosen method between loads, fall back to COD
@@ -154,6 +185,16 @@ export default function Checkout() {
   const fallbackTotals = useMemo(() => checkoutTotals(items, region, 0, settings), [items, region, settings]);
   const totals = quoteTotals(reviewQuote || quote, fallbackTotals);
   const doorToDoorWarning = Boolean(barangay) && String(barangay.doorToDoor || '').toUpperCase() !== 'YES';
+  const oneItemCheckout = cartQuantity(items) === 1;
+  const suggestedCheckoutProducts = useMemo(() => {
+    const cartProductKeys = new Set(items.map((item) => item.slug || item.productId));
+    return suggestedProducts
+      .filter((product) => !cartProductKeys.has(product.slug) && !cartProductKeys.has(product.id))
+      .filter((product) => product.merchandisingStatus !== 'sold_out')
+      .filter((product) => product.images?.[0]?.url)
+      .filter((product) => product.variants?.some((variant) => Number(variant.stockQuantity) > 0))
+      .slice(0, 4);
+  }, [items, suggestedProducts]);
 
   function quotePayload(discountCode = activeDiscountCode) {
     return {
@@ -232,22 +273,87 @@ export default function Checkout() {
     }
   }
 
+  function addSuggestedProductToCart(product) {
+    const variant = product.variants?.find((candidate) => Number(candidate.stockQuantity) > 0);
+    if (!variant) return;
+    const cartItem = {
+      productId: product.id,
+      slug: product.slug,
+      variantId: variant.id,
+      productName: product.name,
+      size: variant.size,
+      quantity: 1,
+      maxStock: Number(variant.stockQuantity || 0),
+      unitPriceCents: variant.priceCents ?? product.priceCents,
+      imageUrl: product.images?.[0]?.url || '',
+      externalPosProductId: product.externalPosProductId || '',
+      externalPosVariantId: variant.externalPosVariantId || ''
+    };
+    const result = addToCart(cartItem);
+    if (result?.limited) {
+      setStatus({ tone: 'error', message: 'Maximum available quantity added.' });
+      return;
+    }
+    trackFacebookAddToCart(cartItem);
+    setStatus({ tone: 'neutral', message: `${product.name} was added to your cart.` });
+  }
+
+  function increaseItem(item) {
+    const result = updateQuantity(item.variantId, Number(item.quantity) + 1);
+    if (result?.limited) {
+      setStatus({ tone: 'error', message: 'Maximum available quantity added.' });
+      return;
+    }
+    setStatus({ tone: 'neutral', message: '' });
+  }
+
+  function decreaseItem(item) {
+    setStatus({ tone: 'neutral', message: '' });
+    updateQuantity(item.variantId, Number(item.quantity) - 1);
+  }
+
+  function fieldClass(fieldName) {
+    return `field customer-input ${missingFields[fieldName] ? 'checkout-field-error' : ''}`;
+  }
+
+  function clearMissingField(fieldName) {
+    setMissingFields((current) => {
+      if (!current[fieldName]) return current;
+      const next = { ...current };
+      delete next[fieldName];
+      return next;
+    });
+  }
+
+  function focusMissingField(fieldName) {
+    requestAnimationFrame(() => {
+      const node = checkoutFieldRefs[fieldName]?.current;
+      if (!node) return;
+      node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (typeof node.focus === 'function') node.focus({ preventScroll: true });
+    });
+  }
+
   function validateDetails() {
     if (!items.length) {
+      setMissingFields({});
       setStatus({ tone: 'error', message: 'Your cart is empty. Add an item before placing an order.' });
       return false;
     }
     const missing = [];
-    if (!fullName.trim()) missing.push('Full name');
-    if (!phone.trim()) missing.push('Mobile number');
-    if (!house.trim()) missing.push('House Number / Street / Building / Unit');
-    if (!barangay) missing.push('Barangay');
-    if (!province) missing.push('Province');
-    if (!city) missing.push('City / Municipality');
+    if (!fullName.trim()) missing.push({ key: 'fullName', label: 'Full name' });
+    if (!phone.trim()) missing.push({ key: 'phone', label: 'Mobile number' });
+    if (!house.trim()) missing.push({ key: 'house', label: 'House Number / Street / Building / Unit' });
+    if (!province) missing.push({ key: 'province', label: 'Province' });
+    if (!city) missing.push({ key: 'city', label: 'City / Municipality' });
+    if (!barangay) missing.push({ key: 'barangay', label: 'Barangay' });
     if (missing.length) {
-      setStatus({ tone: 'error', message: `Complete your checkout details: ${missing.join(', ')}.` });
+      setMissingFields(Object.fromEntries(missing.map((field) => [field.key, true])));
+      setStatus({ tone: 'error', message: `Please complete the missing checkout information: ${missing.map((field) => field.label).join(', ')}.` });
+      focusMissingField(missing[0].key);
       return false;
     }
+    setMissingFields({});
     return true;
   }
 
@@ -259,9 +365,12 @@ export default function Checkout() {
     setStatus({ tone: 'neutral', message: 'Reviewing current prices and promos...' });
     setPending(true);
     try {
-      const nextQuote = await refreshQuote(discountInput.trim());
+      const manualDiscountCode = discountInput.trim();
+      const nextQuote = await refreshQuote(manualDiscountCode);
       setReviewQuote(nextQuote);
-      setActiveDiscountCode(nextQuote?.discountCode || discountInput.trim());
+      if (discountInput.trim()) {
+        setActiveDiscountCode(nextQuote?.discountCode || discountInput.trim());
+      }
       setStep('review');
       setStatus({ tone: 'neutral', message: '' });
     } catch (error) {
@@ -278,7 +387,8 @@ export default function Checkout() {
     setStatus({ tone: 'neutral', message: 'Placing your order...' });
     setPending(true);
 
-    const latestQuote = await refreshQuote(discountInput.trim()).catch((error) => {
+    const orderDiscountCode = activeDiscountCode ? discountInput.trim() : '';
+    const latestQuote = await refreshQuote(orderDiscountCode).catch((error) => {
       setStatus({ tone: 'error', message: error.message });
       return null;
     });
@@ -324,6 +434,7 @@ export default function Checkout() {
         orderNumber: result.orderNumber,
         confirmationToken: result.confirmationToken
       }));
+      placingOrderRef.current = true;
       clearCheckoutIdempotencyKey();
       clearCart();
       resetCartSessionId();
@@ -336,18 +447,18 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="border-b border-line">
+    <div className="customer-checkout-shell min-h-screen bg-[var(--customer-bg)]">
+      <header className="border-b border-[var(--customer-border)] bg-[var(--customer-surface)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 lg:px-8">
           <Link to="/" className="display text-xl">Maria<span className="text-accent">Clara</span></Link>
           <Link to="/cart" className="text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent">Back to cart</Link>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-12 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
-        <form onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate={false}>
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
+        <form className="customer-card rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-6" onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate>
           <p className="eyebrow">Checkout · Cash on Delivery</p>
-          <h1 className="display mt-2 text-3xl sm:text-4xl">{step === 'review' ? 'Review and place order' : 'Where do we send it?'}</h1>
+          <h1 className="display mt-2 text-2xl leading-tight sm:text-4xl">{step === 'review' ? 'Review and place order' : 'Where do we send it?'}</h1>
           {!loggedIn && (
             <p className="mt-3 text-sm text-ink-soft">
               <Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to
@@ -357,23 +468,23 @@ export default function Checkout() {
 
           <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
-            <input className="field" required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
-            <input className="field" required type="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
-            <input className="field" type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+            <input ref={checkoutFieldRefs.fullName} className={fieldClass('fullName')} required placeholder="Full name" value={fullName} onChange={(e) => { setFullName(e.target.value); clearMissingField('fullName'); }} autoComplete="name" />
+            <input ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(e) => { setPhone(e.target.value); clearMissingField('phone'); }} autoComplete="tel" />
+            <input className="field customer-input" type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </fieldset>
 
           <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Shipping address</legend>
-            <input className="field" required placeholder="House no. / Street / Building / Unit" value={house} onChange={(e) => setHouse(e.target.value)} autoComplete="street-address" />
-            <select className="field" required value={provinceCode} onChange={(e) => setProvinceCode(e.target.value)}>
+            <input ref={checkoutFieldRefs.house} className={fieldClass('house')} required placeholder="House no. / Street / Building / Unit" value={house} onChange={(e) => { setHouse(e.target.value); clearMissingField('house'); }} autoComplete="street-address" />
+            <select ref={checkoutFieldRefs.province} className={fieldClass('province')} required value={provinceCode} onChange={(e) => { setProvinceCode(e.target.value); clearMissingField('province'); }}>
               <option value="">Select province</option>
               {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
-            <select className="field" required value={cityCode} disabled={!cities.length} onChange={(e) => setCityCode(e.target.value)}>
+            <select ref={checkoutFieldRefs.city} className={fieldClass('city')} required value={cityCode} disabled={!cities.length} onChange={(e) => { setCityCode(e.target.value); clearMissingField('city'); }}>
               <option value="">{provinceCode ? 'Select city / municipality' : 'Select province first'}</option>
               {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
-            <select className="field" required value={barangayCode} disabled={!barangays.length} onChange={(e) => setBarangayCode(e.target.value)}>
+            <select ref={checkoutFieldRefs.barangay} className={fieldClass('barangay')} required value={barangayCode} disabled={!barangays.length} onChange={(e) => { setBarangayCode(e.target.value); clearMissingField('barangay'); }}>
               <option value="">{cityCode ? 'Select barangay' : 'Select city / municipality first'}</option>
               {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
@@ -382,7 +493,7 @@ export default function Checkout() {
                 J&T door-to-door delivery is not confirmed for this barangay. We will review before shipping.
               </p>
             )}
-            <textarea className="field" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <textarea className="field customer-input" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
             {loggedIn && (
               <label className="flex items-center gap-2 text-sm text-ink-soft">
                 <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} />
@@ -394,7 +505,7 @@ export default function Checkout() {
           <fieldset className="mt-8 space-y-3" disabled={step === 'review'}>
             <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Payment</legend>
             {settings.paymentMethods.map((method) => (
-              <label key={method.id} className="flex items-start gap-3 border border-line px-4 py-3 text-sm">
+              <label key={method.id} className="flex items-start gap-3 rounded-[8px] border border-line bg-white px-4 py-3 text-sm">
                 <input
                   type="radio"
                   name="payment-method"
@@ -414,14 +525,34 @@ export default function Checkout() {
 
           <p className="mt-6 text-sm text-ink-soft">{addressReady ? regionEstimate(settings, region) : 'Complete your address to see estimated delivery time.'}</p>
 
+          {settings.shipping.freeShippingEnabled && (
+            <section className="checkout-free-shipping-reminder mt-5 rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-accent-soft)]/45 p-4 text-left">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink">Buy 2 or more items and get FREE shipping.</p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+                {cartQuantity(items) >= settings.shipping.freeShippingMinimumItems
+                  ? 'Free shipping is already unlocked for this order.'
+                  : `Add ${Math.max(0, settings.shipping.freeShippingMinimumItems - cartQuantity(items))} more ${Math.max(0, settings.shipping.freeShippingMinimumItems - cartQuantity(items)) === 1 ? 'item' : 'items'} to remove the delivery fee.`}
+              </p>
+            </section>
+          )}
+
+          {settings.shipping.freeShippingEnabled && oneItemCheckout && (
+            <section className="checkout-one-item-offer mt-4 rounded-[8px] border border-accent/25 bg-white px-4 py-3 text-left shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-accent-deep">Add one more item to get FREE shipping.</p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+                You are one piece away from unlocking the shipping offer before placing this order.
+              </p>
+            </section>
+          )}
+
           {status.message && (
-            <p className={`mt-4 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role="status">
+            <p className={`mt-4 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role={status.tone === 'error' ? 'alert' : 'status'}>
               {status.message}
             </p>
           )}
 
           {step === 'review' && (
-            <section className="mt-6 border border-line bg-white p-4 text-sm">
+            <section className="mt-6 rounded-[8px] border border-line bg-white p-4 text-sm">
               <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Review</h2>
               <dl className="mt-3 space-y-2">
                 <div><dt className="font-semibold">Customer</dt><dd>{fullName} · {phone}</dd></div>
@@ -432,11 +563,11 @@ export default function Checkout() {
           )}
 
           {step === 'review' && (
-            <button type="button" className="btn-ghost mt-6 w-full" onClick={() => setStep('details')} disabled={pending}>
+            <button type="button" className="btn-ghost customer-compact-button mt-6 w-full" onClick={() => setStep('details')} disabled={pending}>
               Back to details
             </button>
           )}
-          <button type="submit" className="btn-ink mt-6 w-full" disabled={pending}>
+          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending}>
             {pending
               ? (step === 'review' ? 'Placing order...' : 'Preparing review...')
               : step === 'review'
@@ -450,7 +581,7 @@ export default function Checkout() {
           </p>
         </form>
 
-        <aside className="lg:border-l lg:border-line lg:pl-12">
+        <aside className="customer-order-summary self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order summary</h2>
           {!items.length ? (
             <div className="mt-6">
@@ -462,7 +593,7 @@ export default function Checkout() {
               <div className="mt-6 space-y-5">
                 {items.map((item) => (
                   <article key={item.variantId} className="flex min-w-0 gap-3 sm:gap-4">
-                    <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-cream sm:w-20">
+                    <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20">
                       {item.imageUrl && (
                         <img
                           src={item.imageUrl}
@@ -477,8 +608,8 @@ export default function Checkout() {
                       <h3 className="break-words text-sm font-semibold leading-snug">{item.productName}</h3>
                       <p className="text-xs uppercase tracking-[0.12em] text-clay">{item.size}</p>
                       <div className="mt-1 flex items-center gap-3 text-xs">
-                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) - 1)} aria-label="Decrease quantity">−</button>
-                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => updateQuantity(item.variantId, Number(item.quantity) + 1)} aria-label="Increase quantity">+</button>
+                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => decreaseItem(item)} aria-label="Decrease quantity">−</button>
+                        <button type="button" className="touch-target border border-line px-2 py-0.5 disabled:cursor-not-allowed disabled:text-clay" disabled={Number(item.maxStock) > 0 && Number(item.quantity) >= Number(item.maxStock)} onClick={() => increaseItem(item)} aria-label="Increase quantity">+</button>
                         <button type="button" className="text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>Remove</button>
                       </div>
                     </div>
@@ -489,7 +620,7 @@ export default function Checkout() {
               <div className="mt-8 border-t border-line pt-4">
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <input
-                    className="field flex-1 uppercase"
+                    className="field customer-input flex-1 uppercase"
                     placeholder="Discount code"
                     value={discountInput}
                     onChange={(e) => setDiscountInput(e.target.value)}
@@ -524,6 +655,46 @@ export default function Checkout() {
           )}
         </aside>
       </div>
+
+      {suggestedCheckoutProducts.length > 0 && (
+        <section className="checkout-upsell-products mx-auto max-w-6xl px-5 pb-12 lg:px-8" aria-label="Suggested products">
+          <div className="border-t border-[var(--customer-border)] pt-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="eyebrow">Complete the order</p>
+                <h2 className="display mt-2 text-2xl leading-tight sm:text-3xl">Add one more favorite</h2>
+              </div>
+              <p className="max-w-xs text-sm text-ink-soft">Small add-ons that can help unlock free shipping before checkout.</p>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
+              {suggestedCheckoutProducts.map((product) => {
+                const image = product.images[0];
+                return (
+                  <article key={product.id} className="min-w-0 text-center">
+                    <Link to={`/product/${encodeURIComponent(product.slug)}`} className="block aspect-[4/5] overflow-hidden bg-transparent">
+                      <img
+                        src={image.url}
+                        alt={image.altText || `Product photo for ${product.name}`}
+                        className="product-photo-blend h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    </Link>
+                    <h3 className="mt-2 line-clamp-2 text-center text-sm font-semibold leading-snug">{product.name}</h3>
+                    <p className="mt-1 text-center text-sm font-semibold">{formatMoney(product.priceCents)}</p>
+                    <button
+                      type="button"
+                      className="btn-ghost customer-compact-button mt-3 w-full !px-3 !py-2 text-[10px]"
+                      onClick={() => addSuggestedProductToCart(product)}
+                    >
+                      Add to Cart
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

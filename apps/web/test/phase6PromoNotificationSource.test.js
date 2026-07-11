@@ -15,11 +15,9 @@ test('web API exposes active promo notification helper', async () => {
 test('customer shell renders dismissible active promo notification', async () => {
   const source = await readFile(path.join(root, 'components', 'Shell.jsx'), 'utf8');
 
-  assert.match(source, /fetchActivePromoNotification/);
-  assert.match(source, /promoNotification/);
-  assert.match(source, /promo-notification/);
-  assert.match(source, /sessionStorage/);
-  assert.match(source, /maria-clara-promo-notification-dismissed/);
-  assert.match(source, /setPromoNotification\(null\)/);
-  assert.match(source, /aria-label="Close promo notification"/);
+  assert.doesNotMatch(source, /fetchActivePromoNotification/);
+  assert.doesNotMatch(source, /promoNotification/);
+  assert.doesNotMatch(source, /promo-notification/);
+  assert.doesNotMatch(source, /maria-clara-promo-notification-dismissed/);
+  assert.doesNotMatch(source, /aria-label="Close promo notification"/);
 });

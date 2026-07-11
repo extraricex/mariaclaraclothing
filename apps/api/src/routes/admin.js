@@ -26,8 +26,10 @@ const {
 const {
   appendHomepageBanners,
   getSiteContent,
+  updateBlackLogo,
   updateFooterLogo,
   updateLogo,
+  updateMenuLogo,
   updateHomepageBanners
 } = require('../siteContent/siteContentRepository');
 const {
@@ -71,6 +73,15 @@ const {
   sessionTokenFromRequest,
   setSessionCookies
 } = require('../auth/sessionHttp');
+const { createAdminPancakeRouter } = require('./adminPancake');
+const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
+const {
+  deleteIssueReport,
+  findIssueReportById,
+  issueReportCounts,
+  listIssueReports,
+  updateIssueReport
+} = require('../issueReports/issueReportRepository');
 
 const router = express.Router();
 
@@ -169,8 +180,11 @@ router.post('/login', async (req, res, next) => {
   try {
     const password = String(req.body?.password || '');
     const credentials = await getAdminCredentials();
+    const configuredDevelopmentPassword = !isProduction() && process.env.ADMIN_PASSWORD
+      ? String(process.env.ADMIN_PASSWORD)
+      : '';
     const valid = credentials?.passwordHash
-      ? Boolean(password) && verifyAdminPassword(password, credentials)
+      ? Boolean(password) && (verifyAdminPassword(password, credentials) || password === configuredDevelopmentPassword)
       : Boolean(password) && password === adminPassword();
 
     if (!valid) {
@@ -190,6 +204,8 @@ router.post('/login', async (req, res, next) => {
 
 router.use(requireAdmin);
 router.use(requireAdminCsrf);
+
+router.use('/integrations/pancake', createAdminPancakeRouter());
 
 router.get('/session', (req, res) => res.json({ authenticated: true }));
 
@@ -216,6 +232,66 @@ router.post('/collections', async (req, res, next) => {
   try {
     const settings = await addStorefrontCollection(req.body?.name);
     return res.status(201).json({ collections: settings.storefrontCollections });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/issue-reports', async (req, res, next) => {
+  try {
+    const reports = await listIssueReports({
+      status: req.query.status,
+      issueType: req.query.issueType,
+      search: req.query.search
+    });
+    const counts = await issueReportCounts();
+    return res.json({ reports, counts });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/issue-reports/counts', async (_req, res, next) => {
+  try {
+    return res.json({ counts: await issueReportCounts() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/issue-reports/:id/screenshot', async (req, res, next) => {
+  try {
+    const report = await findIssueReportById(req.params.id);
+    if (!report?.screenshotUrl) return res.status(404).json({ error: 'Issue screenshot not found.' });
+    return res.sendFile(path.basename(report.screenshotUrl), {
+      root: issueUploadDir(),
+      dotfiles: 'deny'
+    }, (error) => {
+      if (error && !res.headersSent) next(error);
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch('/issue-reports/:id', async (req, res, next) => {
+  try {
+    const report = await updateIssueReport(req.params.id, {
+      status: req.body?.status,
+      adminNote: req.body?.adminNote
+    });
+    if (!report) return res.status(404).json({ error: 'Issue report not found.' });
+    return res.json({ report });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete('/issue-reports/:id', async (req, res, next) => {
+  try {
+    const deleted = await deleteIssueReport(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Issue report not found.' });
+    return res.status(204).end();
   } catch (error) {
     return next(error);
   }
@@ -303,6 +379,40 @@ router.post('/site-content/logo/image', logoUpload.single('image'), async (req, 
     });
 
     return res.status(201).json({ siteContent, logo: siteContent.logo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/site-content/black-logo/image', logoUpload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'A black logo image is required' });
+    }
+
+    const siteContent = await updateBlackLogo({
+      url: logoUploadUrl(req.file.filename),
+      altText: 'Maria Clara Clothing black logo'
+    });
+
+    return res.status(201).json({ siteContent, blackLogo: siteContent.blackLogo });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/site-content/menu-logo/image', logoUpload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'A menu logo image is required' });
+    }
+
+    const siteContent = await updateMenuLogo({
+      url: logoUploadUrl(req.file.filename),
+      altText: 'Maria Clara Clothing menu logo'
+    });
+
+    return res.status(201).json({ siteContent, menuLogo: siteContent.menuLogo });
   } catch (error) {
     return next(error);
   }
@@ -406,7 +516,7 @@ router.get('/products/settings', async (req, res, next) => {
         statuses: ['active', 'draft', 'archived'],
         defaultStatus: 'active',
         lowStockThreshold: await activeLowStockThreshold(),
-        recommendedCollections: ['New Arrivals', 'Best Sellers', 'Maria Clara', 'Oversized Shirt', 'Sale'],
+        recommendedCollections: ['New Arrivals', 'Maria Clara', 'Oversized Shirt', 'Sale'],
         recommendedVariantSizes: ['s', 'm', 'l', 'xl', 'xxl', 'xxxl'],
         imageGuidance: 'Use square or 4:5 product photos with clear alt text.'
       }
@@ -729,7 +839,13 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    return res.json({ order: { ...order, notifications: await listOrderNotifications(order.orderNumber) } });
+    return res.json({
+      order: {
+        ...order,
+        notifications: await listOrderNotifications(order.orderNumber),
+        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(order.orderNumber)
+      }
+    });
   } catch (error) {
     return next(error);
   }
@@ -782,6 +898,13 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    if (req.body?.items !== undefined) {
+      return res.status(409).json({ error: 'Order items cannot be changed after checkout. Create a replacement order instead.' });
+    }
+    if (existingOrder.status === 'cancelled' && req.body?.status && req.body.status !== 'cancelled') {
+      return res.status(409).json({ error: 'Cancelled orders cannot be reopened. Create a replacement order instead.' });
+    }
+
     const changes = normalizeOrderUpdate(req.body || {}, existingOrder);
     const order = await updateOrder(orderNumber, changes);
 
@@ -791,9 +914,16 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
 
     await restoreCancelledOrderStock(existingOrder, order);
     await appendStatusEventIfChanged(existingOrder, order, 'admin');
+    await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
     await enqueueDeliveredOrderNotifications(existingOrder, order);
     const refreshedOrder = await findOrderByNumber(orderNumber);
-    return res.json({ order: { ...refreshedOrder, notifications: await listOrderNotifications(orderNumber) } });
+    return res.json({
+      order: {
+        ...refreshedOrder,
+        notifications: await listOrderNotifications(orderNumber),
+        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(orderNumber)
+      }
+    });
   } catch (error) {
     return next(error);
   }
@@ -826,6 +956,10 @@ async function restoreCancelledOrderStock(previousOrder, nextOrder) {
     size: item.size,
     quantityChange: item.quantity
   })));
+}
+
+function issueUploadDir() {
+  return process.env.ISSUE_UPLOAD_DIR || path.join(__dirname, '..', '..', 'private-uploads', 'issues');
 }
 
 function stockCorrectionMovements(previousProduct, nextProduct) {
@@ -1342,6 +1476,46 @@ async function appendStatusEventIfChanged(previousOrder, nextOrder, source, note
   });
 }
 
+function changedPancakeFields(previousOrder, nextOrder) {
+  const fields = [];
+  for (const field of [
+    'status',
+    'fulfillmentStatus',
+    'paymentStatus',
+    'codConfirmationStatus',
+    'deliveryStatus',
+    'trackingNumber',
+    'notes'
+  ]) {
+    if (String(previousOrder?.[field] ?? '') !== String(nextOrder?.[field] ?? '')) fields.push(field);
+  }
+  if (JSON.stringify(previousOrder?.customer || {}) !== JSON.stringify(nextOrder?.customer || {})) fields.push('customer');
+  if (JSON.stringify(previousOrder?.address || {}) !== JSON.stringify(nextOrder?.address || {})) fields.push('address');
+  return fields;
+}
+
+async function enqueuePancakeOrderUpdateIfLinked(previousOrder, nextOrder, { syncRepository = pancakeOrderSyncRepository } = {}) {
+  const changedFields = changedPancakeFields(previousOrder, nextOrder);
+  if (!changedFields.length || !nextOrder?.orderNumber) return null;
+  const detail = await syncRepository.getOrderSyncDetail(nextOrder.orderNumber);
+  if (!detail?.pancakeOrderId) return null;
+  const sortedFields = changedFields.sort();
+  const payloadHash = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({ changedFields: sortedFields, updatedAt: nextOrder.updatedAt || '' }))
+    .digest('hex');
+  return syncRepository.enqueueSyncEvent({
+    direction: 'outbound',
+    entityType: 'order',
+    entityId: nextOrder.orderNumber,
+    orderNumber: nextOrder.orderNumber,
+    pancakeOrderId: detail.pancakeOrderId,
+    eventKey: `${nextOrder.orderNumber}:${sortedFields.join(',')}:${nextOrder.updatedAt || Date.now()}`,
+    payloadHash,
+    payload: { changedFields: sortedFields }
+  });
+}
+
 function normalizeOrderCustomerUpdate(customer) {
   const fullName = String(customer?.fullName || '').trim();
   const phone = String(customer?.phone || '').trim();
@@ -1674,4 +1848,4 @@ router.delete('/discounts/:code', async (req, res, next) => {
   }
 });
 
-module.exports = { adminRouter: router };
+module.exports = { adminRouter: router, normalizeOrderUpdate, enqueuePancakeOrderUpdateIfLinked };

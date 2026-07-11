@@ -9,5 +9,12 @@ test('website content uploads notify storefront shell to refresh logos', async (
   assert.match(source, /notifySiteContentChanged/);
   assert.match(source, /new Event\('maria-clara-site-content-changed'\)/);
   assert.match(source, /uploadFooterLogo/);
+  assert.match(source, /uploadBlackLogo/);
+  assert.match(source, /uploadMenuLogo/);
   assert.match(source, /setFooterLogo\(body\.siteContent\?\.footerLogo/);
+  assert.match(source, /setBlackLogo\(body\.siteContent\?\.blackLogo/);
+  assert.match(source, /setMenuLogo\(body\.siteContent\?\.menuLogo/);
+  assert.match(source, /Default \/ light navbar logo/);
+  assert.match(source, /Black navbar logo/);
+  assert.match(source, /Mobile menu drawer logo/);
 });

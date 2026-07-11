@@ -35,6 +35,8 @@ test('site content APIs expose and update homepage banners', async () => {
 
   await fs.writeFile(siteContentFile, JSON.stringify({
     logo: { url: '/brand/logo.png', altText: 'Current logo' },
+    blackLogo: { url: '/brand/logo-black.png', altText: 'Current black logo' },
+    menuLogo: { url: '/brand/logo-menu.png', altText: 'Current menu logo' },
     footerLogo: { url: '/brand/footer-logo.png', altText: 'Current footer logo' },
     homepageBanners: [
       { url: '/brand/hero1v2.jpg', altText: 'Current banner', sortOrder: 0 }
@@ -54,6 +56,8 @@ test('site content APIs expose and update homepage banners', async () => {
 
     assert.equal(publicResponse.status, 200);
     assert.equal(publicBody.siteContent.logo.url, '/brand/logo.png');
+    assert.equal(publicBody.siteContent.blackLogo.url, '/brand/logo-black.png');
+    assert.equal(publicBody.siteContent.menuLogo.url, '/brand/logo-menu.png');
     assert.equal(publicBody.siteContent.footerLogo.url, '/brand/footer-logo.png');
     assert.equal(publicBody.siteContent.homepageBanners[0].url, '/brand/hero1v2.jpg');
 
@@ -102,6 +106,32 @@ test('site content APIs expose and update homepage banners', async () => {
     const savedLogoContent = JSON.parse(await fs.readFile(siteContentFile, 'utf8'));
     assert.match(savedLogoContent.logo.url, /^\/uploads\/logos\/site-logo-/);
 
+    const blackLogoBody = new FormData();
+    blackLogoBody.append('image', new Blob([Buffer.from('black logo bytes')], { type: 'image/png' }), 'black-logo.png');
+    const blackLogoResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/black-logo/image`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      body: blackLogoBody
+    });
+    const blackLogoJson = await blackLogoResponse.json();
+
+    assert.equal(blackLogoResponse.status, 201);
+    assert.match(blackLogoJson.siteContent.blackLogo.url, /^\/uploads\/logos\/site-logo-/);
+    assert.equal(blackLogoJson.siteContent.blackLogo.altText, 'Maria Clara Clothing black logo');
+
+    const menuLogoBody = new FormData();
+    menuLogoBody.append('image', new Blob([Buffer.from('menu logo bytes')], { type: 'image/png' }), 'menu-logo.png');
+    const menuLogoResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/menu-logo/image`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      body: menuLogoBody
+    });
+    const menuLogoJson = await menuLogoResponse.json();
+
+    assert.equal(menuLogoResponse.status, 201);
+    assert.match(menuLogoJson.siteContent.menuLogo.url, /^\/uploads\/logos\/site-logo-/);
+    assert.equal(menuLogoJson.siteContent.menuLogo.altText, 'Maria Clara Clothing menu logo');
+
     const footerLogoBody = new FormData();
     footerLogoBody.append('image', new Blob([Buffer.from('footer logo bytes')], { type: 'image/png' }), 'footer-logo.png');
     const footerLogoResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/footer-logo/image`, {
@@ -117,6 +147,8 @@ test('site content APIs expose and update homepage banners', async () => {
 
     const savedFooterLogoContent = JSON.parse(await fs.readFile(siteContentFile, 'utf8'));
     assert.match(savedFooterLogoContent.footerLogo.url, /^\/uploads\/logos\/site-logo-/);
+    assert.match(savedFooterLogoContent.blackLogo.url, /^\/uploads\/logos\/site-logo-/);
+    assert.match(savedFooterLogoContent.menuLogo.url, /^\/uploads\/logos\/site-logo-/);
     assert.match(savedFooterLogoContent.logo.url, /^\/uploads\/logos\/site-logo-/);
   } finally {
     server.close();

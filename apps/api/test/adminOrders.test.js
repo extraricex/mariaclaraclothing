@@ -375,25 +375,7 @@ test('admin order APIs require login and support list detail and status updates'
           city: 'IMUS',
           province: 'CAVITE',
           addressLine: '99 Edited Street, BUCANDALA IV, IMUS, CAVITE, Philippines'
-        },
-        items: [
-          {
-            productId: ORDER_ITEM.productId,
-            variantId: ORDER_ITEM.variantId,
-            productName: 'Edited CURIOSITY OFFWHITE Shirt',
-            size: 'Medium',
-            quantity: 2,
-            unitPriceCents: 70000
-          },
-          {
-            productId: 'manual-added-item',
-            variantId: 'manual-added-item-large',
-            productName: 'Manual Admin Added Item',
-            size: 'Large',
-            quantity: 1,
-            unitPriceCents: 50000
-          }
-        ]
+        }
       })
     });
     const updateBody = await updateResponse.json();
@@ -415,16 +397,10 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(updateBody.order.address.city, 'IMUS');
     assert.equal(updateBody.order.address.province, 'CAVITE');
     assert.equal(updateBody.order.address.addressLine, '99 Edited Street, BUCANDALA IV, IMUS, CAVITE, Philippines');
-    assert.equal(updateBody.order.items.length, 2);
-    assert.equal(updateBody.order.items[0].productName, 'Edited CURIOSITY OFFWHITE Shirt');
-    assert.equal(updateBody.order.items[0].size, 'Medium');
-    assert.equal(updateBody.order.items[0].quantity, 2);
-    assert.equal(updateBody.order.items[0].unitPriceCents, 70000);
-    assert.equal(updateBody.order.subtotalCents, 190000);
-    assert.equal(updateBody.order.totalCents, 198000);
-    assert.equal(updateBody.order.adminEditableTotals.subtotalCents, 190000);
-    assert.equal(updateBody.order.adminEditableTotals.totalCents, 198000);
-    assert.equal(updateBody.order.cartSnapshot.length, 2);
+    assert.equal(updateBody.order.items.length, 1);
+    assert.deepEqual(updateBody.order.items, detailBody.order.items);
+    assert.equal(updateBody.order.subtotalCents, detailBody.order.subtotalCents);
+    assert.equal(updateBody.order.totalCents, detailBody.order.totalCents);
     assert.equal(updateBody.order.statusEvents.length, 1);
     assert.equal(updateBody.order.statusEvents[0].orderNumber, orderNumber);
     assert.equal(updateBody.order.statusEvents[0].source, 'admin');
@@ -577,11 +553,95 @@ test('admin cancellation restores order stock and records restock movement', asy
     assert.equal(afterCancelStock, afterOrderStock + ORDER_ITEM.quantity);
     assert.ok(movements.some((movement) => movement.reason === 'order_created' && movement.quantityChange === -ORDER_ITEM.quantity));
     assert.ok(movements.some((movement) => movement.reason === 'order_cancelled' && movement.quantityChange === ORDER_ITEM.quantity));
+
+    const reopenResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
+      method: 'PATCH',
+      ...adminRequest('local-admin-token'),
+      headers: {
+        ...adminRequest('local-admin-token').headers,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ status: 'confirmed' })
+    });
+    assert.equal(reopenResponse.status, 409);
+
+    const itemEditResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
+      method: 'PATCH',
+      ...adminRequest('local-admin-token'),
+      headers: {
+        ...adminRequest('local-admin-token').headers,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ items: [ORDER_ITEM] })
+    });
+    assert.equal(itemEditResponse.status, 409);
+
+    const afterRejectedEdits = await findEditableProductBySlug(slug);
+    assert.equal(
+      Number(afterRejectedEdits.variants.find((variant) => variant.sku === 'CURIOSITYOFF-S').stockQuantity),
+      afterCancelStock
+    );
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('PRODUCTS_DATA_FILE', previousProductsDataFile);
     restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);
     restoreEnv('INVENTORY_MOVEMENTS_DATA_FILE', previousMovementsDataFile);
+  }
+});
+
+test('admin order updates enqueue Pancake outbound sync events for linked orders', async () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  const pancakeSync = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  pancakeSync.resetMemoryForTests();
+  await pancakeSync.upsertOrderLink({ orderNumber: 'MCC-ADMIN-SYNC', pancakeOrderId: 'PK-ADMIN-1', syncStatus: 'synced' });
+
+  const previous = {
+    orderNumber: 'MCC-ADMIN-SYNC',
+    status: 'confirmed',
+    fulfillmentStatus: 'unfulfilled',
+    paymentStatus: 'cod_pending',
+    codConfirmationStatus: 'pending',
+    deliveryStatus: 'pending',
+    trackingNumber: '',
+    customer: { fullName: 'A', phone: '1', email: '' },
+    address: { addressLine: 'Old' },
+    items: [],
+    notes: ''
+  };
+  const next = { ...previous, status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery', trackingNumber: 'TRACK-1' };
+
+  try {
+    const { enqueuePancakeOrderUpdateIfLinked } = require('../src/routes/admin');
+    const result = await enqueuePancakeOrderUpdateIfLinked(previous, next, { syncRepository: pancakeSync });
+
+    assert.equal(result?.status, 'pending');
+    assert.equal(result.pancakeOrderId, 'PK-ADMIN-1');
+  } finally {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
+  }
+});
+
+test('admin order detail includes Pancake sync detail', async () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  const pancakeSync = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  pancakeSync.resetMemoryForTests();
+  await pancakeSync.upsertOrderLink({
+    orderNumber: 'MCC-SYNC-DETAIL',
+    pancakeOrderId: 'PK-SYNC-1',
+    syncStatus: 'synced',
+    lastSyncedAt: '2026-07-10T00:00:00.000Z'
+  });
+
+  try {
+    const detail = await pancakeSync.getOrderSyncDetail('MCC-SYNC-DETAIL');
+    assert.equal(detail.pancakeOrderId, 'PK-SYNC-1');
+    assert.equal(detail.syncStatus, 'synced');
+  } finally {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
   }
 });
 
