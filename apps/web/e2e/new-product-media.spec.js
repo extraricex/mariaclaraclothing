@@ -38,6 +38,18 @@ test('new product batches, sorts, and removes customer photos', async ({ page })
 });
 
 test('new product selects multiple storefront collections', async ({ page }) => {
+  await page.route('**/api/admin/collections', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        collections: [...new Set([...(body.collections || []), 'Freedom of Mind'])]
+      }
+    });
+  });
   await page.goto('/admin/products/new');
   await page.getByRole('button', { name: 'Select collections' }).click();
   await page.getByLabel('New Arrivals').check();
