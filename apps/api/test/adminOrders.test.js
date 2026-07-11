@@ -528,7 +528,7 @@ test('admin cancellation restores order stock and records restock movement', asy
     });
     const slug = String(ORDER_ITEM.productId).replace(/^catalog-/, '');
     const afterOrderProduct = await findEditableProductBySlug(slug);
-    const afterOrderStock = Number(afterOrderProduct.variants.find((variant) => variant.sku === 'CURIOSITYOFF-S').stockQuantity);
+    const afterOrderStock = Number(afterOrderProduct.variants.find((variant) => variant.sku === 'ARISOFF-S').stockQuantity);
 
     const cancelResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
       method: 'PATCH',
@@ -545,7 +545,7 @@ test('admin cancellation restores order stock and records restock movement', asy
     });
     const cancelBody = await cancelResponse.json();
     const afterCancelProduct = await findEditableProductBySlug(slug);
-    const afterCancelStock = Number(afterCancelProduct.variants.find((variant) => variant.sku === 'CURIOSITYOFF-S').stockQuantity);
+    const afterCancelStock = Number(afterCancelProduct.variants.find((variant) => variant.sku === 'ARISOFF-S').stockQuantity);
     const movements = await listInventoryMovements({ orderNumber });
 
     assert.equal(cancelResponse.status, 200);
@@ -578,7 +578,7 @@ test('admin cancellation restores order stock and records restock movement', asy
 
     const afterRejectedEdits = await findEditableProductBySlug(slug);
     assert.equal(
-      Number(afterRejectedEdits.variants.find((variant) => variant.sku === 'CURIOSITYOFF-S').stockQuantity),
+      Number(afterRejectedEdits.variants.find((variant) => variant.sku === 'ARISOFF-S').stockQuantity),
       afterCancelStock
     );
   } finally {
