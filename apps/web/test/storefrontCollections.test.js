@@ -31,7 +31,7 @@ test('collection sections preserve existing copy and hide empty registered colle
     { id: 'freedom-of-mind', index: '02', title: 'Freedom of Mind' },
     { id: 'summer-drop', index: '03', title: 'Summer Drop' }
   ]);
-  assert.match(sections[0].blurb, /Fresh drops/);
+  assert.equal(sections[0].blurb, 'Oversized premium shirt.');
   assert.match(sections[1].blurb, /statement line/);
   assert.equal(sections[2].blurb, 'Explore the latest pieces in Summer Drop.');
   assert.deepEqual(sections[2].products.map((product) => product.id), ['one']);

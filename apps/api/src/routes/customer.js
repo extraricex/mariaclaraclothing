@@ -3,13 +3,16 @@ const {
   createAccount,
   findAccountByEmail,
   findAccountById,
+  findOrCreateOAuthAccount,
   normalizeEmail,
   publicCustomer,
   signCustomerToken,
   updateAccount,
+  withLoginProviders,
   verifyCustomerToken,
   verifyPassword
 } = require('../customers/customerAccountRepository');
+const crypto = require('node:crypto');
 const { listOrders } = require('../orders/orderRepository');
 const { normalizePhilippinePhone } = require('../jnt/jntExport');
 const {
@@ -20,14 +23,27 @@ const {
 } = require('../auth/sessionRepository');
 const {
   clearSessionCookies,
+  appendSetCookies,
   csrfTokenFromRequest,
   isProduction,
+  parseCookies,
+  serializeCookie,
   sessionTokenFromRequest,
   setSessionCookies
 } = require('../auth/sessionHttp');
+const { env } = require('../config/env');
+const { getStoreSettings } = require('../settings/storeSettingsRepository');
+const {
+  authorizationUrl,
+  exchangeOAuthCode,
+  safeStateEqual,
+  sanitizeReturnPath
+} = require('../customers/customerOAuthService');
 
 const router = express.Router();
 const CUSTOMER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const OAUTH_STATE_COOKIE = 'mc_oauth_state';
+const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 
 function badRequest(message) {
   const error = new Error(message);
@@ -90,6 +106,82 @@ async function startCustomerSession(res, account) {
   return auth;
 }
 
+async function oauthAvailability() {
+  const settings = await getStoreSettings();
+  return {
+    google: Boolean(env.oauth.google.configured && settings.authentication.googleEnabled),
+    facebook: Boolean(env.oauth.facebook.configured && settings.authentication.facebookEnabled)
+  };
+}
+
+function oauthStateFromRequest(req) {
+  const raw = parseCookies(req.headers.cookie)[OAUTH_STATE_COOKIE];
+  try {
+    const state = JSON.parse(Buffer.from(raw || '', 'base64url').toString('utf8'));
+    return { state: String(state.state || ''), returnTo: sanitizeReturnPath(state.returnTo) };
+  } catch (_error) {
+    return { state: '', returnTo: '/account' };
+  }
+}
+
+function setOAuthState(res, state, returnTo) {
+  const value = Buffer.from(JSON.stringify({ state, returnTo: sanitizeReturnPath(returnTo) })).toString('base64url');
+  appendSetCookies(res, [serializeCookie(OAUTH_STATE_COOKIE, value, { httpOnly: true, maxAge: OAUTH_STATE_TTL_SECONDS })]);
+}
+
+function clearOAuthState(res) {
+  appendSetCookies(res, [serializeCookie(OAUTH_STATE_COOKIE, '', { httpOnly: true, maxAge: 0 })]);
+}
+
+function oauthFailureRedirect(res, message) {
+  const url = new URL('/login', env.oauth.frontendUrl);
+  url.searchParams.set('oauthError', message);
+  return res.redirect(303, url.toString());
+}
+
+router.get('/oauth/status', async (_req, res, next) => {
+  try {
+    return res.json({ providers: await oauthAvailability() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/oauth/:provider/start', async (req, res, next) => {
+  try {
+    const provider = String(req.params.provider || '').toLowerCase();
+    const availability = await oauthAvailability();
+    if (!availability[provider]) return res.status(404).json({ error: 'Social login provider is unavailable' });
+    const state = crypto.randomBytes(32).toString('base64url');
+    setOAuthState(res, state, req.query.returnTo);
+    return res.redirect(302, authorizationUrl(env.oauth, provider, state));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/oauth/:provider/callback', async (req, res, next) => {
+  const provider = String(req.params.provider || '').toLowerCase();
+  const stored = oauthStateFromRequest(req);
+  clearOAuthState(res);
+  try {
+    const availability = await oauthAvailability();
+    if (!availability[provider] || !safeStateEqual(stored.state, req.query.state)) {
+      return oauthFailureRedirect(res, 'Social login expired or was not valid. Please try again.');
+    }
+    if (req.query.error || !req.query.code) {
+      return oauthFailureRedirect(res, 'Social login was cancelled or could not be completed.');
+    }
+    const profile = await exchangeOAuthCode(env.oauth, provider, req.query.code);
+    const account = await findOrCreateOAuthAccount(profile);
+    await startCustomerSession(res, account);
+    return res.redirect(303, new URL(stored.returnTo, env.oauth.frontendUrl).toString());
+  } catch (error) {
+    if (error.status && error.status < 500) return oauthFailureRedirect(res, error.message);
+    return next(error);
+  }
+});
+
 function normalizeRegistration(body) {
   const fullName = String(body.fullName || '').trim();
   const email = normalizeEmail(body.email);
@@ -135,10 +227,11 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Email or password is incorrect' });
     }
 
-    const auth = await startCustomerSession(res, account);
+    const accountWithProviders = await withLoginProviders(account);
+    const auth = await startCustomerSession(res, accountWithProviders);
     return res.json({
       csrfToken: auth.csrfToken,
-      customer: publicCustomer(account),
+      customer: publicCustomer(accountWithProviders),
       ...(!isProduction() ? { token: signCustomerToken(account.id) } : {})
     });
   } catch (error) {
@@ -146,8 +239,12 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-router.get('/me', requireCustomer, (req, res) => {
-  res.json({ customer: publicCustomer(req.customerAccount) });
+router.get('/me', requireCustomer, async (req, res, next) => {
+  try {
+    return res.json({ customer: publicCustomer(await withLoginProviders(req.customerAccount)) });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.put('/me', requireCustomer, requireCustomerCsrf, async (req, res, next) => {
@@ -162,7 +259,7 @@ router.put('/me', requireCustomer, requireCustomerCsrf, async (req, res, next) =
     }
 
     const account = await updateAccount(req.customerAccount.id, body);
-    return res.json({ customer: publicCustomer(account) });
+    return res.json({ customer: publicCustomer(await withLoginProviders(account)) });
   } catch (error) {
     return next(error);
   }

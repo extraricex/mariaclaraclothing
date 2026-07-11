@@ -326,6 +326,46 @@ function InventoryCard({ initial }) {
   );
 }
 
+function AuthenticationCard({ initial }) {
+  const [form, setForm] = useState(initial);
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/authentication', form);
+      setForm(body.settings.authentication);
+      setStatus({ tone: 'ok', message: 'Customer login settings saved.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Customer login" hint="Control configured Google and Facebook sign-in options.">
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" checked={Boolean(form.googleEnabled)} onChange={(event) => setForm((current) => ({ ...current, googleEnabled: event.target.checked }))} />
+          Enable Google login
+        </label>
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" checked={Boolean(form.facebookEnabled)} onChange={(event) => setForm((current) => ({ ...current, facebookEnabled: event.target.checked }))} />
+          Enable Facebook login
+        </label>
+        <p className="text-xs text-clay">A login option appears to customers only after its server credentials are configured.</p>
+      </div>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save customer login settings'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
 function SeoCard({ initial }) {
   const [form, setForm] = useState(initial);
   const [status, setStatus] = useState(null);
@@ -542,6 +582,7 @@ export default function Settings() {
         <ShippingCard initial={settings.shipping} />
         <PaymentsCard initial={settings.payments} />
         <InventoryCard initial={settings.inventory} />
+        <AuthenticationCard initial={settings.authentication} />
         <SeoCard initial={settings.website.seo} />
         <SizeChartCard initial={settings.website.sizeChart} />
         <ReportIssueCard initial={settings.website.reportIssue} />

@@ -497,6 +497,13 @@ ORDER_CONFIRMATION_SECRET=YOUR_UNIQUE_RANDOM_SECRET
 CUSTOMER_AUTH_SECRET=YOUR_DIFFERENT_RANDOM_SECRET
 ADMIN_TOKEN=YOUR_DIFFERENT_RANDOM_TOKEN
 ADMIN_PASSWORD=YOUR_LONG_UNIQUE_ADMIN_PASSWORD
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+FACEBOOK_APP_ID=
+FACEBOOK_APP_SECRET=
+AUTH_CALLBACK_URL=https://mariaclaraclothing.com/api/customer/oauth
+FRONTEND_URL=https://mariaclaraclothing.com
 ```
 
 Rules:
@@ -545,6 +552,45 @@ grep -nE 'replace-with|YOUR_' deploy/production.env
 
 The command should return no required placeholders. Empty optional provider
 credentials are allowed while their feature is disabled.
+
+### 8.1 Configure Google and Facebook customer login
+
+OAuth credentials are optional at first deploy. When a provider credential pair
+is empty, its customer login button is hidden. Never put these secrets in a
+`VITE_` variable because those values are compiled into browser JavaScript.
+
+For Google:
+
+1. Create a Web application OAuth client in Google Cloud Console.
+2. Add `https://mariaclaraclothing.com` as an authorized JavaScript origin.
+3. Add the exact redirect URI
+   `https://mariaclaraclothing.com/api/customer/oauth/google/callback`.
+4. Put its client ID and client secret in `deploy/production.env`.
+
+For Facebook:
+
+1. Create a Meta app, add Facebook Login, and complete the required business,
+   privacy-policy, and data-deletion details before switching it live.
+2. Set the app domain to `mariaclaraclothing.com`.
+3. Add the exact Valid OAuth Redirect URI
+   `https://mariaclaraclothing.com/api/customer/oauth/facebook/callback`.
+4. Put the app ID and app secret in `deploy/production.env`.
+
+Use:
+
+```dotenv
+GOOGLE_CLIENT_ID=YOUR_GOOGLE_WEB_CLIENT_ID
+GOOGLE_CLIENT_SECRET=YOUR_GOOGLE_WEB_CLIENT_SECRET
+FACEBOOK_APP_ID=YOUR_FACEBOOK_APP_ID
+FACEBOOK_APP_SECRET=YOUR_FACEBOOK_APP_SECRET
+AUTH_CALLBACK_URL=https://mariaclaraclothing.com/api/customer/oauth
+FRONTEND_URL=https://mariaclaraclothing.com
+```
+
+After rebuilding, open Admin > Settings > Customer login and enable only the
+providers that are ready. Test with a real non-admin customer account on both a
+phone and desktop. A matching verified email links to the existing customer
+account; provider access tokens are not stored.
 
 Validate Compose without printing rendered secrets:
 
@@ -1179,7 +1225,87 @@ Configure VPS snapshots and an encrypted off-server copy. Alert if no new backup
 arrives. Keep at least 14 daily, 8 weekly, and 6 monthly off-server copies if
 storage permits.
 
-### 20.3 Perform a restore drill
+### 20.3 Add encrypted off-server backups with Backblaze B2
+
+Backblaze B2 is the recommended first off-server target for this VPS because it
+works directly with restic, can use a bucket-scoped key, and is independent from
+Hostinger. Restic encrypts the repository before data leaves the VPS. Losing the
+restic password makes the backup unrecoverable, so store it in a password manager
+outside the VPS.
+
+In Backblaze:
+
+1. Enable B2 Cloud Storage and create a **private** bucket with a globally unique
+   name such as `mariaclara-production-backups-YOUR_RANDOM_SUFFIX`.
+2. Create an application key restricted to only that bucket with Read and Write
+   access. Do not use the master key.
+3. Save the displayed `keyID` and `applicationKey` immediately; the secret is
+   shown only once.
+
+On the VPS:
+
+```bash
+sudo apt update
+sudo apt install -y restic
+install -d -m 700 /home/deploy/.config/mariaclara
+cd /var/www/mariaclara
+cp deploy/offsite-backup.env.example /home/deploy/.config/mariaclara/offsite-backup.env
+chmod 600 /home/deploy/.config/mariaclara/offsite-backup.env
+openssl rand -base64 48 > /home/deploy/.config/mariaclara/restic-password
+chmod 600 /home/deploy/.config/mariaclara/restic-password
+nano /home/deploy/.config/mariaclara/offsite-backup.env
+```
+
+Replace every `YOUR_...` placeholder. Store the contents of `restic-password`
+in your password manager, along with the B2 bucket name and key ID. Initialize
+the encrypted repository once:
+
+```bash
+set -a
+source /home/deploy/.config/mariaclara/offsite-backup.env
+set +a
+restic init
+restic snapshots
+```
+
+Install and run the provided upload script:
+
+```bash
+sudo install -m 750 -o deploy -g deploy \
+  /var/www/mariaclara/deploy/mariaclara-offsite-backup \
+  /usr/local/bin/mariaclara-offsite-backup
+/usr/local/bin/mariaclara-offsite-backup
+```
+
+Add a second cron entry after the 2:00 AM local backup:
+
+```cron
+30 2 * * * /bin/bash -o pipefail -c '/usr/local/bin/mariaclara-offsite-backup 2>&1 | /usr/bin/logger -t mariaclara-offsite-backup'
+```
+
+Verify remote snapshots and run a weekly metadata integrity check:
+
+```bash
+set -a
+source /home/deploy/.config/mariaclara/offsite-backup.env
+set +a
+restic snapshots
+restic check
+sudo journalctl -t mariaclara-offsite-backup --since "2 days ago" --no-pager
+```
+
+Perform a test restore without touching production:
+
+```bash
+mkdir -p /tmp/mariaclara-restic-restore
+restic restore latest --target /tmp/mariaclara-restic-restore
+find /tmp/mariaclara-restic-restore/var/backups/mariaclara -maxdepth 1 -type f | head
+```
+
+References: [restic Backblaze B2 repository setup](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html)
+and [Backblaze bucket-scoped application keys](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys).
+
+### 20.4 Perform a restore drill
 
 At least monthly, restore the newest database dump into a temporary database:
 
@@ -1511,12 +1637,18 @@ sudo systemctl reload caddy
 - [ ] Any enabled GCash/bank instructions and manual verification process are correct.
 - [ ] Thank You page shows the correct private order details.
 - [ ] Customer login/register/account work over HTTPS if enabled for launch.
+- [ ] Google and Facebook buttons appear only for configured/enabled providers;
+  each real OAuth login returns to the intended customer page and reuses a
+  matching email account.
+- [ ] No customer page shows Pancake status, counts, IDs, mappings, or other POS
+  diagnostics.
 - [ ] Mobile layouts work at common phone widths with no overlap/overflow.
 - [ ] Report Issue works from a normal storefront page, appears in admin, and its
   status/admin note can be saved.
 - [ ] Issue screenshots open only while logged into admin and are deleted with their reports.
 - [ ] FAQ, Shipping & Returns, Terms, Contact, and Size Chart work.
 - [ ] Messenger, Facebook, Instagram, TikTok, email, and phone links are correct.
+- [ ] Every Instagram link opens `https://www.instagram.com/mariaclaraclothingshop/`.
 
 ### Admin, orders, and inventory
 

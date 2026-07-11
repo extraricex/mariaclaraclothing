@@ -33,6 +33,7 @@ test('store settings expose defaults, save sections, and validate input', async 
     assert.equal(defaults.shipping.freeShippingMinimumItems, 2);
     assert.equal(defaults.payments.methods.find((method) => method.id === 'cash_on_delivery').enabled, true);
     assert.equal(defaults.payments.methods.find((method) => method.id === 'gcash').enabled, false);
+    assert.deepEqual(defaults.authentication, { googleEnabled: true, facebookEnabled: true });
 
     const updated = repository.updateSettingsSection('shipping', {
       regions: [{ id: 'luzon', feeCents: 15000 }],
@@ -50,6 +51,10 @@ test('store settings expose defaults, save sections, and validate input', async 
       methods: [{ id: 'gcash', enabled: true, instructions: 'Send to 0917 000 0000.' }]
     }).payments.methods.find((method) => method.id === 'gcash').instructions, 'Send to 0917 000 0000.');
     assert.deepEqual(await repository.listEnabledPaymentMethodIds(), ['cash_on_delivery', 'gcash']);
+    assert.deepEqual(
+      repository.updateSettingsSection('authentication', { googleEnabled: false, facebookEnabled: true }).authentication,
+      { googleEnabled: false, facebookEnabled: true }
+    );
 
     assert.throws(() => repository.updateSettingsSection('shipping', { regions: [{ id: 'luzon', feeCents: -1 }] }),
       /must be a non-negative integer/);

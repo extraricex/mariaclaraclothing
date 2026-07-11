@@ -12,6 +12,8 @@ const SAFE_PRODUCTION = {
   CUSTOMER_AUTH_SECRET: 'production-customer-secret-with-more-than-32-characters',
   CHECKOUT_V2_REQUIRED: 'true',
   ORDER_CONFIRMATION_SECRET: 'production-confirmation-secret-more-than-32-characters',
+  AUTH_CALLBACK_URL: 'https://mariaclaraclothing.com/api/customer/oauth',
+  FRONTEND_URL: 'https://mariaclaraclothing.com',
   META_CONVERSIONS_API_ENABLED: 'false',
   ORDER_NOTIFICATIONS_ENABLED: 'false'
 };
@@ -57,6 +59,16 @@ test('safe production configuration builds successfully', () => {
   const env = config.buildEnv?.(SAFE_PRODUCTION);
   assert.equal(env?.appEnv, 'production');
   assert.equal(env?.port, 3000);
+  assert.equal(env?.oauth.frontendUrl, 'https://mariaclaraclothing.com');
+});
+
+test('OAuth configuration requires clean HTTPS production URLs and complete credential pairs', () => {
+  assert.throws(() => config.buildEnv({ ...SAFE_PRODUCTION, FRONTEND_URL: 'http://mariaclaraclothing.com' }), /HTTPS URL/);
+  assert.throws(() => config.buildEnv({ ...SAFE_PRODUCTION, AUTH_CALLBACK_URL: 'https://attacker.example/api/customer/oauth' }), /must use FRONTEND_URL origin/);
+  assert.throws(() => config.buildEnv({ ...SAFE_PRODUCTION, GOOGLE_CLIENT_ID: 'client-only' }), /GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET/);
+  const env = config.buildEnv({ ...SAFE_PRODUCTION, GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET: 'secret' });
+  assert.equal(env.oauth.google.configured, true);
+  assert.equal(env.oauth.facebook.configured, false);
 });
 
 test('production configuration rejects JSON persistence overrides', () => {

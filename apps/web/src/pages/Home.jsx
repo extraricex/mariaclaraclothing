@@ -175,7 +175,7 @@ export default function Home() {
           id="catalog"
           index={String(collectionSections.length + 1).padStart(2, '0')}
           title="Tees"
-          blurb="Premium cotton tees in oversized and crop-box silhouettes."
+          blurb="Regular Fit Tees with premium quality shirt."
           products={tees}
         />
       )}
@@ -191,9 +191,9 @@ export default function Home() {
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ['COD', 'Cash on delivery, nationwide. We text to confirm before anything ships.'],
+            ['COD', 'Cash on delivery nationwide. Pay the rider when your order arrives.'],
             ['240 GSM', 'Dense, structured cotton that holds its shape wash after wash.'],
-            ['Pancake synced orders', 'Website checkout is prepared for Pancake POS order tracking.'],
+            ['Ready to ship', 'Orders are prepared carefully for secure packing and nationwide delivery.'],
             ['2 = Free', 'Add any two pieces and shipping is on us, anywhere in the Philippines.']
           ].map(([title, body]) => (
             <CustomerCard key={title} className="p-6">

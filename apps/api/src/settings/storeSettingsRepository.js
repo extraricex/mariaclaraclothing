@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-se
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
 const SETTINGS_KEY = 'storeSettings';
 const CREDENTIALS_KEY = 'adminCredentials';
-const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory'];
+const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication'];
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
@@ -89,7 +89,7 @@ function defaultStoreSettings() {
       messengerUrl: 'https://m.me/mariaclaraclothing',
       socialLinks: {
         facebook: 'https://www.facebook.com/mariaclaraclothing',
-        instagram: 'https://www.instagram.com/mariaclaraclothing/',
+        instagram: 'https://www.instagram.com/mariaclaraclothingshop/',
         tiktok: ''
       }
     },
@@ -108,6 +108,10 @@ function defaultStoreSettings() {
         { id: 'gcash', label: 'GCash', enabled: false, instructions: '' },
         { id: 'bank_transfer', label: 'Bank Transfer', enabled: false, instructions: '' }
       ]
+    },
+    authentication: {
+      googleEnabled: true,
+      facebookEnabled: true
     },
     website: {
       ticker: [
@@ -477,6 +481,15 @@ function normalizeInventory(inventory) {
   return { lowStockThreshold };
 }
 
+function normalizeAuthentication(authentication) {
+  const value = authentication && typeof authentication === 'object' ? authentication : {};
+  const defaults = defaultStoreSettings().authentication;
+  return {
+    googleEnabled: value.googleEnabled === undefined ? defaults.googleEnabled : Boolean(value.googleEnabled),
+    facebookEnabled: value.facebookEnabled === undefined ? defaults.facebookEnabled : Boolean(value.facebookEnabled)
+  };
+}
+
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
   const storefrontCollections = normalizeStorefrontCollections(value.storefrontCollections);
@@ -486,6 +499,7 @@ function normalizeStoreSettings(settings) {
     payments: normalizePayments(value.payments),
     website: normalizeWebsite(value.website),
     inventory: normalizeInventory(value.inventory),
+    authentication: normalizeAuthentication(value.authentication),
     storefrontCollections,
     collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns, storefrontCollections)
   };
@@ -531,6 +545,7 @@ function normalizeSectionValue(section, value, current) {
   if (section === 'shipping') return normalizeShipping(value);
   if (section === 'payments') return normalizePayments(value);
   if (section === 'inventory') return normalizeInventory(value);
+  if (section === 'authentication') return normalizeAuthentication(value);
   return normalizeWebsite(value, current.website);
 }
 

@@ -576,8 +576,8 @@ export default function Checkout() {
           </button>
           <p className="mt-3 text-xs text-clay">
             {paymentMethod === 'cash_on_delivery'
-              ? 'No payment now. We text you to confirm, then you pay cash on delivery.'
-              : 'We text you to confirm your order and payment before shipping.'}
+              ? 'No advance payment is needed. Pay cash to the rider when your order arrives.'
+              : 'Review the payment instructions carefully before placing your order.'}
           </p>
         </form>
 

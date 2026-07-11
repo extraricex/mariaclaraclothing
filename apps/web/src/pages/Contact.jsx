@@ -28,7 +28,7 @@ function ContactDetail({ label, value }) {
 export default function Contact() {
   const settings = useStorefrontSettings();
   const facebook = settings.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
-  const instagram = settings.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothing/';
+  const instagram = settings.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothingshop/';
   const messenger = settings.messengerUrl || 'https://m.me/mariaclaraclothing';
   const email = settings.contactEmail || '';
   const phone = settings.contactNumber || '';

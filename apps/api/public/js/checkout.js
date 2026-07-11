@@ -434,7 +434,7 @@ function renderCheckoutSuccess(order) {
   if (!success || !title || !body) return;
 
   title.textContent = `Order ${order.orderNumber} received.`;
-  body.textContent = 'We will text you to confirm COD delivery before sending your order.';
+  body.textContent = 'Thank you for your order! Your order is now complete and will be prepared for packing and shipping.';
   success.hidden = false;
   success.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -649,7 +649,7 @@ function renderCheckoutPage() {
       addressState.selectedCity = null;
       renderCheckoutSummary([]);
       renderRelatedProducts([]);
-      setCheckoutStatus(status, `Order ${result.orderNumber} received. We will text you to confirm COD delivery.`, 'success');
+      setCheckoutStatus(status, `Thank you for your order! Order ${result.orderNumber} is complete and will be prepared for packing and shipping.`, 'success');
       renderCheckoutSuccess(result);
       window.location.href = `/thank-you.html?order=${encodeURIComponent(result.orderNumber)}`;
     } catch (error) {

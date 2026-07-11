@@ -59,6 +59,54 @@ function notificationConfig(source = process.env) {
   return { enabled, sms, email };
 }
 
+function validatedHttpsUrl(value, name) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || '').trim());
+  } catch (_error) {
+    throw new Error(`${name} must be a valid HTTPS URL`);
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error(`${name} must be a clean HTTPS URL without credentials, query, or fragment`);
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function oauthConfig(source = process.env) {
+  const appEnv = String(source.APP_ENV || 'development').trim().toLowerCase();
+  const frontendRaw = String(source.FRONTEND_URL || (appEnv === 'production' ? '' : 'http://localhost:5173')).trim();
+  const callbackRaw = String(source.AUTH_CALLBACK_URL || (appEnv === 'production' ? '' : 'http://localhost:3000/api/customer/oauth')).trim();
+  const validateBase = (value, name) => {
+    if (appEnv === 'production') return validatedHttpsUrl(value, name);
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error(`${name} must be a clean HTTP(S) URL`);
+    }
+    return parsed.toString().replace(/\/$/, '');
+  };
+  const provider = (name, id, secret) => {
+    const clientId = String(source[id] || '').trim();
+    const clientSecret = String(source[secret] || '');
+    if (Boolean(clientId) !== Boolean(clientSecret)) {
+      throw new Error(`${id} and ${secret} must both be set or both be empty`);
+    }
+    return { name, clientId, clientSecret, configured: Boolean(clientId && clientSecret) };
+  };
+  const frontendUrl = validateBase(frontendRaw, 'FRONTEND_URL');
+  const callbackBaseUrl = validateBase(callbackRaw, 'AUTH_CALLBACK_URL');
+  const frontend = new URL(frontendUrl);
+  const callback = new URL(callbackBaseUrl);
+  if (callback.pathname !== '/api/customer/oauth' || (appEnv === 'production' && callback.origin !== frontend.origin)) {
+    throw new Error('AUTH_CALLBACK_URL must use FRONTEND_URL origin and the /api/customer/oauth path');
+  }
+  return {
+    frontendUrl,
+    callbackBaseUrl,
+    google: provider('google', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'),
+    facebook: provider('facebook', 'FACEBOOK_APP_ID', 'FACEBOOK_APP_SECRET')
+  };
+}
+
 function pancakeConfig(source = process.env) {
   const mode = String(source.PANCAKE_MODE || 'disabled').trim().toLowerCase();
   if (!['disabled', 'read_only', 'shadow', 'live'].includes(mode)) {
@@ -169,10 +217,11 @@ function buildEnv(source = process.env) {
     meta: metaConfig(source),
     checkout: checkoutConfig(source),
     notifications: notificationConfig(source),
+    oauth: oauthConfig(source),
     pancake: pancakeConfig(source)
   };
 }
 
 const env = buildEnv();
 
-module.exports = { buildEnv, env, metaConfig, checkoutConfig, notificationConfig, pancakeConfig, validateProductionConfig };
+module.exports = { buildEnv, env, metaConfig, checkoutConfig, notificationConfig, oauthConfig, pancakeConfig, validateProductionConfig };

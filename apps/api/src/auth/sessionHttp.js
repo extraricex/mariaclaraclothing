@@ -35,10 +35,16 @@ function serializeCookie(name, value, { httpOnly = false, maxAge = 0 } = {}) {
   return parts.join('; ');
 }
 
+function appendSetCookies(res, cookies) {
+  const current = res.getHeader('Set-Cookie');
+  const existing = Array.isArray(current) ? current : current ? [current] : [];
+  res.setHeader('Set-Cookie', [...existing, ...cookies]);
+}
+
 function setSessionCookies(res, actorType, auth, ttlMs) {
   const names = cookieNames(actorType);
   const maxAge = Number(ttlMs) / 1000;
-  res.setHeader('Set-Cookie', [
+  appendSetCookies(res, [
     serializeCookie(names.session, auth.token, { httpOnly: true, maxAge }),
     serializeCookie(names.csrf, auth.csrfToken, { maxAge })
   ]);
@@ -46,7 +52,7 @@ function setSessionCookies(res, actorType, auth, ttlMs) {
 
 function clearSessionCookies(res, actorType) {
   const names = cookieNames(actorType);
-  res.setHeader('Set-Cookie', [
+  appendSetCookies(res, [
     serializeCookie(names.session, '', { httpOnly: true, maxAge: 0 }),
     serializeCookie(names.csrf, '', { maxAge: 0 })
   ]);
@@ -61,10 +67,12 @@ function csrfTokenFromRequest(req) {
 }
 
 module.exports = {
+  appendSetCookies,
   clearSessionCookies,
   csrfTokenFromRequest,
   isProduction,
   parseCookies,
+  serializeCookie,
   sessionTokenFromRequest,
   setSessionCookies
 };

@@ -1,5 +1,5 @@
 const COLLECTION_COPY = {
-  'New Arrivals': "Fresh drops, cut boxy. Once a size sells through, it's gone.",
+  'New Arrivals': 'Oversized premium shirt.',
   'Freedom of Mind': 'The statement line — graphics for loud thoughts and quiet days.'
 };
 

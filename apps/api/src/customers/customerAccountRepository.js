@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { hasDatabaseUrl, query } = require('../db/postgres');
+const { hasDatabaseUrl, query, transaction } = require('../db/postgres');
 
 const DEFAULT_ACCOUNTS_FILE = path.join(__dirname, '..', '..', 'data', 'customer-accounts.json');
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -28,8 +28,11 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
 }
 
 function verifyPassword(password, account) {
+  if (!account?.passwordHash || !account?.passwordSalt) return false;
   const { passwordHash } = hashPassword(password, account.passwordSalt);
-  return crypto.timingSafeEqual(Buffer.from(passwordHash, 'hex'), Buffer.from(account.passwordHash, 'hex'));
+  const actual = Buffer.from(account.passwordHash, 'hex');
+  const expected = Buffer.from(passwordHash, 'hex');
+  return actual.length === expected.length && crypto.timingSafeEqual(expected, actual);
 }
 
 function signCustomerToken(accountId, now = Date.now()) {
@@ -79,7 +82,8 @@ function publicCustomer(account) {
     fullName: account.fullName,
     phone: account.phone,
     savedAddress: account.savedAddress || null,
-    createdAt: account.createdAt
+    createdAt: account.createdAt,
+    loginProviders: Array.isArray(account.loginProviders) ? account.loginProviders : []
   };
 }
 
@@ -155,6 +159,121 @@ async function createAccount({ fullName, email, phone, password }) {
   return account;
 }
 
+function fromOAuthAccountRow(row, providers = []) {
+  return { ...fromPostgresAccount(row), loginProviders: providers };
+}
+
+async function findOrCreateOAuthAccount({ provider, providerUserId, email, fullName }) {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedProvider = String(provider || '').trim().toLowerCase();
+  const normalizedProviderUserId = String(providerUserId || '').trim();
+  const normalizedName = String(fullName || '').trim();
+  if (!['google', 'facebook'].includes(normalizedProvider) || !normalizedProviderUserId || !normalizedEmail) {
+    throw new Error('OAuth identity is incomplete');
+  }
+
+  if (usePostgresAccounts()) {
+    return transaction(async (client) => {
+      const existingIdentity = await client.query(
+        `SELECT ca.*, cai.provider
+           FROM customer_auth_identities cai
+           JOIN customer_accounts ca ON ca.id = cai.customer_account_id
+          WHERE cai.provider = $1 AND cai.provider_user_id = $2
+          FOR UPDATE OF cai, ca`,
+        [normalizedProvider, normalizedProviderUserId]
+      );
+      let accountRow = existingIdentity.rows[0];
+      if (!accountRow) {
+        const accountResult = await client.query(
+          'SELECT * FROM customer_accounts WHERE email = $1 FOR UPDATE',
+          [normalizedEmail]
+        );
+        accountRow = accountResult.rows[0];
+        if (!accountRow) {
+          const id = crypto.randomUUID();
+          const inserted = await client.query(
+            `INSERT INTO customer_accounts
+              (id, email, password_hash, password_salt, full_name, phone, saved_address, created_at, updated_at)
+             VALUES ($1, $2, NULL, NULL, $3, '', NULL, now(), now())
+             RETURNING *`,
+            [id, normalizedEmail, normalizedName]
+          );
+          accountRow = inserted.rows[0];
+        }
+        await client.query(
+          `INSERT INTO customer_auth_identities
+            (id, customer_account_id, provider, provider_user_id, provider_email, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, now(), now())
+           ON CONFLICT (provider, provider_user_id) DO UPDATE
+             SET provider_email = EXCLUDED.provider_email, updated_at = now()`,
+          [crypto.randomUUID(), accountRow.id, normalizedProvider, normalizedProviderUserId, normalizedEmail]
+        );
+      } else {
+        await client.query(
+          `UPDATE customer_auth_identities SET provider_email = $3, updated_at = now()
+            WHERE provider = $1 AND provider_user_id = $2`,
+          [normalizedProvider, normalizedProviderUserId, normalizedEmail]
+        );
+      }
+      if (!String(accountRow.full_name || '').trim() && normalizedName) {
+        const updated = await client.query(
+          'UPDATE customer_accounts SET full_name = $2, updated_at = now() WHERE id = $1 RETURNING *',
+          [accountRow.id, normalizedName]
+        );
+        accountRow = updated.rows[0];
+      }
+      const providers = await client.query(
+        'SELECT provider FROM customer_auth_identities WHERE customer_account_id = $1 ORDER BY provider',
+        [accountRow.id]
+      );
+      return fromOAuthAccountRow(accountRow, providers.rows.map((row) => row.provider));
+    });
+  }
+
+  const accounts = readAccountsFile();
+  let account = accounts.find((candidate) => (candidate.authIdentities || []).some(
+    (identity) => identity.provider === normalizedProvider && identity.providerUserId === normalizedProviderUserId
+  ));
+  if (!account) account = accounts.find((candidate) => candidate.email === normalizedEmail);
+  const now = new Date().toISOString();
+  if (!account) {
+    account = {
+      id: crypto.randomUUID(), email: normalizedEmail, passwordHash: null, passwordSalt: null,
+      fullName: normalizedName, phone: '', savedAddress: null, authIdentities: [], createdAt: now, updatedAt: now
+    };
+    accounts.push(account);
+  }
+  account.authIdentities ||= [];
+  const linked = account.authIdentities.find((identity) => identity.provider === normalizedProvider);
+  if (linked && linked.providerUserId !== normalizedProviderUserId) {
+    const error = new Error(`This account is already linked to a different ${normalizedProvider} identity`);
+    error.status = 409;
+    throw error;
+  }
+  if (linked) {
+    linked.providerEmail = normalizedEmail;
+    linked.updatedAt = now;
+  } else {
+    account.authIdentities.push({ provider: normalizedProvider, providerUserId: normalizedProviderUserId, providerEmail: normalizedEmail, createdAt: now, updatedAt: now });
+  }
+  if (!account.fullName && normalizedName) account.fullName = normalizedName;
+  account.updatedAt = now;
+  writeAccountsFile(accounts);
+  return { ...account, loginProviders: account.authIdentities.map((identity) => identity.provider).sort() };
+}
+
+async function withLoginProviders(account) {
+  if (!account) return null;
+  if (usePostgresAccounts()) {
+    const { rows } = await query(
+      'SELECT provider FROM customer_auth_identities WHERE customer_account_id = $1 ORDER BY provider',
+      [account.id]
+    );
+    return { ...account, loginProviders: rows.map((row) => row.provider) };
+  }
+  return { ...account, loginProviders: (account.authIdentities || []).map((identity) => identity.provider).sort() };
+}
+
 async function updateAccount(id, changes) {
   const existing = await findAccountById(id);
   if (!existing) return null;
@@ -184,11 +303,13 @@ module.exports = {
   createAccount,
   findAccountByEmail,
   findAccountById,
+  findOrCreateOAuthAccount,
   normalizeEmail,
   normalizeSavedAddress,
   publicCustomer,
   signCustomerToken,
   updateAccount,
+  withLoginProviders,
   verifyCustomerToken,
   verifyPassword
 };

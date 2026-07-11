@@ -484,7 +484,7 @@ export default function Shell() {
   const visibleShippingOffer = freeShippingOfferDismissed ? null : shippingOffer;
   const visibleRecommendation = recommendationDismissed ? null : recommendation;
   const offerCount = Number(Boolean(visibleShippingOffer)) + Number(Boolean(visibleRecommendation));
-  const instagramUrl = storeInfo?.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothing/';
+  const instagramUrl = storeInfo?.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothingshop/';
   const facebookUrl = storeInfo?.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
 
   return (

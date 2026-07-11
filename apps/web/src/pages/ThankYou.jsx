@@ -48,7 +48,9 @@ export default function ThankYou() {
       <h1 className="display mt-3 text-4xl sm:text-6xl">Salamat{summary.customerFirstName ? `, ${summary.customerFirstName}` : ''}.</h1>
       <p className="mx-auto mt-5 max-w-md text-sm leading-relaxed text-ink-soft">
         Your order <strong className="break-all text-ink">{summary.orderNumber}</strong> is in.
-        {summary.paymentMethod === 'cash_on_delivery' ? " We'll text you to confirm Cash on Delivery before anything ships." : ' Payment instructions are shown below.'}
+        {summary.paymentMethod === 'cash_on_delivery'
+          ? ' Thank you for your order! Your order is now complete and will be prepared for packing and shipping.'
+          : ' Thank you for your order! Payment instructions are shown below.'}
       </p>
 
       <dl className="mx-auto mt-10 max-w-md space-y-3 border border-line bg-white p-6 text-left text-sm">

@@ -36,7 +36,7 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   messengerUrl: 'https://m.me/mariaclaraclothing',
   socialLinks: {
     facebook: 'https://www.facebook.com/mariaclaraclothing',
-    instagram: 'https://www.instagram.com/mariaclaraclothing/',
+    instagram: 'https://www.instagram.com/mariaclaraclothingshop/',
     tiktok: ''
   },
   shipping: {

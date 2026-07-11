@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { customerLogin, customerRegister } from '../lib/customerAuth.js';
 
@@ -18,9 +18,21 @@ export function CustomerLogin() {
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => new URLSearchParams(location.search).get('oauthError') || '');
   const [pending, setPending] = useState(false);
-  const redirectTo = location.state?.from || '/account';
+  const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
+  const redirectTo = typeof location.state?.from === 'string' && location.state.from.startsWith('/')
+    ? location.state.from
+    : '/account';
+
+  useEffect(() => {
+    fetch('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Social login status unavailable')))
+      .then((body) => setSocialProviders(body.providers || {}))
+      .catch(() => setSocialProviders({ google: false, facebook: false }));
+  }, []);
+
+  const socialUrl = (provider) => `/api/customer/oauth/${provider}/start?returnTo=${encodeURIComponent(redirectTo)}`;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -38,7 +50,26 @@ export function CustomerLogin() {
 
   return (
     <AuthShell title="Log in" subtitle="Order history, saved address, faster checkout.">
-      <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+      {(socialProviders.google || socialProviders.facebook) && (
+        <div className="mt-8 space-y-3">
+          {socialProviders.facebook && (
+            <a className="flex min-h-12 w-full items-center justify-center border border-[#1877f2] bg-[#1877f2] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#166fe5]" href={socialUrl('facebook')}>
+              Continue with Facebook
+            </a>
+          )}
+          {socialProviders.google && (
+            <a className="flex min-h-12 w-full items-center justify-center border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-mist" href={socialUrl('google')}>
+              Continue with Google
+            </a>
+          )}
+          <div className="flex items-center gap-3 py-2" aria-hidden="true">
+            <span className="h-px flex-1 bg-line" />
+            <span className="text-xs uppercase text-clay">or use email</span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className={`${socialProviders.google || socialProviders.facebook ? '' : 'mt-8'} space-y-4`}>
         <input className="field" type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         <input className="field" type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         {error && <p className="text-sm text-accent-deep" role="alert">{error}</p>}

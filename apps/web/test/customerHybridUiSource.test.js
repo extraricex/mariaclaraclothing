@@ -34,7 +34,8 @@ test('customer storefront applies the approved hybrid visual system only to cust
   assert.match(css, /--customer-bg/);
   assert.match(css, /\.customer-card/);
   assert.match(css, /\.customer-input/);
-  assert.match(home, /Pancake synced orders/);
+  assert.doesNotMatch(home, /Pancake synced orders/i);
+  assert.match(home, /Ready to ship/);
   assert.match(home, /customer-hero/);
   assert.match(productCard, /CustomerBadge/);
   assert.match(product, /customer-buy-panel/);

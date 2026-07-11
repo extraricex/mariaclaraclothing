@@ -39,6 +39,12 @@ const customerAuthRateLimit = postOnly(rateLimit({
   message: 'Too many account attempts. Please try again later.'
 }));
 
+const customerOAuthRateLimit = methodOnly(['GET'], rateLimit({
+  keyPrefix: 'customer-oauth', maxEnv: 'CUSTOMER_OAUTH_RATE_LIMIT_MAX',
+  windowEnv: 'CUSTOMER_OAUTH_RATE_LIMIT_WINDOW_MS', defaultMax: 60, defaultWindowMs: 15 * 60 * 1000,
+  message: 'Too many social login attempts. Please try again later.'
+}));
+
 const quoteRateLimit = postOnly(rateLimit({
   keyPrefix: 'checkout-quote', maxEnv: 'QUOTE_RATE_LIMIT_MAX',
   windowEnv: 'QUOTE_RATE_LIMIT_WINDOW_MS', defaultMax: 120, defaultWindowMs: 10 * 60 * 1000,
@@ -139,6 +145,7 @@ function createApp() {
   app.use('/api/issue-reports', issueReportRateLimit);
   app.use('/api/customer/login', customerAuthRateLimit);
   app.use('/api/customer/register', customerAuthRateLimit);
+  app.use('/api/customer/oauth', customerOAuthRateLimit);
   app.use('/api/admin/settings/security', adminSensitiveRateLimit);
   app.use('/api/admin/integrations/pancake', adminSensitiveRateLimit);
   app.use('/api/admin/products', adminSensitiveRateLimit);
