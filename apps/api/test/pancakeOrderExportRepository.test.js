@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 function loadRepositoryWithoutDatabase() {
   const previous = process.env.DATABASE_URL;
@@ -160,4 +162,13 @@ test('order export repository skips cancelled and pre-cutover orders', async () 
   assert.deepEqual(queued.map((item) => item.orderNumber), ['MCC-NEW']);
   await repository.markOrderExportSkipped('MCC-NEW');
   assert.deepEqual(await repository.listQueuedOrderExports({ placedAfter: '2026-07-12T00:00:00Z' }), []);
+});
+
+test('Pancake export schema allows the skipped cutover audit state', () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, '..', 'db', 'migrations', '20260712_pancake_export_cutover.sql'),
+    'utf8'
+  );
+  assert.match(migration, /'skipped'/);
+  assert.match(migration, /pancake_order_exports_status_check/);
 });

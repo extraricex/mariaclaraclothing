@@ -468,7 +468,7 @@ CREATE TABLE IF NOT EXISTS pancake_order_exports (
   id text PRIMARY KEY,
   order_number text NOT NULL REFERENCES orders(order_number) ON DELETE CASCADE,
   mode text NOT NULL DEFAULT 'shadow' CHECK (mode IN ('read_only','shadow','live')),
-  status text NOT NULL CHECK (status IN ('queued','shadow_built','blocked','failed','sent')),
+  status text NOT NULL CHECK (status IN ('queued','shadow_built','blocked','failed','sent','skipped')),
   shop_id text NOT NULL DEFAULT '',
   warehouse_id text NOT NULL DEFAULT '',
   order_source_id text NOT NULL DEFAULT '',
