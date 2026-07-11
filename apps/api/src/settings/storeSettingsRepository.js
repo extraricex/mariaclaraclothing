@@ -12,7 +12,6 @@ const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
 const DEFAULT_STOREFRONT_COLLECTIONS = ['New Arrivals'];
-const DEFAULT_SIZE_CHART_IMAGE_URL = 'https://cdn.shopify.com/s/files/1/0781/7979/5224/files/oversizedshirtchart.jpg?v=1776047669';
 const DEFAULT_COUNTDOWN_MESSAGE = 'Hurry! Limited time left';
 
 let postgresCredentialsCache = { loaded: false, value: null };
@@ -120,13 +119,13 @@ function defaultStoreSettings() {
       seo: {
         title: 'Maria Clara Clothing — Premium Philippine Streetwear',
         description: 'Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items.',
-        imageUrl: ''
+        imageUrl: '/brand/hero1v2.jpg'
       },
       hero: {
         eyebrow: '',
-        title: 'Premium',
-        highlight: 'Cotton',
-        subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
+        title: 'Maria Clara',
+        highlight: 'Clothing',
+        subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Cash on delivery nationwide, with free shipping when you grab two.',
         primaryButtonText: 'Shop new arrivals',
         primaryButtonLink: '#new-arrivals',
         secondaryButtonText: 'Freedom of Mind',
@@ -135,8 +134,8 @@ function defaultStoreSettings() {
       maintenanceMode: false,
       infoPages: {
         faq: [
-          { heading: 'How does Cash on Delivery work?', body: 'Place your order online — no payment needed. We text your mobile number to confirm, then ship via J&T Express. You pay the rider in cash when the parcel arrives.' },
-          { heading: 'How long is delivery?', body: 'Metro Manila and Cavite: 2–4 days. Other Luzon provinces: 3–6 days. Visayas and Mindanao: 5–8 days. We confirm by text before shipping.' },
+          { heading: 'How does Cash on Delivery work?', body: 'Place your order online — no advance payment needed. Our team reviews your order and may contact you by text or phone before shipping via J&T Express. You pay the rider in cash when the parcel arrives.' },
+          { heading: 'How long is delivery?', body: 'Metro Manila and Cavite: 2–4 days. Other Luzon provinces: 3–6 days. Visayas and Mindanao: 5–8 days. Estimates begin after your order is reviewed and prepared for shipment.' },
           { heading: 'How much is shipping?', body: 'Metro Manila & Cavite ₱80, Luzon ₱120, Visayas/Mindanao ₱180. Order any 2 items and shipping is free.' },
           { heading: 'What if my size is sold out?', body: 'Drops are limited runs. Follow our socials for restocks — once a run sells through, it usually does not return.' },
           { heading: 'What is 240 GSM cotton?', body: 'GSM is fabric weight. 240 GSM is heavyweight tee territory: structured, opaque, and it keeps its shape after repeated washing.' }
@@ -144,11 +143,11 @@ function defaultStoreSettings() {
         shippingReturns: [
           { heading: 'Shipping coverage', body: 'We ship nationwide via J&T Express with structured Philippine addresses (province, city/municipality, barangay). Some barangays are not confirmed for door-to-door delivery; we review those orders before shipping and coordinate by text.' },
           { heading: 'Shipping rates', body: 'Metro Manila & Cavite ₱80 · Luzon ₱120 · Visayas/Mindanao ₱180. Free shipping on any order of 2 or more items.' },
-          { heading: 'Order confirmation', body: 'Every COD order is confirmed by text message before it ships. Unreachable numbers may cause the order to be cancelled.' },
+          { heading: 'Order confirmation', body: 'We review every COD order before shipment and may contact you by text or phone. Orders with invalid or unreachable contact details may be held or cancelled.' },
           { heading: 'Returns & exchanges', body: 'Wrong or damaged item? Message us within 7 days of delivery with photos and we will arrange a replacement. Items must be unworn and unwashed. Size exchanges are subject to stock availability; buyer shoulders return shipping for size exchanges.' }
         ],
         terms: [
-          { heading: 'Orders', body: 'All orders are Cash on Delivery and are confirmed via text message before fulfillment. We reserve the right to cancel orders we cannot confirm.' },
+          { heading: 'Orders', body: 'All orders are Cash on Delivery and are reviewed before fulfillment. We may contact you by text or phone, and reserve the right to hold or cancel orders with invalid or unreachable contact details.' },
           { heading: 'Pricing', body: 'Prices are in Philippine pesos and may change without notice. The price at the time of your order is what you pay.' },
           { heading: 'Size Chart', body: 'Check the size chart before ordering. Measurements have a ±2cm tolerance and size exchanges depend on available stock.', linkText: 'View Size Chart', linkHref: '/size-chart' },
           { heading: 'Privacy', body: 'We use your name, mobile number, and address to fulfill and deliver orders. The customer website also uses the Facebook Meta Pixel to send page visits and shopping actions to Meta for advertising measurement. When an order is completed, our server may send purchase details and hashed contact details to Meta through the Conversions API to match the purchase without sending your delivery address or order notes. Meta handles this information under its own privacy policy. We do not sell your personal information.' },
@@ -156,8 +155,8 @@ function defaultStoreSettings() {
         ]
       },
       sizeChart: {
-        imageUrl: DEFAULT_SIZE_CHART_IMAGE_URL,
-        altText: 'Maria Clara Clothing size chart'
+        imageUrl: '/brand/size-chart.jpg',
+        altText: 'Maria Clara Clothing oversized shirt size chart'
       },
       reportIssue: {
         enabled: true,

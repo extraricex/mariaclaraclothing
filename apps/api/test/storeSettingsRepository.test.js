@@ -125,9 +125,9 @@ test('website settings merge partial updates over the stored section', async () 
     assert.equal(defaults.website.seo.title, 'Maria Clara Clothing — Premium Philippine Streetwear');
     assert.deepEqual(defaults.website.hero, {
       eyebrow: '',
-      title: 'Premium',
-      highlight: 'Cotton',
-      subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Pay cash when it arrives — free shipping when you grab two.',
+      title: 'Maria Clara',
+      highlight: 'Clothing',
+      subtitle: 'Oversized and crop-box tees in 240 GSM premium cotton. Cash on delivery nationwide, with free shipping when you grab two.',
       primaryButtonText: 'Shop new arrivals',
       primaryButtonLink: '#new-arrivals',
       secondaryButtonText: 'Freedom of Mind',
