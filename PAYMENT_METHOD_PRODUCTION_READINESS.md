@@ -17,8 +17,8 @@ controlled PayMongo test order `MCC-1783869820871-9B2B` passed on July 12, 2026:
 - No related production API errors were found.
 
 Do not treat the successful test payment as approval to accept real money. The
-live-account, refund, cancellation, settlement, and monitoring steps below must
-be completed first.
+live-account, refund, settlement, and monitoring steps below must be completed
+first.
 
 ## Current Implementation
 
@@ -192,7 +192,7 @@ Verify all of the following:
 Do not test every live channel at once. Start with one channel, verify the whole
 flow, then test each additional enabled channel separately.
 
-## Launch Blockers
+## Remaining Launch Blocker
 
 ### Refund workflow
 
@@ -218,22 +218,26 @@ by payment channel.
 Official reference:
 [PayMongo refund documentation](https://developers.paymongo.com/v1/docs/refunding-transactions)
 
-### Cancellation and Pancake stock restoration
+## Verified Cancellation and Pancake Sync
 
-Admin cancellation restores local website stock, but the cancellation path must
-be explicitly verified to enqueue and complete the matching Pancake inventory
-update. Before launch, run this controlled test:
+Commit `6c63cba` was deployed and verified in production test mode on July 13,
+2026 using order `MCC-1783869820871-9B2B`:
 
-1. Record website and Pancake stock.
-2. Place a one-unit test order.
-3. Confirm both systems decrease by one.
-4. Cancel the order in Maria Clara Admin.
-5. Confirm local stock increases exactly once.
-6. Confirm Pancake stock increases exactly once.
-7. Confirm the cancelled order cannot be reopened.
+- Admin cancellation changed the linked Pancake order to official status `6`
+  (`canceled`).
+- Pancake stored `cod=0` and `transfer_money=729` for the paid PayMongo order.
+- Payment status remained paid locally; cancellation did not pretend to refund
+  the payment.
+- The restored website and Pancake stock both settled at 4.
+- The inventory outbox synchronized on its first attempt without an error.
+- The outbound cancellation event succeeded and remained idempotently linked to
+  the existing Pancake order.
+- Pancake inbound polling retained the local cancelled state.
 
-If Pancake does not receive the restored quantity automatically, add a Pancake
-inventory outbox entry to the admin cancellation transaction before launch.
+A one-time idempotent backfill also corrected all existing linked paid PayMongo
+test orders to use zero COD and their exact prepaid amounts.
+
+## Remaining Operational Improvements
 
 ### Payment failure and abandoned checkout visibility
 
@@ -258,23 +262,21 @@ Implement these in priority order:
    funds cannot be settled.
 2. **P0: Live webhook and low-value live acceptance test.** Do this before
    enabling PayMongo for all customers.
-3. **P0: Cancellation-to-Pancake restock guarantee.** Add and test the inventory
-   outbox enqueue operation if it is missing.
-4. **P0: Written manual refund procedure.** Staff must understand that order
+3. **P0: Written manual refund procedure.** Staff must understand that order
    cancellation and payment refund are separate actions.
-5. **P1: PayMongo refund integration.** Add verified refund webhooks and an admin
+4. **P1: PayMongo refund integration.** Add verified refund webhooks and an admin
    refund action with confirmation and audit logs.
-6. **P1: Payment operations dashboard.** Show pending age, webhook result, last
+5. **P1: Payment operations dashboard.** Show pending age, webhook result, last
    reconciliation, reservation state, and safe error code without exposing keys.
-7. **P1: Automated alerts.** Notify the support email when paid webhook handling,
+6. **P1: Automated alerts.** Notify the support email when paid webhook handling,
    pending reconciliation, or reservation release repeatedly fails.
-8. **P1: Server-side Meta Conversions API.** Browser Pixel is installed, but the
+7. **P1: Server-side Meta Conversions API.** Browser Pixel is installed, but the
    server-side Meta Purchase outbox is inactive unless a Conversions API token is
    configured. Enable it for more reliable Purchase reporting and browser/server
    event deduplication.
-9. **P2: Finance reconciliation export.** Produce a daily CSV comparing website
+8. **P2: Finance reconciliation export.** Produce a daily CSV comparing website
    orders, PayMongo payments/refunds, Pancake orders, fees, and payouts.
-10. **P2: Additional payment-channel acceptance tests.** Test card 3DS, GCash,
+9. **P2: Additional payment-channel acceptance tests.** Test card 3DS, GCash,
     Maya, and QRPh on mobile and desktop as each becomes available.
 
 ## Daily Operations Checklist
