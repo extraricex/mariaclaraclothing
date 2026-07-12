@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createCheckoutQuote, createQuoteBackedOrder, fetchProducts } from '../lib/api.js';
+import { createCheckoutQuote, createPayMongoCheckout, createQuoteBackedOrder, fetchProducts } from '../lib/api.js';
 import { customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { addToCart, cartQuantity, clearCart, clearCheckoutIdempotencyKey, getCartSessionId, getCheckoutIdempotencyKey, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
@@ -81,6 +81,7 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState('cash_on_delivery');
   const [missingFields, setMissingFields] = useState({});
   const [suggestedProducts, setSuggestedProducts] = useState([]);
+  const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
   const placingOrderRef = useRef(false);
   const checkoutFieldRefs = {
     fullName: useRef(null),
@@ -93,6 +94,9 @@ export default function Checkout() {
 
   useEffect(() => {
     loadProvinces().then(setProvinces);
+    fetch('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.json()).then((body) => setSocialProviders(body.providers || { google: false, facebook: false }))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -412,12 +416,10 @@ export default function Checkout() {
 
     try {
       const idempotencyKey = getCheckoutIdempotencyKey(latestQuote.id);
-      const result = await createQuoteBackedOrder(
-        payload,
-        latestQuote.id,
-        idempotencyKey
-      );
-      trackFacebookPurchase(result, result.items, result.trackingEventId);
+      const result = paymentMethod === 'paymongo'
+        ? await createPayMongoCheckout(payload, latestQuote.id, idempotencyKey)
+        : await createQuoteBackedOrder(payload, latestQuote.id, idempotencyKey);
+      if (paymentMethod !== 'paymongo') trackFacebookPurchase(result, result.items, result.trackingEventId);
       if (loggedIn && saveAddress) {
         customerJson('/api/customer/me', {
           method: 'PUT',
@@ -434,6 +436,11 @@ export default function Checkout() {
         orderNumber: result.orderNumber,
         confirmationToken: result.confirmationToken
       }));
+      if (paymentMethod === 'paymongo') {
+        placingOrderRef.current = true;
+        window.location.assign(result.checkoutUrl);
+        return;
+      }
       placingOrderRef.current = true;
       clearCheckoutIdempotencyKey();
       clearCart();
@@ -457,13 +464,13 @@ export default function Checkout() {
 
       <div className="mx-auto grid max-w-6xl gap-8 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
         <form className="customer-card rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-6" onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate>
-          <p className="eyebrow">Checkout · Cash on Delivery</p>
+          <p className="eyebrow">Secure checkout</p>
           <h1 className="display mt-2 text-2xl leading-tight sm:text-4xl">{step === 'review' ? 'Review and place order' : 'Where do we send it?'}</h1>
           {!loggedIn && (
-            <p className="mt-3 text-sm text-ink-soft">
-              <Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to
-              prefill your saved address — or continue as guest below.
-            </p>
+            <div className="mt-4 border-b border-line pb-5"><p className="text-sm text-ink-soft"><Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to prefill your saved address, or continue as guest.</p><div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {socialProviders.google ? <a className="btn-ghost text-center" href="/api/customer/oauth/google/start?returnTo=%2Fcheckout">Continue with Google</a> : <button type="button" className="btn-ghost" disabled>Continue with Google</button>}
+              {socialProviders.facebook ? <a className="btn-ghost text-center" href="/api/customer/oauth/facebook/start?returnTo=%2Fcheckout">Continue with Facebook</a> : <button type="button" className="btn-ghost" disabled>Continue with Facebook</button>}
+            </div></div>
           )}
 
           <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
@@ -571,13 +578,13 @@ export default function Checkout() {
             {pending
               ? (step === 'review' ? 'Placing order...' : 'Preparing review...')
               : step === 'review'
-                ? (paymentMethod === 'cash_on_delivery' ? 'Place COD order' : 'Place order')
+                ? (paymentMethod === 'cash_on_delivery' ? 'Place Order' : 'Continue to Payment')
                 : 'Continue to review'}
           </button>
           <p className="mt-3 text-xs text-clay">
             {paymentMethod === 'cash_on_delivery'
               ? 'No advance payment is needed. Pay cash to the rider when your order arrives.'
-              : 'Review the payment instructions carefully before placing your order.'}
+              : 'Pay securely using GCash, Maya, card, QRPh, or online banking through PayMongo.'}
           </p>
         </form>
 

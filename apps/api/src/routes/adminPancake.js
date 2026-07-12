@@ -6,6 +6,8 @@ const catalogRepositoryDefault = require('../integrations/pancake/pancakeCatalog
 const catalogServiceDefault = require('../integrations/pancake/pancakeCatalogService');
 const inventoryRepositoryDefault = require('../integrations/pancake/pancakeInventoryRepository');
 const inventoryServiceDefault = require('../integrations/pancake/pancakeInventoryService');
+const inventoryOutboxRepositoryDefault = require('../integrations/pancake/pancakeInventoryOutboxRepository');
+const inventoryOutboxServiceDefault = require('../integrations/pancake/pancakeInventoryOutboxService');
 const orderExportRepositoryDefault = require('../integrations/pancake/pancakeOrderExportRepository');
 const orderExportServiceDefault = require('../integrations/pancake/pancakeOrderExportService');
 const orderSyncRepositoryDefault = require('../integrations/pancake/pancakeOrderSyncRepository');
@@ -25,6 +27,8 @@ function createAdminPancakeRouter(dependencies = {}) {
   const catalogService = dependencies.catalogService || catalogServiceDefault;
   const inventoryRepository = dependencies.inventoryRepository || inventoryRepositoryDefault;
   const inventoryService = dependencies.inventoryService || dependencies.catalogService || inventoryServiceDefault;
+  const inventoryOutboxRepository = dependencies.inventoryOutboxRepository || inventoryOutboxRepositoryDefault;
+  const inventoryOutboxService = dependencies.inventoryOutboxService || inventoryOutboxServiceDefault;
   const orderRepository = dependencies.orderRepository || orderExportRepositoryDefault;
   const orderService = dependencies.orderService || orderExportServiceDefault;
   const orderSyncRepository = dependencies.orderSyncRepository || orderSyncRepositoryDefault;
@@ -73,6 +77,21 @@ function createAdminPancakeRouter(dependencies = {}) {
     try {
       const inventory = await inventoryService.runInventoryReconciliation({ config, client, repository: inventoryRepository });
       return res.status(inventory.status === 'concurrent' ? 409 : 200).json({ inventory });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/inventory/sync-dashboard', async (req, res, next) => {
+    try {
+      return res.json({ inventorySync: await inventoryOutboxRepository.listInventorySyncDashboard({ limit: req.query.limit }) });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/inventory/process-outbox', async (_req, res, next) => {
+    try {
+      const inventorySync = await inventoryOutboxService.processInventorySyncJobs({
+        config, client, repository: inventoryOutboxRepository, productSyncRepository
+      });
+      return res.json({ inventorySync });
     } catch (error) { return next(error); }
   });
 

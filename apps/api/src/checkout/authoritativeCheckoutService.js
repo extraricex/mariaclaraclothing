@@ -54,10 +54,16 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
     cartSnapshot: snapshot.items,
     checkoutChannel: 'storefront_checkout',
     paymentMethod: String(input.paymentMethod || 'cash_on_delivery'),
+    paymentProvider: input.paymentMethod === 'paymongo' ? 'paymongo' : '',
     channel: 'Online Store',
-    status: 'confirmed',
+    status: input.paymentMethod === 'paymongo' ? 'pending_payment' : 'confirmed',
     fulfillmentStatus: 'unfulfilled',
-    paymentStatus: input.paymentMethod === 'cash_on_delivery' ? 'cod_pending' : 'payment_pending',
+    paymentStatus: input.paymentMethod === 'cash_on_delivery' ? 'cod_pending' : 'pending_payment',
+    paymentExpiresAt: input.paymentExpiresAt || null,
+    inventoryReservationStatus: input.paymentMethod === 'paymongo' ? 'reserved' : 'committed',
+    paymentMetadata: input.paymentMethod === 'paymongo'
+      ? { metaRequestContext: input.requestContext || {} }
+      : {},
     codConfirmationStatus: 'pending',
     deliveryStatus: 'pending',
     deliveryMethod: 'Standard shipping',
@@ -165,9 +171,12 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     await deps.deductStock(stockItems, { client });
     await deps.saveOrder(order, { client });
     await deps.appendMovements(movements, { client });
+    if (deps.enqueueInventorySync) {
+      await deps.enqueueInventorySync([...new Set(stockItems.map((item) => item.slug))], 'website_order', { client });
+    }
     await deps.convertCart(request.cartSessionId, orderNumber, { client });
     if (manualDiscountCode(order)) await deps.claimPromo(order.discountCode, { client });
-    await deps.insertMeta(client, order, input.requestContext || {});
+    if (order.paymentMethod !== 'paymongo') await deps.insertMeta(client, order, input.requestContext || {});
     if (deps.enqueueOrderExport) await deps.enqueueOrderExport(order, { client });
     await deps.consumeQuote(client, quote.id, orderNumber);
     const response = checkoutResponse(order);

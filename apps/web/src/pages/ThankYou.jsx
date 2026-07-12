@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { fetchOrderConfirmation } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
+import { clearCart, clearCheckoutIdempotencyKey, resetCartSessionId } from '../lib/cart.js';
+import { trackFacebookPurchase } from '../lib/metaPixel.js';
 
 function storedConfirmation() {
   try {
@@ -20,12 +22,27 @@ export default function ThankYou() {
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
 
   useEffect(() => {
+    let timer;
+    let stopped = false;
     if (orderNumber && confirmation?.orderNumber === orderNumber && confirmation.confirmationToken) {
-      fetchOrderConfirmation(orderNumber, confirmation.confirmationToken)
-        .then((body) => setOrder(body.order))
-        .catch(() => {});
+      const refresh = () => fetchOrderConfirmation(orderNumber, confirmation.confirmationToken)
+        .then((body) => {
+          if (stopped) return;
+          setOrder(body.order);
+          if (body.order.paymentMethod === 'paymongo' && body.order.paymentStatus === 'pending_payment') {
+            timer = setTimeout(refresh, 2500);
+          }
+        }).catch(() => {});
+      refresh();
     }
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [orderNumber, confirmation]);
+
+  useEffect(() => {
+    if (order?.paymentMethod !== 'paymongo' || order.paymentStatus !== 'paid') return;
+    trackFacebookPurchase({ ...order, trackingEventId: `purchase:${order.orderNumber}` }, order.items || [], `purchase:${order.orderNumber}`);
+    clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
+  }, [order]);
 
   useEffect(() => {
     loadStorefrontSettings().then(setSettings);
@@ -52,7 +69,9 @@ export default function ThankYou() {
       <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-ink-soft">
         {summary.paymentMethod === 'cash_on_delivery'
           ? 'Thank you for your order! Your order is now complete and will be prepared for packing and shipping.'
-          : 'Thank you for your order! Payment instructions are shown below.'}
+          : summary.paymentStatus === 'paid'
+            ? 'Thank you for your payment! Your order is now confirmed and will be prepared for packing and shipping.'
+            : 'Your order is waiting for payment confirmation. Please complete your payment to confirm your order.'}
       </p>
 
       <dl className="mx-auto mt-10 max-w-md space-y-3 border border-line bg-white p-6 text-left text-sm">
@@ -64,6 +83,7 @@ export default function ThankYou() {
           <div className="flex justify-between gap-6"><dt className="text-clay">Deliver to</dt><dd className="min-w-0 break-words text-right">{summary.addressLine}</dd></div>
         )}
         <div className="flex justify-between gap-6"><dt className="text-clay">Payment</dt><dd>{summary.paymentMethodLabel}</dd></div>
+        <div className="flex justify-between gap-6"><dt className="text-clay">Payment status</dt><dd className="capitalize">{String(summary.paymentStatus || '').replaceAll('_', ' ')}</dd></div>
         {summary.subtotalCents !== undefined && (
           <div className="flex justify-between gap-6"><dt className="text-clay">Subtotal</dt><dd>{formatMoney(summary.subtotalCents)}</dd></div>
         )}
@@ -77,7 +97,7 @@ export default function ThankYou() {
           <div className="flex justify-between gap-6"><dt className="text-clay">Shipping</dt><dd>{summary.shippingFeeCents ? formatMoney(summary.shippingFeeCents) : 'Free'}</dd></div>
         )}
         {summary.totalCents !== undefined && (
-          <div className="flex justify-between gap-6 border-t border-line pt-3 text-base font-semibold"><dt>Total due</dt><dd>{formatMoney(summary.totalCents)}</dd></div>
+          <div className="flex justify-between gap-6 border-t border-line pt-3 text-base font-semibold"><dt>{summary.paymentStatus === 'paid' ? 'Total paid' : 'Total due'}</dt><dd>{formatMoney(summary.totalCents)}</dd></div>
         )}
       </dl>
 

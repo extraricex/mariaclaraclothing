@@ -52,6 +52,7 @@ function buildSnapshot({ runId, readiness, variations, startedAt, finishedAt }) 
   const updates = [];
   const conflicts = [];
   let unchangedCount = 0;
+  let protectedCount = 0;
 
   for (const mapping of readiness.mappings || []) {
     const remote = byVariationId.get(String(mapping.pancakeVariationId || ''));
@@ -68,7 +69,8 @@ function buildSnapshot({ runId, readiness, variations, startedAt, finishedAt }) 
     }
     const previousQuantity = Number(mapping.stockQuantity || 0);
     const quantityChange = evidence.quantity - previousQuantity;
-    if (quantityChange === 0) unchangedCount += 1;
+    if (mapping.outboundPending) protectedCount += 1;
+    else if (quantityChange === 0) unchangedCount += 1;
     updates.push({
       localVariantId: mapping.localVariantId,
       productSlug: mapping.productSlug,
@@ -76,13 +78,15 @@ function buildSnapshot({ runId, readiness, variations, startedAt, finishedAt }) 
       sku: mapping.sku,
       size: mapping.size,
       pancakeVariationId: mapping.pancakeVariationId,
+      pancakeProductId: mapping.pancakeProductId || '',
       previousQuantity,
       nextQuantity: evidence.quantity,
-      quantityChange
+      quantityChange,
+      protectedByOutbound: Boolean(mapping.outboundPending)
     });
   }
 
-  const changed = updates.filter((item) => item.quantityChange !== 0);
+  const changed = updates.filter((item) => !item.protectedByOutbound && item.quantityChange !== 0);
   return {
     runId,
     shopId: readiness.shopId,
@@ -94,7 +98,8 @@ function buildSnapshot({ runId, readiness, variations, startedAt, finishedAt }) 
       checkedCount: (readiness.mappings || []).length,
       updatedCount: changed.length,
       unchangedCount,
-      skippedCount: conflicts.length,
+      skippedCount: conflicts.length + protectedCount,
+      ...(protectedCount ? { protectedCount } : {}),
       conflictCount: conflicts.length
     },
     startedAt,

@@ -89,3 +89,22 @@ test('server leaves Pancake auto sync worker stopped when unsafe or incomplete',
   assert.equal(runtime.pancakeWorker, null);
   await runtime.shutdown();
 });
+
+test('server starts and stops the PayMongo reservation worker only when configured', async () => {
+  const calls = [];
+  const paymentWorker = { start: () => calls.push('payment.start'), stop: () => calls.push('payment.stop') };
+  const runtime = startServer({
+    app: { listen: () => ({ close: (callback) => { calls.push('server.close'); callback(); } }) },
+    config: {
+      port: 3000, meta: { enabled: false }, notifications: { enabled: false },
+      pancake: { mode: 'disabled', apiKeyConfigured: false, autoSyncEnabled: false },
+      paymongo: { configured: true }
+    },
+    createPaymentWorker: () => paymentWorker,
+    closeDatabase: async () => calls.push('db.close'), registerSignals: false, logger: { log() {} }
+  });
+  assert.equal(runtime.paymentWorker, paymentWorker);
+  assert.deepEqual(calls, ['payment.start']);
+  await runtime.shutdown();
+  assert.deepEqual(calls, ['payment.start', 'payment.stop', 'server.close', 'db.close']);
+});

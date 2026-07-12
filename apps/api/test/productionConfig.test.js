@@ -71,6 +71,40 @@ test('OAuth configuration requires clean HTTPS production URLs and complete cred
   assert.equal(env.oauth.facebook.configured, false);
 });
 
+test('PayMongo requires server-side keys and same-origin HTTPS return URLs when enabled', () => {
+  assert.throws(() => config.buildEnv({ ...SAFE_PRODUCTION, PAYMONGO_ENABLED: 'true' }), /PAYMONGO_SECRET_KEY and PAYMONGO_WEBHOOK_SECRET/);
+  const enabled = config.buildEnv({
+    ...SAFE_PRODUCTION,
+    PAYMONGO_ENABLED: 'true',
+    PAYMONGO_PUBLIC_KEY: 'pk_test_public',
+    PAYMONGO_SECRET_KEY: 'sk_test_secret',
+    PAYMONGO_WEBHOOK_SECRET: 'whsk_test_secret',
+    PAYMONGO_SUCCESS_URL: 'https://mariaclaraclothing.com/thank-you',
+    PAYMONGO_CANCEL_URL: 'https://mariaclaraclothing.com/checkout'
+  });
+  assert.equal(enabled.paymongo.configured, true);
+  assert.equal(enabled.paymongo.livemode, false);
+  assert.throws(() => config.buildEnv({
+    ...SAFE_PRODUCTION,
+    PAYMONGO_ENABLED: 'true',
+    PAYMONGO_SECRET_KEY: 'sk_test_secret',
+    PAYMONGO_WEBHOOK_SECRET: 'whsk_test_secret',
+    PAYMONGO_SUCCESS_URL: 'https://attacker.example/thank-you'
+  }), /must use FRONTEND_URL origin/);
+});
+
+test('Pancake sync aliases enable automatic three-minute reconciliation', () => {
+  const built = config.buildEnv({
+    ...SAFE_PRODUCTION,
+    PANCAKE_MODE: 'shadow',
+    PANCAKE_API_KEY: 'pancake-key',
+    PANCAKE_SYNC_ENABLED: 'true',
+    PANCAKE_SYNC_INTERVAL_MINUTES: '3'
+  });
+  assert.equal(built.pancake.autoSyncEnabled, true);
+  assert.equal(built.pancake.autoSyncIntervalMs, 180000);
+});
+
 test('production configuration rejects JSON persistence overrides', () => {
   for (const name of [
     'ORDERS_DATA_FILE',

@@ -38,10 +38,13 @@ async function loadInventoryReadiness(config = {}) {
       v.sku,
       v.size,
       v.stock_quantity,
-      m.pancake_variation_id
+      m.pancake_product_id,
+      m.pancake_variation_id,
+      (o.status IN ('pending','processing','failed')) AS outbound_pending
     FROM pancake_variant_mappings m
     JOIN product_variants v ON v.id=m.local_variant_id
     JOIN products p ON p.slug=v.product_slug
+    LEFT JOIN pancake_inventory_outbox o ON o.product_slug=v.product_slug
     WHERE m.status='verified' AND p.status NOT IN ('draft','archived')
     ORDER BY m.local_variant_id`
   );
@@ -63,7 +66,9 @@ async function loadInventoryReadiness(config = {}) {
       sku: row.sku,
       size: row.size,
       stockQuantity: Number(row.stock_quantity || 0),
-      pancakeVariationId: row.pancake_variation_id
+      pancakeProductId: row.pancake_product_id || '',
+      pancakeVariationId: row.pancake_variation_id,
+      outboundPending: row.outbound_pending === true
     }))
   };
 }
@@ -77,11 +82,13 @@ async function completeInventoryReconciliation(snapshot) {
 
   await transaction(async (client) => {
     for (const item of snapshot.updates) {
-      await client.query(
-        'UPDATE product_variants SET stock_quantity=$1 WHERE id=$2',
-        [item.nextQuantity, item.localVariantId]
-      );
-      if (item.quantityChange !== 0) {
+      if (!item.protectedByOutbound) {
+        await client.query(
+          'UPDATE product_variants SET stock_quantity=$1 WHERE id=$2',
+          [item.nextQuantity, item.localVariantId]
+        );
+      }
+      if (!item.protectedByOutbound && item.quantityChange !== 0) {
         await client.query(
           `INSERT INTO inventory_movements (
             id, order_number, source, reason, product_slug, product_name, sku,
@@ -96,6 +103,31 @@ async function completeInventoryReconciliation(snapshot) {
             item.quantityChange,
             snapshot.finishedAt
           ]
+        );
+      }
+      await client.query(
+        `INSERT INTO pancake_inventory_state (
+           local_variant_id,product_slug,sku,pancake_product_id,pancake_variation_id,
+           website_quantity,pancake_quantity,status,last_source,last_synced_at,updated_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pancake',$9,$9)
+         ON CONFLICT (local_variant_id) DO UPDATE SET
+           product_slug=EXCLUDED.product_slug,sku=EXCLUDED.sku,pancake_product_id=EXCLUDED.pancake_product_id,
+           pancake_variation_id=EXCLUDED.pancake_variation_id,website_quantity=EXCLUDED.website_quantity,
+           pancake_quantity=EXCLUDED.pancake_quantity,status=EXCLUDED.status,last_source=EXCLUDED.last_source,
+           last_synced_at=EXCLUDED.last_synced_at,updated_at=EXCLUDED.updated_at`,
+        [item.localVariantId,item.productSlug,item.sku,item.pancakeProductId || '',item.pancakeVariationId,
+          item.protectedByOutbound ? item.previousQuantity : item.nextQuantity,item.nextQuantity,
+          item.protectedByOutbound ? 'pending' : 'matched',snapshot.finishedAt]
+      );
+      if (item.protectedByOutbound || item.quantityChange !== 0) {
+        await client.query(
+          `INSERT INTO pancake_inventory_sync_logs (
+             id,product_slug,sku,direction,source,status,website_quantity,pancake_quantity,message,metadata,created_at
+           ) VALUES ($1,$2,$3,'inbound','pancake',$4,$5,$6,$7,$8::jsonb,$9)`,
+          [crypto.randomUUID(),item.productSlug,item.sku,item.protectedByOutbound ? 'skipped_newer_outbound' : 'updated',
+            item.previousQuantity,item.nextQuantity,item.protectedByOutbound
+              ? 'Skipped Pancake stock because a newer Admin or website update is pending.'
+              : 'Pancake stock reconciled to website inventory.',JSON.stringify({ pancakeVariationId: item.pancakeVariationId }),snapshot.finishedAt]
         );
       }
     }

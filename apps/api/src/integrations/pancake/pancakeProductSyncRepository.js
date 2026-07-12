@@ -25,23 +25,37 @@ function fromRows(productSlug, rows, sync) {
     stockQuantity: Number(row.stock_quantity || 0),
     pancakeProductId: row.pancake_product_id || '',
     pancakeVariantId: row.pancake_variation_id || '',
-    status: row.mapping_status || 'missing'
+    status: row.mapping_status || 'missing',
+    pancakeStockQuantity: row.pancake_quantity === null || row.pancake_quantity === undefined ? null : Number(row.pancake_quantity),
+    inventorySyncStatus: row.inventory_sync_status || '',
+    inventorySource: row.inventory_last_source || '',
+    inventoryLastSyncedAt: row.inventory_last_synced_at || ''
   }));
   const verified = mappings.filter((mapping) => mapping.status === 'verified' && mapping.pancakeProductId && mapping.pancakeVariantId);
   const productIds = [...new Set(verified.map((mapping) => mapping.pancakeProductId))];
   const mappingComplete = mappings.length > 0 && verified.length === mappings.length && productIds.length === 1;
   const summary = sync?.summary && typeof sync.summary === 'object' ? sync.summary : {};
+  const outboxStatus = rows[0]?.outbox_status || '';
+  const inventoryMismatch = mappings.some((mapping) => mapping.pancakeStockQuantity !== null && mapping.pancakeStockQuantity !== mapping.stockQuantity);
   return {
     productSlug,
-    status: sync?.status || (mappingComplete ? 'never_synced' : 'missing_mapping'),
+    status: !mappingComplete ? 'missing_mapping'
+      : ['pending', 'processing'].includes(outboxStatus) ? 'pending_sync'
+        : outboxStatus === 'failed' ? 'failed'
+          : sync?.status || (mappingComplete ? 'never_synced' : 'missing_mapping'),
     pancakeProductId: sync?.pancake_product_id || (productIds.length === 1 ? productIds[0] : ''),
     mappedVariantCount: verified.length,
     totalVariantCount: mappings.length,
     variantMappings: mappings,
     lastAttemptAt: sync?.last_attempt_at || '',
-    lastSyncedAt: sync?.last_synced_at || '',
-    lastErrorCode: sync?.safe_error_code || '',
-    stockMismatch: summary.stockMismatch === undefined ? null : Boolean(summary.stockMismatch)
+    lastSyncedAt: rows[0]?.outbox_last_synced_at || sync?.last_synced_at || '',
+    lastErrorCode: rows[0]?.outbox_error_code || sync?.safe_error_code || '',
+    stockMismatch: ['pending', 'processing', 'failed'].includes(outboxStatus) || inventoryMismatch
+      ? true
+      : summary.stockMismatch === undefined ? null : Boolean(summary.stockMismatch),
+    inventorySource: rows[0]?.outbox_source || mappings.find((mapping) => mapping.inventorySource)?.inventorySource || '',
+    retryAttemptCount: Number(rows[0]?.outbox_attempt_count || 0),
+    nextRetryAt: rows[0]?.outbox_next_attempt_at || ''
   };
 }
 
@@ -53,10 +67,17 @@ async function listProductSyncStatuses(productSlugs = []) {
   }
   const mappings = await query(
     `SELECT p.slug AS product_slug,v.id AS local_variant_id,v.sku,v.size,v.stock_quantity,
-            m.pancake_product_id,m.pancake_variation_id,m.status AS mapping_status
+            m.pancake_product_id,m.pancake_variation_id,m.status AS mapping_status,
+            s.pancake_quantity,s.status AS inventory_sync_status,s.last_source AS inventory_last_source,
+            s.last_synced_at AS inventory_last_synced_at,
+            o.status AS outbox_status,o.source AS outbox_source,o.attempt_count AS outbox_attempt_count,
+            o.next_attempt_at AS outbox_next_attempt_at,o.last_synced_at AS outbox_last_synced_at,
+            o.last_error_code AS outbox_error_code
        FROM products p
        JOIN product_variants v ON v.product_slug=p.slug
        LEFT JOIN pancake_variant_mappings m ON m.local_variant_id=v.id
+       LEFT JOIN pancake_inventory_state s ON s.local_variant_id=v.id
+       LEFT JOIN pancake_inventory_outbox o ON o.product_slug=p.slug
       WHERE p.slug=ANY($1::text[])
       ORDER BY p.slug,v.id`,
     [slugs]

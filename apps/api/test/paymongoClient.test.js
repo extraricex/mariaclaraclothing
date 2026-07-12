@@ -1,0 +1,30 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { createPayMongoClient } = require('../src/payments/paymongoClient');
+
+test('PayMongo client creates an official V2 hosted checkout with server-side Basic auth', async () => {
+  let request;
+  const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_test_secret', timeoutMs: 1000 }, async (url, options) => {
+    request = { url, options };
+    return { ok: true, json: async () => ({ data: { id: 'cs_test_1', attributes: { checkout_url: 'https://checkout.paymongo.com/cs_test_1' } } }) };
+  });
+  const payload = { data: { attributes: { line_items: [] } } };
+  const result = await client.createCheckoutSession(payload);
+  assert.equal(request.url, 'https://api.paymongo.com/v2/checkout_sessions');
+  assert.equal(request.options.method, 'POST');
+  assert.equal(request.options.headers.Authorization, `Basic ${Buffer.from('sk_test_secret:').toString('base64')}`);
+  assert.deepEqual(JSON.parse(request.options.body), payload);
+  assert.equal(result.checkoutUrl, 'https://checkout.paymongo.com/cs_test_1');
+});
+
+test('PayMongo client never exposes provider response bodies in errors', async () => {
+  const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'bad', timeoutMs: 1000 }, async () => ({
+    ok: false, status: 401, json: async () => ({ secret_provider_detail: 'must not leak' })
+  }));
+  await assert.rejects(client.createCheckoutSession({}), (error) => {
+    assert.equal(error.code, 'paymongo_auth_failed');
+    assert.equal(error.message.includes('must not leak'), false);
+    return true;
+  });
+});

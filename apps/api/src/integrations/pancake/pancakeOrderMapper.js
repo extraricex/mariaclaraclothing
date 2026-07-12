@@ -267,6 +267,9 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
     };
   }
   if (fields.has('notes')) payload.note_print = String(order.notes || '').trim();
+  if (fields.has('paymentStatus')) {
+    payload.note_print = [String(order.notes || '').trim(), `payment_method=${order.paymentMethod || 'cash_on_delivery'}`, `payment_status=${order.paymentStatus || 'pending'}`].filter(Boolean).join('\n');
+  }
   return payload;
 }
 

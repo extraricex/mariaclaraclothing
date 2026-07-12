@@ -11,6 +11,7 @@ const { storeSettingsRouter } = require('./routes/storeSettings');
 const { checkoutRouter } = require('./routes/checkout');
 const { issueReportsRouter } = require('./routes/issueReports');
 const { pancakeWebhookRouter } = require('./routes/pancakeWebhook');
+const { paymongoRouter } = require('./routes/paymongo');
 const { methodOnly, postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
@@ -127,7 +128,12 @@ function createApp() {
     }
   }
 
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({
+    limit: '1mb',
+    verify: (req, _res, buffer) => {
+      if (req.originalUrl?.startsWith('/api/payments/paymongo/webhook')) req.rawBody = Buffer.from(buffer);
+    }
+  }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   app.get('/collections/all', (_req, res) => {
@@ -140,6 +146,7 @@ function createApp() {
 
   app.use('/api/admin/login', loginRateLimit);
   app.use('/api/orders', checkoutRateLimit);
+  app.use('/api/payments/paymongo/create-checkout-session', checkoutRateLimit);
   app.use('/api/orders', orderLookupRateLimit);
   app.use('/api/checkout/quotes', quoteRateLimit);
   app.use('/api/cart-sessions', cartRateLimit);
@@ -162,6 +169,7 @@ function createApp() {
   app.use('/api/customer', customerRouter);
   app.use('/api/storefront-settings', storeSettingsRouter);
   app.use('/api/integrations/pancake/webhook', pancakeWebhookRouter);
+  app.use('/api/payments/paymongo', paymongoRouter);
   app.use('/api/admin', adminRouter);
 
   app.use(errorHandler);

@@ -190,7 +190,7 @@ export default function Products() {
   function syncLabel(sync) {
     const labels = {
       syncing: 'Syncing...', synced: 'Synced', failed: 'Sync failed',
-      missing_mapping: 'Missing mapping', blocked: 'Blocked', never_synced: 'Not synced'
+      pending_sync: 'Pending sync', missing_mapping: 'Missing mapping', blocked: 'Blocked', never_synced: 'Not synced'
     };
     return labels[sync?.status] || 'Checking mapping';
   }
@@ -356,6 +356,7 @@ export default function Products() {
                     {sync?.pancakeProductId && <span className="mt-1 block max-w-44 truncate text-clay" title={sync.pancakeProductId}>Product ID: {sync.pancakeProductId}</span>}
                     {Number.isInteger(sync?.mappedVariantCount) && <span className="block text-clay">Variants: {sync.mappedVariantCount}/{sync.totalVariantCount} mapped</span>}
                     {sync?.lastSyncedAt && <time className="block text-clay" dateTime={sync.lastSyncedAt}>Last sync: {new Date(sync.lastSyncedAt).toLocaleString()}</time>}
+                    {sync?.nextRetryAt && <time className="block text-clay" dateTime={sync.nextRetryAt}>Retry: {new Date(sync.nextRetryAt).toLocaleString()}</time>}
                     {sync?.stockMismatch === true && <span className="mt-1 block font-semibold text-amber-300">Stock mismatch warning</span>}
                     {sync?.lastErrorCode && <span className="block text-red-300">{sync.lastErrorCode.replaceAll('_', ' ')}</span>}
                     <button type="button" className="btn-ghost mt-2 !px-3 !py-1.5 text-[10px]" disabled={busy || sync?.status === 'missing_mapping'} onClick={() => syncProduct(product.slug)}>

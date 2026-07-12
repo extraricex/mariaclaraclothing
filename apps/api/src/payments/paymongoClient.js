@@ -1,0 +1,58 @@
+class PayMongoApiError extends Error {
+  constructor(code, { status = 0, retryable = false } = {}) {
+    super({
+      paymongo_auth_failed: 'PayMongo authentication failed.',
+      paymongo_rejected: 'PayMongo rejected the checkout request.',
+      paymongo_timeout: 'PayMongo request timed out.',
+      paymongo_network_error: 'PayMongo could not be reached.',
+      paymongo_invalid_response: 'PayMongo returned an invalid response.'
+    }[code] || 'PayMongo request failed.');
+    this.name = 'PayMongoApiError';
+    this.code = code;
+    this.status = status;
+    this.retryable = retryable;
+  }
+}
+
+function createPayMongoClient(config, fetchImpl = fetch) {
+  async function request(pathname, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.timeoutMs || 20_000);
+    let response;
+    try {
+      response = await fetchImpl(`${config.apiBaseUrl}${pathname}`, {
+        method: options.method || 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Basic ${Buffer.from(`${config.secretKey}:`).toString('base64')}`,
+          ...(options.body ? { 'Content-Type': 'application/json' } : {})
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new PayMongoApiError('paymongo_timeout', { retryable: true });
+      throw new PayMongoApiError('paymongo_network_error', { retryable: true });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!response.ok) {
+      if ([401, 403].includes(response.status)) throw new PayMongoApiError('paymongo_auth_failed', { status: response.status });
+      throw new PayMongoApiError('paymongo_rejected', { status: response.status, retryable: response.status === 429 || response.status >= 500 });
+    }
+    const body = await response.json().catch(() => null);
+    if (!body?.data?.id || !body.data?.attributes) throw new PayMongoApiError('paymongo_invalid_response');
+    return body.data;
+  }
+
+  async function createCheckoutSession(payload) {
+    const data = await request('/v2/checkout_sessions', { method: 'POST', body: payload });
+    const checkoutUrl = String(data.attributes.checkout_url || '');
+    if (!checkoutUrl.startsWith('https://')) throw new PayMongoApiError('paymongo_invalid_response');
+    return { id: String(data.id), checkoutUrl, attributes: data.attributes };
+  }
+
+  return { createCheckoutSession };
+}
+
+module.exports = { PayMongoApiError, createPayMongoClient };

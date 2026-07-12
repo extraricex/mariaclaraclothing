@@ -43,6 +43,7 @@ export default function PancakePos() {
   const [pancake, setPancake] = useState(null);
   const [catalog, setCatalog] = useState(null);
   const [inventory, setInventory] = useState(null);
+  const [inventorySync, setInventorySync] = useState({ variants: [], jobs: [], logs: [] });
   const [orderExports, setOrderExports] = useState(null);
   const [references, setReferences] = useState({ shops: [], warehouses: [], orderSources: [] });
   const [selection, setSelection] = useState({ shopId: '', warehouseId: '', orderSourceId: '' });
@@ -60,16 +61,18 @@ export default function PancakePos() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [connectionBody, catalogBody, inventoryBody, orderBody, referencesBody] = await Promise.all([
+      const [connectionBody, catalogBody, inventoryBody, inventorySyncBody, orderBody, referencesBody] = await Promise.all([
         adminJson(connectionStatusEndpoint),
         adminJson(`${base}/catalog/status`),
         adminJson(`${base}/inventory/status`),
+        adminJson(`${base}/inventory/sync-dashboard?limit=100`),
         adminJson(`${base}/orders/status`),
         adminJson(`${base}/references`)
       ]);
       setPancake(connectionBody.pancake);
       setCatalog(catalogBody.catalog);
       setInventory(inventoryBody.inventory);
+      setInventorySync(inventorySyncBody.inventorySync);
       setOrderExports(orderBody.orders);
       setReferences(referencesBody.references);
       setSelection({
@@ -122,6 +125,12 @@ export default function PancakePos() {
     setInventory(body.inventory);
     await loadAll();
     setMessage(body.inventory.status === 'complete' ? 'Inventory sync completed from Pancake warehouse stock.' : `Inventory sync status: ${body.inventory.status.replaceAll('_', ' ')}.`);
+  });
+
+  const retryOutboundInventory = () => run('inventory-outbound', async () => {
+    const body = await adminSend('POST', `${base}/inventory/process-outbox`, {});
+    await loadAll();
+    setMessage(`Automatic inventory queue processed: ${body.inventorySync.syncedCount} synced, ${body.inventorySync.failedCount} pending retry.`);
   });
 
   const buildShadowOrders = () => run('orders', async () => {
@@ -212,9 +221,9 @@ export default function PancakePos() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-bold text-[var(--admin-text)]">Catalog & inventory</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">Pancake remains the source for stock. Automatic background sync updates website inventory from verified SKU and variation mappings.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">Admin and website orders send absolute stock to Pancake. Pancake changes flow back automatically when no newer outbound update is pending.</p>
           </div>
-          <StatusPill tone={inventory?.status === 'complete' ? 'good' : 'neutral'}>Auto sync</StatusPill>
+          <div className="flex flex-wrap gap-2"><StatusPill tone={inventory?.status === 'complete' ? 'good' : 'neutral'}>Auto sync</StatusPill><button type="button" className="btn-outline" disabled={syncBusy} onClick={retryOutboundInventory}>{busy === 'inventory-outbound' ? 'Retrying...' : 'Process pending retries'}</button></div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -229,6 +238,25 @@ export default function PancakePos() {
           <p><span className="font-bold text-[var(--admin-text)]">Inventory:</span> {display(inventory?.status?.replaceAll('_', ' '))}</p>
           <p><span className="font-bold text-[var(--admin-text)]">Safe conflict code:</span> {display(catalog?.lastErrorCode || inventory?.lastErrorCode || pancake.lastErrorCode)}</p>
         </div>
+
+        <div className="admin-table-shell mt-4 overflow-x-auto">
+          <table className="w-full min-w-[980px] text-left text-xs">
+            <thead><tr className="border-b border-[var(--admin-line)] uppercase tracking-[0.1em] text-[var(--admin-muted)]">
+              <th className="p-3">Product / size</th><th className="p-3">SKU</th><th className="p-3">Website</th><th className="p-3">Pancake</th><th className="p-3">Mapping</th><th className="p-3">Sync</th><th className="p-3">Last synced</th>
+            </tr></thead>
+            <tbody>{(inventorySync.variants || []).map((item) => <tr key={item.local_variant_id} className="border-b border-[var(--admin-line)] last:border-0">
+              <td className="p-3"><strong>{item.product_name}</strong><span className="ml-2 uppercase text-[var(--admin-muted)]">{item.size}</span></td>
+              <td className="p-3 font-mono">{item.sku}</td><td className="p-3">{item.website_quantity}</td><td className="p-3">{item.pancake_quantity ?? 'Unknown'}</td>
+              <td className="p-3">{item.mapping_status === 'verified' ? 'Verified' : 'Missing Pancake mapping'}<span className="block max-w-44 truncate font-mono text-[10px] text-[var(--admin-muted)]" title={item.pancake_variation_id}>{item.pancake_variation_id || ''}</span></td>
+              <td className="p-3">{item.job_status === 'failed' ? 'Sync failed - retry scheduled' : item.job_status === 'pending' || item.job_status === 'processing' ? 'Pending sync' : item.sync_status || 'Not synced'}{item.last_error_code && <span className="block text-[var(--admin-red)]">{item.last_error_code.replaceAll('_', ' ')}</span>}</td>
+              <td className="p-3">{item.last_synced_at ? new Date(item.last_synced_at).toLocaleString('en-PH') : 'Never'}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+
+        <details className="mt-4 border-t border-[var(--admin-line)] pt-4"><summary className="cursor-pointer text-sm font-bold">Inventory sync logs</summary>
+          <div className="admin-table-shell mt-3 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead><tr className="border-b border-[var(--admin-line)] uppercase tracking-[0.1em] text-[var(--admin-muted)]"><th className="p-3">Time</th><th className="p-3">Direction</th><th className="p-3">Source</th><th className="p-3">SKU</th><th className="p-3">Status</th><th className="p-3">Message</th></tr></thead><tbody>{(inventorySync.logs || []).map((log) => <tr key={log.id} className="border-b border-[var(--admin-line)] last:border-0"><td className="p-3">{new Date(log.created_at).toLocaleString('en-PH')}</td><td className="p-3">{log.direction}</td><td className="p-3">{log.source}</td><td className="p-3 font-mono">{log.sku || '-'}</td><td className="p-3">{log.status?.replaceAll('_', ' ')}</td><td className="p-3">{log.message || log.safe_error_code || '-'}</td></tr>)}</tbody></table></div>
+        </details>
       </section>
 
       <details className="admin-panel mt-5">

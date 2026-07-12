@@ -7,6 +7,7 @@ const {
   createPancakeAutoSyncWorker,
   shouldRunPancakeAutoSync
 } = require('./integrations/pancake/pancakeAutoSyncWorker');
+const { createPayMongoWorker } = require('./payments/paymongoWorker');
 
 function closeHttpServer(server) {
   return new Promise((resolve, reject) => {
@@ -20,6 +21,7 @@ function startServer({
   createWorker = createMetaConversionsWorker,
   createNotificationWorker = createOrderNotificationWorker,
   createPancakeWorker = createPancakeAutoSyncWorker,
+  createPaymentWorker = createPayMongoWorker,
   pool,
   closeDatabase = closePool,
   registerSignals = true,
@@ -40,6 +42,8 @@ function startServer({
     ? createPancakeWorker({ config: config.pancake, logger })
     : null;
   pancakeWorker?.start();
+  const paymentWorker = config.paymongo?.configured ? createPaymentWorker({ config: config.paymongo, logger }) : null;
+  paymentWorker?.start();
   let shutdownPromise;
 
   function shutdown() {
@@ -48,6 +52,7 @@ function startServer({
         worker?.stop();
         notificationWorker?.stop();
         pancakeWorker?.stop();
+        paymentWorker?.stop();
         await closeHttpServer(server);
         await closeDatabase();
       })();
@@ -66,7 +71,7 @@ function startServer({
     }
   }
 
-  return { server, worker, notificationWorker, pancakeWorker, shutdown };
+  return { server, worker, notificationWorker, pancakeWorker, paymentWorker, shutdown };
 }
 
 if (require.main === module) startServer();

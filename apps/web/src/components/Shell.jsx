@@ -304,6 +304,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
 export default function Shell() {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
+  const hideFloatingUtilities = ['/login', '/register', '/account', '/account/settings'].includes(location.pathname);
   const items = useCart();
   const count = cartQuantity(items);
   const loggedIn = useCustomerLoggedIn();
@@ -611,19 +612,23 @@ export default function Shell() {
         onClose={closeCartDrawer}
       />
 
-      <OfferDock
-        offer={visibleShippingOffer}
-        product={visibleRecommendation}
-        offerCount={offerCount}
-        mobileOffersOpen={mobileOffersOpen}
-        dockRef={offerDockRef}
-        onToggle={() => setMobileOffersOpen((open) => !open)}
-        onNavigate={() => setMobileOffersOpen(false)}
-        onCloseOffer={dismissFreeShippingOffer}
-        onCloseProduct={dismissRecommendation}
-      />
-      <MessengerSupportLink href={storeInfo?.messengerUrl} />
-      <ReportIssueWidget settings={storeInfo} cartItems={items} />
+      {!hideFloatingUtilities && (
+        <>
+          <OfferDock
+            offer={visibleShippingOffer}
+            product={visibleRecommendation}
+            offerCount={offerCount}
+            mobileOffersOpen={mobileOffersOpen}
+            dockRef={offerDockRef}
+            onToggle={() => setMobileOffersOpen((open) => !open)}
+            onNavigate={() => setMobileOffersOpen(false)}
+            onCloseOffer={dismissFreeShippingOffer}
+            onCloseProduct={dismissRecommendation}
+          />
+          <MessengerSupportLink href={storeInfo?.messengerUrl} />
+          <ReportIssueWidget settings={storeInfo} cartItems={items} />
+        </>
+      )}
       {privacyDialogOpen && <PrivacyDialog onChoice={chooseTrackingConsent} onClose={() => setPrivacyDialogOpen(false)} requireConsent={Boolean(storeInfo?.metaPixel?.requireConsent)} />}
 
       <main className="flex-1">

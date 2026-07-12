@@ -1,4 +1,5 @@
 const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
+const inventoryOutboxRepositoryDefault = require('./pancakeInventoryOutboxRepository');
 
 class PancakeOrderExportError extends Error {
   constructor(code) {
@@ -75,7 +76,9 @@ function noteForOrder(order) {
   const pieces = [
     `Website order ${order.orderNumber}`,
     `checkout_channel=${order.checkoutChannel || 'storefront_checkout'}`,
-    `payment_method=${order.paymentMethod || 'cash_on_delivery'}`
+    `payment_method=${order.paymentMethod || 'cash_on_delivery'}`,
+    `payment_status=${order.paymentStatus || 'pending'}`,
+    `cod_amount=${order.paymentMethod === 'cash_on_delivery' ? Number(order.totalCents || 0) / 100 : 0}`
   ];
   return pieces.join('\n');
 }
@@ -193,7 +196,11 @@ function safeProviderCode(error) {
   return /^pancake_[a-z_]+$/.test(code) ? code : 'pancake_order_live_export_failed';
 }
 
-async function runOrderLiveExport({ config, client, repository, syncRepository = syncRepositoryDefault, now = () => new Date(), limit = 50, orderNumber = '' }) {
+async function runOrderLiveExport({
+  config, client, repository, syncRepository = syncRepositoryDefault,
+  inventoryOutboxRepository = inventoryOutboxRepositoryDefault,
+  now = () => new Date(), limit = 50, orderNumber = ''
+}) {
   const emptySummary = { checkedCount: 0, sentCount: 0, blockedCount: 0, failedCount: 0 };
   if (config.mode !== 'live') {
     return { status: 'blocked', lastErrorCode: 'pancake_mode_not_allowed', summary: emptySummary };
@@ -241,6 +248,12 @@ async function runOrderLiveExport({ config, client, repository, syncRepository =
         shopId: String(readiness.shopId || ''),
         syncStatus: 'synced',
         lastSyncedAt: sentAt
+      });
+      const productSlugs = [...new Set((item.order?.items || [])
+        .map((line) => String(line.productId || '').replace(/^catalog-/, ''))
+        .filter(Boolean))];
+      await inventoryOutboxRepository.enqueueInventorySync(productSlugs, 'website_order', {
+        maxAttempts: config.syncMaxAttempts
       });
       summary.sentCount += 1;
     } catch (error) {

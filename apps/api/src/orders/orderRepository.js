@@ -257,11 +257,13 @@ async function upsertPostgresOrder(order, transactionClient) {
       delivery_method, tracking_number, tags, notes, exported_to_jnt, jnt_exported_at,
       admin_editable_totals, placed_at, updated_at, discount_code, customer_account_id, discount_snapshot,
       checkout_idempotency_key, confirmation_token_hash, confirmation_token_created_at,
-      parcel_weight_grams, parcel_weight_override_grams
+      parcel_weight_grams, parcel_weight_override_grams,payment_provider,provider_checkout_session_id,
+      provider_payment_id,paid_amount_cents,paid_at,payment_expires_at,inventory_reservation_status,payment_metadata
     ) VALUES (
       $1, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10,
       $11, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20,
-      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33, $34, $35, $36, $37
+      $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33, $34, $35, $36, $37,
+      $38,$39,$40,$41,$42,$43,$44,$45::jsonb
     )
     ON CONFLICT (order_number) DO UPDATE SET
       customer = EXCLUDED.customer,
@@ -298,6 +300,14 @@ async function upsertPostgresOrder(order, transactionClient) {
       confirmation_token_created_at = EXCLUDED.confirmation_token_created_at,
       parcel_weight_grams = EXCLUDED.parcel_weight_grams,
       parcel_weight_override_grams = EXCLUDED.parcel_weight_override_grams,
+      payment_provider = EXCLUDED.payment_provider,
+      provider_checkout_session_id = EXCLUDED.provider_checkout_session_id,
+      provider_payment_id = EXCLUDED.provider_payment_id,
+      paid_amount_cents = EXCLUDED.paid_amount_cents,
+      paid_at = EXCLUDED.paid_at,
+      payment_expires_at = EXCLUDED.payment_expires_at,
+      inventory_reservation_status = EXCLUDED.inventory_reservation_status,
+      payment_metadata = EXCLUDED.payment_metadata,
       placed_at = EXCLUDED.placed_at,
       updated_at = now()`,
     [
@@ -339,7 +349,15 @@ async function upsertPostgresOrder(order, transactionClient) {
       Number(order.parcelWeightGrams || 0),
       order.parcelWeightOverrideGrams === null || order.parcelWeightOverrideGrams === undefined
         ? null
-        : Number(order.parcelWeightOverrideGrams)
+        : Number(order.parcelWeightOverrideGrams),
+      order.paymentProvider || '',
+      order.providerCheckoutSessionId || '',
+      order.providerPaymentId || '',
+      order.paidAmountCents === null || order.paidAmountCents === undefined ? null : Number(order.paidAmountCents),
+      order.paidAt || null,
+      order.paymentExpiresAt || null,
+      order.inventoryReservationStatus || 'committed',
+      JSON.stringify(order.paymentMetadata || {})
     ]
   );
 }
@@ -376,6 +394,14 @@ function fromPostgresOrder(row) {
     status: row.status,
     fulfillmentStatus: row.fulfillment_status,
     paymentStatus: row.payment_status,
+    paymentProvider: row.payment_provider || '',
+    providerCheckoutSessionId: row.provider_checkout_session_id || '',
+    providerPaymentId: row.provider_payment_id || '',
+    paidAmountCents: row.paid_amount_cents === null ? null : Number(row.paid_amount_cents),
+    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : '',
+    paymentExpiresAt: row.payment_expires_at ? new Date(row.payment_expires_at).toISOString() : '',
+    inventoryReservationStatus: row.inventory_reservation_status || 'committed',
+    paymentMetadata: row.payment_metadata || {},
     codConfirmationStatus: row.cod_confirmation_status,
     deliveryStatus: row.delivery_status,
     deliveryMethod: row.delivery_method,

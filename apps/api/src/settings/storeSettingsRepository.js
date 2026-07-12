@@ -10,7 +10,7 @@ const CREDENTIALS_KEY = 'adminCredentials';
 const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication', 'marketing'];
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
-const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
+const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'paymongo', 'gcash', 'bank_transfer'];
 const DEFAULT_COLLECTION_DEFINITIONS = [
   {
     name: 'New Arrivals',
@@ -221,6 +221,7 @@ function defaultStoreSettings() {
     payments: {
       methods: [
         { id: 'cash_on_delivery', label: 'Cash on Delivery', enabled: true, instructions: '' },
+        { id: 'paymongo', label: 'Online Payment via PayMongo', enabled: false, instructions: 'Pay securely using GCash, Maya, card, QRPh, or online banking through PayMongo.' },
         { id: 'gcash', label: 'GCash', enabled: false, instructions: '' },
         { id: 'bank_transfer', label: 'Bank Transfer', enabled: false, instructions: '' }
       ]
@@ -430,9 +431,7 @@ function normalizePayments(payments) {
   const methods = defaults.methods.map((fallback) => {
     const match = incoming.find((method) => method && method.id === fallback.id) || {};
     const enabled = match.enabled === undefined ? fallback.enabled : Boolean(match.enabled);
-    if (fallback.id === 'cash_on_delivery' && !enabled) {
-      throw badRequest('Cash on Delivery cannot be disabled.');
-    }
+    if (fallback.id === 'cash_on_delivery' && !enabled) throw badRequest('Cash on Delivery cannot be disabled.');
     return {
       id: fallback.id,
       label: String(match.label || fallback.label).trim() || fallback.label,

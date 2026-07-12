@@ -85,7 +85,7 @@ test('admin settings expose defaults and save sections', async () => {
     const defaults = await defaultsResponse.json();
     assert.equal(defaults.settings.general.storeName, 'Maria Clara Clothing');
     assert.equal(defaults.settings.shipping.regions.length, 3);
-    assert.equal(defaults.settings.payments.methods.length, 3);
+    assert.equal(defaults.settings.payments.methods.length, 4);
     assert.deepEqual(defaults.settings.marketing.metaPixel, {
       enabled: true,
       pixelId: '595813035761213',

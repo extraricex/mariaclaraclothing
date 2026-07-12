@@ -154,3 +154,31 @@ test('inventory reconciliation uses top-level remain_quantity when warehouse row
   assert.equal(snapshot.updates[0].nextQuantity, 0);
   assert.equal(snapshot.updates[0].quantityChange, -4);
 });
+
+test('inventory reconciliation does not overwrite a newer pending Admin update', async () => {
+  const { runInventoryReconciliation } = require('../src/integrations/pancake/pancakeInventoryService');
+  const repo = repository({
+    mappings: [{
+      localVariantId: 10, productSlug: 'shirt', productName: 'Shirt', sku: 'SKU-M', size: 'M',
+      pancakeVariationId: 'pv-1', stockQuantity: 3, outboundPending: true
+    }]
+  });
+  const client = {
+    listVariations: async (_shopId, { pageNumber }) => ({
+      data: [{ id: 'pv-1', remain_quantity: 5, variations_warehouses: [] }],
+      page_number: pageNumber, page_size: 100, total_entries: 1, total_pages: 1
+    })
+  };
+
+  const result = await runInventoryReconciliation({
+    config: { mode: 'read_only', apiKeyConfigured: true, catalogPageSize: 100, catalogMaxPages: 5 },
+    client, repository: repo, now: () => new Date('2026-07-12T00:00:00Z')
+  });
+
+  assert.deepEqual(result.summary, {
+    checkedCount: 1, updatedCount: 0, unchangedCount: 0, skippedCount: 1, protectedCount: 1, conflictCount: 0
+  });
+  const snapshot = repo.calls.find((call) => call[0] === 'complete')[1];
+  assert.equal(snapshot.changed.length, 0);
+  assert.equal(snapshot.updates[0].protectedByOutbound, true);
+});

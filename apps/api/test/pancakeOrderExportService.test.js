@@ -169,6 +169,9 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
   const syncRepository = {
     upsertOrderLink: async (record) => calls.push(['link', record])
   };
+  const inventoryOutboxRepository = {
+    enqueueInventorySync: async (slugs, source, options) => calls.push(['inventory', slugs, source, options])
+  };
   const client = {
     createOrder: async (shopId, payload) => {
       calls.push(['createOrder', shopId, payload.custom_id]);
@@ -177,10 +180,11 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
   };
 
   const result = await runOrderLiveExport({
-    config: { mode: 'live' },
+    config: { mode: 'live', syncMaxAttempts: 10 },
     client,
     repository,
     syncRepository,
+    inventoryOutboxRepository,
     now: () => new Date('2026-07-08T00:00:00Z')
   });
 
@@ -199,6 +203,7 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
     syncStatus: 'synced',
     lastSyncedAt: '2026-07-08T00:00:00.000Z'
   }]);
+  assert.deepEqual(calls[4], ['inventory', ['shirt'], 'website_order', { maxAttempts: 10 }]);
 });
 
 test('live export backfills missing links for already sent Pancake exports', async () => {
@@ -287,12 +292,21 @@ test('live export can send one specific queued order for realtime checkout', asy
   const syncRepository = {
     upsertOrderLink: async (record) => calls.push(['link', record.orderNumber, record.pancakeOrderId])
   };
+  const inventoryOutboxRepository = {
+    enqueueInventorySync: async (slugs, source) => calls.push(['inventory', slugs, source])
+  };
   const client = { createOrder: async () => ({ pancakeOrderId: '12345' }) };
 
-  const result = await runOrderLiveExport({ config: { mode: 'live' }, client, repository, syncRepository, orderNumber: 'MCC-REALTIME' });
+  const result = await runOrderLiveExport({
+    config: { mode: 'live' }, client, repository, syncRepository, inventoryOutboxRepository,
+    orderNumber: 'MCC-REALTIME'
+  });
 
   assert.deepEqual(result.summary, { checkedCount: 1, sentCount: 1, blockedCount: 0, failedCount: 0 });
-  assert.deepEqual(calls, [['loadOne', 'MCC-REALTIME'], ['sent', 'MCC-REALTIME'], ['link', 'MCC-REALTIME', '12345']]);
+  assert.deepEqual(calls, [
+    ['loadOne', 'MCC-REALTIME'], ['sent', 'MCC-REALTIME'], ['link', 'MCC-REALTIME', '12345'],
+    ['inventory', ['shirt'], 'website_order']
+  ]);
 });
 
 test('live export skips a specific order when no unsent export row exists', async () => {

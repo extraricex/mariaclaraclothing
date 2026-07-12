@@ -8,7 +8,7 @@ import { adminProductDisplayParts, truncateAdminProductCode } from './adminProdu
 const ENUMS = {
   status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'],
   fulfillmentStatus: ['unfulfilled', 'packed', 'shipped', 'delivered', 'cancelled'],
-  paymentStatus: ['cod_pending', 'paid', 'cancelled', 'refunded'],
+  paymentStatus: ['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'refunded'],
   codConfirmationStatus: ['pending', 'confirmed', 'unreachable', 'cancelled'],
   deliveryStatus: ['pending', 'ready', 'out_for_delivery', 'delivered', 'returned', 'cancelled']
 };
@@ -379,7 +379,7 @@ export default function OrderDetail() {
   const surchargeCents = Number(order.surchargeCents || 0);
   const discountAwareOrderTotalCents = subtotalCents - discountTotalCents + Number(order.shippingFeeCents || 0);
   const totalCents = Math.max(0, discountAwareOrderTotalCents + surchargeCents);
-  const paidCents = form.paymentStatus === 'paid' ? totalCents : 0;
+  const paidCents = form.paymentStatus === 'paid' ? Number(order.paidAmountCents ?? totalCents) : 0;
   const balanceCents = Math.max(totalCents - paidCents, 0);
   const paymentPending = form.paymentStatus !== 'paid';
   const unfulfilled = !['shipped', 'delivered', 'cancelled'].includes(form.fulfillmentStatus);
@@ -572,13 +572,16 @@ export default function OrderDetail() {
               <dl className="mt-3">
                 <InfoRow label="Payment method" value={titleCase(order.paymentMethod || 'cash_on_delivery')} />
                 <InfoRow label="Payment status" value={titleCase(form.paymentStatus)} />
+                <InfoRow label="PayMongo checkout session" value={order.providerCheckoutSessionId || 'Not applicable'} />
+                <InfoRow label="PayMongo payment ID" value={order.providerPaymentId || 'Not available'} />
+                <InfoRow label="Payment timestamp" value={order.paidAt ? new Date(order.paidAt).toLocaleString('en-PH') : 'Not paid'} />
                 <InfoRow label="Paid amount" value={formatMoney(paidCents)} />
                 <InfoRow label="Missing balance" value={formatMoney(balanceCents)} strong={paymentPending} />
                 <InfoRow label="Amount due" value={formatMoney(totalCents)} strong />
               </dl>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={markAsPaid}>Mark as paid</button>
-                <select className="field !w-auto !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" value={form.paymentStatus} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, paymentStatus: e.target.value })); }}>
+                {order.paymentMethod !== 'paymongo' && <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={markAsPaid}>Mark as paid</button>}
+                <select disabled={order.paymentMethod === 'paymongo'} className="field !w-auto !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" value={form.paymentStatus} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, paymentStatus: e.target.value })); }}>
                   {ENUMS.paymentStatus.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
                 </select>
               </div>

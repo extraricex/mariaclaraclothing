@@ -15,7 +15,7 @@ function usePostgresAccounts() {
 }
 
 function authSecret() {
-  return process.env.CUSTOMER_AUTH_SECRET || 'local-customer-auth-secret';
+  return process.env.CUSTOMER_AUTH_SECRET || process.env.AUTH_SECRET || 'local-customer-auth-secret';
 }
 
 function normalizeEmail(email) {

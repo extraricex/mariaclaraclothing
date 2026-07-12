@@ -371,7 +371,7 @@ export default function ProductEditor() {
         setPricePeso(centsToPesoInput(body.product.priceCents));
         setComparePeso(centsToPesoInput(body.product.compareAtPriceCents));
       }
-      setMessage(['failed', 'blocked', 'missing_mapping'].includes(savedPancakeStatus) ? 'Changes saved. Automatic Pancake sync did not complete; use Sync to Pancake POS to retry after resolving the warning.' : 'Changes saved successfully.');
+      setMessage(['failed', 'blocked', 'missing_mapping'].includes(savedPancakeStatus) ? 'Changes saved locally. Pancake sync is pending automatic retry; resolve any mapping warning shown below.' : 'Changes saved successfully.');
     } catch (error) {
       setMessage(error.message);
     }
@@ -470,13 +470,14 @@ export default function ProductEditor() {
             {pancakeSync.pancakeProductId && <span>Product ID: {pancakeSync.pancakeProductId}</span>}
             <span>Mapped variants: {pancakeSync.mappedVariantCount || 0}/{pancakeSync.totalVariantCount || 0}</span>
             {pancakeSync.lastSyncedAt && <time dateTime={pancakeSync.lastSyncedAt}>Last synced: {new Date(pancakeSync.lastSyncedAt).toLocaleString()}</time>}
+            {pancakeSync.nextRetryAt && <time dateTime={pancakeSync.nextRetryAt}>Next retry: {new Date(pancakeSync.nextRetryAt).toLocaleString()}</time>}
             {pancakeSync.stockMismatch === true && <strong className="text-amber-300">Stock mismatch warning</strong>}
             {pancakeSync.lastErrorCode && <strong className="text-red-300">Error: {pancakeSync.lastErrorCode.replaceAll('_', ' ')}</strong>}
           </div>
           {pancakeSync.variantMappings?.length > 0 && (
             <div className="mt-3 grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
               {pancakeSync.variantMappings.map((mapping) => (
-                <span key={mapping.localVariantId || mapping.sku} className="truncate" title={mapping.pancakeVariantId || 'Missing mapping'}>{mapping.size} · {mapping.sku} · {mapping.pancakeVariantId || 'Missing Pancake variant ID'}</span>
+                <span key={mapping.localVariantId || mapping.sku} className="truncate" title={mapping.pancakeVariantId || 'Missing mapping'}>{mapping.size} · {mapping.sku} · Website {mapping.stockQuantity} · Pancake {mapping.pancakeStockQuantity ?? 'Unknown'} · {mapping.pancakeVariantId || 'Missing Pancake variant ID'}</span>
               ))}
             </div>
           )}

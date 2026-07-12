@@ -1,5 +1,6 @@
 const express = require('express');
 const { getStoreSettings } = require('../settings/storeSettingsRepository');
+const { env } = require('../config/env');
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ router.get('/', async (_req, res, next) => {
         collectionDefinitions: settings.collectionDefinitions,
         collectionCountdowns: settings.collectionCountdowns,
         paymentMethods: settings.payments.methods
-          .filter((method) => method.enabled)
+          .filter((method) => method.enabled && (method.id !== 'paymongo' || env.paymongo.configured))
           .map(({ id, label, instructions }) => ({ id, label, instructions }))
       }
     });

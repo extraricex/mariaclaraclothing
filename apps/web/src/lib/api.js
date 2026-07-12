@@ -77,6 +77,15 @@ export function createQuoteBackedOrder(input, quoteId, idempotencyKey, headers =
   });
 }
 
+export function createPayMongoCheckout(input, quoteId, idempotencyKey) {
+  const order = buildOrderRequest({ ...input, paymentMethod: 'paymongo' }, quoteId, idempotencyKey);
+  return request('/api/payments/paymongo/create-checkout-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...order.headers },
+    body: JSON.stringify(order.body)
+  });
+}
+
 export async function fetchOrderConfirmation(orderNumber, token, fetchImpl = fetch) {
   const response = await fetchImpl(`/api/orders/${encodeURIComponent(orderNumber)}/confirmation`, {
     cache: 'no-store',

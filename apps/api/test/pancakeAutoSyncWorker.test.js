@@ -54,7 +54,7 @@ test('Pancake auto sync runOnce imports catalog, reconciles inventory, and build
 
   const result = await worker.runOnce();
 
-  assert.deepEqual(calls, ['catalog', 'inventory:read_only', 'orders']);
+  assert.deepEqual(calls, ['catalog', 'orders', 'inventory:read_only']);
   assert.equal(result.status, 'complete');
   assert.equal(result.catalog.mappedCount, 24);
   assert.equal(result.inventory.checked, 24);
@@ -80,7 +80,7 @@ test('Pancake auto sync runOnce sends live order exports only in live mode', asy
 
   const result = await worker.runOnce();
 
-  assert.deepEqual(calls, ['catalog', 'inventory', 'live']);
+  assert.deepEqual(calls, ['catalog', 'live', 'inventory']);
   assert.equal(result.orders.sent, 1);
 });
 
@@ -164,11 +164,11 @@ test('Pancake auto sync start runs after startup delay on an interval and stop c
     ['interval', 600000],
     'unref',
     'catalog',
-    'inventory',
     'orders',
+    'inventory',
     'catalog',
-    'inventory',
     'orders',
+    'inventory',
     ['clear-timeout', timeoutId],
     ['clear', intervalId]
   ]);

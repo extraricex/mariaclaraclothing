@@ -173,7 +173,7 @@ function ShippingCard({ initial }) {
   );
 }
 
-function PaymentsCard({ initial }) {
+function PaymentsCard({ initial, providers = {} }) {
   const [methods, setMethods] = useState(initial.methods);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -196,7 +196,8 @@ function PaymentsCard({ initial }) {
   }
 
   return (
-    <SectionCard title="Payments" hint="Enabled methods appear at checkout. Cash on Delivery is always on.">
+    <SectionCard title="Payments" hint="Enabled and configured methods appear at checkout.">
+      <p className="mt-3 text-xs text-clay">PayMongo: {providers.paymongo?.configured ? `${providers.paymongo.mode} mode configured` : 'not configured'}{providers.paymongo?.publicKey ? ` · Public key ${providers.paymongo.publicKey}` : ''}. Secret keys are never displayed.</p>
       <div className="mt-4 space-y-4">
         {methods.map((method) => (
           <div key={method.id} className="border-b border-line/60 pb-4 last:border-0">
@@ -204,7 +205,7 @@ function PaymentsCard({ initial }) {
               <input
                 type="checkbox"
                 checked={method.enabled}
-                disabled={method.id === 'cash_on_delivery'}
+                disabled={method.id === 'cash_on_delivery' || (method.id === 'paymongo' && !providers.paymongo?.configured)}
                 onChange={(e) => setMethod(method.id, 'enabled', e.target.checked)}
               />
               {method.label}
@@ -608,7 +609,7 @@ export default function Settings() {
 
   useEffect(() => {
     adminJson('/api/admin/settings')
-      .then((body) => setSettings(body.settings))
+      .then((body) => setSettings({ ...body.settings, paymentProviders: body.paymentProviders || {} }))
       .catch((loadError) => setError(loadError.message));
   }, []);
 
@@ -625,7 +626,7 @@ export default function Settings() {
       <div className="mt-8 space-y-4">
         <GeneralCard initial={settings.general} />
         <ShippingCard initial={settings.shipping} />
-        <PaymentsCard initial={settings.payments} />
+        <PaymentsCard initial={settings.payments} providers={settings.paymentProviders || {}} />
         <InventoryCard initial={settings.inventory} />
         <AuthenticationCard initial={settings.authentication} />
         <MarketingCard initial={settings.marketing} />

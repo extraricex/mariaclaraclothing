@@ -50,26 +50,25 @@ export function CustomerLogin() {
 
   return (
     <AuthShell title="Log in" subtitle="Order history, saved address, faster checkout.">
-      {(socialProviders.google || socialProviders.facebook) && (
-        <div className="mt-8 space-y-3">
-          {socialProviders.facebook && (
-            <a className="flex min-h-12 w-full items-center justify-center border border-[#1877f2] bg-[#1877f2] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#166fe5]" href={socialUrl('facebook')}>
-              Continue with Facebook
-            </a>
-          )}
-          {socialProviders.google && (
+      <div className="mt-8 space-y-3">
+          {socialProviders.google ? (
             <a className="flex min-h-12 w-full items-center justify-center border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-mist" href={socialUrl('google')}>
               Continue with Google
             </a>
-          )}
+          ) : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Google</button>}
+          {socialProviders.facebook ? (
+            <a className="flex min-h-12 w-full items-center justify-center border border-[#1877f2] bg-[#1877f2] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#166fe5]" href={socialUrl('facebook')}>
+              Continue with Facebook
+            </a>
+          ) : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Facebook</button>}
+          {!socialProviders.google && !socialProviders.facebook && <p className="text-center text-xs text-clay">Social login is temporarily unavailable while provider credentials are being configured.</p>}
           <div className="flex items-center gap-3 py-2" aria-hidden="true">
             <span className="h-px flex-1 bg-line" />
             <span className="text-xs uppercase text-clay">or use email</span>
             <span className="h-px flex-1 bg-line" />
           </div>
         </div>
-      )}
-      <form onSubmit={handleSubmit} className={`${socialProviders.google || socialProviders.facebook ? '' : 'mt-8'} space-y-4`}>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <input className="field" type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         <input className="field" type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         {error && <p className="text-sm text-accent-deep" role="alert">{error}</p>}
@@ -88,6 +87,15 @@ export function CustomerRegister() {
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '' });
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
+  const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
+
+  useEffect(() => {
+    fetch('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.json())
+      .then((body) => setSocialProviders(body.providers || { google: false, facebook: false }))
+      .catch(() => setSocialProviders({ google: false, facebook: false }));
+  }, []);
+  const socialUrl = (provider) => `/api/customer/oauth/${provider}/start?returnTo=${encodeURIComponent('/account')}`;
 
   function update(field, value) {
     setForm((previous) => ({ ...previous, [field]: value }));
@@ -108,8 +116,14 @@ export function CustomerRegister() {
   }
 
   return (
-    <AuthShell title="Create account" subtitle="Save your address once, breeze through every COD checkout after.">
-      <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+    <AuthShell title="Create account" subtitle="Save your address once for a faster checkout next time.">
+      <div className="mt-8 space-y-3">
+        {socialProviders.google ? <a className="flex min-h-12 w-full items-center justify-center border border-line bg-white px-5 py-3 text-sm font-semibold text-ink" href={socialUrl('google')}>Continue with Google</a> : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Google</button>}
+        {socialProviders.facebook ? <a className="flex min-h-12 w-full items-center justify-center border border-[#1877f2] bg-[#1877f2] px-5 py-3 text-sm font-semibold text-white" href={socialUrl('facebook')}>Continue with Facebook</a> : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Facebook</button>}
+        {!socialProviders.google && !socialProviders.facebook && <p className="text-center text-xs text-clay">Social registration is temporarily unavailable while provider credentials are being configured.</p>}
+        <div className="flex items-center gap-3 py-2" aria-hidden="true"><span className="h-px flex-1 bg-line" /><span className="text-xs uppercase text-clay">or use email</span><span className="h-px flex-1 bg-line" /></div>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <input className="field" required placeholder="Full name" value={form.fullName} onChange={(e) => update('fullName', e.target.value)} autoComplete="name" />
         <input className="field" type="email" required placeholder="Email" value={form.email} onChange={(e) => update('email', e.target.value)} autoComplete="email" />
         <input className="field" type="tel" required placeholder="Mobile number (09XXXXXXXXX)" value={form.phone} onChange={(e) => update('phone', e.target.value)} autoComplete="tel" />

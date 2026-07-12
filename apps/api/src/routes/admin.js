@@ -78,7 +78,8 @@ const { createAdminPancakeRouter } = require('./adminPancake');
 const { env } = require('../config/env');
 const { createPancakeClient } = require('../integrations/pancake/pancakeClient');
 const pancakeProductSyncRepository = require('../integrations/pancake/pancakeProductSyncRepository');
-const { syncProductToPancake } = require('../integrations/pancake/pancakeProductSyncService');
+const pancakeInventoryOutboxRepository = require('../integrations/pancake/pancakeInventoryOutboxRepository');
+const { processInventorySyncJobs } = require('../integrations/pancake/pancakeInventoryOutboxService');
 const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const { applyOversizedProductTemplate, isOversizedProduct } = require('../products/oversizedProductTemplate');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
@@ -95,7 +96,7 @@ const router = express.Router();
 
 const VALID_ORDER_STATUSES = new Set(['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled']);
 const VALID_FULFILLMENT_STATUSES = new Set(['unfulfilled', 'packed', 'shipped', 'delivered', 'cancelled']);
-const VALID_PAYMENT_STATUSES = new Set(['cod_pending', 'paid', 'cancelled', 'refunded']);
+const VALID_PAYMENT_STATUSES = new Set(['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'refunded']);
 const VALID_COD_CONFIRMATION_STATUSES = new Set(['pending', 'confirmed', 'unreachable', 'cancelled']);
 const VALID_DELIVERY_STATUSES = new Set(['pending', 'ready', 'out_for_delivery', 'delivered', 'returned', 'cancelled']);
 const VALID_PRODUCT_STATUSES = new Set(['active', 'draft', 'archived']);
@@ -486,7 +487,17 @@ router.post('/site-content/footer-logo/image', logoUpload.single('image'), async
 
 router.get('/settings', async (_req, res, next) => {
   try {
-    return res.json({ settings: await getStoreSettings() });
+    return res.json({
+      settings: await getStoreSettings(),
+      paymentProviders: {
+        paymongo: {
+          configured: env.paymongo.configured,
+          enabled: env.paymongo.enabled,
+          mode: env.paymongo.livemode ? 'live' : 'test',
+          publicKey: env.paymongo.publicKey || ''
+        }
+      }
+    });
   } catch (error) {
     return next(error);
   }
@@ -816,16 +827,18 @@ router.put('/products/:slug', async (req, res, next) => {
     await appendInventoryMovements(stockCorrectionMovements(existingProduct, product));
     let pancakeSync = null;
     if (productVariantStockChanged(existingProduct, product)) {
-      try {
-        pancakeSync = await syncProductToPancake({
-          productSlug: product.slug,
-          config: env.pancake,
-          client: createPancakeClient(env.pancake),
-          repository: pancakeProductSyncRepository
-        });
-      } catch (syncError) {
-        pancakeSync = syncError.sync || { status: 'failed', lastErrorCode: syncError.code || 'pancake_product_sync_failed' };
-      }
+      await pancakeInventoryOutboxRepository.enqueueInventorySync([product.slug], 'admin', {
+        maxAttempts: env.pancake.syncMaxAttempts
+      });
+      const outbound = await processInventorySyncJobs({
+        productSlugs: [product.slug], config: env.pancake, client: createPancakeClient(env.pancake),
+        repository: pancakeInventoryOutboxRepository, productSyncRepository: pancakeProductSyncRepository
+      });
+      const result = outbound.results[0];
+      pancakeSync = result?.sync || {
+        status: result?.status === 'failed' ? 'failed' : 'pending',
+        lastErrorCode: result?.code || '', pendingRetry: result?.status === 'failed'
+      };
     }
     return res.json({ product, pancakeSync, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
@@ -1511,6 +1524,11 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
     changes.fulfillmentStatus = validateEnum(body.fulfillmentStatus, VALID_FULFILLMENT_STATUSES, 'Fulfillment status is invalid');
   }
   if (body.paymentStatus !== undefined) {
+    if (existingOrder.paymentMethod === 'paymongo' && String(body.paymentStatus) !== String(existingOrder.paymentStatus)) {
+      const error = new Error('PayMongo payment status can only be changed by a verified PayMongo webhook.');
+      error.status = 403;
+      throw error;
+    }
     changes.paymentStatus = validateEnum(body.paymentStatus, VALID_PAYMENT_STATUSES, 'Payment status is invalid');
   }
   if (body.codConfirmationStatus !== undefined) {
@@ -1748,7 +1766,13 @@ function orderSummary(order) {
     shippingRegionLabel: order.shippingRegionLabel,
     status: order.status,
     fulfillmentStatus: order.fulfillmentStatus,
+    paymentMethod: order.paymentMethod,
     paymentStatus: order.paymentStatus,
+    paymentProvider: order.paymentProvider || '',
+    providerCheckoutSessionId: order.providerCheckoutSessionId || '',
+    providerPaymentId: order.providerPaymentId || '',
+    paidAmountCents: order.paidAmountCents,
+    paidAt: order.paidAt || '',
     codConfirmationStatus: order.codConfirmationStatus || 'pending',
     itemCount: Array.isArray(order.items) ? order.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0) : 0,
     deliveryStatus: order.deliveryStatus || 'pending',

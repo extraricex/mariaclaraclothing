@@ -4,6 +4,8 @@ const catalogRepositoryDefault = require('./pancakeCatalogRepository');
 const catalogServiceDefault = require('./pancakeCatalogService');
 const inventoryRepositoryDefault = require('./pancakeInventoryRepository');
 const inventoryServiceDefault = require('./pancakeInventoryService');
+const inventoryOutboxRepositoryDefault = require('./pancakeInventoryOutboxRepository');
+const inventoryOutboxServiceDefault = require('./pancakeInventoryOutboxService');
 const orderRepositoryDefault = require('./pancakeOrderExportRepository');
 const orderServiceDefault = require('./pancakeOrderExportService');
 const orderSyncRepositoryDefault = require('./pancakeOrderSyncRepository');
@@ -42,6 +44,8 @@ function createPancakeAutoSyncWorker({
   catalogService = catalogServiceDefault,
   inventoryRepository = inventoryRepositoryDefault,
   inventoryService = inventoryServiceDefault,
+  inventoryOutboxRepository = inventoryOutboxRepositoryDefault,
+  inventoryOutboxService = inventoryOutboxServiceDefault,
   orderRepository = orderRepositoryDefault,
   orderService = orderServiceDefault,
   orderSyncRepository = orderSyncRepositoryDefault,
@@ -84,15 +88,11 @@ function createPancakeAutoSyncWorker({
           repository: catalogRepository
         })),
         inventory: null,
+        inventoryOutbound: null,
         orders: null,
         orderInbound: null,
         orderOutbound: null
       };
-      result.inventory = await guardedStep('inventory reconciliation', () => inventoryService.runInventoryReconciliation({
-        config: readOnlyConfig,
-        client,
-        repository: inventoryRepository
-      }));
       result.orders = config.mode === 'live'
         ? await guardedStep('order live export', () => orderService.runOrderLiveExport({
           config,
@@ -113,9 +113,20 @@ function createPancakeAutoSyncWorker({
         client,
         syncRepository: orderSyncRepository
       }));
+      result.inventoryOutbound = config.mode === 'live'
+        ? await guardedStep('outbound inventory sync', () => inventoryOutboxService.processInventorySyncJobs({
+          config, client, repository: inventoryOutboxRepository
+        }))
+        : { status: 'skipped', reason: 'pancake_mode_not_live' };
+      result.inventory = await guardedStep('inventory reconciliation', () => inventoryService.runInventoryReconciliation({
+        config: readOnlyConfig,
+        client,
+        repository: inventoryRepository
+      }));
       logger.info?.('Pancake auto sync completed', {
         catalog: result.catalog?.status,
         inventory: result.inventory?.status,
+        inventoryOutbound: result.inventoryOutbound?.status,
         orders: result.orders?.status,
         orderInbound: result.orderInbound?.status,
         orderOutbound: result.orderOutbound?.status

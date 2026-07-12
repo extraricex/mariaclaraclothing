@@ -18,6 +18,8 @@ const { persistPostgresCheckout } = require('../orders/checkoutService');
 const { buildMetaPurchaseEvent, parseMetaCookies } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
+const pancakeInventoryOutboxRepository = require('../integrations/pancake/pancakeInventoryOutboxRepository');
+const { processInventorySyncJobs } = require('../integrations/pancake/pancakeInventoryOutboxService');
 const { createPancakeClient } = require('../integrations/pancake/pancakeClient');
 const { runOrderLiveExport } = require('../integrations/pancake/pancakeOrderExportService');
 const { placeAuthoritativeCheckout } = require('../checkout/authoritativeCheckoutService');
@@ -394,6 +396,12 @@ function privateOrderPayload(order) {
     status: order.status,
     fulfillmentStatus: order.fulfillmentStatus,
     paymentStatus: order.paymentStatus,
+    paymentProvider: order.paymentProvider || '',
+    providerCheckoutSessionId: order.providerCheckoutSessionId || '',
+    providerPaymentId: order.providerPaymentId || '',
+    paidAmountCents: order.paidAmountCents,
+    paidAt: order.paidAt || '',
+    paymentExpiresAt: order.paymentExpiresAt || '',
     placedAt: order.placedAt
   };
 }
@@ -420,6 +428,10 @@ function defaultAuthoritativeDependencies(req) {
       return insertMetaPurchaseOutbox(client, buildMetaPurchaseEvent({ order, requestContext }));
     },
     enqueueOrderExport,
+    enqueueInventorySync: (slugs, source, options) => pancakeInventoryOutboxRepository.enqueueInventorySync(slugs, source, {
+      ...options,
+      maxAttempts: env.pancake.syncMaxAttempts
+    }),
     consumeQuote: consumeCheckoutQuote,
     completeIdempotency,
     deriveToken: deriveConfirmationToken,
@@ -436,6 +448,19 @@ async function exportPancakeOrderNow(orderNumber) {
     client: createPancakeClient(env.pancake),
     repository: pancakeOrderExportRepository,
     orderNumber
+  });
+}
+
+async function syncOrderInventoryNow(orderNumber) {
+  if (env.pancake.mode !== 'live') return { status: 'skipped', reason: 'pancake_mode_not_live' };
+  const order = await findOrderByNumber(orderNumber, { includeRelated: false });
+  const productSlugs = [...new Set((order?.items || []).map((item) => String(item.productId || '').replace(/^catalog-/, '')).filter(Boolean))];
+  if (!productSlugs.length) return { status: 'complete', processedCount: 0 };
+  return processInventorySyncJobs({
+    config: env.pancake,
+    client: createPancakeClient(env.pancake),
+    repository: pancakeInventoryOutboxRepository,
+    productSlugs
   });
 }
 
@@ -494,6 +519,11 @@ function createOrderRouter(overrides = {}) {
             code: 'payment_method_unavailable', status: 400
           });
         }
+        if (paymentMethod === 'paymongo') {
+          throw new CommerceError('Use the secure PayMongo checkout endpoint.', {
+            code: 'paymongo_checkout_required', status: 400
+          });
+        }
         const customerAccountId = await dependencies.resolveCustomerAccountId(req);
         const cookies = parseMetaCookies(req.headers.cookie);
         const result = await dependencies.placeAuthoritativeCheckout({
@@ -508,9 +538,12 @@ function createOrderRouter(overrides = {}) {
           }
         }, dependencies.authoritativeDependencies(req));
         try {
-          await dependencies.exportPancakeOrderNow(result.orderNumber);
+          const pancakeExport = await dependencies.exportPancakeOrderNow(result.orderNumber);
+          if (Number(pancakeExport?.summary?.sentCount || 0) > 0) {
+            await syncOrderInventoryNow(result.orderNumber);
+          }
         } catch (error) {
-          dependencies.logger?.error?.('Realtime Pancake order export failed:', error?.message || error);
+          dependencies.logger?.error?.('Realtime Pancake order/inventory sync failed:', error?.message || error);
         }
         return res.status(201).json(result);
       }
@@ -533,7 +566,11 @@ const orderRouter = createOrderRouter();
 
 module.exports = {
   createOrderRouter,
+  defaultAuthoritativeDependencies,
+  exportPancakeOrderNow,
   orderRouter,
   privateOrderPayload,
-  publicOrderPayload
+  publicOrderPayload,
+  resolveCustomerAccountId,
+  syncOrderInventoryNow
 };

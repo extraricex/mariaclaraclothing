@@ -59,6 +59,44 @@ function notificationConfig(source = process.env) {
   return { enabled, sms, email };
 }
 
+function paymongoConfig(source = process.env) {
+  const enabled = String(source.PAYMONGO_ENABLED || 'false').trim().toLowerCase() === 'true';
+  const secretKey = String(source.PAYMONGO_SECRET_KEY || '');
+  const publicKey = String(source.PAYMONGO_PUBLIC_KEY || '').trim();
+  const webhookSecret = String(source.PAYMONGO_WEBHOOK_SECRET || '');
+  const apiBaseUrl = String(source.PAYMONGO_API_BASE_URL || 'https://api.paymongo.com').trim().replace(/\/$/, '');
+  const appEnv = String(source.APP_ENV || 'development').trim().toLowerCase();
+  if (appEnv === 'production' && apiBaseUrl !== 'https://api.paymongo.com') {
+    throw new Error('PAYMONGO_API_BASE_URL must use the official PayMongo API host in production');
+  }
+  if (enabled && (!secretKey || !webhookSecret)) {
+    throw new Error('PAYMONGO_SECRET_KEY and PAYMONGO_WEBHOOK_SECRET are required when PayMongo is enabled');
+  }
+  const frontend = String(source.FRONTEND_URL || (appEnv === 'production' ? '' : 'http://localhost:5173')).trim().replace(/\/$/, '');
+  const successUrl = String(source.PAYMONGO_SUCCESS_URL || `${frontend}/thank-you`).trim();
+  const cancelUrl = String(source.PAYMONGO_CANCEL_URL || `${frontend}/checkout`).trim();
+  for (const [name, value] of [['PAYMONGO_SUCCESS_URL', successUrl], ['PAYMONGO_CANCEL_URL', cancelUrl]]) {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol) || (appEnv === 'production' && url.protocol !== 'https:')) {
+      throw new Error(`${name} must be a valid ${appEnv === 'production' ? 'HTTPS' : 'HTTP(S)'} URL`);
+    }
+    if (appEnv === 'production' && new URL(frontend).origin !== url.origin) {
+      throw new Error(`${name} must use FRONTEND_URL origin in production`);
+    }
+  }
+  const paymentMethodTypes = String(source.PAYMONGO_PAYMENT_METHOD_TYPES || 'card,gcash,paymaya,qrph')
+    .split(',').map((value) => value.trim()).filter(Boolean);
+  const reservationMinutes = Number(source.PAYMONGO_RESERVATION_MINUTES || 30);
+  if (!Number.isInteger(reservationMinutes) || reservationMinutes < 5 || reservationMinutes > 1440) {
+    throw new Error('PAYMONGO_RESERVATION_MINUTES must be an integer from 5 to 1440');
+  }
+  return {
+    enabled, configured: Boolean(enabled && secretKey && webhookSecret), apiBaseUrl, secretKey, publicKey,
+    webhookSecret, successUrl, cancelUrl, paymentMethodTypes, reservationMinutes,
+    livemode: secretKey.startsWith('sk_live_'), timeoutMs: 20_000
+  };
+}
+
 function validatedHttpsUrl(value, name) {
   let parsed;
   try {
@@ -144,6 +182,22 @@ function pancakeConfig(source = process.env) {
     return value;
   };
   const autoSyncDefault = mode === 'read_only' || mode === 'shadow' || mode === 'live';
+  const syncEnabledAlias = source.PANCAKE_AUTO_SYNC_ENABLED === undefined || source.PANCAKE_AUTO_SYNC_ENABLED === ''
+    ? source.PANCAKE_SYNC_ENABLED
+    : source.PANCAKE_AUTO_SYNC_ENABLED;
+  const syncEnabledValue = syncEnabledAlias === undefined || syncEnabledAlias === ''
+    ? autoSyncDefault
+    : String(syncEnabledAlias).trim().toLowerCase() === 'true'
+      ? true
+      : String(syncEnabledAlias).trim().toLowerCase() === 'false'
+        ? false
+        : null;
+  if (syncEnabledValue === null) throw new Error('PANCAKE_SYNC_ENABLED must be true or false');
+  const syncMinutesRaw = source.PANCAKE_SYNC_INTERVAL_MINUTES;
+  const syncMinutes = syncMinutesRaw === undefined || syncMinutesRaw === '' ? null : Number(syncMinutesRaw);
+  if (syncMinutes !== null && (!Number.isInteger(syncMinutes) || syncMinutes < 1 || syncMinutes > 1440)) {
+    throw new Error('PANCAKE_SYNC_INTERVAL_MINUTES must be an integer from 1 to 1440');
+  }
   const orderExportCutoffRaw = String(source.PANCAKE_ORDER_EXPORT_CUTOFF_AT || '').trim();
   const orderExportCutoffAt = orderExportCutoffRaw ? new Date(orderExportCutoffRaw) : null;
   if (orderExportCutoffRaw && Number.isNaN(orderExportCutoffAt.getTime())) {
@@ -173,8 +227,12 @@ function pancakeConfig(source = process.env) {
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 20000,
     catalogPageSize: catalogInteger('PANCAKE_CATALOG_PAGE_SIZE', 100, 100),
     catalogMaxPages: catalogInteger('PANCAKE_CATALOG_MAX_PAGES', 100, 500),
-    autoSyncEnabled: autoSyncBoolean('PANCAKE_AUTO_SYNC_ENABLED', autoSyncDefault),
-    autoSyncIntervalMs: autoSyncInteger('PANCAKE_AUTO_SYNC_INTERVAL_MS', 10 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000),
+    autoSyncEnabled: source.PANCAKE_AUTO_SYNC_ENABLED === undefined || source.PANCAKE_AUTO_SYNC_ENABLED === ''
+      ? syncEnabledValue
+      : autoSyncBoolean('PANCAKE_AUTO_SYNC_ENABLED', autoSyncDefault),
+    autoSyncIntervalMs: source.PANCAKE_AUTO_SYNC_INTERVAL_MS === undefined || source.PANCAKE_AUTO_SYNC_INTERVAL_MS === ''
+      ? (syncMinutes === null ? 10 * 60 * 1000 : syncMinutes * 60 * 1000)
+      : autoSyncInteger('PANCAKE_AUTO_SYNC_INTERVAL_MS', 10 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000),
     autoSyncStartupDelayMs: autoSyncInteger('PANCAKE_AUTO_SYNC_STARTUP_DELAY_MS', 15 * 1000, 0, 5 * 60 * 1000),
     orderPollIntervalMs,
     orderPollPageSize,
@@ -197,8 +255,8 @@ function validateProductionConfig(source = process.env) {
   if (!adminPassword || adminPassword === 'admin') {
     throw new Error('ADMIN_PASSWORD must not use a local default in production');
   }
-  if (String(source.CUSTOMER_AUTH_SECRET || '').length < 32) {
-    throw new Error('CUSTOMER_AUTH_SECRET must be at least 32 characters in production');
+  if (String(source.CUSTOMER_AUTH_SECRET || source.AUTH_SECRET || '').length < 32) {
+    throw new Error('CUSTOMER_AUTH_SECRET must be at least 32 characters in production (AUTH_SECRET is accepted as an alias)');
   }
   if (String(source.ORDER_CONFIRMATION_SECRET || '').length < 32) {
     throw new Error('ORDER_CONFIRMATION_SECRET must be at least 32 characters in production');
@@ -230,6 +288,7 @@ function buildEnv(source = process.env) {
     meta: metaConfig(source),
     checkout: checkoutConfig(source),
     notifications: notificationConfig(source),
+    paymongo: paymongoConfig(source),
     oauth: oauthConfig(source),
     pancake: pancakeConfig(source)
   };
@@ -237,4 +296,4 @@ function buildEnv(source = process.env) {
 
 const env = buildEnv();
 
-module.exports = { buildEnv, env, metaConfig, checkoutConfig, notificationConfig, oauthConfig, pancakeConfig, validateProductionConfig };
+module.exports = { buildEnv, env, metaConfig, checkoutConfig, notificationConfig, oauthConfig, pancakeConfig, paymongoConfig, validateProductionConfig };
