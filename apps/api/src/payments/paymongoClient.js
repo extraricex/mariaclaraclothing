@@ -52,7 +52,14 @@ function createPayMongoClient(config, fetchImpl = fetch) {
     return { id: String(data.id), checkoutUrl, attributes: data.attributes };
   }
 
-  return { createCheckoutSession };
+  async function retrieveCheckoutSession(checkoutSessionId) {
+    const id = String(checkoutSessionId || '').trim();
+    if (!/^cs_[A-Za-z0-9_-]+$/.test(id)) throw new PayMongoApiError('paymongo_invalid_response');
+    const data = await request(`/v1/checkout_sessions/${encodeURIComponent(id)}`);
+    return { id: String(data.id), attributes: data.attributes };
+  }
+
+  return { createCheckoutSession, retrieveCheckoutSession };
 }
 
 module.exports = { PayMongoApiError, createPayMongoClient };

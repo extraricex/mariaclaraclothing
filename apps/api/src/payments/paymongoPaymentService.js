@@ -40,21 +40,23 @@ function checkoutSessionPayload(order, config) {
 async function attachCheckoutSession(order, session, config) {
   const expiresAt = order.paymentExpiresAt || new Date(Date.now() + config.reservationMinutes * 60_000).toISOString();
   return updateOrder(order.orderNumber, {
+    paymentMethod: 'paymongo', paymentStatus: 'pending_payment', status: 'pending_payment',
     paymentProvider: 'paymongo', providerCheckoutSessionId: session.id,
-    paymentExpiresAt: expiresAt,
+    paymentExpiresAt: expiresAt, inventoryReservationStatus: 'reserved',
     paymentMetadata: { ...(order.paymentMetadata || {}), checkoutUrl: session.checkoutUrl, livemode: config.livemode }
   });
 }
 
 function parsePaidEvent(payload) {
-  const eventType = String(payload?.data?.type || payload?.type || '');
-  const session = payload?.data?.data || payload?.data?.attributes?.data || {};
+  const envelope = payload?.data || {};
+  const eventType = String(envelope?.attributes?.type || envelope?.type || payload?.type || '');
+  const session = envelope?.attributes?.data || envelope?.data || {};
   const attributes = session.attributes || {};
   const payment = (attributes.payments || []).find((item) => item?.attributes?.status === 'paid') || (attributes.payments || [])[0] || {};
   const paymentAttributes = payment.attributes || {};
   const digest = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   return {
-    eventId: String(payload?.id || payload?.event_id || `${eventType}:${session.id || digest}`),
+    eventId: String(envelope?.id || payload?.id || payload?.event_id || `${eventType}:${session.id || digest}`),
     eventType,
     checkoutSessionId: String(session.id || ''),
     orderNumber: String(attributes.reference_number || attributes.metadata?.order_number || ''),
@@ -87,7 +89,7 @@ async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
     );
     if (!inserted.rowCount) return { status: 'duplicate', orderNumber: event.orderNumber };
     const order = await findOrderByNumber(event.orderNumber, { client, forUpdate: true, includeRelated: false });
-    if (!order || order.paymentMethod !== 'paymongo' || order.providerCheckoutSessionId !== event.checkoutSessionId) {
+    if (!order || order.paymentProvider !== 'paymongo' || order.providerCheckoutSessionId !== event.checkoutSessionId) {
       const error = new Error('PayMongo order reference does not match.'); error.status = 409; error.code = 'paymongo_order_mismatch'; throw error;
     }
     if (event.currency !== 'PHP' || !Number.isInteger(event.amountCents) || event.amountCents !== Number(order.totalCents)) {
@@ -95,7 +97,7 @@ async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
     }
     if (order.paymentStatus === 'paid') return { status: 'duplicate', orderNumber: order.orderNumber, order };
     const updated = await updateOrder(order.orderNumber, {
-      status: 'confirmed', paymentStatus: 'paid', providerPaymentId: event.paymentId,
+      status: 'confirmed', paymentMethod: 'paymongo', paymentStatus: 'paid', providerPaymentId: event.paymentId,
       paidAmountCents: event.amountCents, paidAt: event.paidAt, inventoryReservationStatus: 'committed'
     }, { client, existingOrder: order });
     if (metaEnabled) {
@@ -117,7 +119,43 @@ async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
   return result;
 }
 
-async function releaseExpiredReservations({ now = new Date(), limit = 50 } = {}) {
+function paidSessionPayload(session) {
+  const payment = (session?.attributes?.payments || []).find((item) => item?.attributes?.status === 'paid');
+  if (!payment) return null;
+  return {
+    data: {
+      id: `reconcile_${session.id}_${payment.id}`,
+      type: 'event',
+      attributes: { type: 'checkout_session.payment.paid', data: session }
+    }
+  };
+}
+
+async function reconcilePendingPayments({ client, limit = 50, metaEnabled = false } = {}) {
+  if (!client?.retrieveCheckoutSession) return { checkedCount: 0, paidCount: 0, failedCount: 0 };
+  const pending = await query(
+    `SELECT order_number,provider_checkout_session_id FROM orders
+      WHERE payment_provider='paymongo' AND payment_status='pending_payment'
+        AND provider_checkout_session_id<>'' ORDER BY placed_at LIMIT $1`,
+    [limit]
+  );
+  const summary = { checkedCount: 0, paidCount: 0, failedCount: 0 };
+  for (const row of pending.rows) {
+    summary.checkedCount += 1;
+    try {
+      const session = await client.retrieveCheckoutSession(row.provider_checkout_session_id);
+      const payload = paidSessionPayload(session);
+      if (!payload) continue;
+      const result = await processPaidWebhook(payload, { metaEnabled });
+      if (['paid', 'duplicate'].includes(result.status)) summary.paidCount += 1;
+    } catch (_error) {
+      summary.failedCount += 1;
+    }
+  }
+  return summary;
+}
+
+async function releaseExpiredReservations({ now = new Date(), limit = 50, client } = {}) {
   const due = await query(
     `SELECT order_number FROM orders WHERE payment_method='paymongo' AND payment_status='pending_payment'
       AND inventory_reservation_status='reserved' AND payment_expires_at<= $1
@@ -126,6 +164,19 @@ async function releaseExpiredReservations({ now = new Date(), limit = 50 } = {})
   );
   const released = [];
   for (const row of due.rows) {
+    if (!client?.retrieveCheckoutSession) continue;
+    let session;
+    try {
+      session = await client.retrieveCheckoutSession(row.provider_checkout_session_id);
+      const paidPayload = paidSessionPayload(session);
+      if (paidPayload) {
+        await processPaidWebhook(paidPayload);
+        continue;
+      }
+    } catch (_error) {
+      continue;
+    }
+    if (session.attributes?.status !== 'expired') continue;
     const outcome = await transaction(async (client) => {
       const order = await findOrderByNumber(row.order_number, { client, forUpdate: true, includeRelated: false });
       if (!order || order.paymentStatus !== 'pending_payment' || order.inventoryReservationStatus !== 'reserved') return null;
@@ -148,5 +199,5 @@ async function releaseExpiredReservations({ now = new Date(), limit = 50 } = {})
 
 module.exports = {
   attachCheckoutSession, checkoutSessionPayload, parsePaidEvent, processPaidWebhook,
-  releaseExpiredReservations, restockItems, withOrderParam
+  paidSessionPayload, reconcilePendingPayments, releaseExpiredReservations, restockItems, withOrderParam
 };

@@ -42,7 +42,9 @@ function startServer({
     ? createPancakeWorker({ config: config.pancake, logger })
     : null;
   pancakeWorker?.start();
-  const paymentWorker = config.paymongo?.configured ? createPaymentWorker({ config: config.paymongo, logger }) : null;
+  const paymentWorker = config.paymongo?.configured
+    ? createPaymentWorker({ config: config.paymongo, metaEnabled: Boolean(config.meta?.enabled), logger })
+    : null;
   paymentWorker?.start();
   let shutdownPromise;
 

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  checkoutSessionPayload, parsePaidEvent, restockItems, withOrderParam
+  checkoutSessionPayload, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
 } = require('../src/payments/paymongoPaymentService');
 
 test('PayMongo checkout payload uses the authoritative total and approved hosted channels', () => {
@@ -27,14 +27,17 @@ test('PayMongo checkout payload uses the authoritative total and approved hosted
 
 test('PayMongo paid event parser extracts session, payment, amount, and reference', () => {
   const event = parsePaidEvent({
-    id: 'evt-1',
     data: {
-      type: 'checkout_session.payment.paid',
-      data: {
+      id: 'evt-1',
+      type: 'event',
+      attributes: {
+        type: 'checkout_session.payment.paid',
+        data: {
         id: 'cs-1',
         attributes: {
           reference_number: 'MCC-1001',
           payments: [{ id: 'pay-1', attributes: { status: 'paid', amount: 72900, currency: 'PHP', paid_at: 1783785600 } }]
+        }
         }
       }
     }
@@ -52,4 +55,17 @@ test('expired reservation restock data preserves exact product variant quantitie
   const order = { items: [{ productId: 'catalog-shirt', productName: 'Shirt', sku: 'SHIRT-M', size: 'M', quantity: 2 }] };
   assert.deepEqual(restockItems(order), [{ slug: 'shirt', productName: 'Shirt', sku: 'SHIRT-M', size: 'M', quantity: 2 }]);
   assert.equal(withOrderParam('https://mariaclaraclothing.com/thank-you', 'MCC-1', { payment: 'success' }), 'https://mariaclaraclothing.com/thank-you?order=MCC-1&payment=success');
+});
+
+test('paid checkout recovery produces the official webhook envelope', () => {
+  const payload = paidSessionPayload({
+    id: 'cs-1',
+    attributes: {
+      reference_number: 'MCC-1',
+      payments: [{ id: 'pay-1', attributes: { status: 'paid', amount: 10000, currency: 'PHP' } }]
+    }
+  });
+  assert.equal(payload.data.type, 'event');
+  assert.equal(payload.data.attributes.type, 'checkout_session.payment.paid');
+  assert.equal(parsePaidEvent(payload).paymentId, 'pay-1');
 });

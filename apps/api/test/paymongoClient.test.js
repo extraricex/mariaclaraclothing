@@ -28,3 +28,14 @@ test('PayMongo client never exposes provider response bodies in errors', async (
     return true;
   });
 });
+
+test('PayMongo client retrieves a checkout session with the server-side secret', async () => {
+  let requestedUrl = '';
+  const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_test_secret' }, async (url) => {
+    requestedUrl = url;
+    return { ok: true, json: async () => ({ data: { id: 'cs_test_1', attributes: { status: 'active', payments: [] } } }) };
+  });
+  const session = await client.retrieveCheckoutSession('cs_test_1');
+  assert.equal(requestedUrl, 'https://api.paymongo.com/v1/checkout_sessions/cs_test_1');
+  assert.equal(session.id, 'cs_test_1');
+});
