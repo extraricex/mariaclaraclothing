@@ -18,7 +18,10 @@ test('catalog data is stored in an admin-editable JSON structure', () => {
   assert.equal(product.name, 'CURIOSITY OFFWHITE — Oversized 240 GSM Shirt');
   assert.equal(product.priceCents, 64900);
   assert.equal(product.compareAtPriceCents, 92900);
-  assert.ok(product.description.includes('premium cotton'));
+  assert.equal(
+    product.description,
+    'Premium oversized shirt made with 240 GSM cotton fabric. Designed for a relaxed streetwear fit with a clean and comfortable feel. Proudly made in the Philippines.'
+  );
   assert.deepEqual(product.collections, ['New Arrivals']);
   assert.equal(product.images[0].url, 'https://cdn.shopify.com/s/files/1/0781/7979/5224/files/arisoffback_3dfaaa41-4b08-46df-baaf-e7fc81a222a3.jpg?v=1774462005');
   assert.equal(product.images[0].altText, product.name);

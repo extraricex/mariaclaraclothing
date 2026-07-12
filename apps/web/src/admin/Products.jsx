@@ -72,6 +72,20 @@ export default function Products() {
   const [error, setError] = useState('');
   const [activeView, setActiveView] = useState('all');
   const [selectedProducts, setSelectedProducts] = useState(() => new Set());
+  const [pancakeStatuses, setPancakeStatuses] = useState({});
+  const [pancakeBusy, setPancakeBusy] = useState(() => new Set());
+  const [pancakeMessage, setPancakeMessage] = useState('');
+
+  async function loadPancakeStatuses(records) {
+    const slugs = (records || []).map((product) => product.slug).filter(Boolean);
+    if (!slugs.length) return;
+    try {
+      const body = await adminJson(`/api/admin/integrations/pancake/products/status?slugs=${encodeURIComponent(slugs.join(','))}`);
+      setPancakeStatuses((current) => ({ ...current, ...Object.fromEntries((body.products || []).map((item) => [item.productSlug, item])) }));
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+    }
+  }
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -83,7 +97,11 @@ export default function Products() {
     if (sort) params.set('sort', sort);
     if (query) params.set('q', query);
     adminJson(`/api/admin/products?${params}`)
-      .then((body) => { setProducts(body.products); setSummary(body.summary); })
+      .then((body) => {
+        setProducts(body.products);
+        setSummary(body.summary);
+        loadPancakeStatuses(body.products);
+      })
       .catch((err) => setError(err.message));
   }, [status, stock, collection, category, vendor, sort, query]);
 
@@ -122,6 +140,61 @@ export default function Products() {
 
   const allVisibleSelected = products.length > 0 && selectedProducts.size === products.length;
 
+  async function syncProduct(slug) {
+    setPancakeBusy((current) => new Set(current).add(slug));
+    setPancakeMessage('Syncing product to Pancake POS...');
+    setPancakeStatuses((current) => ({ ...current, [slug]: { ...(current[slug] || {}), productSlug: slug, status: 'syncing' } }));
+    try {
+      const body = await adminJson(`/api/admin/integrations/pancake/products/${encodeURIComponent(slug)}/sync`, { method: 'POST' });
+      setPancakeStatuses((current) => ({ ...current, [slug]: body.sync }));
+      setPancakeMessage('Product synced successfully to Pancake POS.');
+    } catch (requestError) {
+      if (requestError.body?.sync) setPancakeStatuses((current) => ({ ...current, [slug]: requestError.body.sync }));
+      setPancakeMessage(requestError.message);
+    } finally {
+      setPancakeBusy((current) => {
+        const next = new Set(current);
+        next.delete(slug);
+        return next;
+      });
+    }
+  }
+
+  async function syncSelectedProducts() {
+    for (const slug of selectedProducts) await syncProduct(slug);
+  }
+
+  async function applyOversizedTemplate() {
+    setPancakeMessage('Checking oversized products...');
+    try {
+      const preview = await adminJson('/api/admin/products/templates/oversized/preview');
+      if (!preview.count) {
+        setPancakeMessage('No oversized products were detected.');
+        return;
+      }
+      const names = preview.products.map((product) => product.name).join('\n');
+      if (!window.confirm(`Apply the oversized content template to ${preview.count} products?\n\n${names}`)) {
+        setPancakeMessage('Oversized template update cancelled.');
+        return;
+      }
+      const result = await adminSend('POST', '/api/admin/products/templates/oversized/apply', {
+        slugs: preview.products.map((product) => product.slug)
+      });
+      setPancakeMessage(`Oversized template applied to ${result.count} products.`);
+      load();
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+    }
+  }
+
+  function syncLabel(sync) {
+    const labels = {
+      syncing: 'Syncing...', synced: 'Synced', failed: 'Sync failed',
+      missing_mapping: 'Missing mapping', blocked: 'Blocked', never_synced: 'Not synced'
+    };
+    return labels[sync?.status] || 'Checking mapping';
+  }
+
   return (
     <div>
       <div className="admin-mobile-stack items-start justify-between">
@@ -134,6 +207,7 @@ export default function Products() {
           <button type="button" className="btn-secondary">Import</button>
           <button type="button" className="btn-secondary">Export</button>
           <button type="button" className="btn-secondary">More actions</button>
+          <button type="button" className="btn-secondary" onClick={applyOversizedTemplate}>Apply oversized template</button>
           <Link to="/admin/products/new" className="btn-ink">Add product</Link>
         </div>
       </div>
@@ -147,6 +221,7 @@ export default function Products() {
         </div>
       )}
       {error && <p className="mt-4 text-sm text-accent-deep">{error}</p>}
+      {pancakeMessage && <p className="mt-4 text-sm text-accent-deep" role="status">{pancakeMessage}</p>}
 
       <div className="mt-6 border border-line bg-paper">
         <div className="product-view-tabs border-b border-line px-3 pt-3">
@@ -205,6 +280,7 @@ export default function Products() {
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-secondary">Set as active</button>
               <button type="button" className="btn-secondary">Archive</button>
+              <button type="button" className="btn-secondary" disabled={pancakeBusy.size > 0} onClick={syncSelectedProducts}>Sync selected to Pancake</button>
               <button type="button" className="btn-secondary">More actions</button>
             </div>
           </div>
@@ -228,10 +304,14 @@ export default function Products() {
                 <th className="p-3">Product organization</th>
                 <th className="p-3">Sales channels</th>
                 <th className="p-3">Price</th>
+                <th className="p-3">Pancake POS</th>
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => (
+              {products.map((product) => {
+                const sync = pancakeStatuses[product.slug];
+                const busy = pancakeBusy.has(product.slug);
+                return (
                 <tr key={product.slug} className="border-b border-line/60 hover:bg-cream/60">
                   <td className="p-3 align-middle">
                     <input
@@ -271,9 +351,21 @@ export default function Products() {
                     <span className="inline-flex border border-line bg-cream px-2 py-1 font-semibold text-ink">Online Store</span>
                   </td>
                   <td className="p-3">{formatMoney(product.priceCents)}</td>
+                  <td className="p-3 text-xs">
+                    <span className={`block font-semibold ${sync?.status === 'synced' ? 'text-emerald-400' : sync?.status === 'failed' || sync?.status === 'missing_mapping' ? 'text-red-300' : 'text-clay'}`}>{syncLabel(sync)}</span>
+                    {sync?.pancakeProductId && <span className="mt-1 block max-w-44 truncate text-clay" title={sync.pancakeProductId}>Product ID: {sync.pancakeProductId}</span>}
+                    {Number.isInteger(sync?.mappedVariantCount) && <span className="block text-clay">Variants: {sync.mappedVariantCount}/{sync.totalVariantCount} mapped</span>}
+                    {sync?.lastSyncedAt && <time className="block text-clay" dateTime={sync.lastSyncedAt}>Last sync: {new Date(sync.lastSyncedAt).toLocaleString()}</time>}
+                    {sync?.stockMismatch === true && <span className="mt-1 block font-semibold text-amber-300">Stock mismatch warning</span>}
+                    {sync?.lastErrorCode && <span className="block text-red-300">{sync.lastErrorCode.replaceAll('_', ' ')}</span>}
+                    <button type="button" className="btn-ghost mt-2 !px-3 !py-1.5 text-[10px]" disabled={busy || sync?.status === 'missing_mapping'} onClick={() => syncProduct(product.slug)}>
+                      {busy ? 'Syncing...' : 'Sync to Pancake POS'}
+                    </button>
+                  </td>
                 </tr>
-              ))}
-              {!products.length && <tr><td colSpan="7" className="p-6 text-center text-sm text-clay">No products match.</td></tr>}
+                );
+              })}
+              {!products.length && <tr><td colSpan="8" className="p-6 text-center text-sm text-clay">No products match.</td></tr>}
             </tbody>
           </table>
         </div>

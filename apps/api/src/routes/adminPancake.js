@@ -9,6 +9,8 @@ const inventoryServiceDefault = require('../integrations/pancake/pancakeInventor
 const orderExportRepositoryDefault = require('../integrations/pancake/pancakeOrderExportRepository');
 const orderExportServiceDefault = require('../integrations/pancake/pancakeOrderExportService');
 const orderSyncRepositoryDefault = require('../integrations/pancake/pancakeOrderSyncRepository');
+const productSyncRepositoryDefault = require('../integrations/pancake/pancakeProductSyncRepository');
+const productSyncServiceDefault = require('../integrations/pancake/pancakeProductSyncService');
 const {
   getPancakeConnectionStatus,
   testPancakeConnection
@@ -26,6 +28,8 @@ function createAdminPancakeRouter(dependencies = {}) {
   const orderRepository = dependencies.orderRepository || orderExportRepositoryDefault;
   const orderService = dependencies.orderService || orderExportServiceDefault;
   const orderSyncRepository = dependencies.orderSyncRepository || orderSyncRepositoryDefault;
+  const productSyncRepository = dependencies.productSyncRepository || productSyncRepositoryDefault;
+  const productSyncService = dependencies.productSyncService || productSyncServiceDefault;
 
   router.get('/status', async (_req, res, next) => {
     try {
@@ -112,6 +116,33 @@ function createAdminPancakeRouter(dependencies = {}) {
       const saved = await catalogService.saveReferenceSelection({ config, repository: catalogRepository, selection });
       return res.json({ selection: saved });
     } catch (error) { return next(error); }
+  });
+
+  router.get('/products/status', async (req, res, next) => {
+    try {
+      const slugs = String(req.query.slugs || '').split(',').map((slug) => slug.trim()).filter(Boolean);
+      if (!slugs.length || slugs.length > 100 || slugs.some((slug) => slug.length > 200)) {
+        const error = new Error('Provide 1 to 100 valid product slugs.'); error.status = 400; throw error;
+      }
+      return res.json({ products: await productSyncRepository.listProductSyncStatuses(slugs) });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/products/:slug/sync', async (req, res, next) => {
+    try {
+      const sync = await productSyncService.syncProductToPancake({
+        productSlug: req.params.slug,
+        config,
+        client,
+        repository: productSyncRepository
+      });
+      return res.json({ sync });
+    } catch (error) {
+      if (error?.sync) {
+        return res.status(error.status || 502).json({ error: error.message, code: error.code, sync: error.sync });
+      }
+      return next(error);
+    }
   });
 
   return router;

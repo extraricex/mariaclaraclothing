@@ -91,6 +91,24 @@ test('Pancake client updates an order with JSON body', async () => {
   assert.match(calls[0].url, /\/shops\/shop-1\/orders\/PK-1/);
 });
 
+test('Pancake client uses official mapped product and bulk quantity update endpoints', async () => {
+  const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
+  const calls = [];
+  const client = createPancakeClient(CONFIG, async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
+  });
+  await client.updateProduct('shop-1', 'product-1', { product: { name: 'Shirt', weight: 250 } });
+  await client.updateVariationQuantities('shop-1', {
+    is_actual_remain_quantity: false,
+    variations_warehouses: [{ variation_id: 'variant-1', remain_quantity: 3, warehouse_id: 'warehouse-1' }]
+  });
+  assert.match(calls[0].url, /\/shops\/shop-1\/products\/product-1/);
+  assert.equal(calls[0].options.method, 'PUT');
+  assert.match(calls[1].url, /\/shops\/shop-1\/variations\/update_quantity/);
+  assert.equal(calls[1].options.method, 'POST');
+});
+
 test('client errors never expose credentials or provider response bodies', async () => {
   const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
   const client = createPancakeClient(CONFIG, async () => new Response(

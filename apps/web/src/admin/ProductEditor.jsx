@@ -73,6 +73,8 @@ export default function ProductEditor() {
   const [message, setMessage] = useState('');
   const [queuedImages, setQueuedImages] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [pancakeSync, setPancakeSync] = useState(null);
+  const [pancakeSyncBusy, setPancakeSyncBusy] = useState(false);
   const descriptionEditorRef = useRef(null);
   const queuedImagesRef = useRef([]);
 
@@ -85,6 +87,13 @@ export default function ProductEditor() {
         setComparePeso(centsToPesoInput(body.product.compareAtPriceCents));
       })
       .catch((err) => setMessage(err.message));
+  }, [slug, isNew]);
+
+  useEffect(() => {
+    if (isNew || !slug) return;
+    adminJson(`/api/admin/integrations/pancake/products/status?slugs=${encodeURIComponent(slug)}`)
+      .then((body) => setPancakeSync(body.products?.[0] || null))
+      .catch((error) => setMessage(error.message));
   }, [slug, isNew]);
 
   useEffect(() => {
@@ -301,6 +310,7 @@ export default function ProductEditor() {
 
   async function save() {
     setMessage('');
+    let savedPancakeStatus = '';
     const partialSizeChartRow = sizeChartRows.some((row) => sizeChartRowHasValue(row) && !sizeChartRowIsComplete(row));
     if (partialSizeChartRow) {
       setMessage('Complete every size chart field before saving, or remove the incomplete row.');
@@ -354,10 +364,14 @@ export default function ProductEditor() {
       } else {
         const body = await adminSend('PUT', `/api/admin/products/${encodeURIComponent(slug)}`, payload);
         setProduct(body.product);
+        if (body.pancakeSync) {
+          setPancakeSync(body.pancakeSync);
+          savedPancakeStatus = body.pancakeSync.status;
+        }
         setPricePeso(centsToPesoInput(body.product.priceCents));
         setComparePeso(centsToPesoInput(body.product.compareAtPriceCents));
       }
-      setMessage('Changes saved successfully.');
+      setMessage(['failed', 'blocked', 'missing_mapping'].includes(savedPancakeStatus) ? 'Changes saved. Automatic Pancake sync did not complete; use Sync to Pancake POS to retry after resolving the warning.' : 'Changes saved successfully.');
     } catch (error) {
       setMessage(error.message);
     }
@@ -413,6 +427,22 @@ export default function ProductEditor() {
     }
   }
 
+  async function manualPancakeSync() {
+    setPancakeSyncBusy(true);
+    setMessage('Syncing product to Pancake POS...');
+    setPancakeSync((current) => ({ ...(current || {}), status: 'syncing' }));
+    try {
+      const body = await adminJson(`/api/admin/integrations/pancake/products/${encodeURIComponent(slug)}/sync`, { method: 'POST' });
+      setPancakeSync(body.sync);
+      setMessage('Product synced successfully to Pancake POS.');
+    } catch (error) {
+      if (error.body?.sync) setPancakeSync(error.body.sync);
+      setMessage(error.message);
+    } finally {
+      setPancakeSyncBusy(false);
+    }
+  }
+
   return (
     <div className="product-editor-shell">
       <Link to="/admin/products" className="text-xs font-semibold uppercase tracking-[0.12em] text-clay hover:text-accent">Products</Link>
@@ -427,11 +457,31 @@ export default function ProductEditor() {
         <div className="flex flex-wrap gap-2">
           {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" onClick={duplicateProduct}>Duplicate</button>}
           {!isNew && <Link to={`/product/${encodeURIComponent(product.slug)}`} className="btn-ghost !px-4 !py-2.5 text-xs">View</Link>}
+          {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" disabled={pancakeSyncBusy || pancakeSync?.status === 'missing_mapping'} onClick={manualPancakeSync}>{pancakeSyncBusy ? 'Syncing...' : 'Sync to Pancake POS'}</button>}
           {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs !border-accent-deep !text-accent-deep" onClick={deleteProduct}>Delete</button>}
           <button type="button" className="btn-ink !px-5 !py-2.5 text-xs" onClick={save}>Save</button>
         </div>
       </div>
       {message && <p className="mt-3 text-sm text-accent-deep" role="status">{message}</p>}
+      {!isNew && pancakeSync && (
+        <section className="mt-4 border border-line bg-paper p-4 text-xs text-clay" aria-label="Pancake product sync status">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <strong className="text-ink">Pancake: {pancakeSync.status?.replaceAll('_', ' ')}</strong>
+            {pancakeSync.pancakeProductId && <span>Product ID: {pancakeSync.pancakeProductId}</span>}
+            <span>Mapped variants: {pancakeSync.mappedVariantCount || 0}/{pancakeSync.totalVariantCount || 0}</span>
+            {pancakeSync.lastSyncedAt && <time dateTime={pancakeSync.lastSyncedAt}>Last synced: {new Date(pancakeSync.lastSyncedAt).toLocaleString()}</time>}
+            {pancakeSync.stockMismatch === true && <strong className="text-amber-300">Stock mismatch warning</strong>}
+            {pancakeSync.lastErrorCode && <strong className="text-red-300">Error: {pancakeSync.lastErrorCode.replaceAll('_', ' ')}</strong>}
+          </div>
+          {pancakeSync.variantMappings?.length > 0 && (
+            <div className="mt-3 grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
+              {pancakeSync.variantMappings.map((mapping) => (
+                <span key={mapping.localVariantId || mapping.sku} className="truncate" title={mapping.pancakeVariantId || 'Missing mapping'}>{mapping.size} · {mapping.sku} · {mapping.pancakeVariantId || 'Missing Pancake variant ID'}</span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="product-editor-grid mt-6">
         <div className="space-y-4">

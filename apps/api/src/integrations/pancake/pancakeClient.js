@@ -142,6 +142,24 @@ function createPancakeClient(config, fetchImpl = fetch) {
     });
   }
 
+  async function updateProduct(shopId, productId, payload) {
+    const id = String(productId || '').trim();
+    if (!id) throw new PancakeApiError('pancake_invalid_request');
+    return request(shopPath(shopId, `/products/${encodeURIComponent(id)}`), {}, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {})
+    });
+  }
+
+  async function updateVariationQuantities(shopId, payload) {
+    return request(shopPath(shopId, '/variations/update_quantity'), {}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {})
+    });
+  }
+
   return {
     createOrder,
     listOrders,
@@ -149,6 +167,8 @@ function createPancakeClient(config, fetchImpl = fetch) {
     listWarehouses: (shopId) => listData(shopId, '/warehouses'),
     listOrderSources: (shopId) => listData(shopId, '/order_source'),
     listVariations,
+    updateProduct,
+    updateVariationQuantities,
     updateOrder
   };
 }

@@ -141,6 +141,35 @@ test('Pancake admin status includes bidirectional sync summary', async () => {
   });
 });
 
+test('Pancake admin subrouter exposes product mapping status and manual sync', async () => {
+  const { createAdminPancakeRouter } = require('../src/routes/adminPancake');
+  const app = express();
+  app.use(express.json());
+  const calls = [];
+  const status = {
+    productSlug: 'shirt', status: 'synced', pancakeProductId: 'product-1',
+    mappedVariantCount: 2, totalVariantCount: 2, variantMappings: []
+  };
+  app.use(createAdminPancakeRouter({
+    config: { mode: 'live', apiKey: 'secret', shopId: 'shop-1', warehouseId: 'warehouse-1' },
+    repository: { getConnectionStatus: async () => null },
+    orderSyncRepository: { getOrderSyncSummary: async () => ({}) },
+    productSyncRepository: { listProductSyncStatuses: async (slugs) => slugs.map((slug) => ({ ...status, productSlug: slug })) },
+    productSyncService: {
+      syncProductToPancake: async (options) => { calls.push(options.productSlug); return status; }
+    }
+  }));
+  await listen(app, async (port) => {
+    const listed = await fetch(`http://127.0.0.1:${port}/products/status?slugs=shirt,second-shirt`);
+    assert.equal(listed.status, 200);
+    assert.equal((await listed.json()).products.length, 2);
+    const synced = await fetch(`http://127.0.0.1:${port}/products/shirt/sync`, { method: 'POST' });
+    assert.equal(synced.status, 200);
+    assert.equal((await synced.json()).sync.status, 'synced');
+    assert.deepEqual(calls, ['shirt']);
+  });
+});
+
 test('Pancake admin subrouter exposes validated catalog import mapping and selection APIs', async () => {
   const { createAdminPancakeRouter } = require('../src/routes/adminPancake');
   const calls = [];

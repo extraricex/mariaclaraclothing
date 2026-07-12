@@ -75,7 +75,12 @@ const {
   setSessionCookies
 } = require('../auth/sessionHttp');
 const { createAdminPancakeRouter } = require('./adminPancake');
+const { env } = require('../config/env');
+const { createPancakeClient } = require('../integrations/pancake/pancakeClient');
+const pancakeProductSyncRepository = require('../integrations/pancake/pancakeProductSyncRepository');
+const { syncProductToPancake } = require('../integrations/pancake/pancakeProductSyncService');
 const { hasDatabaseUrl, transaction } = require('../db/postgres');
+const { applyOversizedProductTemplate, isOversizedProduct } = require('../products/oversizedProductTemplate');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const {
@@ -696,6 +701,38 @@ router.get('/products', async (req, res, next) => {
   }
 });
 
+router.get('/products/templates/oversized/preview', async (_req, res, next) => {
+  try {
+    const products = (await listEditableProducts()).filter(isOversizedProduct);
+    return res.json({
+      count: products.length,
+      products: products.map((product) => ({ name: product.name, slug: product.slug, status: productStatus(product) }))
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/products/templates/oversized/apply', async (req, res, next) => {
+  try {
+    const requested = Array.isArray(req.body?.slugs)
+      ? new Set(req.body.slugs.map((slug) => String(slug || '').trim()).filter(Boolean))
+      : null;
+    const products = (await listEditableProducts())
+      .filter(isOversizedProduct)
+      .filter((product) => !requested || requested.has(product.slug));
+    for (const product of products) {
+      await saveEditableProduct(applyOversizedProductTemplate(product), product.slug);
+    }
+    return res.json({
+      count: products.length,
+      products: products.map((product) => ({ name: product.name, slug: product.slug }))
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/products/:slug', async (req, res, next) => {
   try {
     const product = await findEditableProductBySlug(String(req.params.slug || '').trim());
@@ -777,7 +814,20 @@ router.put('/products/:slug', async (req, res, next) => {
       productPage: req.body?.productPage || existingProduct.productPage
     }), slug);
     await appendInventoryMovements(stockCorrectionMovements(existingProduct, product));
-    return res.json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
+    let pancakeSync = null;
+    if (productVariantStockChanged(existingProduct, product)) {
+      try {
+        pancakeSync = await syncProductToPancake({
+          productSlug: product.slug,
+          config: env.pancake,
+          client: createPancakeClient(env.pancake),
+          repository: pancakeProductSyncRepository
+        });
+      } catch (syncError) {
+        pancakeSync = syncError.sync || { status: 'failed', lastErrorCode: syncError.code || 'pancake_product_sync_failed' };
+      }
+    }
+    return res.json({ product, pancakeSync, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
   } catch (error) {
     return next(error);
   }
@@ -1380,6 +1430,13 @@ function productSummaryRecord(product, lowStockThreshold) {
     productType: product.productType || inferProductType(product, category),
     vendor: product.vendor || 'Maria Clara Clothing'
   };
+}
+
+function productVariantStockChanged(previousProduct, nextProduct) {
+  const previous = new Map((previousProduct?.variants || []).map((variant) => [String(variant.sku || '').trim().toUpperCase(), Number(variant.stockQuantity || 0)]));
+  const next = new Map((nextProduct?.variants || []).map((variant) => [String(variant.sku || '').trim().toUpperCase(), Number(variant.stockQuantity || 0)]));
+  if (previous.size !== next.size) return true;
+  return [...next].some(([sku, quantity]) => previous.get(sku) !== quantity);
 }
 
 function sortProductRecords(products, sort) {
