@@ -447,13 +447,36 @@ async function savePostgresProduct(client, product) {
     );
   }
 
-  await client.query('DELETE FROM product_variants WHERE product_slug = $1', [product.slug]);
   for (const variant of product.variants) {
     await client.query(
-      'INSERT INTO product_variants (product_slug, size, sku, price_cents, stock_quantity, external_pos_variant_id) VALUES ($1, $2, $3, $4, $5, $6)',
+      `INSERT INTO product_variants (product_slug, size, sku, price_cents, stock_quantity, external_pos_variant_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (sku) DO UPDATE SET
+         product_slug=EXCLUDED.product_slug,
+         size=EXCLUDED.size,
+         price_cents=EXCLUDED.price_cents,
+         stock_quantity=EXCLUDED.stock_quantity,
+         external_pos_variant_id=CASE
+           WHEN EXCLUDED.external_pos_variant_id<>'' THEN EXCLUDED.external_pos_variant_id
+           ELSE product_variants.external_pos_variant_id
+         END`,
       [product.slug, variant.size, variant.sku, variant.priceCents || null, variant.stockQuantity, variant.externalPosVariantId || '']
     );
   }
+  const variantSkus = product.variants.map((variant) => variant.sku);
+  await client.query(
+    'DELETE FROM product_variants WHERE product_slug=$1 AND NOT (sku=ANY($2::text[]))',
+    [product.slug, variantSkus]
+  );
+  await client.query(
+    `UPDATE pancake_variant_mappings m SET
+       product_slug=v.product_slug,
+       local_sku=v.sku,
+       normalized_sku=upper(trim(v.sku))
+     FROM product_variants v
+     WHERE m.local_variant_id=v.id AND v.product_slug=$1`,
+    [product.slug]
+  );
 }
 
 function fromPostgresProduct(row) {
