@@ -252,7 +252,7 @@ async function processOutboundOrderEvents({
   limit = 25
 }) {
   const events = await syncRepository.claimDueSyncEvents({ direction: 'outbound', limit, now: now().toISOString() });
-  const summary = { checkedCount: events.length, updatedCount: 0, failedCount: 0, blockedCount: 0 };
+  const summary = { status: 'complete', checkedCount: events.length, updatedCount: 0, failedCount: 0, blockedCount: 0 };
   for (const event of events) {
     try {
       const order = await orderRepository.findOrderByNumber(event.orderNumber);
@@ -284,6 +284,8 @@ async function processOutboundOrderEvents({
       summary.failedCount += 1;
     }
   }
+  if (summary.failedCount) summary.status = 'failed';
+  else if (summary.blockedCount) summary.status = 'blocked';
   return summary;
 }
 

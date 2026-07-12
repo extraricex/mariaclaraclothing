@@ -304,6 +304,7 @@ test('processOutboundOrderEvents sends due admin changes to Pancake', async () =
   });
 
   assert.equal(result.updatedCount, 1);
+  assert.equal(result.status, 'complete');
   assert.equal(calls[0].pancakeOrderId, 'PK-1');
   assert.equal(calls[0].payload.status, 2);
   assert.equal(calls[0].payload.partner.extend_code, 'TRACK-1');
@@ -330,5 +331,6 @@ test('processOutboundOrderEvents blocks unsupported-only updates without calling
   });
 
   assert.equal(result.blockedCount, 1);
+  assert.equal(result.status, 'blocked');
   assert.equal(callCount, 0);
 });
