@@ -10,6 +10,8 @@ const {
 const { createPayMongoClient } = require('../payments/paymongoClient');
 const { attachCheckoutSession, checkoutSessionPayload, processPaidWebhook } = require('../payments/paymongoPaymentService');
 const { verifyPayMongoSignature } = require('../payments/paymongoWebhookSignature');
+const { createPancakeClient } = require('../integrations/pancake/pancakeClient');
+const { processOutboundOrderEvents } = require('../integrations/pancake/pancakeOrderSyncService');
 
 function sourceUrl(req) {
   try { return new URL('/checkout', String(req.get('origin') || env.oauth.frontendUrl)).toString(); }
@@ -20,6 +22,13 @@ function createPayMongoRouter(dependencies = {}) {
   const router = express.Router();
   const config = dependencies.config || env.paymongo;
   const client = dependencies.client || createPayMongoClient(config);
+  const processPancakeOrderUpdates = dependencies.processPancakeOrderUpdates || (async () => {
+    if (env.pancake.mode !== 'live' || !env.pancake.apiKeyConfigured) return { status: 'skipped' };
+    return processOutboundOrderEvents({
+      config: env.pancake,
+      client: createPancakeClient(env.pancake)
+    });
+  });
 
   router.post('/create-checkout-session', async (req, res, next) => {
     try {
@@ -65,6 +74,21 @@ function createPayMongoRouter(dependencies = {}) {
       });
       if (!valid) return res.status(401).json({ error: 'Invalid PayMongo signature.' });
       const result = await processPaidWebhook(req.body, { metaEnabled: env.meta.enabled });
+      console.info('PayMongo webhook processed.', {
+        eventType: req.body?.data?.attributes?.type || '',
+        orderNumber: result.orderNumber || '',
+        status: result.status
+      });
+      if (result.status === 'paid') {
+        try {
+          const pancakeResult = await processPancakeOrderUpdates();
+          if (pancakeResult?.status === 'failed') {
+            console.error('Pancake payment update failed and remains queued for retry.');
+          }
+        } catch (error) {
+          console.error('Pancake payment update remains queued for retry:', error?.message || error);
+        }
+      }
       return res.status(200).json({ received: true, status: result.status });
     } catch (error) { return next(error); }
   });

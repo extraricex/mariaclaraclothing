@@ -138,5 +138,42 @@ test('builds outbound Pancake order update payload from local order changes', ()
   assert.equal(payload.status, 2);
   assert.equal(payload.partner.extend_code, 'JNT123');
   assert.equal(payload.bill_full_name, 'Maria Customer');
-  assert.equal(payload.note_print, 'Pack carefully');
+  assert.match(payload.note_print, /Pack carefully/);
+  assert.match(payload.note_print, /website_status=shipped/);
+});
+
+test('builds a verified PayMongo payment update with zero COD and prepaid transfer amount', () => {
+  const { buildPancakeOrderUpdatePayload } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const payload = buildPancakeOrderUpdatePayload({
+    order: {
+      orderNumber: 'MCC-PAY-1', status: 'confirmed', checkoutChannel: 'storefront_checkout',
+      paymentMethod: 'paymongo', paymentStatus: 'paid', totalCents: 72900, paidAmountCents: 72900,
+      providerCheckoutSessionId: 'cs_1', providerPaymentId: 'pay_1', notes: 'Pack carefully'
+    },
+    changedFields: ['paymentMethod', 'paymentStatus', 'status']
+  });
+  assert.equal(payload.status, 1);
+  assert.equal(payload.cod, 0);
+  assert.equal(payload.transfer_money, 729);
+  assert.match(payload.note_print, /payment_method=paymongo/);
+  assert.match(payload.note_print, /payment_status=paid/);
+  assert.match(payload.note_print, /paymongo_payment_id=pay_1/);
+});
+
+test('normalizes Pancake transfer payments and website status markers safely', () => {
+  const { mapPancakeStatus, normalizePancakeOrder } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const paid = normalizePancakeOrder({
+    id: 'PK-PAY-1', custom_id: 'MCC-PAY-1', status: 1, cod: 0, transfer_money: 729,
+    note_print: 'payment_method=paymongo\npayment_status=paid\nwebsite_status=confirmed'
+  });
+  assert.equal(paid.paymentMethod, 'paymongo');
+  assert.equal(paid.paymentStatus, 'paid');
+  assert.equal(paid.codAmountCents, 0);
+
+  const unreachable = normalizePancakeOrder({
+    id: 'PK-UNREACHABLE', custom_id: 'MCC-UNREACHABLE', status: 17,
+    note_print: 'website_status=unreachable'
+  });
+  assert.equal(unreachable.status, 'unreachable');
+  assert.equal(mapPancakeStatus(17).status, 'received');
 });

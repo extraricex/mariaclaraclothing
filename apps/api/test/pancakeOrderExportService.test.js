@@ -77,9 +77,34 @@ test('builds a Pancake shadow order payload from a mapped COD order', () => {
   assert.equal(payload.is_free_shipping, false);
   assert.equal(payload.received_at_shop, false);
   assert.equal(payload.status, 0);
+  assert.equal(payload.cod, 1380);
+  assert.equal(payload.transfer_money, 0);
   assert.match(payload.note, /MCC-1001/);
   assert.match(payload.note, /storefront_checkout/);
-  assert.equal(payload.note_print, 'Leave at guard');
+  assert.match(payload.note_print, /Leave at guard/);
+  assert.match(payload.note_print, /payment_method=cash_on_delivery/);
+  assert.match(payload.note_print, /cod_amount=1380/);
+});
+
+test('builds PayMongo orders as non-COD and exports a verified paid amount only after payment', () => {
+  const { buildPancakeOrderPayload } = require('../src/integrations/pancake/pancakeOrderExportService');
+  const pending = buildPancakeOrderPayload(order({
+    paymentMethod: 'paymongo', paymentStatus: 'pending_payment', totalCents: 148000,
+    providerCheckoutSessionId: 'cs_test_1'
+  }), readiness());
+  assert.equal(pending.cod, 0);
+  assert.equal(pending.transfer_money, 0);
+  assert.match(pending.note_print, /payment_method=paymongo/);
+  assert.match(pending.note_print, /paymongo_checkout_session_id=cs_test_1/);
+
+  const paid = buildPancakeOrderPayload(order({
+    paymentMethod: 'paymongo', paymentStatus: 'paid', totalCents: 148000,
+    paidAmountCents: 148000, providerCheckoutSessionId: 'cs_test_1', providerPaymentId: 'pay_test_1'
+  }), readiness());
+  assert.equal(paid.cod, 0);
+  assert.equal(paid.transfer_money, 1480);
+  assert.match(paid.note_print, /payment_status=paid/);
+  assert.match(paid.note_print, /paymongo_payment_id=pay_test_1/);
 });
 
 test('redacts phone and email in stored shadow review payloads', () => {

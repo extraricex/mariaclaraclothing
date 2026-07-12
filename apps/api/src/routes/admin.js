@@ -84,6 +84,7 @@ const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const { applyOversizedProductTemplate, isOversizedProduct } = require('../products/oversizedProductTemplate');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
+const { processOutboundOrderEvents } = require('../integrations/pancake/pancakeOrderSyncService');
 const {
   deleteIssueReport,
   findIssueReportById,
@@ -94,7 +95,9 @@ const {
 
 const router = express.Router();
 
-const VALID_ORDER_STATUSES = new Set(['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled']);
+const VALID_ORDER_STATUSES = new Set([
+  'received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'
+]);
 const VALID_FULFILLMENT_STATUSES = new Set(['unfulfilled', 'packed', 'shipped', 'delivered', 'cancelled']);
 const VALID_PAYMENT_STATUSES = new Set(['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'refunded']);
 const VALID_COD_CONFIRMATION_STATUSES = new Set(['pending', 'confirmed', 'unreachable', 'cancelled']);
@@ -934,7 +937,19 @@ router.post('/orders/export/jnt', async (req, res, next) => {
           : 'out_for_delivery'
       });
       await appendStatusEventIfChanged(order, updatedOrder, 'jnt_export', 'J&T export marked this order as shipped.');
+      await enqueuePancakeOrderUpdateIfLinked(order, updatedOrder);
     }));
+    if (env.pancake.mode === 'live' && env.pancake.apiKeyConfigured) {
+      try {
+        await processOutboundOrderEvents({
+          config: env.pancake,
+          client: createPancakeClient(env.pancake),
+          syncRepository: pancakeOrderSyncRepository
+        });
+      } catch (error) {
+        console.error('J&T Pancake status update remains queued for retry:', error?.message || error);
+      }
+    }
 
     res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('content-disposition', `attachment; filename="JNT_Orders_${exportedAt.slice(0, 10)}.xlsx"`);
@@ -1040,7 +1055,18 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
     if (existingOrder.status !== 'cancelled' && order.status === 'cancelled') {
       await pancakeOrderExportRepository.markOrderExportSkipped(order.orderNumber);
     }
-    await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
+    const pancakeEvent = await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
+    if (pancakeEvent?.status === 'pending' && env.pancake.mode === 'live' && env.pancake.apiKeyConfigured) {
+      try {
+        await processOutboundOrderEvents({
+          config: env.pancake,
+          client: createPancakeClient(env.pancake),
+          syncRepository: pancakeOrderSyncRepository
+        });
+      } catch (error) {
+        console.error('Immediate Pancake order update failed and remains queued:', error?.message || error);
+      }
+    }
     await enqueueDeliveredOrderNotifications(existingOrder, order);
     const refreshedOrder = await findOrderByNumber(orderNumber);
     return res.json({
@@ -1082,6 +1108,11 @@ async function restoreCancelledOrderStock(previousOrder, nextOrder, options = {}
     size: item.size,
     quantityChange: item.quantity
   })), options);
+  await pancakeInventoryOutboxRepository.enqueueInventorySync(
+    [...new Set(restockItems.map((item) => item.slug).filter(Boolean))],
+    'admin',
+    { ...options, maxAttempts: env.pancake.syncMaxAttempts }
+  );
 }
 
 function issueUploadDir() {
@@ -1620,6 +1651,7 @@ function changedPancakeFields(previousOrder, nextOrder) {
     'status',
     'fulfillmentStatus',
     'deliveryStatus',
+    'paymentStatus',
     'trackingNumber',
     'notes'
   ]) {
@@ -1633,14 +1665,22 @@ function changedPancakeFields(previousOrder, nextOrder) {
 async function enqueuePancakeOrderUpdateIfLinked(previousOrder, nextOrder, { syncRepository = pancakeOrderSyncRepository } = {}) {
   const changedFields = changedPancakeFields(previousOrder, nextOrder);
   if (!changedFields.length || !nextOrder?.orderNumber) return null;
+  await syncRepository.backfillSentOrderExportLinks?.({ limit: 100 });
   const detail = await syncRepository.getOrderSyncDetail(nextOrder.orderNumber);
-  if (!detail?.pancakeOrderId) return null;
+  if (!detail?.pancakeOrderId) {
+    await syncRepository.appendSyncLog({
+      direction: 'outbound', entityType: 'order', entityId: nextOrder.orderNumber,
+      orderNumber: nextOrder.orderNumber, level: 'warning', code: 'pancake_order_link_missing',
+      message: 'Admin order update was saved locally but no Pancake order link exists.'
+    });
+    return { status: 'blocked', safeErrorCode: 'pancake_order_link_missing' };
+  }
   const sortedFields = changedFields.sort();
   const payloadHash = crypto
     .createHash('sha256')
     .update(JSON.stringify({ changedFields: sortedFields, updatedAt: nextOrder.updatedAt || '' }))
     .digest('hex');
-  return syncRepository.enqueueSyncEvent({
+  const event = await syncRepository.enqueueSyncEvent({
     direction: 'outbound',
     entityType: 'order',
     entityId: nextOrder.orderNumber,
@@ -1650,6 +1690,27 @@ async function enqueuePancakeOrderUpdateIfLinked(previousOrder, nextOrder, { syn
     payloadHash,
     payload: { changedFields: sortedFields }
   });
+  if (event?.status === 'pending') {
+    await syncRepository.upsertOrderLink({
+      ...detail,
+      orderNumber: nextOrder.orderNumber,
+      pancakeOrderId: detail.pancakeOrderId,
+      syncStatus: 'pending_sync',
+      lastLocalUpdatedAt: nextOrder.updatedAt || new Date().toISOString()
+    });
+    await syncRepository.appendSyncLog({
+      direction: 'outbound', entityType: 'order', entityId: nextOrder.orderNumber,
+      orderNumber: nextOrder.orderNumber, pancakeOrderId: detail.pancakeOrderId,
+      level: 'info', code: nextOrder.status === 'cancelled'
+        ? 'pancake_order_cancellation_queued'
+        : 'pancake_order_update_queued',
+      message: nextOrder.status === 'cancelled'
+        ? 'Admin order cancellation queued for Pancake POS.'
+        : 'Admin order update queued for Pancake POS.',
+      metadata: { changedFields: sortedFields }
+    });
+  }
+  return event;
 }
 
 function normalizeOrderCustomerUpdate(customer) {

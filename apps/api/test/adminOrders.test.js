@@ -510,6 +510,7 @@ test('admin cancellation restores order stock and records restock movement', asy
   const app = createFreshApp();
   const { findEditableProductBySlug } = require('../src/products/catalogRepository');
   const { listInventoryMovements } = require('../src/inventory/inventoryMovementRepository');
+  const pancakeInventoryOutboxRepository = require('../src/integrations/pancake/pancakeInventoryOutboxRepository');
   const pancakeOrderExportRepository = require('../src/integrations/pancake/pancakeOrderExportRepository');
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
@@ -550,6 +551,7 @@ test('admin cancellation restores order stock and records restock movement', asy
     const movements = await listInventoryMovements({ orderNumber });
     const exportStatus = await pancakeOrderExportRepository.getOrderExportStatus();
     const cancelledExport = exportStatus.recent.find((item) => item.orderNumber === orderNumber);
+    const inventorySync = await pancakeInventoryOutboxRepository.listInventorySyncDashboard();
 
     assert.equal(cancelResponse.status, 200);
     assert.equal(cancelBody.order.status, 'cancelled');
@@ -558,6 +560,7 @@ test('admin cancellation restores order stock and records restock movement', asy
     assert.ok(movements.some((movement) => movement.reason === 'order_cancelled' && movement.quantityChange === ORDER_ITEM.quantity));
     assert.equal(cancelledExport?.status, 'skipped');
     assert.equal(cancelledExport?.safeErrorCode, 'pancake_order_cancelled_before_export');
+    assert.ok(inventorySync.jobs.some((job) => job.productSlug === slug && job.status === 'pending'));
 
     const reopenResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, {
       method: 'PATCH',
@@ -622,6 +625,9 @@ test('admin order updates enqueue Pancake outbound sync events for linked orders
 
     assert.equal(result?.status, 'pending');
     assert.equal(result.pancakeOrderId, 'PK-ADMIN-1');
+    const detail = await pancakeSync.getOrderSyncDetail('MCC-ADMIN-SYNC');
+    assert.equal(detail.syncStatus, 'pending_sync');
+    assert.equal(detail.statusSyncStatus, 'pending_sync');
   } finally {
     if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previousDatabaseUrl;

@@ -6,7 +6,7 @@ import { loadBarangays, loadCities, loadProvinces } from '../lib/addressGuide.js
 import { adminProductDisplayParts, truncateAdminProductCode } from './adminProductDisplay.js';
 
 const ENUMS = {
-  status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'],
+  status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'],
   fulfillmentStatus: ['unfulfilled', 'packed', 'shipped', 'delivered', 'cancelled'],
   paymentStatus: ['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'refunded'],
   codConfirmationStatus: ['pending', 'confirmed', 'unreachable', 'cancelled'],
@@ -27,7 +27,10 @@ const ORDER_ACTION_STATUSES = [
   ['packed', 'Packing'],
   ['shipped', 'Shipped'],
   ['delivered', 'Delivered'],
-  ['cancelled', 'Cancelled']
+  ['cancelled', 'Cancelled'],
+  ['returned', 'Returned'],
+  ['failed', 'Failed'],
+  ['unreachable', 'Unreachable']
 ];
 
 const NOTE_TABS = ['All', 'Internal', 'Printing', 'Conversation'];
@@ -302,20 +305,22 @@ export default function OrderDetail() {
 
   function setOrderStatusFromAction(nextStatus) {
     setIsEditing(true);
-    setForm((previous) => ({
-      ...previous,
-      status: nextStatus,
-      fulfillmentStatus: nextStatus === 'packed'
-        ? 'packed'
-        : ['shipped', 'delivered', 'cancelled'].includes(nextStatus)
-          ? nextStatus
-          : previous.fulfillmentStatus,
-      deliveryStatus: nextStatus === 'delivered'
-        ? 'delivered'
-        : nextStatus === 'cancelled'
-          ? 'cancelled'
-          : previous.deliveryStatus
-    }));
+    setForm((previous) => {
+      let fulfillmentStatus = previous.fulfillmentStatus;
+      let deliveryStatus = previous.deliveryStatus;
+      let codConfirmationStatus = previous.codConfirmationStatus;
+      if (nextStatus === 'packed') fulfillmentStatus = 'packed';
+      if (['shipped', 'delivered', 'cancelled'].includes(nextStatus)) fulfillmentStatus = nextStatus;
+      if (nextStatus === 'returned') fulfillmentStatus = 'shipped';
+      if (['failed', 'unreachable'].includes(nextStatus)) fulfillmentStatus = 'unfulfilled';
+      if (nextStatus === 'delivered') deliveryStatus = 'delivered';
+      if (nextStatus === 'cancelled') deliveryStatus = 'cancelled';
+      if (nextStatus === 'returned') deliveryStatus = 'returned';
+      if (['failed', 'unreachable'].includes(nextStatus)) deliveryStatus = 'pending';
+      if (nextStatus === 'unreachable') codConfirmationStatus = 'unreachable';
+      if (nextStatus === 'cancelled') codConfirmationStatus = 'cancelled';
+      return { ...previous, status: nextStatus, fulfillmentStatus, deliveryStatus, codConfirmationStatus };
+    });
   }
 
   function markAsReturned() {
@@ -414,6 +419,8 @@ export default function OrderDetail() {
   const pancakeSyncLabel = pancakeSyncStatus ? titleCase(pancakeSyncStatus) : 'Not synced to Pancake POS';
   const pancakeProductMappingStatus = pancakeSyncDetail.productMappingStatus || (pancakeSyncDetail.pancakeOrderId ? 'Mapped by saved order link' : 'Not linked to Pancake POS');
   const pancakeInventorySyncStatus = pancakeSyncDetail.inventorySyncStatus || (pancakeSyncStatus === 'synced' ? 'Synced with order' : pancakeSyncLabel);
+  const pancakePaymentSyncLabel = titleCase(pancakeSyncDetail.paymentSyncStatus || 'not_synced');
+  const pancakeStatusSyncLabel = titleCase(pancakeSyncDetail.statusSyncStatus || 'not_synced');
   const orderMetricCards = [
     ['Order status', displayOrderStatus(form.status), form.status === 'cancelled' ? 'danger' : form.status === 'delivered' ? 'success' : 'info'],
     ['Amount due', formatMoney(balanceCents), balanceCents > 0 ? 'warning' : 'success'],
@@ -657,9 +664,15 @@ export default function OrderDetail() {
               <dl>
                 <InfoRow label="Pancake POS order ID" value={fallback(pancakeSyncDetail.pancakeOrderId, 'Not linked to Pancake POS')} strong={Boolean(pancakeSyncDetail.pancakeOrderId)} />
                 <InfoRow label="Sync status" value={pancakeSyncLabel} strong />
+                <InfoRow label="Payment sync status" value={pancakePaymentSyncLabel} strong={pancakeSyncDetail.paymentSyncStatus === 'synced'} />
+                <InfoRow label="Order status sync" value={pancakeStatusSyncLabel} strong={pancakeSyncDetail.statusSyncStatus === 'synced'} />
                 <InfoRow label="Last sync time" value={pancakeSyncDetail.lastSyncedAt ? new Date(pancakeSyncDetail.lastSyncedAt).toLocaleString('en-PH') : 'Never synced'} />
+                <InfoRow label="Payment last synced" value={pancakeSyncDetail.paymentLastSyncedAt ? new Date(pancakeSyncDetail.paymentLastSyncedAt).toLocaleString('en-PH') : 'Never synced'} />
+                <InfoRow label="Status last synced" value={pancakeSyncDetail.statusLastSyncedAt ? new Date(pancakeSyncDetail.statusLastSyncedAt).toLocaleString('en-PH') : 'Never synced'} />
                 <InfoRow label="Last Pancake update time" value={pancakeSyncDetail.lastPancakeUpdatedAt ? new Date(pancakeSyncDetail.lastPancakeUpdatedAt).toLocaleString('en-PH') : 'No Pancake update recorded'} />
                 <InfoRow label="Last sync error" value={fallback(pancakeSyncDetail.safeErrorCode, 'No sync error')} />
+                <InfoRow label="Payment sync error" value={fallback(pancakeSyncDetail.paymentSyncError, 'No payment sync error')} />
+                <InfoRow label="Status sync error" value={fallback(pancakeSyncDetail.statusSyncError, 'No status sync error')} />
                 <InfoRow label="Product mapping status" value={pancakeProductMappingStatus} />
                 <InfoRow label="Inventory sync status" value={pancakeInventorySyncStatus} />
               </dl>

@@ -53,8 +53,22 @@ const LOCAL_TO_PANCAKE_STATUS = {
   shipped: 2,
   delivered: 3,
   cancelled: 6,
-  returned: 5
+  returned: 5,
+  failed: 17,
+  unreachable: 17
 };
+
+const SYNC_NOTE_PREFIXES = [
+  'Website order ',
+  'checkout_channel=',
+  'payment_method=',
+  'payment_status=',
+  'paid_amount=',
+  'cod_amount=',
+  'paymongo_payment_id=',
+  'paymongo_checkout_session_id=',
+  'website_status='
+];
 
 function normalizedKey(value) {
   return String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
@@ -72,6 +86,67 @@ function centsFromPesos(value) {
   const amount = Number(value || 0);
   if (!Number.isFinite(amount)) return 0;
   return Math.round(amount * 100);
+}
+
+function pesosFromCents(value) {
+  const cents = Number(value || 0);
+  if (!Number.isFinite(cents)) return 0;
+  return Math.max(0, Math.round(cents / 100));
+}
+
+function noteMarker(notes, name) {
+  const match = String(notes || '').match(new RegExp(`(?:^|\\n)${name}=([^\\n]*)`, 'i'));
+  return String(match?.[1] || '').trim();
+}
+
+function customerNoteLines(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !SYNC_NOTE_PREFIXES.some((prefix) => line.startsWith(prefix)));
+}
+
+function isPayMongo(order = {}) {
+  return String(order.paymentMethod || order.paymentProvider || '').trim().toLowerCase() === 'paymongo';
+}
+
+function orderTotalCents(order = {}) {
+  const explicit = Number(order.totalCents);
+  if (Number.isFinite(explicit) && explicit >= 0) return explicit;
+  const subtotal = (Array.isArray(order.items) ? order.items : []).reduce(
+    (sum, item) => sum + Number(item.unitPriceCents || 0) * Number(item.quantity || 0),
+    0
+  );
+  return Math.max(0, subtotal - Number(order.discountTotalCents || 0) + Number(order.shippingFeeCents || 0));
+}
+
+function buildPancakePaymentPayload(order = {}) {
+  const totalCents = orderTotalCents(order);
+  const total = pesosFromCents(totalCents);
+  const paid = order.paymentStatus === 'paid';
+  const paymongo = isPayMongo(order);
+  const paidAmount = paid ? pesosFromCents(order.paidAmountCents ?? totalCents) : 0;
+  return {
+    cod: paymongo || paid ? 0 : total,
+    transfer_money: paymongo ? paidAmount : 0
+  };
+}
+
+function buildPancakeOrderNote(order = {}) {
+  const payment = buildPancakePaymentPayload(order);
+  const lines = [
+    ...customerNoteLines(order.notes),
+    order.orderNumber ? `Website order ${order.orderNumber}` : '',
+    `checkout_channel=${order.checkoutChannel || 'storefront_checkout'}`,
+    `payment_method=${order.paymentMethod || 'cash_on_delivery'}`,
+    `payment_status=${order.paymentStatus || 'pending'}`,
+    `paid_amount=${payment.transfer_money}`,
+    `cod_amount=${payment.cod}`,
+    isPayMongo(order) && order.providerPaymentId ? `paymongo_payment_id=${order.providerPaymentId}` : '',
+    isPayMongo(order) && order.providerCheckoutSessionId ? `paymongo_checkout_session_id=${order.providerCheckoutSessionId}` : '',
+    `website_status=${order.status || 'received'}`
+  ];
+  return lines.filter(Boolean).join('\n');
 }
 
 function firstText(...values) {
@@ -132,7 +207,14 @@ function normalizePancakeOrder(payload = {}) {
     shippingInfo.extend_update?.at?.(-1)?.status,
     shippingInfo.status
   );
-  const statusFields = mapPancakeStatus(payload.status ?? payload.status_name);
+  const notes = [payload.note_print, payload.note].filter(Boolean).join('\n');
+  const statusFields = { ...mapPancakeStatus(payload.status ?? payload.status_name) };
+  const websiteStatus = normalizedKey(noteMarker(notes, 'website_status'));
+  if (websiteStatus === 'failed') {
+    Object.assign(statusFields, { status: 'failed', fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' });
+  } else if (websiteStatus === 'unreachable') {
+    Object.assign(statusFields, { status: 'unreachable', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' });
+  }
   const shippingStatusFields = shippingStatus
     ? mapPancakeStatus(shippingStatus)
     : null;
@@ -144,6 +226,30 @@ function normalizePancakeOrder(payload = {}) {
   const discountTotalCents = centsFromPesos(payload.total_discount || payload.discount || 0);
   const shippingFeeCents = centsFromPesos(payload.shipping_fee || 0);
   const totalCents = centsFromPesos(payload.total_price || payload.total || 0) || Math.max(0, subtotalCents - discountTotalCents + shippingFeeCents);
+
+  const codAmountCents = centsFromPesos(payload.cod_amount ?? payload.cod ?? payload.cash_on_delivery_amount ?? 0);
+  const prepaidAmountCents = centsFromPesos(
+    Number(payload.transfer_money || 0)
+      + Number(payload.charged_by_card || 0)
+      + Number(payload.charged_by_qrpay || 0)
+      + Number(payload.charged_by_vnpay || 0)
+      + Number(payload.charged_by_momo || 0)
+  );
+  const markedPaymentMethod = noteMarker(notes, 'payment_method');
+  const markedPaymentStatus = normalizedKey(noteMarker(notes, 'payment_status'));
+  const explicitPaymentStatus = normalizedKey(payload.payment_status || payload.payment?.status);
+  const paymentMethod = firstText(
+    markedPaymentMethod,
+    payload.payment_method,
+    payload.payment?.method,
+    prepaidAmountCents > 0 && codAmountCents === 0 ? 'online_payment' : 'cash_on_delivery'
+  );
+  const paymentStatus = payload.is_paid
+    || explicitPaymentStatus === 'paid'
+    || markedPaymentStatus === 'paid'
+    || (prepaidAmountCents > 0 && codAmountCents === 0)
+    ? 'paid'
+    : paymentMethod === 'cash_on_delivery' ? 'cod_pending' : 'pending_payment';
 
   return {
     pancakeOrderId,
@@ -168,9 +274,9 @@ function normalizePancakeOrder(payload = {}) {
     discountTotalCents,
     shippingFeeCents,
     totalCents,
-    codAmountCents: centsFromPesos(payload.cod_amount || payload.cod || payload.cash_on_delivery_amount || 0),
-    paymentMethod: String(payload.payment_method || payload.payment?.method || 'cash_on_delivery').trim(),
-    paymentStatus: payload.is_paid || normalizedKey(payload.payment_status || payload.payment?.status) === 'paid' ? 'paid' : 'cod_pending',
+    codAmountCents,
+    paymentMethod,
+    paymentStatus,
     codConfirmationStatus: 'pending',
     deliveryMethod: firstText(
       payload.shipping_partner,
@@ -266,15 +372,19 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
       post_code: String(order.address?.postalCode || '').trim()
     };
   }
-  if (fields.has('notes')) payload.note_print = String(order.notes || '').trim();
-  if (fields.has('paymentStatus')) {
-    payload.note_print = [String(order.notes || '').trim(), `payment_method=${order.paymentMethod || 'cash_on_delivery'}`, `payment_status=${order.paymentStatus || 'pending'}`].filter(Boolean).join('\n');
+  if (fields.has('notes') || fields.has('paymentStatus') || fields.has('paymentMethod') || fields.has('status')) {
+    payload.note_print = buildPancakeOrderNote(order);
+  }
+  if (fields.has('paymentStatus') || fields.has('paymentMethod')) {
+    Object.assign(payload, buildPancakePaymentPayload(order));
   }
   return payload;
 }
 
 module.exports = {
+  buildPancakeOrderNote,
   buildPancakeOrderUpdatePayload,
+  buildPancakePaymentPayload,
   mapPancakeStatus,
   normalizePancakeOrder
 };

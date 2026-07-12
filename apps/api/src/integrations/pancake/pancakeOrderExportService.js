@@ -1,5 +1,6 @@
 const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
 const inventoryOutboxRepositoryDefault = require('./pancakeInventoryOutboxRepository');
+const { buildPancakeOrderNote, buildPancakePaymentPayload } = require('./pancakeOrderMapper');
 
 class PancakeOrderExportError extends Error {
   constructor(code) {
@@ -72,17 +73,6 @@ function shippingAddress(order) {
   };
 }
 
-function noteForOrder(order) {
-  const pieces = [
-    `Website order ${order.orderNumber}`,
-    `checkout_channel=${order.checkoutChannel || 'storefront_checkout'}`,
-    `payment_method=${order.paymentMethod || 'cash_on_delivery'}`,
-    `payment_status=${order.paymentStatus || 'pending'}`,
-    `cod_amount=${order.paymentMethod === 'cash_on_delivery' ? Number(order.totalCents || 0) / 100 : 0}`
-  ];
-  return pieces.join('\n');
-}
-
 function buildPancakeOrderPayload(order, readiness) {
   assertReady(readiness);
   const bySku = mappingBySku(readiness);
@@ -109,6 +99,8 @@ function buildPancakeOrderPayload(order, readiness) {
   if (!items.length) block('pancake_order_items_empty');
 
   const customer = order.customer || {};
+  const payment = buildPancakePaymentPayload(order);
+  const paymentNote = buildPancakeOrderNote(order);
   const payload = {
     shop_id: safeShopId(readiness.shopId),
     warehouse_id: String(readiness.warehouseId || ''),
@@ -123,8 +115,10 @@ function buildPancakeOrderPayload(order, readiness) {
     is_free_shipping: Boolean(order.freeShippingUnlocked),
     received_at_shop: false,
     status: 0,
-    note: noteForOrder(order),
-    note_print: String(order.notes || '').trim() || null,
+    cod: payment.cod,
+    transfer_money: payment.transfer_money,
+    note: paymentNote,
+    note_print: paymentNote,
     merge_order: false
   };
   const orderSource = String(readiness.orderSourceId || '').trim();

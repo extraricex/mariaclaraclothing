@@ -342,7 +342,7 @@ test('processOutboundOrderEvents sends due admin changes to Pancake', async () =
   assert.equal(calls[0].payload.partner.extend_code, 'TRACK-1');
 });
 
-test('processOutboundOrderEvents blocks unsupported-only updates without calling Pancake', async () => {
+test('processOutboundOrderEvents maps failed orders to Pancake waiting-for-confirmation with a marker', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');
   syncRepo.resetMemoryForTests();
@@ -362,7 +362,43 @@ test('processOutboundOrderEvents blocks unsupported-only updates without calling
     syncRepository: syncRepo
   });
 
-  assert.equal(result.blockedCount, 1);
-  assert.equal(result.status, 'blocked');
-  assert.equal(callCount, 0);
+  assert.equal(result.updatedCount, 1);
+  assert.equal(result.status, 'complete');
+  assert.equal(callCount, 1);
+});
+
+test('processOutboundOrderEvents retains failed updates for retry and exposes sync failure detail', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'MCC-FAIL-1', status: 'cancelled', paymentMethod: 'paymongo', paymentStatus: 'paid',
+    totalCents: 72900, paidAmountCents: 72900, customer: {}, address: {}, notes: ''
+  });
+  await syncRepo.upsertOrderLink({
+    orderNumber: 'MCC-FAIL-1', pancakeOrderId: 'PK-FAIL-1', shopId: 'shop-1', syncStatus: 'pending_sync'
+  });
+  await syncRepo.enqueueSyncEvent({
+    direction: 'outbound', entityType: 'order', entityId: 'MCC-FAIL-1',
+    orderNumber: 'MCC-FAIL-1', pancakeOrderId: 'PK-FAIL-1', eventKey: 'cancel-fail',
+    payload: { changedFields: ['status'] }
+  });
+  const providerError = new Error('provider unavailable');
+  providerError.code = 'pancake_http_error';
+
+  const result = await service.processOutboundOrderEvents({
+    config: { shopId: 'shop-1' },
+    client: { updateOrder: async () => { throw providerError; } },
+    orderRepository: orders,
+    syncRepository: syncRepo,
+    now: () => new Date('2026-07-12T00:00:00.000Z')
+  });
+  const detail = await syncRepo.getOrderSyncDetail('MCC-FAIL-1');
+
+  assert.equal(result.status, 'failed');
+  assert.equal(detail.syncStatus, 'sync_failed');
+  assert.equal(detail.statusSyncStatus, 'sync_failed');
+  assert.equal(detail.statusSyncError, 'pancake_http_error');
+  assert.ok(detail.recentLogs.some((log) => log.code === 'pancake_order_cancellation_failed'));
 });

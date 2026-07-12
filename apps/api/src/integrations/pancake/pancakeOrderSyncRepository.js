@@ -31,8 +31,35 @@ function rowEvent(row) {
     safeErrorCode: row.safe_error_code || row.safeErrorCode || '',
     attemptCount: Number(row.attempt_count || row.attemptCount || 0),
     nextAttemptAt: iso(row.next_attempt_at || row.nextAttemptAt),
+    processedAt: iso(row.processed_at || row.processedAt),
     createdAt: iso(row.created_at || row.createdAt),
     updatedAt: iso(row.updated_at || row.updatedAt)
+  };
+}
+
+function eventSyncStatus(event) {
+  if (!event) return 'not_synced';
+  if (event.status === 'succeeded') return 'synced';
+  if (event.status === 'failed_retryable') return 'sync_failed';
+  if (event.status === 'blocked') return 'blocked';
+  return 'pending_sync';
+}
+
+function eventTouches(event, fields) {
+  const changed = Array.isArray(event?.payload?.changedFields) ? event.payload.changedFields : [];
+  return changed.some((field) => fields.includes(field));
+}
+
+function syncBreakdown(events = []) {
+  const payment = events.find((event) => eventTouches(event, ['paymentMethod', 'paymentStatus']));
+  const status = events.find((event) => eventTouches(event, ['status', 'fulfillmentStatus', 'deliveryStatus']));
+  return {
+    paymentSyncStatus: eventSyncStatus(payment),
+    paymentLastSyncedAt: payment?.processedAt || '',
+    paymentSyncError: payment?.safeErrorCode || '',
+    statusSyncStatus: eventSyncStatus(status),
+    statusLastSyncedAt: status?.processedAt || '',
+    statusSyncError: status?.safeErrorCode || ''
   };
 }
 
@@ -72,6 +99,7 @@ async function upsertOrderLink(input) {
     if (existing) Object.assign(existing, {
       ...record,
       shopId: record.shopId || existing.shopId,
+      lastSyncedAt: record.lastSyncedAt || existing.lastSyncedAt,
       lastPancakeUpdatedAt: record.lastPancakeUpdatedAt || existing.lastPancakeUpdatedAt,
       lastLocalUpdatedAt: record.lastLocalUpdatedAt || existing.lastLocalUpdatedAt
     });
@@ -87,7 +115,7 @@ async function upsertOrderLink(input) {
        pancake_order_id=EXCLUDED.pancake_order_id,
        shop_id=CASE WHEN EXCLUDED.shop_id <> '' THEN EXCLUDED.shop_id ELSE pancake_order_links.shop_id END,
        sync_status=EXCLUDED.sync_status,
-       last_synced_at=EXCLUDED.last_synced_at,
+       last_synced_at=COALESCE(EXCLUDED.last_synced_at,pancake_order_links.last_synced_at),
        last_pancake_updated_at=COALESCE(EXCLUDED.last_pancake_updated_at,pancake_order_links.last_pancake_updated_at),
        last_local_updated_at=COALESCE(EXCLUDED.last_local_updated_at,pancake_order_links.last_local_updated_at),
        safe_error_code=EXCLUDED.safe_error_code,
@@ -107,15 +135,25 @@ async function getOrderSyncDetail(orderNumber) {
   if (!hasDatabaseUrl()) {
     const link = memory.links.find((item) => item.orderNumber === normalized);
     const recentLogs = memory.logs.filter((item) => item.orderNumber === normalized).slice(0, 10);
-    return { ...(rowLink(link) || { orderNumber: normalized, syncStatus: 'not_linked' }), recentLogs };
+    const events = memory.events
+      .filter((item) => item.orderNumber === normalized && item.direction === 'outbound')
+      .slice().reverse().map(rowEvent);
+    return {
+      ...(rowLink(link) || { orderNumber: normalized, syncStatus: 'not_linked' }),
+      ...syncBreakdown(events),
+      recentLogs
+    };
   }
   const link = await query('SELECT * FROM pancake_order_links WHERE order_number=$1', [normalized]);
-  const logs = await query(
-    'SELECT * FROM pancake_sync_logs WHERE order_number=$1 ORDER BY created_at DESC LIMIT 10',
-    [normalized]
-  );
+  const [logs, events] = await Promise.all([
+    query('SELECT * FROM pancake_sync_logs WHERE order_number=$1 ORDER BY created_at DESC LIMIT 10', [normalized]),
+    query(`SELECT * FROM pancake_sync_events
+      WHERE order_number=$1 AND direction='outbound'
+      ORDER BY created_at DESC LIMIT 50`, [normalized])
+  ]);
   return {
     ...(rowLink(link.rows[0]) || { orderNumber: normalized, syncStatus: 'not_linked' }),
+    ...syncBreakdown(events.rows.map(rowEvent)),
     recentLogs: logs.rows.map((row) => ({
       id: row.id,
       level: row.level,

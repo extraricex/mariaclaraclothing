@@ -30,6 +30,30 @@ function retryDelayMs(attempt) {
   return Math.min(60 * 60 * 1000, 60 * 1000 * (2 ** Math.max(0, attempt - 1)));
 }
 
+function changedFieldsForEvent(event = {}) {
+  return Array.isArray(event.payload?.changedFields) ? event.payload.changedFields : [];
+}
+
+function outboundLogCode(event, order, outcome) {
+  const fields = new Set(changedFieldsForEvent(event));
+  const suffix = outcome === 'failed' ? 'failed' : 'synced';
+  if (fields.has('paymentStatus') || fields.has('paymentMethod')) return `pancake_order_payment_${suffix}`;
+  if (fields.has('status') && order?.status === 'cancelled') return `pancake_order_cancellation_${suffix}`;
+  if (fields.has('status') || fields.has('fulfillmentStatus') || fields.has('deliveryStatus')) return `pancake_order_status_${suffix}`;
+  if (fields.has('trackingNumber')) return `pancake_order_tracking_${suffix}`;
+  return `pancake_order_update_${suffix}`;
+}
+
+function outboundLogMessage(event, order, outcome) {
+  const fields = new Set(changedFieldsForEvent(event));
+  const completed = outcome === 'failed' ? 'failed and was scheduled for retry' : 'synchronized to Pancake POS';
+  if (fields.has('paymentStatus') || fields.has('paymentMethod')) return `Payment update ${completed}.`;
+  if (fields.has('status') && order?.status === 'cancelled') return `Order cancellation ${completed}.`;
+  if (fields.has('status') || fields.has('fulfillmentStatus') || fields.has('deliveryStatus')) return `Order status ${completed}.`;
+  if (fields.has('trackingNumber')) return `Tracking update ${completed}.`;
+  return `Order update ${completed}.`;
+}
+
 function importedOrder(normalized, now) {
   const placedAt = normalized.pancakeUpdatedAt || now().toISOString();
   return {
@@ -262,10 +286,23 @@ async function processOutboundOrderEvents({
   const events = await syncRepository.claimDueSyncEvents({ direction: 'outbound', limit, now: now().toISOString() });
   const summary = { status: 'complete', checkedCount: events.length, updatedCount: 0, failedCount: 0, blockedCount: 0 };
   for (const event of events) {
+    let order;
+    let pancakeOrderId = event.pancakeOrderId;
     try {
-      const order = await orderRepository.findOrderByNumber(event.orderNumber);
-      if (!order || !event.pancakeOrderId) {
-        await syncRepository.markSyncEventBlocked(event.id, !order ? 'local_order_missing' : 'pancake_order_link_missing');
+      order = await orderRepository.findOrderByNumber(event.orderNumber);
+      if (!pancakeOrderId) {
+        const detail = await syncRepository.getOrderSyncDetail(event.orderNumber);
+        pancakeOrderId = detail?.pancakeOrderId || '';
+      }
+      if (!order || !pancakeOrderId) {
+        const code = !order ? 'local_order_missing' : 'pancake_order_link_missing';
+        await syncRepository.markSyncEventBlocked(event.id, code);
+        await syncRepository.appendSyncLog({
+          direction: 'outbound', entityType: 'order', entityId: event.orderNumber,
+          orderNumber: event.orderNumber, pancakeOrderId,
+          level: 'error', code,
+          message: !order ? 'Local order was not found.' : 'Pancake order link is missing; update was not sent.'
+        });
         summary.blockedCount += 1;
         continue;
       }
@@ -275,20 +312,46 @@ async function processOutboundOrderEvents({
         summary.blockedCount += 1;
         continue;
       }
-      await client.updateOrder(config.shopId, event.pancakeOrderId, payload);
+      await client.updateOrder(config.shopId, pancakeOrderId, payload);
       await syncRepository.markSyncEventSucceeded(event.id);
       await syncRepository.upsertOrderLink({
         orderNumber: event.orderNumber,
-        pancakeOrderId: event.pancakeOrderId,
+        pancakeOrderId,
         shopId: config.shopId,
         syncStatus: 'synced',
         lastSyncedAt: now().toISOString(),
-        lastLocalUpdatedAt: order.updatedAt || now().toISOString()
+        lastLocalUpdatedAt: order.updatedAt || now().toISOString(),
+        safeErrorCode: ''
+      });
+      await syncRepository.appendSyncLog({
+        direction: 'outbound', entityType: 'order', entityId: event.orderNumber,
+        orderNumber: event.orderNumber, pancakeOrderId,
+        level: 'info', code: outboundLogCode(event, order, 'synced'),
+        message: outboundLogMessage(event, order, 'synced'),
+        metadata: { changedFields: changedFieldsForEvent(event) }
       });
       summary.updatedCount += 1;
     } catch (error) {
+      const code = safeProviderCode(error);
       const nextAttemptAt = new Date(now().getTime() + retryDelayMs(Number(event.attemptCount || 0) + 1)).toISOString();
-      await syncRepository.markSyncEventRetryable(event.id, { safeErrorCode: safeProviderCode(error), nextAttemptAt });
+      await syncRepository.markSyncEventRetryable(event.id, { safeErrorCode: code, nextAttemptAt });
+      if (pancakeOrderId) {
+        await syncRepository.upsertOrderLink({
+          orderNumber: event.orderNumber,
+          pancakeOrderId,
+          shopId: config.shopId,
+          syncStatus: 'sync_failed',
+          lastLocalUpdatedAt: order?.updatedAt || now().toISOString(),
+          safeErrorCode: code
+        });
+      }
+      await syncRepository.appendSyncLog({
+        direction: 'outbound', entityType: 'order', entityId: event.orderNumber,
+        orderNumber: event.orderNumber, pancakeOrderId,
+        level: 'error', code: outboundLogCode(event, order, 'failed'),
+        message: outboundLogMessage(event, order, 'failed'),
+        metadata: { safeErrorCode: code, changedFields: changedFieldsForEvent(event) }
+      });
       summary.failedCount += 1;
     }
   }

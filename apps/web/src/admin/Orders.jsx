@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { adminDownload, adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
 
-const STATUS_OPTIONS = ['', 'received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'];
+const STATUS_OPTIONS = [
+  '', 'received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'
+];
 const DATE_RANGE_OPTIONS = [
   ['', 'All dates'],
   ['today', 'Today'],
@@ -20,7 +22,10 @@ export function statusBadge(status) {
     packed: 'admin-status-warn',
     shipped: 'admin-status-info',
     delivered: 'admin-status-good',
-    cancelled: 'admin-status-bad line-through'
+    cancelled: 'admin-status-bad line-through',
+    returned: 'admin-status-warn',
+    failed: 'admin-status-bad',
+    unreachable: 'admin-status-warn'
   };
   return tones[status] || 'admin-status-info';
 }
