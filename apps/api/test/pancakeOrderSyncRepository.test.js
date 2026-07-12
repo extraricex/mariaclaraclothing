@@ -29,6 +29,35 @@ test('memory sync repository upserts links and exposes public sync detail', asyn
   }
 });
 
+test('link upserts preserve timestamps owned by the opposite sync direction', async () => {
+  const { repo, restore } = memoryRepo();
+  try {
+    await repo.upsertOrderLink({
+      orderNumber: 'MCC-BOTH', pancakeOrderId: 'PK-BOTH', shopId: 'shop-1',
+      syncStatus: 'synced', lastLocalUpdatedAt: '2026-07-10T00:01:00.000Z'
+    });
+    await repo.upsertOrderLink({
+      orderNumber: 'MCC-BOTH', pancakeOrderId: 'PK-BOTH', syncStatus: 'synced',
+      lastPancakeUpdatedAt: '2026-07-10T00:02:00.000Z'
+    });
+
+    const detail = await repo.getOrderSyncDetail('MCC-BOTH');
+    assert.equal(detail.shopId, 'shop-1');
+    assert.equal(detail.lastLocalUpdatedAt, '2026-07-10T00:01:00.000Z');
+    assert.equal(detail.lastPancakeUpdatedAt, '2026-07-10T00:02:00.000Z');
+  } finally {
+    restore();
+  }
+});
+
+test('PostgreSQL link upsert preserves directional timestamps with COALESCE', async () => {
+  const { readFile } = require('node:fs/promises');
+  const path = require('node:path');
+  const source = await readFile(path.join(__dirname, '..', 'src', 'integrations', 'pancake', 'pancakeOrderSyncRepository.js'), 'utf8');
+  assert.match(source, /last_pancake_updated_at=COALESCE\(EXCLUDED\.last_pancake_updated_at,pancake_order_links\.last_pancake_updated_at\)/);
+  assert.match(source, /last_local_updated_at=COALESCE\(EXCLUDED\.last_local_updated_at,pancake_order_links\.last_local_updated_at\)/);
+});
+
 test('memory sync repository deduplicates events by deterministic key', async () => {
   const { repo, restore } = memoryRepo();
   try {

@@ -69,7 +69,12 @@ async function upsertOrderLink(input) {
   if (!record.orderNumber || !record.pancakeOrderId) return null;
   if (!hasDatabaseUrl()) {
     const existing = memory.links.find((item) => item.orderNumber === record.orderNumber || item.pancakeOrderId === record.pancakeOrderId);
-    if (existing) Object.assign(existing, record);
+    if (existing) Object.assign(existing, {
+      ...record,
+      shopId: record.shopId || existing.shopId,
+      lastPancakeUpdatedAt: record.lastPancakeUpdatedAt || existing.lastPancakeUpdatedAt,
+      lastLocalUpdatedAt: record.lastLocalUpdatedAt || existing.lastLocalUpdatedAt
+    });
     else memory.links.push(record);
     return rowLink(existing || record);
   }
@@ -80,11 +85,11 @@ async function upsertOrderLink(input) {
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
      ON CONFLICT (order_number) DO UPDATE SET
        pancake_order_id=EXCLUDED.pancake_order_id,
-       shop_id=EXCLUDED.shop_id,
+       shop_id=CASE WHEN EXCLUDED.shop_id <> '' THEN EXCLUDED.shop_id ELSE pancake_order_links.shop_id END,
        sync_status=EXCLUDED.sync_status,
        last_synced_at=EXCLUDED.last_synced_at,
-       last_pancake_updated_at=EXCLUDED.last_pancake_updated_at,
-       last_local_updated_at=EXCLUDED.last_local_updated_at,
+       last_pancake_updated_at=COALESCE(EXCLUDED.last_pancake_updated_at,pancake_order_links.last_pancake_updated_at),
+       last_local_updated_at=COALESCE(EXCLUDED.last_local_updated_at,pancake_order_links.last_local_updated_at),
        safe_error_code=EXCLUDED.safe_error_code,
        updated_at=now()
      RETURNING *`,
