@@ -73,18 +73,8 @@ function inboundOrderPatch(normalized, existing = {}) {
   const patch = {
     customer: normalized.customer,
     address: normalized.address,
-    items: normalized.items,
-    subtotalCents: normalized.subtotalCents,
-    discountTotalCents: normalized.discountTotalCents,
-    shippingFeeCents: normalized.shippingFeeCents,
-    freeShippingUnlocked: normalized.shippingFeeCents === 0,
-    totalCents: normalized.totalCents,
-    codAmountCents: normalized.codAmountCents,
-    cartSnapshot: normalized.items,
-    paymentMethod: normalized.paymentMethod,
     status: normalized.status,
     fulfillmentStatus: normalized.fulfillmentStatus,
-    paymentStatus: normalized.paymentStatus,
     codConfirmationStatus: normalized.codConfirmationStatus,
     deliveryStatus: normalized.deliveryStatus,
     deliveryMethod: normalized.deliveryMethod,
@@ -93,6 +83,24 @@ function inboundOrderPatch(normalized, existing = {}) {
     deliveryNotes: normalized.deliveryNotes || existing.deliveryNotes || '',
     notes: normalized.notes || existing.notes || ''
   };
+  if (existing.checkoutChannel === 'storefront_checkout') {
+    patch.paymentStatus = existing.paymentProvider === 'paymongo'
+      ? existing.paymentStatus
+      : normalized.paymentStatus;
+  } else {
+    Object.assign(patch, {
+      items: normalized.items,
+      subtotalCents: normalized.subtotalCents,
+      discountTotalCents: normalized.discountTotalCents,
+      shippingFeeCents: normalized.shippingFeeCents,
+      freeShippingUnlocked: normalized.shippingFeeCents === 0,
+      totalCents: normalized.totalCents,
+      codAmountCents: normalized.codAmountCents,
+      cartSnapshot: normalized.items,
+      paymentMethod: normalized.paymentMethod,
+      paymentStatus: normalized.paymentStatus
+    });
+  }
   return patch;
 }
 

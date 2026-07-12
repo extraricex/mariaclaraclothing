@@ -70,6 +70,38 @@ test('processInboundPancakeOrder updates linked existing order without duplicati
   assert.equal(orders.orders.size, 1);
 });
 
+test('Pancake status updates preserve authoritative website totals and PayMongo payment state', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'MCC-PAY', checkoutChannel: 'storefront_checkout', paymentProvider: 'paymongo',
+    paymentMethod: 'paymongo', paymentStatus: 'pending_payment', status: 'pending_payment',
+    subtotalCents: 64900, shippingFeeCents: 18000, discountTotalCents: 0, totalCents: 82900,
+    items: [{ sku: 'SKU-S', quantity: 1 }], cartSnapshot: [{ sku: 'SKU-S', quantity: 1 }],
+    customer: {}, address: {}, fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending'
+  });
+  await syncRepo.upsertOrderLink({ orderNumber: 'MCC-PAY', pancakeOrderId: 'PK-PAY', syncStatus: 'synced' });
+
+  await service.processInboundPancakeOrder({
+    pancakeOrder: {
+      id: 'PK-PAY', custom_id: 'MCC-PAY', status: 'Confirmed', total_price: 649,
+      shipping_fee: 0, payment_method: 'cash_on_delivery', payment_status: 'unpaid',
+      items: [], updated_at: '2026-07-12T00:00:00.000Z'
+    },
+    orderRepository: orders, syncRepository: syncRepo
+  });
+
+  const updated = orders.orders.get('MCC-PAY');
+  assert.equal(updated.totalCents, 82900);
+  assert.equal(updated.shippingFeeCents, 18000);
+  assert.equal(updated.items.length, 1);
+  assert.equal(updated.paymentMethod, 'paymongo');
+  assert.equal(updated.paymentStatus, 'pending_payment');
+  assert.equal(updated.status, 'confirmed');
+});
+
 test('processInboundPancakeOrder imports native Pancake orders with a deterministic number', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');
