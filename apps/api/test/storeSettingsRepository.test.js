@@ -304,10 +304,10 @@ test('storefront collections persist unique names and receive countdown defaults
 
   try {
     const repository = freshRepository();
-    assert.deepEqual(repository.getStoreSettings().storefrontCollections, ['New Arrivals']);
+    assert.deepEqual(repository.getStoreSettings().storefrontCollections, ['New Arrivals', 'Tees', 'Freedom of Mind']);
 
     const updated = await repository.addStorefrontCollection('  Summer   Drop  ');
-    assert.deepEqual(updated.storefrontCollections, ['New Arrivals', 'Summer Drop']);
+    assert.deepEqual(updated.storefrontCollections, ['New Arrivals', 'Tees', 'Freedom of Mind', 'Summer Drop']);
     assert.deepEqual(updated.collectionCountdowns['Summer Drop'], {
       enabled: false,
       message: 'Hurry! Limited time left',
@@ -316,7 +316,24 @@ test('storefront collections persist unique names and receive countdown defaults
     });
     assert.deepEqual(repository.getStoreSettings().storefrontCollections, updated.storefrontCollections);
 
-    assert.throws(() => repository.addStorefrontCollection('summer drop'), /already exists/i);
+    const edited = await repository.updateStorefrontCollection('summer-drop', {
+      name: 'Summer Edit', slug: 'summer-edit', description: 'Seasonal collection.',
+      visible: true, showOnHomepage: false, showOnShop: true, sortOrder: 9
+    });
+    const definition = edited.collectionDefinitions.find((collection) => collection.slug === 'summer-edit');
+    assert.equal(definition.showOnHomepage, false);
+    assert.ok(definition.aliases.includes('Summer Drop'));
+    assert.ok(edited.collectionCountdowns['Summer Edit']);
+
+    await repository.updateStorefrontCollection('freedom-of-mind', {
+      name: 'Freedom Collection', slug: 'freedom-collection'
+    });
+    const persistedDefinitions = repository.getStoreSettings().collectionDefinitions;
+    assert.equal(persistedDefinitions.filter((collection) => collection.name === 'Freedom Collection').length, 1);
+    assert.equal(persistedDefinitions.some((collection) => collection.name === 'Freedom of Mind'), false);
+    assert.ok(persistedDefinitions.find((collection) => collection.name === 'Freedom Collection').aliases.includes('Freedom of Mind'));
+
+    assert.throws(() => repository.addStorefrontCollection('summer edit'), /already exists/i);
     assert.throws(() => repository.addStorefrontCollection('   '), /name is required/i);
     assert.throws(() => repository.addStorefrontCollection('x'.repeat(61)), /60 characters/i);
   } finally {

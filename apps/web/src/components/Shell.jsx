@@ -6,6 +6,7 @@ import { createCheckoutQuote, fetchProducts, fetchSiteContent } from '../lib/api
 import { formatMoney } from '../lib/money.js';
 import { setMetaTrackingConsent, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
+import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
 import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storefrontSupport.js';
 import useModalFocus from '../hooks/useModalFocus.js';
 import PageTransition from './PageTransition.jsx';
@@ -24,15 +25,8 @@ const NAV_LINKS = [
   { to: '/terms', label: 'Terms' },
   { to: '/contact', label: 'Contact' }
 ];
-const CATEGORY_LINKS = [
-  { href: '/#new-arrivals', label: 'New' },
-  { href: '/#catalog', label: 'Tees' },
-  { href: '/#freedom-of-mind', label: 'Freedom of Mind' },
-  { href: '/#best-sellers', label: 'Best Seller' }
-];
 const MENU_LINKS = [
   { href: '/', label: 'Shop' },
-  { href: '/#new-arrivals', label: 'New' },
   { href: '/faq', label: 'FAQ' },
   { href: '/terms', label: 'Terms' },
   { href: '/contact', label: 'Contact' }
@@ -494,6 +488,8 @@ export default function Shell() {
   const offerCount = Number(Boolean(visibleShippingOffer)) + Number(Boolean(visibleRecommendation));
   const instagramUrl = storeInfo?.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothingshop/';
   const facebookUrl = storeInfo?.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
+  const shopCollections = normalizeCollectionDefinitions(storeInfo?.collectionDefinitions || [])
+    .filter((collection) => collection.visible && collection.showOnShop);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -552,10 +548,10 @@ export default function Shell() {
         >
           <div className="mx-auto flex max-w-7xl items-center gap-5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-clay sm:px-5 lg:px-8">
             <span className="shrink-0 border-r border-line pr-5 font-bold text-ink">Shop Categories</span>
-            {CATEGORY_LINKS.map((link) => (
-              <a key={link.label} href={link.href} className="text-action shrink-0 hover:text-accent">
-                {link.label}
-              </a>
+            {shopCollections.map((collection) => (
+              <Link key={collection.slug} to={`/collections/${encodeURIComponent(collection.slug)}`} className="text-action shrink-0 hover:text-accent">
+                {collection.name}
+              </Link>
             ))}
           </div>
         </nav>
@@ -580,7 +576,7 @@ export default function Shell() {
             <button type="button" className="touch-target text-2xl leading-none text-ink" aria-label="Close navigation menu" onClick={() => setMenuOpen(false)}>×</button>
           </div>
           <nav className="flex flex-col px-5" aria-label="Mobile menu">
-            {MENU_LINKS.map((link) => (
+            {[MENU_LINKS[0], ...shopCollections.map((collection) => ({ href: `/collections/${collection.slug}`, label: collection.name })), ...MENU_LINKS.slice(1)].map((link) => (
               <a
                 key={link.label}
                 href={link.href}
@@ -652,6 +648,9 @@ export default function Shell() {
               <p className="eyebrow text-paper/60">Shop</p>
               <ul className="mt-3 space-y-2 text-sm text-paper/80">
                 <li><Link to="/" className="text-action hover:text-accent">All products</Link></li>
+                {shopCollections.map((collection) => (
+                  <li key={collection.slug}><Link to={`/collections/${collection.slug}`} className="text-action hover:text-accent">{collection.name}</Link></li>
+                ))}
                 <li><Link to="/cart" className="text-action hover:text-accent">Cart</Link></li>
               </ul>
             </div>

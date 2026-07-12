@@ -35,6 +35,7 @@ router.get('/', async (_req, res, next) => {
         },
         inventory: settings.inventory,
         storefrontCollections: settings.storefrontCollections,
+        collectionDefinitions: settings.collectionDefinitions,
         collectionCountdowns: settings.collectionCountdowns,
         paymentMethods: settings.payments.methods
           .filter((method) => method.enabled)

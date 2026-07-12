@@ -11,7 +11,42 @@ const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'invent
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
-const DEFAULT_STOREFRONT_COLLECTIONS = ['New Arrivals'];
+const DEFAULT_COLLECTION_DEFINITIONS = [
+  {
+    name: 'New Arrivals',
+    slug: 'new-arrivals',
+    description: 'Oversized premium shirt.',
+    imageUrl: '',
+    visible: true,
+    showOnHomepage: true,
+    showOnShop: true,
+    sortOrder: 0,
+    aliases: []
+  },
+  {
+    name: 'Tees',
+    slug: 'tees',
+    description: 'Regular Fit Tees with premium quality shirt.',
+    imageUrl: '',
+    visible: true,
+    showOnHomepage: true,
+    showOnShop: true,
+    sortOrder: 1,
+    aliases: ['Catalog']
+  },
+  {
+    name: 'Freedom of Mind',
+    slug: 'freedom-of-mind',
+    description: 'The statement line - graphics for loud thoughts and quiet days.',
+    imageUrl: '',
+    visible: true,
+    showOnHomepage: true,
+    showOnShop: true,
+    sortOrder: 2,
+    aliases: []
+  }
+];
+const DEFAULT_STOREFRONT_COLLECTIONS = DEFAULT_COLLECTION_DEFINITIONS.map((collection) => collection.name);
 const DEFAULT_COUNTDOWN_MESSAGE = 'Hurry! Limited time left';
 
 let postgresCredentialsCache = { loaded: false, value: null };
@@ -68,18 +103,99 @@ function normalizeCollectionName(value) {
   return name;
 }
 
-function normalizeStorefrontCollections(value) {
-  const incoming = Array.isArray(value) ? value : [];
-  const collections = [];
-  for (const item of [...DEFAULT_STOREFRONT_COLLECTIONS, ...incoming]) {
-    const name = normalizeCollectionName(item);
-    if (!collections.some((existing) => existing.toLowerCase() === name.toLowerCase())) collections.push(name);
+function collectionSlug(value, fallbackName = '') {
+  const incoming = String(value || '').trim().toLowerCase();
+  const slug = (incoming || String(fallbackName || '').trim().toLowerCase())
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!slug) throw badRequest('Collection slug is required.');
+  if (slug.length > 80) throw badRequest('Collection slug must be 80 characters or fewer.');
+  return slug;
+}
+
+function normalizeCollectionImageUrl(value) {
+  const imageUrl = String(value || '').trim();
+  if (!imageUrl) return '';
+  const localPath = imageUrl.startsWith('/') && !imageUrl.startsWith('//');
+  if (imageUrl.length > 500 || (!localPath && !/^https:\/\//i.test(imageUrl))) {
+    throw badRequest('Collection image must use an HTTPS URL or an uploaded image path.');
   }
-  return collections;
+  return imageUrl;
+}
+
+function normalizeCollectionDefinition(value, index, fallback = {}) {
+  const input = value && typeof value === 'object' ? value : { name: value };
+  const name = normalizeCollectionName(input.name === undefined ? fallback.name : input.name);
+  const description = String(input.description === undefined ? fallback.description || '' : input.description).trim();
+  if (description.length > 500) throw badRequest('Collection description must be 500 characters or fewer.');
+  const sortOrder = Number(input.sortOrder === undefined ? fallback.sortOrder ?? index : input.sortOrder);
+  if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 9999) {
+    throw badRequest('Collection sort order must be an integer between 0 and 9999.');
+  }
+  const aliases = [...new Set([
+    ...(Array.isArray(fallback.aliases) ? fallback.aliases : []),
+    ...(Array.isArray(input.aliases) ? input.aliases : [])
+  ].map((alias) => String(alias || '').trim()).filter(Boolean))]
+    .filter((alias) => alias.toLowerCase() !== name.toLowerCase());
+  const bestSeller = ['best seller', 'best sellers'].includes(name.toLowerCase());
+  return {
+    name,
+    slug: collectionSlug(input.slug === undefined ? fallback.slug : input.slug, name),
+    description,
+    imageUrl: normalizeCollectionImageUrl(input.imageUrl === undefined ? fallback.imageUrl : input.imageUrl),
+    visible: input.visible === undefined ? fallback.visible !== false : Boolean(input.visible),
+    showOnHomepage: input.showOnHomepage === undefined
+      ? (bestSeller ? false : fallback.showOnHomepage !== false)
+      : Boolean(input.showOnHomepage),
+    showOnShop: input.showOnShop === undefined ? fallback.showOnShop !== false : Boolean(input.showOnShop),
+    sortOrder,
+    aliases
+  };
+}
+
+function normalizeCollectionDefinitions(value, legacyNames) {
+  const incoming = Array.isArray(value) ? value : [];
+  const legacy = Array.isArray(legacyNames) ? legacyNames : [];
+  const merged = DEFAULT_COLLECTION_DEFINITIONS.map((collection) => ({ ...collection }));
+
+  for (const item of incoming) {
+    const rawName = typeof item === 'object' ? item?.name : item;
+    const rawSlug = typeof item === 'object' ? String(item?.slug || '').trim().toLowerCase() : '';
+    const rawAliases = typeof item === 'object' && Array.isArray(item?.aliases)
+      ? item.aliases.map((alias) => String(alias || '').trim().toLowerCase())
+      : [];
+    const normalizedName = String(rawName || '').trim().toLowerCase();
+    const index = merged.findIndex((existing) => (
+      existing.name.toLowerCase() === normalizedName ||
+      (rawSlug && existing.slug === rawSlug) ||
+      rawAliases.includes(existing.name.toLowerCase())
+    ));
+    const record = typeof item === 'object' ? item : { name: item };
+    if (index >= 0) merged[index] = { ...merged[index], ...record };
+    else merged.push(record);
+  }
+  for (const name of legacy) {
+    if (!merged.some((existing) => String(existing?.name || existing).trim().toLowerCase() === String(name || '').trim().toLowerCase())) {
+      merged.push({ name });
+    }
+  }
+
+  const definitions = merged.map((item, index) => {
+    const fallback = DEFAULT_COLLECTION_DEFINITIONS.find((collection) => collection.name.toLowerCase() === String(item?.name || item).trim().toLowerCase()) || {};
+    return normalizeCollectionDefinition(item, index, fallback);
+  });
+  const duplicateName = definitions.find((collection, index) => definitions.findIndex((candidate) => candidate.name.toLowerCase() === collection.name.toLowerCase()) !== index);
+  if (duplicateName) throw conflict('Collection names must be unique.');
+  const duplicateSlug = definitions.find((collection, index) => definitions.findIndex((candidate) => candidate.slug === collection.slug) !== index);
+  if (duplicateSlug) throw conflict('Collection slugs must be unique.');
+  return definitions.sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
 }
 
 function defaultStoreSettings() {
-  const storefrontCollections = [...DEFAULT_STOREFRONT_COLLECTIONS];
+  const collectionDefinitions = DEFAULT_COLLECTION_DEFINITIONS.map((collection) => ({ ...collection, aliases: [...collection.aliases] }));
+  const storefrontCollections = collectionDefinitions.map((collection) => collection.name);
   return {
     general: {
       storeName: 'Maria Clara Clothing',
@@ -183,6 +299,7 @@ function defaultStoreSettings() {
       lowStockThreshold: 12
     },
     storefrontCollections,
+    collectionDefinitions,
     collectionCountdowns: defaultCollectionCountdowns(storefrontCollections)
   };
 }
@@ -518,7 +635,8 @@ function normalizeMarketing(marketing) {
 
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
-  const storefrontCollections = normalizeStorefrontCollections(value.storefrontCollections);
+  const collectionDefinitions = normalizeCollectionDefinitions(value.collectionDefinitions, value.storefrontCollections);
+  const storefrontCollections = collectionDefinitions.map((collection) => collection.name);
   return {
     general: normalizeGeneral(value.general),
     shipping: normalizeShipping(value.shipping),
@@ -528,6 +646,7 @@ function normalizeStoreSettings(settings) {
     authentication: normalizeAuthentication(value.authentication),
     marketing: normalizeMarketing(value.marketing),
     storefrontCollections,
+    collectionDefinitions,
     collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns, storefrontCollections)
   };
 }
@@ -598,13 +717,23 @@ function updateSettingsSection(section, value) {
 }
 
 function nextStorefrontCollection(current, input) {
-  const name = normalizeCollectionName(input);
+  const record = normalizeCollectionDefinition(input, current.collectionDefinitions.length, {
+    name: typeof input === 'object' ? input?.name : input,
+    sortOrder: current.collectionDefinitions.length
+  });
+  const name = record.name;
   if (current.storefrontCollections.some((existing) => existing.toLowerCase() === name.toLowerCase())) {
     throw conflict('Collection already exists.');
   }
+  if (current.collectionDefinitions.some((existing) => existing.slug === record.slug)) {
+    throw conflict('Collection slug already exists.');
+  }
+  const collectionDefinitions = [...current.collectionDefinitions, record]
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
   return {
     ...current,
-    storefrontCollections: [...current.storefrontCollections, name],
+    storefrontCollections: collectionDefinitions.map((collection) => collection.name),
+    collectionDefinitions,
     collectionCountdowns: {
       ...current.collectionCountdowns,
       [name]: defaultCollectionCountdown()
@@ -612,8 +741,7 @@ function nextStorefrontCollection(current, input) {
   };
 }
 
-function addStorefrontCollection(name) {
-  const normalizedName = normalizeCollectionName(name);
+function addStorefrontCollection(input) {
   if (usePostgresSettings()) {
     return transaction(async (client) => {
       await client.query(
@@ -627,7 +755,7 @@ function addStorefrontCollection(name) {
         [SETTINGS_KEY]
       );
       const current = normalizeStoreSettings(result.rows[0]?.value || {});
-      const next = nextStorefrontCollection(current, normalizedName);
+      const next = nextStorefrontCollection(current, input);
       await client.query(
         `UPDATE store_settings SET value = $2, updated_at = now() WHERE key = $1`,
         [SETTINGS_KEY, JSON.stringify(next)]
@@ -637,7 +765,56 @@ function addStorefrontCollection(name) {
   }
 
   const current = normalizeStoreSettings(readJsonFile(settingsDataFile()) || {});
-  const next = nextStorefrontCollection(current, normalizedName);
+  const next = nextStorefrontCollection(current, input);
+  writeJsonFile(settingsDataFile(), next);
+  return next;
+}
+
+function nextUpdatedStorefrontCollection(current, identifier, input) {
+  const lookup = String(identifier || '').trim().toLowerCase();
+  const index = current.collectionDefinitions.findIndex((collection) => collection.slug === lookup || collection.name.toLowerCase() === lookup);
+  if (index < 0) throw badRequest('Collection was not found.');
+  const previous = current.collectionDefinitions[index];
+  const record = normalizeCollectionDefinition({ ...previous, ...(input || {}) }, index, previous);
+  if (current.collectionDefinitions.some((collection, candidateIndex) => candidateIndex !== index && collection.name.toLowerCase() === record.name.toLowerCase())) {
+    throw conflict('Collection already exists.');
+  }
+  if (current.collectionDefinitions.some((collection, candidateIndex) => candidateIndex !== index && collection.slug === record.slug)) {
+    throw conflict('Collection slug already exists.');
+  }
+  if (record.name.toLowerCase() !== previous.name.toLowerCase()) {
+    record.aliases = [...new Set([...record.aliases, previous.name])];
+  }
+  const collectionDefinitions = current.collectionDefinitions
+    .map((collection, candidateIndex) => candidateIndex === index ? record : collection)
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+  const previousCountdown = current.collectionCountdowns[previous.name] || defaultCollectionCountdown();
+  const collectionCountdowns = { ...current.collectionCountdowns, [record.name]: previousCountdown };
+  if (record.name !== previous.name) delete collectionCountdowns[previous.name];
+  return {
+    ...current,
+    storefrontCollections: collectionDefinitions.map((collection) => collection.name),
+    collectionDefinitions,
+    collectionCountdowns
+  };
+}
+
+function updateStorefrontCollection(identifier, input) {
+  if (usePostgresSettings()) {
+    return transaction(async (client) => {
+      await client.query(
+        `INSERT INTO store_settings (key, value, updated_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (key) DO NOTHING`,
+        [SETTINGS_KEY, JSON.stringify(defaultStoreSettings())]
+      );
+      const result = await client.query('SELECT value FROM store_settings WHERE key = $1 FOR UPDATE', [SETTINGS_KEY]);
+      const next = nextUpdatedStorefrontCollection(normalizeStoreSettings(result.rows[0]?.value || {}), identifier, input);
+      await client.query('UPDATE store_settings SET value = $2, updated_at = now() WHERE key = $1', [SETTINGS_KEY, JSON.stringify(next)]);
+      return next;
+    });
+  }
+  const next = nextUpdatedStorefrontCollection(normalizeStoreSettings(readJsonFile(settingsDataFile()) || {}), identifier, input);
   writeJsonFile(settingsDataFile(), next);
   return next;
 }
@@ -772,6 +949,7 @@ module.exports = {
   rotateAdminToken,
   setAdminPassword,
   updateCollectionCountdown,
+  updateStorefrontCollection,
   updateSettingsSection,
   verifyAdminPassword
 };

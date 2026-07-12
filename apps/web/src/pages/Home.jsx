@@ -7,16 +7,21 @@ import ProductCard from '../components/ProductCard.jsx';
 import { CustomerButton } from '../components/ui/Button.jsx';
 import { CustomerCard } from '../components/ui/Card.jsx';
 
-function CollectionSection({ id, index, title, blurb, products }) {
+function CollectionSection({ id, index, title, blurb, slug, products }) {
   if (!products.length) return null;
   return (
-    <section id={id} className="mx-auto mt-8 max-w-7xl px-5 sm:mt-14 lg:mt-20 lg:px-8">
+    <section id={id} className="mx-auto mt-8 max-w-7xl scroll-mt-36 px-5 sm:mt-14 lg:mt-20 lg:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4 border-t border-[var(--customer-border)] pt-6">
         <div>
           <p className="eyebrow">{index} / Collection</p>
           <h2 className="display mt-2 text-3xl sm:text-5xl">{title}</h2>
         </div>
-        <p className="max-w-xs text-sm text-ink-soft">{blurb}</p>
+        <div className="max-w-xs">
+          <p className="text-sm text-ink-soft">{blurb}</p>
+          <Link to={`/collections/${encodeURIComponent(slug)}`} className="text-action mt-3 inline-block text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-deep">
+            View collection
+          </Link>
+        </div>
       </div>
       <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:mt-8 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
         {products.map((product, i) => (
@@ -27,21 +32,10 @@ function CollectionSection({ id, index, title, blurb, products }) {
   );
 }
 
-function visibleStorefrontCollections(collections) {
-  return (Array.isArray(collections) ? collections : [])
-    .filter((name) => String(name || '').trim().toLowerCase() !== 'best sellers');
-}
-
-function bestSellerProducts(products) {
-  return [...(Array.isArray(products) ? products : [])]
-    .sort((left, right) => Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0))
-    .slice(0, 4);
-}
-
 export default function Home() {
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState([]);
-  const [collectionNames, setCollectionNames] = useState(DEFAULT_STOREFRONT_SETTINGS.storefrontCollections);
+  const [collections, setCollections] = useState(DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
   const [storefrontSettings, setStorefrontSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const [error, setError] = useState('');
@@ -57,14 +51,11 @@ export default function Home() {
     loadStorefrontSettings()
       .then((settings) => {
         setStorefrontSettings(settings);
-        setCollectionNames(visibleStorefrontCollections(settings.storefrontCollections || DEFAULT_STOREFRONT_SETTINGS.storefrontCollections));
+        setCollections(settings.collectionDefinitions || DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
       });
   }, []);
 
-  const collectionSections = buildStorefrontCollectionSections(products, collectionNames);
-  const catalogAlreadyVisible = collectionSections.some((section) => section.id === 'catalog');
-  const tees = products.filter((product) => (product.collections || []).includes('Catalog'));
-  const bestSellers = bestSellerProducts(products);
+  const collectionSections = buildStorefrontCollectionSections(products, collections);
   const activeBanner = banners[activeHeroIndex] || banners[0] || null;
   const heroCopy = storefrontSettings.hero || DEFAULT_STOREFRONT_SETTINGS.hero;
 
@@ -169,24 +160,6 @@ export default function Home() {
       )}
 
       {collectionSections.map((section) => <CollectionSection key={section.title} {...section} />)}
-
-      {!catalogAlreadyVisible && (
-        <CollectionSection
-          id="catalog"
-          index={String(collectionSections.length + 1).padStart(2, '0')}
-          title="Tees"
-          blurb="Regular Fit Tees with premium quality shirt."
-          products={tees}
-        />
-      )}
-
-      <CollectionSection
-        id="best-sellers"
-        index={String(collectionSections.length + (catalogAlreadyVisible ? 1 : 2)).padStart(2, '0')}
-        title="Best Seller"
-        blurb="The pieces customers choose most, ranked from successful orders."
-        products={bestSellers}
-      />
 
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

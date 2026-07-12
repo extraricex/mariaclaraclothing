@@ -28,6 +28,21 @@ export const DEFAULT_SIZE_CHART = {
   altText: 'Maria Clara Clothing oversized shirt size chart'
 };
 
+export const DEFAULT_COLLECTION_DEFINITIONS = [
+  {
+    name: 'New Arrivals', slug: 'new-arrivals', description: 'Oversized premium shirt.', imageUrl: '',
+    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 0, aliases: []
+  },
+  {
+    name: 'Tees', slug: 'tees', description: 'Regular Fit Tees with premium quality shirt.', imageUrl: '',
+    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 1, aliases: ['Catalog']
+  },
+  {
+    name: 'Freedom of Mind', slug: 'freedom-of-mind', description: 'The statement line - graphics for loud thoughts and quiet days.', imageUrl: '',
+    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 2, aliases: []
+  }
+];
+
 export const DEFAULT_STOREFRONT_SETTINGS = {
   storeName: 'Maria Clara Clothing',
   contactEmail: 'mariaclaraclothing@gmail.com',
@@ -90,11 +105,16 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     pushNotificationsEnabled: false
   },
   inventory: { lowStockThreshold: 12 },
-  storefrontCollections: ['New Arrivals'],
+  storefrontCollections: DEFAULT_COLLECTION_DEFINITIONS.map((collection) => collection.name),
+  collectionDefinitions: DEFAULT_COLLECTION_DEFINITIONS,
   collectionCountdowns: {}
 };
 
 let settingsPromise = null;
+
+export function invalidateStorefrontSettings() {
+  settingsPromise = null;
+}
 
 export function loadStorefrontSettings() {
   if (!settingsPromise) {

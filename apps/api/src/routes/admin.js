@@ -39,6 +39,7 @@ const {
   rotateAdminToken,
   setAdminPassword,
   updateCollectionCountdown,
+  updateStorefrontCollection,
   updateSettingsSection,
   verifyAdminPassword
 } = require('../settings/storeSettingsRepository');
@@ -224,7 +225,10 @@ router.post('/logout', async (req, res, next) => {
 router.get('/collections', async (_req, res, next) => {
   try {
     const settings = await getStoreSettings();
-    return res.json({ collections: settings.storefrontCollections });
+    return res.json({
+      collections: settings.storefrontCollections,
+      collectionDefinitions: settings.collectionDefinitions
+    });
   } catch (error) {
     return next(error);
   }
@@ -232,9 +236,47 @@ router.get('/collections', async (_req, res, next) => {
 
 router.post('/collections', async (req, res, next) => {
   try {
-    const settings = await addStorefrontCollection(req.body?.name);
-    return res.status(201).json({ collections: settings.storefrontCollections });
+    const settings = await addStorefrontCollection(req.body || {});
+    return res.status(201).json({
+      collections: settings.storefrontCollections,
+      collectionDefinitions: settings.collectionDefinitions
+    });
   } catch (error) {
+    return next(error);
+  }
+});
+
+router.put('/collections/:identifier', async (req, res, next) => {
+  try {
+    const settings = await updateStorefrontCollection(req.params.identifier, req.body || {});
+    return res.json({
+      collections: settings.storefrontCollections,
+      collectionDefinitions: settings.collectionDefinitions
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/collections/:identifier/image', bannerUpload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      const error = new Error('Choose a collection image to upload.');
+      error.status = 400;
+      throw error;
+    }
+    await normalizeProductUploads([req.file]);
+    const settings = await updateStorefrontCollection(req.params.identifier, {
+      imageUrl: bannerUploadUrl(req.file.filename)
+    });
+    const collection = settings.collectionDefinitions.find((item) => item.slug === String(req.params.identifier).toLowerCase());
+    return res.status(201).json({ collection, collectionDefinitions: settings.collectionDefinitions });
+  } catch (error) {
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (unlinkError) {
+        if (unlinkError.code !== 'ENOENT') return next(unlinkError);
+      }
+    }
     return next(error);
   }
 });
@@ -630,9 +672,15 @@ router.get('/products', async (req, res, next) => {
     const sort = String(req.query.sort || 'name_asc').trim();
     const allProducts = await listEditableProducts();
     const lowStockThreshold = await activeLowStockThreshold();
+    const collectionSettings = collection ? await getStoreSettings() : null;
+    const collectionDefinition = collectionSettings?.collectionDefinitions.find((item) => item.name.toLowerCase() === collection || item.slug === collection);
+    const acceptedCollectionNames = new Set([
+      collectionDefinition?.name || collection,
+      ...(collectionDefinition?.aliases || [])
+    ].map((name) => String(name || '').trim().toLowerCase()));
     const products = sortProductRecords(allProducts
       .filter((product) => !status || productStatus(product) === status)
-      .filter((product) => !collection || product.collections.some((item) => item.toLowerCase() === collection))
+      .filter((product) => !collection || product.collections.some((item) => acceptedCollectionNames.has(item.toLowerCase())))
       .filter((product) => !category || String(product.category || '').trim().toLowerCase() === category)
       .filter((product) => !vendor || String(product.vendor || '').trim().toLowerCase() === vendor)
       .filter((product) => !query || productSearchText(product).includes(query))

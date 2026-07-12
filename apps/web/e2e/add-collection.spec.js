@@ -16,8 +16,8 @@ test('admin creates a collection, assigns a product, and exposes it to customers
 
   try {
     await page.goto('/admin/collections');
-    await page.getByLabel('Collection name').fill(collectionName);
-    await page.getByRole('button', { name: 'Add collection', exact: true }).click();
+    await page.getByLabel('New collection name').fill(collectionName);
+    await page.getByRole('button', { name: 'Create collection', exact: true }).click();
     await expect(page.getByRole('button', { name: new RegExp(collectionName) })).toBeVisible();
 
     const productSelector = page.locator('select').first();
@@ -27,7 +27,7 @@ test('admin creates a collection, assigns a product, and exposes it to customers
     originalProduct = (await productResponse.json()).product;
 
     await productSelector.selectOption(productSlug);
-    await expect(page.getByRole('status')).toContainText('Collection updated.');
+    await expect(page.getByRole('status')).toContainText('Product assignment updated.');
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: collectionName, exact: true })).toBeVisible();

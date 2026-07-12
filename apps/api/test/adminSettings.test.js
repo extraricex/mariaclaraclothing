@@ -265,7 +265,8 @@ test('public storefront settings expose only the safe subset', async () => {
     assert.equal(body.settings.messengerUrl, 'https://m.me/mariaclaraclothing');
     assert.equal(body.settings.hero.title, 'Maria Clara');
     assert.equal(body.settings.hero.primaryButtonText, 'Shop new arrivals');
-    assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals']);
+    assert.deepEqual(body.settings.storefrontCollections, ['New Arrivals', 'Tees', 'Freedom of Mind']);
+    assert.equal(body.settings.collectionDefinitions.find((collection) => collection.slug === 'freedom-of-mind').showOnHomepage, true);
     assert.ok(body.settings.sizeChart.imageUrl);
     assert.equal(body.settings.shipping.regions.length, 3);
     assert.deepEqual(
@@ -294,14 +295,14 @@ test('admin can create and list persistent storefront collections', async () => 
 
     const before = await fetch(`http://127.0.0.1:${port}/api/admin/collections`, adminRequest());
     assert.equal(before.status, 200);
-    assert.deepEqual((await before.json()).collections, ['New Arrivals']);
+    assert.deepEqual((await before.json()).collections, ['New Arrivals', 'Tees', 'Freedom of Mind']);
 
     const created = await fetch(
       `http://127.0.0.1:${port}/api/admin/collections`,
       adminRequest('POST', { name: '  Summer   Drop  ' })
     );
     assert.equal(created.status, 201);
-    assert.deepEqual((await created.json()).collections, ['New Arrivals', 'Summer Drop']);
+    assert.deepEqual((await created.json()).collections, ['New Arrivals', 'Tees', 'Freedom of Mind', 'Summer Drop']);
 
     const duplicate = await fetch(
       `http://127.0.0.1:${port}/api/admin/collections`,
@@ -311,8 +312,23 @@ test('admin can create and list persistent storefront collections', async () => 
     assert.match((await duplicate.json()).error, /already exists/i);
 
     const publicBody = await (await fetch(`http://127.0.0.1:${port}/api/storefront-settings`)).json();
-    assert.deepEqual(publicBody.settings.storefrontCollections, ['New Arrivals', 'Summer Drop']);
+    assert.deepEqual(publicBody.settings.storefrontCollections, ['New Arrivals', 'Tees', 'Freedom of Mind', 'Summer Drop']);
     assert.ok(publicBody.settings.collectionCountdowns['Summer Drop']);
+
+    const updated = await fetch(
+      `http://127.0.0.1:${port}/api/admin/collections/summer-drop`,
+      adminRequest('PUT', {
+        name: 'Summer Edit', slug: 'summer-edit', description: 'Seasonal collection.',
+        visible: true, showOnHomepage: false, showOnShop: true, sortOrder: 9
+      })
+    );
+    assert.equal(updated.status, 200);
+    const updatedBody = await updated.json();
+    const record = updatedBody.collectionDefinitions.find((collection) => collection.slug === 'summer-edit');
+    assert.equal(record.name, 'Summer Edit');
+    assert.equal(record.description, 'Seasonal collection.');
+    assert.equal(record.showOnHomepage, false);
+    assert.ok(record.aliases.includes('Summer Drop'));
   });
 });
 

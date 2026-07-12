@@ -8,6 +8,7 @@ import ProductCountdown from './admin/ProductCountdown.jsx';
 import PancakePos from './admin/PancakePos.jsx';
 
 const Product = lazy(() => import('./pages/Product.jsx'));
+const Collection = lazy(() => import('./pages/Collection.jsx'));
 const Cart = lazy(() => import('./pages/Cart.jsx'));
 const Checkout = lazy(() => import('./pages/Checkout.jsx'));
 const ThankYou = lazy(() => import('./pages/ThankYou.jsx'));
@@ -42,6 +43,7 @@ export default function App() {
       <Route element={<MaintenanceGate><Shell /></MaintenanceGate>}>
         <Route path="/" element={<Home />} />
         <Route path="/product/:slug" element={<Product />} />
+        <Route path="/collections/:slug" element={<Collection />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/thank-you" element={<ThankYou />} />
         <Route path="/login" element={<CustomerLogin />} />

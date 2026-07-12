@@ -37,7 +37,7 @@ test('shell uses separate header and footer logos from site content', async () =
 test('shell uses a transparent homepage header until the page scrolls', async () => {
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'components', 'Shell.jsx'), 'utf8');
 
-  assert.match(source, /const CATEGORY_LINKS = \[/);
+  assert.match(source, /normalizeCollectionDefinitions/);
   assert.match(source, /const isHomePage = location\.pathname === '\/';/);
   assert.match(source, /const \[headerScrolled, setHeaderScrolled\] = useState\(false\);/);
   assert.match(source, /window\.scrollY > 48/);
@@ -46,13 +46,9 @@ test('shell uses a transparent homepage header until the page scrolls', async ()
   assert.match(source, /aria-label="Shop categories"/);
   assert.match(source, />Shop Categories<\/span>/);
   assert.match(source, /max-h-12 opacity-100/);
-  assert.match(source, /New/);
-  assert.match(source, /label: 'Tees'/);
-  assert.match(source, /label: 'Freedom of Mind'/);
-  assert.match(source, /label: 'Best Seller'/);
-  assert.match(source, /href: '\/#catalog'/);
-  assert.match(source, /href: '\/#freedom-of-mind'/);
-  assert.match(source, /href: '\/#best-sellers'/);
+  assert.match(source, /collection\.visible && collection\.showOnShop/);
+  assert.match(source, /collections\/\$\{encodeURIComponent\(collection\.slug\)\}/);
+  assert.doesNotMatch(source, /label: 'Best Seller'/);
   assert.doesNotMatch(source, /Restocked/);
   assert.doesNotMatch(source, /Long Sleeves/);
   assert.doesNotMatch(source, /Cotton'/);
