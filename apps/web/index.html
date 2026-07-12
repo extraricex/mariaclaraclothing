@@ -8,6 +8,77 @@
     <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
     <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&f[]=switzer@400,500,600,700&display=swap" rel="stylesheet" />
     <link rel="icon" href="/brand/maria-clara-logo.png" />
+    <!-- Meta Pixel is bootstrapped before React so browser tools and Meta's URL checker can detect it. -->
+    <script>
+      (function () {
+        var defaultPixel = {
+          enabled: true,
+          pixelId: '595813035761213',
+          requireConsent: false
+        };
+        var settingsRequest = fetch('/api/storefront-settings', {
+          cache: 'no-store',
+          credentials: 'same-origin'
+        }).then(function (response) {
+          if (!response.ok) throw new Error('Could not load storefront settings.');
+          return response.json();
+        }).then(function (body) {
+          return body.settings || {};
+        });
+
+        window.__mariaClaraStorefrontSettingsPromise = settingsRequest;
+
+        function startMetaPixel(pixel) {
+          var config = pixel || defaultPixel;
+          var pixelId = String(config.pixelId || '').trim();
+          var enabled = Boolean(config.enabled && /^\d{5,30}$/.test(pixelId));
+          var requireConsent = Boolean(config.requireConsent);
+          var customerPath = !window.location.pathname.startsWith('/admin');
+
+          window.__mariaClaraFacebookPixelConfig = {
+            enabled: enabled,
+            pixelId: enabled ? pixelId : '',
+            requireConsent: requireConsent
+          };
+          if (!enabled || !customerPath) return;
+
+          !function(f,b,e,v,n,t,s)
+          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+          n.queue=[];t=b.createElement(e);t.async=!0;
+          t.src=v;s=b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t,s)}(window, document,'script',
+          'https://connect.facebook.net/en_US/fbevents.js');
+
+          fbq('consent', 'revoke');
+          if (pixelId === '595813035761213') {
+            fbq('init', '595813035761213');
+          } else {
+            fbq('init', pixelId);
+          }
+
+          var consent = !requireConsent ||
+            localStorage.getItem('maria-clara-meta-tracking-consent') === 'accepted';
+          if (!consent) {
+            window.__mariaClaraFacebookConsent = 'revoke';
+            window.__mariaClaraFacebookPixelId = pixelId;
+            return;
+          }
+
+          fbq('consent', 'grant');
+          fbq('track', 'PageView');
+          window.__mariaClaraFacebookConsent = 'grant';
+          window.__mariaClaraFacebookPixelId = pixelId;
+          window.__mariaClaraInitialMetaPageViewPath =
+            window.location.pathname + window.location.search;
+        }
+
+        settingsRequest
+          .then(function (settings) { startMetaPixel(settings.metaPixel || defaultPixel); })
+          .catch(function () { startMetaPixel(defaultPixel); });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

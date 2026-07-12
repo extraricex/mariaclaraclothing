@@ -136,6 +136,23 @@ test('admin runtime setting can enable immediate Pixel events without consent', 
   ]);
 });
 
+test('React consumes the HTML bootstrap PageView without sending a duplicate', () => {
+  configureFacebookMetaPixel({ enabled: true, pixelId: '595813035761213', requireConsent: false });
+  const calls = [];
+  const windowRef = {
+    fbq: (...args) => calls.push(args),
+    __mariaClaraInitialMetaPageViewPath: '/bootstrap-test'
+  };
+
+  assert.equal(trackFacebookPageView('/bootstrap-test', { windowRef, path: '/bootstrap-test' }), true);
+  assert.equal(trackFacebookPageView('/bootstrap-test', { windowRef, path: '/bootstrap-test' }), false);
+  assert.equal(calls.length, 0);
+  assert.equal(windowRef.__mariaClaraInitialMetaPageViewPath, undefined);
+
+  assert.equal(trackFacebookPageView('/bootstrap-next', { windowRef, path: '/bootstrap-next' }), true);
+  assert.deepEqual(calls, [['track', 'PageView', {}]]);
+});
+
 test('SPA page views skip repeated and admin paths', () => {
   assert.equal(shouldTrackFacebookPath('', '/'), true);
   assert.equal(shouldTrackFacebookPath('/', '/product/example'), true);

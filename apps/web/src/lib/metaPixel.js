@@ -243,6 +243,14 @@ export function flushPendingFacebookEvents(options = {}) {
 }
 
 export function trackFacebookPageView(path, options = {}) {
+  const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
+  const initialPath = String(windowRef?.__mariaClaraInitialMetaPageViewPath || '');
+  if (initialPath) {
+    delete windowRef.__mariaClaraInitialMetaPageViewPath;
+    lastTrackedPagePath = initialPath;
+    lastViewContentKey = '';
+    if (initialPath === path) return true;
+  }
   if (!shouldTrackFacebookPath(lastTrackedPagePath, path)) return false;
   const tracked = trackFacebookEvent('PageView', {}, { ...options, path });
   if (tracked) {

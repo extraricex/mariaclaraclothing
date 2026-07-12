@@ -98,12 +98,19 @@ let settingsPromise = null;
 
 export function loadStorefrontSettings() {
   if (!settingsPromise) {
-    settingsPromise = fetch('/api/storefront-settings', { cache: 'no-store' })
+    const bootstrappedRequest = typeof window !== 'undefined' &&
+      window.__mariaClaraStorefrontSettingsPromise?.then
+      ? window.__mariaClaraStorefrontSettingsPromise
+      : null;
+    const request = bootstrappedRequest || fetch('/api/storefront-settings', { cache: 'no-store' })
       .then((response) => {
         if (!response.ok) throw new Error('Could not load storefront settings.');
         return response.json();
       })
-      .then((body) => ({ ...DEFAULT_STOREFRONT_SETTINGS, ...(body.settings || {}) }))
+      .then((body) => body.settings || {});
+
+    settingsPromise = request
+      .then((settings) => ({ ...DEFAULT_STOREFRONT_SETTINGS, ...(settings || {}) }))
       .catch(() => {
         settingsPromise = null;
         return DEFAULT_STOREFRONT_SETTINGS;
