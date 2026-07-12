@@ -1,15 +1,42 @@
 const repositoryDefault = require('./pancakeInventoryOutboxRepository');
 const productSyncRepositoryDefault = require('./pancakeProductSyncRepository');
-const { syncProductToPancake } = require('./pancakeProductSyncService');
 
 function safeCode(error) {
   const value = String(error?.code || 'pancake_inventory_sync_failed');
   return /^pancake_[a-z_]+$/.test(value) ? value : 'pancake_inventory_sync_failed';
 }
 
+async function syncInventoryToPancake({ productSlug, config, client, repository = productSyncRepositoryDefault }) {
+  if (config?.mode !== 'live' || !config?.apiKey) {
+    const error = new Error('Pancake inventory sync requires live mode.');
+    error.code = 'pancake_product_sync_not_live';
+    throw error;
+  }
+  const readiness = await repository.loadProductSyncReadiness(productSlug, config);
+  if (!readiness.ready) {
+    const error = new Error('Pancake inventory mapping is not ready.');
+    error.code = readiness.reason || 'pancake_product_mapping_missing';
+    throw error;
+  }
+  await client.updateVariationQuantities(readiness.shopId, {
+    is_actual_remain_quantity: false,
+    variations_warehouses: readiness.mappings.map((mapping) => ({
+      variation_id: mapping.pancakeVariantId,
+      remain_quantity: Number(mapping.stockQuantity || 0),
+      warehouse_id: readiness.warehouseId
+    }))
+  });
+  return {
+    productSlug,
+    status: 'synced',
+    pancakeProductId: readiness.pancakeProductId,
+    variantMappings: readiness.mappings
+  };
+}
+
 async function processInventorySyncJobs({
   config, client, repository = repositoryDefault, productSyncRepository = productSyncRepositoryDefault,
-  productSlugs = [], limit = 20, syncProduct = syncProductToPancake
+  productSlugs = [], limit = 20, syncProduct = syncInventoryToPancake
 }) {
   const jobs = await repository.claimDueInventoryJobs({ limit, productSlugs });
   const results = [];
@@ -35,4 +62,4 @@ async function processInventorySyncJobs({
   };
 }
 
-module.exports = { processInventorySyncJobs, safeCode };
+module.exports = { processInventorySyncJobs, safeCode, syncInventoryToPancake };
