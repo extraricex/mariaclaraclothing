@@ -116,7 +116,17 @@ function createPancakeClient(config, fetchImpl = fetch) {
       throw new PancakeApiError('pancake_invalid_request');
     }
     const params = { page_number: pageNumber, page_size: pageSize };
-    if (options.updatedSince) params.updated_since = options.updatedSince;
+    if (options.updatedSince || options.updatedUntil) {
+      const start = options.updatedSince ? new Date(options.updatedSince) : null;
+      const end = options.updatedUntil ? new Date(options.updatedUntil) : null;
+      if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) {
+        throw new PancakeApiError('pancake_invalid_request');
+      }
+      params.updateStatus = 'updated_at';
+      if (start) params.startDateTime = Math.floor(start.getTime() / 1000);
+      if (end) params.endDateTime = Math.floor(end.getTime() / 1000);
+      params.option_sort = 'last_updated_order_asc';
+    }
     const body = await request(shopPath(shopId, '/orders'), params);
     if (!Array.isArray(body.data)) throw new PancakeApiError('pancake_invalid_response');
     return body;

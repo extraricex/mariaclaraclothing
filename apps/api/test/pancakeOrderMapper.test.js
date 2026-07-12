@@ -15,6 +15,16 @@ test('unknown Pancake status maps safely to other', () => {
   assert.deepEqual(mapPancakeStatus('Provider Custom State'), { status: 'other', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' });
 });
 
+test('maps official numeric Pancake status codes', () => {
+  const { mapPancakeStatus } = require('../src/integrations/pancake/pancakeOrderMapper');
+  assert.equal(mapPancakeStatus(0).status, 'received');
+  assert.equal(mapPancakeStatus(8).status, 'packed');
+  assert.equal(mapPancakeStatus(2).status, 'shipped');
+  assert.equal(mapPancakeStatus(3).status, 'delivered');
+  assert.equal(mapPancakeStatus(6).status, 'cancelled');
+  assert.equal(mapPancakeStatus(5).status, 'returned');
+});
+
 test('normalizes Pancake order payload into local order fields', () => {
   const { normalizePancakeOrder } = require('../src/integrations/pancake/pancakeOrderMapper');
   const order = normalizePancakeOrder({
@@ -93,6 +103,24 @@ test('normalizes nested Pancake shipment tracking fields', () => {
   assert.equal(order.deliveryNotes, 'Call before delivery');
 });
 
+test('normalizes official Pancake partner tracking fields', () => {
+  const { normalizePancakeOrder } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const order = normalizePancakeOrder({
+    id: 456,
+    status: 2,
+    partner: {
+      partner_name: 'J&T Express',
+      partner_status: 'shipping',
+      extend_code: 'JT-OFFICIAL-123'
+    }
+  });
+
+  assert.equal(order.status, 'shipped');
+  assert.equal(order.deliveryMethod, 'J&T Express');
+  assert.equal(order.trackingNumber, 'JT-OFFICIAL-123');
+  assert.equal(order.deliveryStatus, 'out_for_delivery');
+});
+
 test('builds outbound Pancake order update payload from local order changes', () => {
   const { buildPancakeOrderUpdatePayload } = require('../src/integrations/pancake/pancakeOrderMapper');
   const payload = buildPancakeOrderUpdatePayload({
@@ -107,8 +135,8 @@ test('builds outbound Pancake order update payload from local order changes', ()
     },
     changedFields: ['status', 'trackingNumber', 'customer', 'address', 'notes']
   });
-  assert.equal(payload.status, 'Shipped');
-  assert.equal(payload.tracking_number, 'JNT123');
+  assert.equal(payload.status, 2);
+  assert.equal(payload.partner.extend_code, 'JNT123');
   assert.equal(payload.bill_full_name, 'Maria Customer');
   assert.equal(payload.note_print, 'Pack carefully');
 });

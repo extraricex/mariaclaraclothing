@@ -11,6 +11,7 @@ test('admin order detail editor exposes contact and address editing while lockin
   assert.match(source, /phone:\s*order\.customer\?\.phone/);
   assert.match(source, /email:\s*order\.customer\?\.email/);
   assert.match(source, /items:\s*\(order\.items/);
+  assert.match(source, /\{ items: _immutableItems, \.\.\.changes \} = form/);
   assert.match(source, /changes\.customer\s*=\s*form\.customer/);
   assert.doesNotMatch(source, /changes\.items\s*=/);
   assert.match(source, /House \/ Street/);

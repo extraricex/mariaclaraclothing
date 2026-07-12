@@ -152,6 +152,10 @@ function pancakeConfig(source = process.env) {
   if (mode === 'live' && !orderExportCutoffAt) {
     throw new Error('PANCAKE_ORDER_EXPORT_CUTOFF_AT is required in live mode');
   }
+  const webhookSecret = String(source.PANCAKE_WEBHOOK_SECRET || '');
+  if (appEnv === 'production' && mode === 'live' && webhookSecret.length < 32) {
+    throw new Error('PANCAKE_WEBHOOK_SECRET must be at least 32 characters in production live mode');
+  }
   const orderPollIntervalMs = autoSyncInteger('PANCAKE_ORDER_POLL_INTERVAL_MS', 5 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000);
   const orderPollPageSize = autoSyncInteger('PANCAKE_ORDER_POLL_PAGE_SIZE', 50, 1, 100);
   const orderPollLookbackMs = autoSyncInteger('PANCAKE_ORDER_POLL_LOOKBACK_MS', 15 * 60 * 1000, 60 * 1000, 7 * 24 * 60 * 60 * 1000);
@@ -165,7 +169,7 @@ function pancakeConfig(source = process.env) {
     shopId: String(source.PANCAKE_SHOP_ID || '').trim(),
     warehouseId: String(source.PANCAKE_WAREHOUSE_ID || '').trim(),
     orderSourceId: String(source.PANCAKE_ORDER_SOURCE_ID || '').trim(),
-    webhookSecret: String(source.PANCAKE_WEBHOOK_SECRET || ''),
+    webhookSecret,
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 20000,
     catalogPageSize: catalogInteger('PANCAKE_CATALOG_PAGE_SIZE', 100, 100),
     catalogMaxPages: catalogInteger('PANCAKE_CATALOG_MAX_PAGES', 100, 500),

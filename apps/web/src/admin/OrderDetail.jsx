@@ -249,7 +249,7 @@ export default function OrderDetail() {
 
   async function save() {
     setMessage('');
-    const changes = { ...form };
+    const { items: _immutableItems, ...changes } = form;
     changes.customer = form.customer;
     if (editAddress) {
       const province = provinces.find((item) => item.code === addressDraft.provinceCode);

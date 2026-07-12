@@ -84,14 +84,18 @@ async function listOrders() {
     .map((order) => ({ ...order, statusEvents: [] }));
 }
 
-async function findOrderByNumber(orderNumber) {
+async function findOrderByNumber(orderNumber, options = {}) {
   if (usePostgresOrders()) {
-    const result = await query('SELECT * FROM orders WHERE order_number = $1', [orderNumber]);
+    const executor = options.client || { query };
+    const lockClause = options.forUpdate ? ' FOR UPDATE' : '';
+    const result = await executor.query(`SELECT * FROM orders WHERE order_number = $1${lockClause}`, [orderNumber]);
     if (!result.rows[0]) return null;
+    const order = fromPostgresOrder(result.rows[0]);
+    if (options.includeRelated === false) return order;
     return {
-      ...fromPostgresOrder(result.rows[0]),
-      statusEvents: await listOrderStatusEvents(orderNumber),
-      trackingNotifications: await listOrderTrackingNotifications(orderNumber)
+      ...order,
+      statusEvents: await listOrderStatusEvents(orderNumber, options),
+      trackingNotifications: await listOrderTrackingNotifications(orderNumber, options)
     };
   }
 
@@ -109,16 +113,19 @@ async function findOrderByNumber(orderNumber) {
   };
 }
 
-async function updateOrder(orderNumber, changes) {
+async function updateOrder(orderNumber, changes, options = {}) {
   if (usePostgresOrders()) {
-    const existing = await findOrderByNumber(orderNumber);
+    const existing = options.existingOrder || await findOrderByNumber(orderNumber, {
+      ...options,
+      includeRelated: false
+    });
     if (!existing) return null;
     const updatedOrder = {
       ...existing,
       ...changes,
       updatedAt: new Date().toISOString()
     };
-    await upsertPostgresOrder(updatedOrder);
+    await upsertPostgresOrder(updatedOrder, options.client);
     return updatedOrder;
   }
 
@@ -147,11 +154,12 @@ async function resetOrderRepositoryForTests() {
   await writeOrderStore({ orders: [], statusEvents: [], trackingNotifications: [] });
 }
 
-async function appendOrderStatusEvent(orderNumber, event) {
+async function appendOrderStatusEvent(orderNumber, event, options = {}) {
   const normalized = normalizeStatusEvent(orderNumber, event);
 
   if (usePostgresOrders()) {
-    await query(
+    const executor = options.client || { query };
+    await executor.query(
       `INSERT INTO order_status_events (id, order_number, source, changes, note, created_at)
        VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
       [
@@ -172,9 +180,10 @@ async function appendOrderStatusEvent(orderNumber, event) {
   return normalized;
 }
 
-async function listOrderStatusEvents(orderNumber) {
+async function listOrderStatusEvents(orderNumber, options = {}) {
   if (usePostgresOrders()) {
-    const result = await query(
+    const executor = options.client || { query };
+    const result = await executor.query(
       `SELECT * FROM order_status_events
        WHERE order_number = $1
        ORDER BY created_at DESC, id DESC`,
@@ -219,9 +228,10 @@ async function appendOrderTrackingNotification(orderNumber, notification) {
   return normalized;
 }
 
-async function listOrderTrackingNotifications(orderNumber) {
+async function listOrderTrackingNotifications(orderNumber, options = {}) {
   if (usePostgresOrders()) {
-    const result = await query(
+    const executor = options.client || { query };
+    const result = await executor.query(
       `SELECT * FROM order_tracking_notifications
        WHERE order_number = $1
        ORDER BY created_at DESC, id DESC`,

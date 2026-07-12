@@ -1,32 +1,59 @@
 const STATUS_MAP = new Map([
   ['new', { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
+  ['waiting for confirmation', { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
   ['received', { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
+  ['purchased', { status: 'confirmed', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
   ['confirmed', { status: 'confirmed', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
+  ['wait for printing', { status: 'confirmed', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
+  ['printed', { status: 'confirmed', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
+  ['packaging', { status: 'packed', fulfillmentStatus: 'packed', deliveryStatus: 'ready' }],
   ['packing', { status: 'packed', fulfillmentStatus: 'packed', deliveryStatus: 'ready' }],
   ['packed', { status: 'packed', fulfillmentStatus: 'packed', deliveryStatus: 'ready' }],
+  ['waiting for pick up', { status: 'packed', fulfillmentStatus: 'packed', deliveryStatus: 'ready' }],
   ['shipping', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
   ['to ship', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
   ['in transit', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
   ['shipped', { status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' }],
   ['delivered', { status: 'delivered', fulfillmentStatus: 'delivered', deliveryStatus: 'delivered' }],
+  ['collected money', { status: 'delivered', fulfillmentStatus: 'delivered', deliveryStatus: 'delivered' }],
   ['cancelled', { status: 'cancelled', fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' }],
   ['canceled', { status: 'cancelled', fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' }],
+  ['returning', { status: 'returned', fulfillmentStatus: 'shipped', deliveryStatus: 'returned' }],
+  ['partial return', { status: 'returned', fulfillmentStatus: 'shipped', deliveryStatus: 'returned' }],
   ['returned', { status: 'returned', fulfillmentStatus: 'shipped', deliveryStatus: 'returned' }],
+  ['deleted recently', { status: 'cancelled', fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' }],
   ['failed', { status: 'failed', fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' }],
   ['unreachable', { status: 'unreachable', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }]
 ]);
 
-const LOCAL_TO_PANCAKE = {
-  received: 'New',
-  confirmed: 'Confirmed',
-  packed: 'Packing',
-  shipped: 'Shipped',
-  delivered: 'Delivered',
-  cancelled: 'Cancelled',
-  returned: 'Returned',
-  failed: 'Failed',
-  unreachable: 'Unreachable',
-  other: 'Other'
+const PANCAKE_STATUS_BY_ID = new Map([
+  [0, STATUS_MAP.get('new')],
+  [17, STATUS_MAP.get('waiting for confirmation')],
+  [11, { status: 'other', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
+  [12, STATUS_MAP.get('wait for printing')],
+  [13, STATUS_MAP.get('printed')],
+  [20, STATUS_MAP.get('purchased')],
+  [1, STATUS_MAP.get('confirmed')],
+  [8, STATUS_MAP.get('packaging')],
+  [9, STATUS_MAP.get('waiting for pick up')],
+  [2, STATUS_MAP.get('shipped')],
+  [3, STATUS_MAP.get('delivered')],
+  [16, STATUS_MAP.get('collected money')],
+  [4, STATUS_MAP.get('returning')],
+  [15, STATUS_MAP.get('partial return')],
+  [5, STATUS_MAP.get('returned')],
+  [6, STATUS_MAP.get('cancelled')],
+  [7, STATUS_MAP.get('deleted recently')]
+]);
+
+const LOCAL_TO_PANCAKE_STATUS = {
+  received: 0,
+  confirmed: 1,
+  packed: 8,
+  shipped: 2,
+  delivered: 3,
+  cancelled: 6,
+  returned: 5
 };
 
 function normalizedKey(value) {
@@ -34,7 +61,9 @@ function normalizedKey(value) {
 }
 
 function mapPancakeStatus(value) {
-  const raw = typeof value === 'object' && value !== null ? value.name ?? value.status ?? value.id : value;
+  const raw = typeof value === 'object' && value !== null ? value.id ?? value.status ?? value.name : value;
+  const numeric = Number(raw);
+  if (Number.isInteger(numeric) && PANCAKE_STATUS_BY_ID.has(numeric)) return PANCAKE_STATUS_BY_ID.get(numeric);
   const mapped = STATUS_MAP.get(normalizedKey(raw));
   return mapped || { status: 'other', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' };
 }
@@ -77,26 +106,33 @@ function normalizePancakeItem(item = {}) {
 function normalizePancakeOrder(payload = {}) {
   const pancakeOrderId = String(payload.id ?? payload.order_id ?? '').trim();
   const shipping = payload.shipping_address || {};
-  const shippingInfo = firstObject(
-    payload.shipping_info,
-    payload.shipping,
-    payload.shipment,
-    payload.shipment_info,
-    payload.delivery_info,
-    payload.delivery,
-    payload.logistics,
-    payload.logistics_info
-  );
+  const partner = firstObject(payload.partner);
+  const shippingInfo = {
+    ...firstObject(
+      payload.shipping_info,
+      payload.shipping,
+      payload.shipment,
+      payload.shipment_info,
+      payload.delivery_info,
+      payload.delivery,
+      payload.logistics,
+      payload.logistics_info
+    ),
+    ...partner
+  };
   const shippingStatus = firstText(
     payload.shipping_status,
     payload.delivery_status,
     payload.shipment_status,
+    payload.partner_status,
     shippingInfo.shipping_status,
     shippingInfo.delivery_status,
     shippingInfo.shipment_status,
+    shippingInfo.partner_status,
+    shippingInfo.extend_update?.at?.(-1)?.status,
     shippingInfo.status
   );
-  const statusFields = mapPancakeStatus(payload.status_name || payload.status);
+  const statusFields = mapPancakeStatus(payload.status ?? payload.status_name);
   const shippingStatusFields = shippingStatus
     ? mapPancakeStatus(shippingStatus)
     : null;
@@ -149,6 +185,8 @@ function normalizePancakeOrder(payload = {}) {
       shippingInfo.courier_name,
       shippingInfo.carrier,
       shippingInfo.carrier_name,
+      shippingInfo.partner_name,
+      shippingInfo.delivery_name,
       'Standard shipping'
     ),
     trackingNumber: firstText(
@@ -181,7 +219,10 @@ function normalizePancakeOrder(payload = {}) {
       shippingInfo.bill_lading_id,
       shippingInfo.billLadingId,
       shippingInfo.bill_of_lading,
-      shippingInfo.billOfLading
+      shippingInfo.billOfLading,
+      shippingInfo.extend_code,
+      shippingInfo.order_number_vtp,
+      shippingInfo.extend_update?.at?.(-1)?.tracking_id
     ),
     estimatedDeliveryAt: firstText(
       payload.estimated_delivery_at,
@@ -207,9 +248,12 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
   const fields = new Set(changedFields);
   const payload = {};
   if (fields.has('status') || fields.has('fulfillmentStatus') || fields.has('deliveryStatus')) {
-    payload.status = LOCAL_TO_PANCAKE[order.status] || 'Other';
+    const status = LOCAL_TO_PANCAKE_STATUS[order.status];
+    if (status !== undefined) payload.status = status;
   }
-  if (fields.has('trackingNumber')) payload.tracking_number = String(order.trackingNumber || '').trim();
+  if (fields.has('trackingNumber')) {
+    payload.partner = { extend_code: String(order.trackingNumber || '').trim() };
+  }
   if (fields.has('customer')) {
     payload.bill_full_name = String(order.customer?.fullName || '').trim();
     payload.bill_phone_number = String(order.customer?.phone || '').trim();
@@ -223,7 +267,6 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
     };
   }
   if (fields.has('notes')) payload.note_print = String(order.notes || '').trim();
-  if (fields.has('paymentStatus')) payload.payment_status = order.paymentStatus === 'paid' ? 'paid' : 'cod_pending';
   return payload;
 }
 

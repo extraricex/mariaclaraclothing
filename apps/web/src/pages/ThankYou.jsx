@@ -57,10 +57,22 @@ export default function ThankYou() {
 
       <dl className="mx-auto mt-10 max-w-md space-y-3 border border-line bg-white p-6 text-left text-sm">
         <div className="flex justify-between gap-6"><dt className="text-clay">Order no.</dt><dd className="min-w-0 break-words text-right font-semibold">{summary.orderNumber}</dd></div>
+        {summary.customerName && (
+          <div className="flex justify-between gap-6"><dt className="text-clay">Customer</dt><dd className="min-w-0 break-words text-right">{summary.customerName}</dd></div>
+        )}
         {summary.addressLine && (
           <div className="flex justify-between gap-6"><dt className="text-clay">Deliver to</dt><dd className="min-w-0 break-words text-right">{summary.addressLine}</dd></div>
         )}
         <div className="flex justify-between gap-6"><dt className="text-clay">Payment</dt><dd>{summary.paymentMethodLabel}</dd></div>
+        {summary.subtotalCents !== undefined && (
+          <div className="flex justify-between gap-6"><dt className="text-clay">Subtotal</dt><dd>{formatMoney(summary.subtotalCents)}</dd></div>
+        )}
+        {Number(summary.discountTotalCents || 0) > 0 && (
+          <div className="flex justify-between gap-6 text-accent-deep">
+            <dt>{summary.discountCode ? `Discount (${summary.discountCode})` : 'Discount'}</dt>
+            <dd>-{formatMoney(summary.discountTotalCents)}</dd>
+          </div>
+        )}
         {summary.shippingFeeCents !== undefined && (
           <div className="flex justify-between gap-6"><dt className="text-clay">Shipping</dt><dd>{summary.shippingFeeCents ? formatMoney(summary.shippingFeeCents) : 'Free'}</dd></div>
         )}

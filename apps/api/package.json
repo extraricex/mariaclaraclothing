@@ -20,7 +20,7 @@
     "multer": "^2.2.0",
     "pg": "^8.21.0",
     "sharp": "^0.35.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

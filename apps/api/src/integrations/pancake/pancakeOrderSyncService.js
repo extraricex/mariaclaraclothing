@@ -96,6 +96,11 @@ function inboundOrderPatch(normalized, existing = {}) {
   return patch;
 }
 
+function nativePancakeOrderNumber(pancakeOrderId) {
+  const id = String(pancakeOrderId || '').trim().replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 80);
+  return id ? `PNK-${id}` : '';
+}
+
 function isOlderPancakeUpdate(normalized, link) {
   if (!normalized.pancakeUpdatedAt || !link?.lastPancakeUpdatedAt) return false;
   const incoming = new Date(normalized.pancakeUpdatedAt).getTime();
@@ -112,7 +117,7 @@ async function processInboundPancakeOrder({
   const normalized = normalizePancakeOrder(pancakeOrder);
   if (!normalized.pancakeOrderId) return { status: 'blocked', safeErrorCode: 'pancake_order_id_missing' };
   const linked = await syncRepository.getOrderLinkByPancakeOrderId?.(normalized.pancakeOrderId);
-  const orderNumber = normalized.orderNumber || linked?.orderNumber || '';
+  const orderNumber = linked?.orderNumber || normalized.orderNumber || nativePancakeOrderNumber(normalized.pancakeOrderId);
   if (!orderNumber) return { status: 'blocked', safeErrorCode: 'pancake_order_match_low_confidence' };
   normalized.orderNumber = orderNumber;
   const existingLink = linked || await syncRepository.getOrderSyncDetail(orderNumber);
@@ -205,13 +210,15 @@ async function pollInboundPancakeOrders({
       duplicateCount: 0
     };
   }
-  const updatedSince = new Date(now().getTime() - Number(config.orderPollLookbackMs || 15 * 60 * 1000)).toISOString();
+  const pollTime = now();
+  const updatedSince = new Date(pollTime.getTime() - Number(config.orderPollLookbackMs || 15 * 60 * 1000)).toISOString();
+  const updatedUntil = pollTime.toISOString();
   const pageSize = Number(config.orderPollPageSize || 50);
   const summary = { status: 'complete', importedCount: 0, updatedCount: 0, duplicateCount: 0, blockedCount: 0 };
   let pageNumber = 1;
   let totalPages = 1;
   do {
-    const body = await client.listOrders(config.shopId, { pageNumber, pageSize, updatedSince });
+    const body = await client.listOrders(config.shopId, { pageNumber, pageSize, updatedSince, updatedUntil });
     totalPages = Math.max(1, Math.min(100, Number(body.total_pages || body.totalPages || pageNumber)));
     for (const pancakeOrder of body.data || []) {
       const result = await processInboundPancakeOrder({ pancakeOrder, orderRepository, syncRepository, now });
@@ -255,6 +262,11 @@ async function processOutboundOrderEvents({
         continue;
       }
       const payload = buildPancakeOrderUpdatePayload({ order, changedFields: event.payload.changedFields || [] });
+      if (!Object.keys(payload).length) {
+        await syncRepository.markSyncEventBlocked(event.id, 'pancake_order_update_not_supported');
+        summary.blockedCount += 1;
+        continue;
+      }
       await client.updateOrder(config.shopId, event.pancakeOrderId, payload);
       await syncRepository.markSyncEventSucceeded(event.id);
       await syncRepository.upsertOrderLink({

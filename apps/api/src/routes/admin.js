@@ -74,6 +74,7 @@ const {
   setSessionCookies
 } = require('../auth/sessionHttp');
 const { createAdminPancakeRouter } = require('./adminPancake');
+const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const {
@@ -893,31 +894,41 @@ router.post('/orders/:orderNumber/tracking-notification', async (req, res, next)
 router.patch('/orders/:orderNumber', async (req, res, next) => {
   try {
     const orderNumber = String(req.params.orderNumber || '').trim();
-    const existingOrder = await findOrderByNumber(orderNumber);
-
-    if (!existingOrder) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
     if (req.body?.items !== undefined) {
       return res.status(409).json({ error: 'Order items cannot be changed after checkout. Create a replacement order instead.' });
     }
-    if (existingOrder.status === 'cancelled' && req.body?.status && req.body.status !== 'cancelled') {
-      return res.status(409).json({ error: 'Cancelled orders cannot be reopened. Create a replacement order instead.' });
-    }
+    const updateWithinTransaction = async (client) => {
+      const repositoryOptions = client
+        ? { client, forUpdate: true, includeRelated: false }
+        : {};
+      const existingOrder = await findOrderByNumber(orderNumber, repositoryOptions);
+      if (!existingOrder) return null;
+      if (existingOrder.status === 'cancelled' && req.body?.status && req.body.status !== 'cancelled') {
+        const error = new Error('Cancelled orders cannot be reopened. Create a replacement order instead.');
+        error.status = 409;
+        throw error;
+      }
 
-    const changes = normalizeOrderUpdate(req.body || {}, existingOrder);
-    const order = await updateOrder(orderNumber, changes);
+      const changes = normalizeOrderUpdate(req.body || {}, existingOrder);
+      const order = await updateOrder(orderNumber, changes, {
+        ...(client ? { client } : {}),
+        existingOrder
+      });
+      await restoreCancelledOrderStock(existingOrder, order, client ? { client } : {});
+      await appendStatusEventIfChanged(existingOrder, order, 'admin', '', client ? { client } : {});
+      return { existingOrder, order };
+    };
+    const result = hasDatabaseUrl()
+      ? await transaction(updateWithinTransaction)
+      : await updateWithinTransaction();
 
-    if (!order) {
+    if (!result) {
       return res.status(404).json({ error: 'Order not found' });
     }
-
-    await restoreCancelledOrderStock(existingOrder, order);
+    const { existingOrder, order } = result;
     if (existingOrder.status !== 'cancelled' && order.status === 'cancelled') {
       await pancakeOrderExportRepository.markOrderExportSkipped(order.orderNumber);
     }
-    await appendStatusEventIfChanged(existingOrder, order, 'admin');
     await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
     await enqueueDeliveredOrderNotifications(existingOrder, order);
     const refreshedOrder = await findOrderByNumber(orderNumber);
@@ -933,7 +944,7 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
   }
 });
 
-async function restoreCancelledOrderStock(previousOrder, nextOrder) {
+async function restoreCancelledOrderStock(previousOrder, nextOrder, options = {}) {
   if (!previousOrder || !nextOrder) return;
   if (previousOrder.status === 'cancelled' || nextOrder.status !== 'cancelled') return;
 
@@ -949,7 +960,7 @@ async function restoreCancelledOrderStock(previousOrder, nextOrder) {
 
   if (!restockItems.length) return;
 
-  await restockVariantStock(restockItems);
+  await restockVariantStock(restockItems, options);
   await appendInventoryMovements(restockItems.map((item) => ({
     orderNumber: nextOrder.orderNumber,
     source: 'admin',
@@ -959,7 +970,7 @@ async function restoreCancelledOrderStock(previousOrder, nextOrder) {
     sku: item.sku,
     size: item.size,
     quantityChange: item.quantity
-  })));
+  })), options);
 }
 
 function issueUploadDir() {
@@ -1460,7 +1471,7 @@ function normalizeParcelWeightGrams(value, message, maximum = 100000) {
   return number;
 }
 
-async function appendStatusEventIfChanged(previousOrder, nextOrder, source, note = '') {
+async function appendStatusEventIfChanged(previousOrder, nextOrder, source, note = '', options = {}) {
   if (!previousOrder || !nextOrder) return null;
   const changes = {};
 
@@ -1477,7 +1488,7 @@ async function appendStatusEventIfChanged(previousOrder, nextOrder, source, note
     source,
     changes,
     note
-  });
+  }, options);
 }
 
 function changedPancakeFields(previousOrder, nextOrder) {
@@ -1485,8 +1496,6 @@ function changedPancakeFields(previousOrder, nextOrder) {
   for (const field of [
     'status',
     'fulfillmentStatus',
-    'paymentStatus',
-    'codConfirmationStatus',
     'deliveryStatus',
     'trackingNumber',
     'notes'

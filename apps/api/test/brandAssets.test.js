@@ -11,6 +11,7 @@ const brandAssets = [
   '/brand/hero2.png',
   '/brand/hero1-web.jpg',
   '/brand/hero1v2.jpg',
+  '/brand/hero1v2-web.jpg',
   '/brand/hero2-web.jpg',
   '/brand/video-poster.mp4'
 ];
@@ -33,7 +34,7 @@ test('customer pages use the uploaded logo and no temporary logo image', () => {
 test('homepage uses uploaded campaign media', () => {
   const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
 
-  assert.match(html, /\/brand\/hero1(?:-web|v2)\.jpg/);
+  assert.match(html, /\/brand\/hero1(?:-web|v2(?:-web)?)\.jpg/);
   assert.match(html, /\/brand\/hero2-web\.jpg/);
   assert.match(html, /\/brand\/video-poster\.mp4/);
   assert.doesNotMatch(html, /images\.unsplash\.com/);

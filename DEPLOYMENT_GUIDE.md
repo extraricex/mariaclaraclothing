@@ -29,7 +29,7 @@ deployment template.
 | Admin | React routes under `/admin`; single-admin cookie/CSRF authentication | Production login must be tested over HTTPS. There are no roles or MFA. |
 | Checkout | Server-authoritative quote and order flow in PostgreSQL | Price, discounts, shipping, payment availability, and stock are rechecked by the API. |
 | Payments | COD enabled by default; GCash and bank transfer are optional instruction-based methods | There is no payment gateway or automatic payment verification. COD is the ready-to-use path. |
-| Pancake POS | Server-side REST client plus catalog, inventory, export, and polling workers | API credentials stay in the API environment. Inbound order updates use polling, not webhooks. |
+| Pancake POS | Server-side REST client, authenticated order webhook, catalog/inventory reconciliation, export, and recovery polling workers | API credentials and the webhook secret stay in the API environment. |
 | CI | `.github/workflows/ci.yml` | Pull requests and `main` run API tests, PostgreSQL integration tests, web tests/build, and the checkout browser journey. |
 
 ### Build, start, and test commands
@@ -114,16 +114,16 @@ Do not set production JSON file overrides such as `ORDERS_DATA_FILE`,
 - Changing the password in Admin > Settings stores an scrypt hash in PostgreSQL.
   After that, changing `ADMIN_PASSWORD` in the env file does not reset the stored
   password.
-- Cancelling an order from a non-cancelled state restores stock. Treat cancellation
-  as terminal: reopening and cancelling again can restore twice. Editing order
-  line items recalculates totals but does not adjust stock, so make a separate
-  inventory correction/reconciliation.
+- Cancelling an order is transactional and restores stock once. Cancellation is
+  terminal, and order line items are immutable after checkout; use a separate
+  inventory correction/reconciliation for operational stock adjustments.
 - Once Pancake auto-sync is enabled, the selected Pancake warehouse is the stock
   source of truth. Reconciliation writes its absolute remaining quantities into
   local variants, so a manual admin stock correction can be overwritten next cycle.
 - J&T live booking is not implemented; any non-`dry_run` mode is unavailable.
-- `PANCAKE_WEBHOOK_SECRET` is parsed for status but there is no Pancake webhook
-  route. Inbound changes are polled.
+- Pancake order webhooks are authenticated with `PANCAKE_WEBHOOK_SECRET` and the
+  `X-Maria-Clara-Pancake-Secret` request header. A five-minute incremental poll
+  remains enabled as recovery for a delayed or missed webhook.
 - The Report Issue widget appears on normal storefront pages and Thank You, but
   not on the standalone checkout route. Webhook notification works; the stored
   email/push notification settings do not send email or push messages yet.
@@ -652,14 +652,27 @@ PANCAKE_API_KEY=YOUR_PANCAKE_API_KEY
 PANCAKE_SHOP_ID=YOUR_PANCAKE_SHOP_ID
 PANCAKE_WAREHOUSE_ID=YOUR_PANCAKE_WAREHOUSE_ID
 PANCAKE_ORDER_SOURCE_ID=YOUR_PANCAKE_ORDER_SOURCE_ID
-PANCAKE_WEBHOOK_SECRET=
+PANCAKE_WEBHOOK_SECRET=GENERATE_A_UNIQUE_32_PLUS_CHARACTER_SECRET
 PANCAKE_AUTO_SYNC_ENABLED=false
 ```
 
-Production code requires the official `https://pos.pages.fm/api/v1` host. Leave
-the webhook secret blank because this application does not expose a Pancake
-webhook endpoint. Credentials remain server-side and are never displayed in the
-admin browser.
+Production code requires the official `https://pos.pages.fm/api/v1` host. Generate
+the webhook secret on the VPS with `openssl rand -hex 32`; do not display it in
+screenshots or commit it. Credentials remain server-side and are never displayed
+in the admin browser.
+
+After the HTTPS site is running, open Pancake **Settings > Advance > Third-party
+connection > Webhook/API** and configure:
+
+```text
+Webhook URL: https://mariaclaraclothing.com/api/integrations/pancake/webhook
+Webhook type: orders
+Request header name: X-Maria-Clara-Pancake-Secret
+Request header value: the exact PANCAKE_WEBHOOK_SECRET value
+```
+
+Keep the five-minute order poll enabled. It is a recovery path and uses Pancake's
+documented `updated_at` time window, so it does not scan the shop's full history.
 
 Do not switch to `live` yet. Section 19 uses `read_only`, then `shadow`, then
 `live` after mappings and inventory are verified.
@@ -1127,7 +1140,9 @@ Test the complete path:
 
 An export failure does not undo the customer's local order; it remains queued for
 retry. Monitor for failed, blocked, and duplicate provider orders during launch.
-There is no webhook test because this integration is polling-based.
+Use Pancake's webhook test after saving the URL and private header. Require a 200
+response. Then keep the polling verification because it proves missed deliveries
+will recover.
 
 ## 20. Backups Before And After Go-Live
 
@@ -1684,7 +1699,8 @@ sudo systemctl reload caddy
 - [ ] Stage C uses a new order, not a prior `shadow_built` row, and creates exactly
   one Pancake order.
 - [ ] At least one full live worker cycle completes without repeated errors.
-- [ ] Pancake status/tracking changes arrive in admin after polling.
+- [ ] Pancake status/tracking changes arrive in admin through the webhook (and
+  also recover through polling if the webhook is temporarily unavailable).
 - [ ] Admin changes for a linked order reach Pancake.
 - [ ] Queued, failed, and blocked sync counts are zero or explained.
 

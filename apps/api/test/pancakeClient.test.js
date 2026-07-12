@@ -58,10 +58,19 @@ test('Pancake client lists orders with updated cursor pagination', async () => {
     return { ok: true, text: async () => JSON.stringify({ data: [{ id: 'PK-1' }], page_number: 1, page_size: 50, total_pages: 1, total_entries: 1 }) };
   });
 
-  const body = await client.listOrders('shop-1', { pageNumber: 1, pageSize: 50, updatedSince: '2026-07-10T00:00:00.000Z' });
+  const body = await client.listOrders('shop-1', {
+    pageNumber: 1,
+    pageSize: 50,
+    updatedSince: '2026-07-10T00:00:00.000Z',
+    updatedUntil: '2026-07-10T00:15:00.000Z'
+  });
   assert.equal(body.data[0].id, 'PK-1');
   assert.match(calls[0].url, /\/shops\/shop-1\/orders/);
-  assert.match(calls[0].url, /updated_since=2026-07-10T00%3A00%3A00.000Z/);
+  assert.match(calls[0].url, /updateStatus=updated_at/);
+  assert.match(calls[0].url, /startDateTime=1783641600/);
+  assert.match(calls[0].url, /endDateTime=1783642500/);
+  assert.match(calls[0].url, /option_sort=last_updated_order_asc/);
+  assert.doesNotMatch(calls[0].url, /updated_since/);
 });
 
 test('Pancake client updates an order with JSON body', async () => {
@@ -76,9 +85,9 @@ test('Pancake client updates an order with JSON body', async () => {
     return { ok: true, text: async () => JSON.stringify({ data: { id: 'PK-1' } }) };
   });
 
-  await client.updateOrder('shop-1', 'PK-1', { status: 'Shipped' });
+  await client.updateOrder('shop-1', 'PK-1', { status: 2 });
   assert.equal(calls[0].options.method, 'PUT');
-  assert.equal(JSON.parse(calls[0].options.body).status, 'Shipped');
+  assert.equal(JSON.parse(calls[0].options.body).status, 2);
   assert.match(calls[0].url, /\/shops\/shop-1\/orders\/PK-1/);
 });
 

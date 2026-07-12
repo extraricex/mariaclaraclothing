@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 const collectionName = process.env.TEST_COLLECTION_NAME || '';
+const adminPassword = process.env.E2E_ADMIN_PASSWORD || 'admin';
 let adminCsrf = '';
 
 test.beforeEach(async ({ page }) => {
-  const response = await page.request.post('/api/admin/login', { data: { password: 'admin' } });
+  const response = await page.request.post('/api/admin/login', { data: { password: adminPassword } });
   expect(response.ok()).toBe(true);
   adminCsrf = (await response.json()).csrfToken;
 });

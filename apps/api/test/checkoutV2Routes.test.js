@@ -344,6 +344,7 @@ test('public lookup returns no PII and private confirmation requires its header 
     const allowedBody = await allowed.json();
     assert.equal(allowed.status, 200);
     assert.equal(allowedBody.order.customerFirstName, 'Maria');
+    assert.equal(allowedBody.order.customerName, 'Maria Test');
     assert.equal(allowedBody.order.paymentMethodLabel, 'Cash on Delivery');
     assert.equal(allowedBody.order.totalCents, 72900);
   });

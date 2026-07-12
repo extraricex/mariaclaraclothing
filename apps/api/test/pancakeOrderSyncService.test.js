@@ -70,6 +70,22 @@ test('processInboundPancakeOrder updates linked existing order without duplicati
   assert.equal(orders.orders.size, 1);
 });
 
+test('processInboundPancakeOrder imports native Pancake orders with a deterministic number', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  const pancakeOrder = { id: 98765, status: 0, items: [], total_price: 500, updated_at: '2026-07-10T00:00:00.000Z' };
+
+  const imported = await service.processInboundPancakeOrder({ pancakeOrder, orderRepository: orders, syncRepository: syncRepo });
+  const duplicate = await service.processInboundPancakeOrder({ pancakeOrder, orderRepository: orders, syncRepository: syncRepo });
+
+  assert.equal(imported.status, 'imported');
+  assert.equal(imported.orderNumber, 'PNK-98765');
+  assert.equal(orders.orders.get('PNK-98765').channel, 'Pancake POS');
+  assert.equal(duplicate.status, 'duplicate');
+});
+
 test('processInboundPancakeOrder applies detail changes with the same Pancake updated timestamp', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');
@@ -233,12 +249,14 @@ test('pollInboundPancakeOrders fetches every updated order page', async () => {
   syncRepo.resetMemoryForTests();
   const orders = memoryOrderRepo();
   const requestedPages = [];
+  const requestedOptions = [];
 
   const result = await service.pollInboundPancakeOrders({
     config: { shopId: 'shop-1', orderPollPageSize: 1, orderPollLookbackMs: 60000 },
     client: {
       listOrders: async (_shopId, options) => {
         requestedPages.push(options.pageNumber);
+        requestedOptions.push(options);
         return {
           data: [{ id: `PK-${options.pageNumber}`, custom_id: `MCC-PAGE-${options.pageNumber}`, status: 'New', updated_at: `2026-07-10T00:0${options.pageNumber}:00.000Z` }],
           page_number: options.pageNumber,
@@ -252,6 +270,8 @@ test('pollInboundPancakeOrders fetches every updated order page', async () => {
   });
 
   assert.deepEqual(requestedPages, [1, 2]);
+  assert.equal(requestedOptions[0].updatedSince, '2026-07-10T00:09:00.000Z');
+  assert.equal(requestedOptions[0].updatedUntil, '2026-07-10T00:10:00.000Z');
   assert.equal(result.importedCount, 2);
   assert.equal(orders.orders.size, 2);
 });
@@ -285,5 +305,30 @@ test('processOutboundOrderEvents sends due admin changes to Pancake', async () =
 
   assert.equal(result.updatedCount, 1);
   assert.equal(calls[0].pancakeOrderId, 'PK-1');
-  assert.equal(calls[0].payload.status, 'Shipped');
+  assert.equal(calls[0].payload.status, 2);
+  assert.equal(calls[0].payload.partner.extend_code, 'TRACK-1');
+});
+
+test('processOutboundOrderEvents blocks unsupported-only updates without calling Pancake', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({ orderNumber: 'MCC-UNSUPPORTED', status: 'failed', customer: {}, address: {}, notes: '' });
+  await syncRepo.enqueueSyncEvent({
+    direction: 'outbound', entityType: 'order', entityId: 'MCC-UNSUPPORTED',
+    orderNumber: 'MCC-UNSUPPORTED', pancakeOrderId: 'PK-UNSUPPORTED', eventKey: 'unsupported',
+    payloadHash: 'unsupported', payload: { changedFields: ['status'] }
+  });
+  let callCount = 0;
+
+  const result = await service.processOutboundOrderEvents({
+    config: { shopId: 'shop-1' },
+    client: { updateOrder: async () => { callCount += 1; } },
+    orderRepository: orders,
+    syncRepository: syncRepo
+  });
+
+  assert.equal(result.blockedCount, 1);
+  assert.equal(callCount, 0);
 });

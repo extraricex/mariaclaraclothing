@@ -5,10 +5,11 @@ import { fileURLToPath } from 'node:url';
 const API_PUBLIC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../api/public');
 const LARGE_JPEG = path.join(API_PUBLIC, 'MANDALA WHITE', 'mandala3rd.jpg');
 const TRANSPARENT_PNG = path.join(API_PUBLIC, 'uploads', 'products', 'oranges-mcc-box-tee-1781162364372-494817ca92b258.png');
+const adminPassword = process.env.E2E_ADMIN_PASSWORD || 'admin';
 let adminCsrf = '';
 
 test.beforeEach(async ({ page }) => {
-  const response = await page.request.post('/api/admin/login', { data: { password: 'admin' } });
+  const response = await page.request.post('/api/admin/login', { data: { password: adminPassword } });
   expect(response.ok()).toBe(true);
   adminCsrf = (await response.json()).csrfToken;
 });

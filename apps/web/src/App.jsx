@@ -1,40 +1,44 @@
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import Shell from './components/Shell.jsx';
 import PageTransition from './components/PageTransition.jsx';
 import MaintenanceGate from './components/MaintenanceGate.jsx';
 import Home from './pages/Home.jsx';
-import Product from './pages/Product.jsx';
-import Cart from './pages/Cart.jsx';
-import Checkout from './pages/Checkout.jsx';
-import ThankYou from './pages/ThankYou.jsx';
-import InfoPage from './pages/InfoPage.jsx';
-import Contact from './pages/Contact.jsx';
-import SizeChart from './pages/SizeChart.jsx';
-import { CustomerLogin, CustomerRegister } from './pages/CustomerAuth.jsx';
-import Account from './pages/Account.jsx';
-import AccountSettings from './pages/AccountSettings.jsx';
-import Login from './admin/Login.jsx';
-import AdminLayout from './admin/AdminLayout.jsx';
-import Dashboard from './admin/Dashboard.jsx';
-import Orders from './admin/Orders.jsx';
-import OrderDetail from './admin/OrderDetail.jsx';
-import CartSessions from './admin/CartSessions.jsx';
-import Products from './admin/Products.jsx';
-import ProductEditor from './admin/ProductEditor.jsx';
 import ProductCountdown from './admin/ProductCountdown.jsx';
-import Collections from './admin/Collections.jsx';
-import Inventory from './admin/Inventory.jsx';
-import Customers from './admin/Customers.jsx';
-import Discounts from './admin/Discounts.jsx';
-import DiscountDetail from './admin/DiscountDetail.jsx';
-import Banners from './admin/Banners.jsx';
-import Settings from './admin/Settings.jsx';
 import PancakePos from './admin/PancakePos.jsx';
-import IssueReports from './admin/IssueReports.jsx';
+
+const Product = lazy(() => import('./pages/Product.jsx'));
+const Cart = lazy(() => import('./pages/Cart.jsx'));
+const Checkout = lazy(() => import('./pages/Checkout.jsx'));
+const ThankYou = lazy(() => import('./pages/ThankYou.jsx'));
+const InfoPage = lazy(() => import('./pages/InfoPage.jsx'));
+const Contact = lazy(() => import('./pages/Contact.jsx'));
+const SizeChart = lazy(() => import('./pages/SizeChart.jsx'));
+const CustomerLogin = lazy(() => import('./pages/CustomerAuth.jsx').then((module) => ({ default: module.CustomerLogin })));
+const CustomerRegister = lazy(() => import('./pages/CustomerAuth.jsx').then((module) => ({ default: module.CustomerRegister })));
+const Account = lazy(() => import('./pages/Account.jsx'));
+const AccountSettings = lazy(() => import('./pages/AccountSettings.jsx'));
+const Login = lazy(() => import('./admin/Login.jsx'));
+const AdminLayout = lazy(() => import('./admin/AdminLayout.jsx'));
+const Dashboard = lazy(() => import('./admin/Dashboard.jsx'));
+const Orders = lazy(() => import('./admin/Orders.jsx'));
+const OrderDetail = lazy(() => import('./admin/OrderDetail.jsx'));
+const CartSessions = lazy(() => import('./admin/CartSessions.jsx'));
+const Products = lazy(() => import('./admin/Products.jsx'));
+const ProductEditor = lazy(() => import('./admin/ProductEditor.jsx'));
+const Collections = lazy(() => import('./admin/Collections.jsx'));
+const Inventory = lazy(() => import('./admin/Inventory.jsx'));
+const Customers = lazy(() => import('./admin/Customers.jsx'));
+const Discounts = lazy(() => import('./admin/Discounts.jsx'));
+const DiscountDetail = lazy(() => import('./admin/DiscountDetail.jsx'));
+const Banners = lazy(() => import('./admin/Banners.jsx'));
+const Settings = lazy(() => import('./admin/Settings.jsx'));
+const IssueReports = lazy(() => import('./admin/IssueReports.jsx'));
 
 export default function App() {
   return (
-    <Routes>
+    <Suspense fallback={<div className="min-h-[40vh]" aria-busy="true" aria-label="Loading page" />}>
+      <Routes>
       <Route element={<MaintenanceGate><Shell /></MaintenanceGate>}>
         <Route path="/" element={<Home />} />
         <Route path="/product/:slug" element={<Product />} />
@@ -72,6 +76,7 @@ export default function App() {
         <Route path="issue-reports" element={<IssueReports />} />
       </Route>
       <Route path="*" element={<MaintenanceGate><Shell /></MaintenanceGate>} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }

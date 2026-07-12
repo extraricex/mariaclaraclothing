@@ -130,7 +130,7 @@ function defaultStoreSettings() {
       seo: {
         title: 'Maria Clara Clothing — Premium Philippine Streetwear',
         description: 'Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items.',
-        imageUrl: '/brand/hero1v2.jpg'
+        imageUrl: '/brand/hero1v2-web.jpg'
       },
       hero: {
         eyebrow: '',

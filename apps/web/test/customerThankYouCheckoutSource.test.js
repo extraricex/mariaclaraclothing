@@ -13,6 +13,10 @@ test('thank you page renders real order items and Messenger support from setting
   assert.match(thankYou, /messengerUrl/);
   assert.match(thankYou, /Message Us About Your Order|Ask About My Order/);
   assert.match(thankYou, /summary\.items/);
+  assert.match(thankYou, /summary\.customerName/);
+  assert.match(thankYou, /summary\.subtotalCents/);
+  assert.match(thankYou, /summary\.discountTotalCents/);
+  assert.match(thankYou, /summary\.discountCode/);
   assert.match(thankYou, /item\.productName/);
   assert.match(thankYou, /item\.quantity/);
   assert.match(thankYou, /formatMoney\(Number\(item\.unitPriceCents/);

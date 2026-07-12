@@ -163,7 +163,7 @@ function aggregateStockItems(items) {
   return [...bySku.values()].filter((item) => item.sku && item.quantity > 0);
 }
 
-function restockVariantStock(items) {
+function restockVariantStock(items, options = {}) {
   const restocks = (Array.isArray(items) ? items : []).map((item) => ({
     slug: String(item.slug || '').trim(),
     sku: String(item.sku || '').trim(),
@@ -171,7 +171,7 @@ function restockVariantStock(items) {
   })).filter((item) => item.sku && item.quantity > 0);
 
   if (usePostgresProducts()) {
-    return restockPostgresVariantStock(restocks);
+    return restockPostgresVariantStock(restocks, options.client);
   }
   return restockJsonVariantStock(restocks);
 }
@@ -221,8 +221,8 @@ function deductPostgresVariantStock(items, transactionClient) {
   return transactionClient ? deduct(transactionClient) : transaction(deduct);
 }
 
-function restockPostgresVariantStock(items) {
-  return transaction(async (client) => {
+function restockPostgresVariantStock(items, transactionClient) {
+  const restock = async (client) => {
     for (const item of items) {
       await client.query(
         `UPDATE product_variants
@@ -231,7 +231,8 @@ function restockPostgresVariantStock(items) {
         [item.quantity, item.sku]
       );
     }
-  });
+  };
+  return transactionClient ? restock(transactionClient) : transaction(restock);
 }
 
 function isPromise(value) {

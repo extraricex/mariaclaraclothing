@@ -114,6 +114,19 @@ test('Pancake live mode requires a valid order export cutover timestamp', () => 
   }), /valid ISO timestamp/);
 });
 
+test('production live mode requires a strong Pancake webhook secret', () => {
+  const base = {
+    APP_ENV: 'production',
+    PANCAKE_MODE: 'live',
+    PANCAKE_ORDER_EXPORT_CUTOFF_AT: '2026-07-12T00:00:00Z'
+  };
+  assert.throws(() => pancakeConfig(base), /PANCAKE_WEBHOOK_SECRET/);
+  assert.equal(pancakeConfig({
+    ...base,
+    PANCAKE_WEBHOOK_SECRET: 'strong-pancake-webhook-secret-32-plus'
+  }).webhookSecret, 'strong-pancake-webhook-secret-32-plus');
+});
+
 test('Pancake catalog bounds accept safe integers and reject invalid values', () => {
   const value = pancakeConfig({ PANCAKE_CATALOG_PAGE_SIZE: '50', PANCAKE_CATALOG_MAX_PAGES: '200' });
   assert.equal(value.catalogPageSize, 50);

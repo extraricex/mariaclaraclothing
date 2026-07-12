@@ -378,6 +378,7 @@ function privateOrderPayload(order) {
     : String(order.paymentMethod || '').replaceAll('_', ' ');
   return {
     orderNumber: order.orderNumber,
+    customerName: String(order.customer?.fullName || '').trim(),
     customerFirstName: String(order.customer?.fullName || '').trim().split(/\s+/)[0] || '',
     addressLine: order.address?.addressLine || '',
     address: order.address || {},

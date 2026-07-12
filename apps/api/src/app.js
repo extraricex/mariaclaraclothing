@@ -10,6 +10,7 @@ const { customerRouter } = require('./routes/customer');
 const { storeSettingsRouter } = require('./routes/storeSettings');
 const { checkoutRouter } = require('./routes/checkout');
 const { issueReportsRouter } = require('./routes/issueReports');
+const { pancakeWebhookRouter } = require('./routes/pancakeWebhook');
 const { methodOnly, postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
@@ -160,6 +161,7 @@ function createApp() {
   app.use('/api/discounts', discountRouter);
   app.use('/api/customer', customerRouter);
   app.use('/api/storefront-settings', storeSettingsRouter);
+  app.use('/api/integrations/pancake/webhook', pancakeWebhookRouter);
   app.use('/api/admin', adminRouter);
 
   app.use(errorHandler);
