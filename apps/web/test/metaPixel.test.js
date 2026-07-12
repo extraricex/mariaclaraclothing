@@ -75,13 +75,13 @@ test('Pixel initializes once on customer paths and never on admin paths', () => 
   assert.equal(initializeFacebookMetaPixel(options), true);
   assert.equal(initializeFacebookMetaPixel(options), true);
   assert.equal(inserted.length, 1);
-  assert.equal(customerWindow.fbq.queue.length, 2);
-  assert.equal(customerWindow.fbq.queue[0][0], 'init');
-  assert.equal(customerWindow.fbq.queue[1][0], 'consent');
-  assert.equal(customerWindow.fbq.queue[1][1], 'grant');
+  assert.equal(customerWindow.fbq.queue.length, 3);
+  assert.deepEqual(customerWindow.fbq.queue.map((call) => call[0]), ['consent', 'init', 'consent']);
+  assert.equal(customerWindow.fbq.queue[0][1], 'revoke');
+  assert.equal(customerWindow.fbq.queue[2][1], 'grant');
 });
 
-test('Pixel does not initialize until tracking consent is accepted', () => {
+test('Pixel initializes detectably with revoked consent and sends no event until accepted', () => {
   const values = new Map();
   const storage = {
     getItem: (key) => values.get(key) || null,
@@ -104,7 +104,11 @@ test('Pixel does not initialize until tracking consent is accepted', () => {
   assert.equal(initializeFacebookMetaPixel({
     windowRef: noConsentWindow, documentRef, enabled: true, pixelId: '123', path: '/', consent: false
   }), false);
-  assert.equal(noConsentWindow.fbq, undefined);
+  assert.equal(typeof noConsentWindow.fbq, 'function');
+  assert.equal(noConsentWindow.__mariaClaraFacebookPixelId, '123');
+  assert.deepEqual(noConsentWindow.fbq.queue.map((call) => call[0]), ['consent', 'init']);
+  assert.equal(noConsentWindow.fbq.queue[0][1], 'revoke');
+  assert.doesNotMatch(JSON.stringify(noConsentWindow.fbq.queue), /PageView/);
 });
 
 test('SPA page views skip repeated and admin paths', () => {

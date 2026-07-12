@@ -19,8 +19,15 @@ export function setMetaTrackingConsent(value, options = {}) {
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
   if (value === 'accepted' || value === 'declined') storage?.setItem(META_CONSENT_KEY, value);
   else storage?.removeItem(META_CONSENT_KEY);
-  if (windowRef?.fbq) windowRef.fbq('consent', value === 'accepted' ? 'grant' : 'revoke');
+  setFacebookPixelConsent(windowRef, value === 'accepted' ? 'grant' : 'revoke');
   windowRef?.dispatchEvent?.(new Event(META_CONSENT_EVENT));
+}
+
+function setFacebookPixelConsent(windowRef, value) {
+  if (!windowRef?.fbq || !['grant', 'revoke'].includes(value)) return;
+  if (windowRef.__mariaClaraFacebookConsent === value) return;
+  windowRef.fbq('consent', value);
+  windowRef.__mariaClaraFacebookConsent = value;
 }
 
 function hasMetaTrackingConsent(options = {}) {
@@ -52,8 +59,12 @@ export function initializeFacebookMetaPixel(options = {}) {
   const pixelId = String(options.pixelId ?? environment.pixelId).trim();
   const path = options.path ?? windowRef?.location?.pathname ?? '';
 
-  if (!windowRef || !documentRef || !enabled || !pixelId || !hasMetaTrackingConsent(options) || isFacebookAdminPath(path)) return false;
-  if (windowRef.__mariaClaraFacebookPixelId === pixelId) return true;
+  if (!windowRef || !documentRef || !enabled || !pixelId || isFacebookAdminPath(path)) return false;
+  const consentGranted = hasMetaTrackingConsent(options);
+  if (windowRef.__mariaClaraFacebookPixelId === pixelId) {
+    setFacebookPixelConsent(windowRef, consentGranted ? 'grant' : 'revoke');
+    return consentGranted;
+  }
 
   if (!windowRef.fbq) {
     const queue = function facebookPixelQueue() {
@@ -79,10 +90,11 @@ export function initializeFacebookMetaPixel(options = {}) {
     }
   }
 
+  setFacebookPixelConsent(windowRef, 'revoke');
   windowRef.fbq('init', pixelId);
-  windowRef.fbq('consent', 'grant');
+  setFacebookPixelConsent(windowRef, consentGranted ? 'grant' : 'revoke');
   windowRef.__mariaClaraFacebookPixelId = pixelId;
-  return true;
+  return consentGranted;
 }
 
 export function facebookMoneyValue(cents) {
