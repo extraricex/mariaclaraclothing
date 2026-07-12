@@ -135,7 +135,7 @@ async function reconcilePendingPayments({ client, limit = 50, metaEnabled = fals
   if (!client?.retrieveCheckoutSession) return { checkedCount: 0, paidCount: 0, failedCount: 0 };
   const pending = await query(
     `SELECT order_number,provider_checkout_session_id FROM orders
-      WHERE payment_provider='paymongo' AND payment_status='pending_payment'
+      WHERE payment_provider='paymongo' AND payment_status IN ('pending_payment','cod_pending')
         AND provider_checkout_session_id<>'' ORDER BY placed_at LIMIT $1`,
     [limit]
   );
