@@ -8,6 +8,7 @@ test('initial HTML contains a detectable Meta Pixel bootstrap', () => {
   assert.match(html, /connect\.facebook\.net\/en_US\/fbevents\.js/);
   assert.match(html, /fbq\('init', '595813035761213'\)/);
   assert.match(html, /fbq\('track', 'PageView'\)/);
+  assert.match(html, /facebook\.com\/tr\?id=595813035761213&amp;ev=PageView&amp;noscript=1/);
   assert.match(html, /\/api\/storefront-settings/);
 });
 

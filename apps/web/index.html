@@ -51,22 +51,22 @@
           s.parentNode.insertBefore(t,s)}(window, document,'script',
           'https://connect.facebook.net/en_US/fbevents.js');
 
-          fbq('consent', 'revoke');
+          var consent = !requireConsent ||
+            localStorage.getItem('maria-clara-meta-tracking-consent') === 'accepted';
+          if (requireConsent) fbq('consent', 'revoke');
           if (pixelId === '595813035761213') {
             fbq('init', '595813035761213');
           } else {
             fbq('init', pixelId);
           }
 
-          var consent = !requireConsent ||
-            localStorage.getItem('maria-clara-meta-tracking-consent') === 'accepted';
           if (!consent) {
             window.__mariaClaraFacebookConsent = 'revoke';
             window.__mariaClaraFacebookPixelId = pixelId;
             return;
           }
 
-          fbq('consent', 'grant');
+          if (requireConsent) fbq('consent', 'grant');
           fbq('track', 'PageView');
           window.__mariaClaraFacebookConsent = 'grant';
           window.__mariaClaraFacebookPixelId = pixelId;
@@ -81,6 +81,7 @@
     </script>
   </head>
   <body>
+    <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=595813035761213&amp;ev=PageView&amp;noscript=1" /></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

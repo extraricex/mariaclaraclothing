@@ -112,9 +112,13 @@ export function initializeFacebookMetaPixel(options = {}) {
     }
   }
 
-  setFacebookPixelConsent(windowRef, 'revoke');
+  if (requireConsent) setFacebookPixelConsent(windowRef, 'revoke');
   windowRef.fbq('init', pixelId);
-  setFacebookPixelConsent(windowRef, consentGranted ? 'grant' : 'revoke');
+  if (requireConsent) {
+    setFacebookPixelConsent(windowRef, consentGranted ? 'grant' : 'revoke');
+  } else {
+    windowRef.__mariaClaraFacebookConsent = 'grant';
+  }
   windowRef.__mariaClaraFacebookPixelId = pixelId;
   return consentGranted;
 }
