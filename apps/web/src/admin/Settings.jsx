@@ -366,6 +366,51 @@ function AuthenticationCard({ initial }) {
   );
 }
 
+function MarketingCard({ initial }) {
+  const [form, setForm] = useState(initial.metaPixel);
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/marketing', { metaPixel: form });
+      setForm(body.settings.marketing.metaPixel);
+      setStatus({ tone: 'ok', message: 'Meta Pixel settings saved.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Meta Pixel" hint="Customer storefront advertising and ecommerce event tracking.">
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" checked={Boolean(form.enabled)} onChange={(event) => setForm((current) => ({ ...current, enabled: event.target.checked }))} />
+          Enable Meta Pixel
+        </label>
+        <Field label="Meta Pixel ID">
+          <input className="field mt-1" inputMode="numeric" value={form.pixelId || ''} onChange={(event) => setForm((current) => ({ ...current, pixelId: event.target.value.replace(/\D/g, '') }))} />
+        </Field>
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" checked={Boolean(form.requireConsent)} onChange={(event) => setForm((current) => ({ ...current, requireConsent: event.target.checked }))} />
+          <span>
+            <span className="font-semibold">Require consent before Meta Pixel events</span>
+            <span className="mt-1 block text-xs text-clay">Enable this if your privacy requirements must block tracking until the customer opts in.</span>
+          </span>
+        </label>
+      </div>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save Meta Pixel settings'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
 function SeoCard({ initial }) {
   const [form, setForm] = useState(initial);
   const [status, setStatus] = useState(null);
@@ -583,6 +628,7 @@ export default function Settings() {
         <PaymentsCard initial={settings.payments} />
         <InventoryCard initial={settings.inventory} />
         <AuthenticationCard initial={settings.authentication} />
+        <MarketingCard initial={settings.marketing} />
         <SeoCard initial={settings.website.seo} />
         <SizeChartCard initial={settings.website.sizeChart} />
         <ReportIssueCard initial={settings.website.reportIssue} />

@@ -86,6 +86,11 @@ test('admin settings expose defaults and save sections', async () => {
     assert.equal(defaults.settings.general.storeName, 'Maria Clara Clothing');
     assert.equal(defaults.settings.shipping.regions.length, 3);
     assert.equal(defaults.settings.payments.methods.length, 3);
+    assert.deepEqual(defaults.settings.marketing.metaPixel, {
+      enabled: true,
+      pixelId: '595813035761213',
+      requireConsent: false
+    });
     assert.equal(JSON.stringify(defaults).includes('passwordHash'), false);
 
     const shippingResponse = await fetch(
@@ -113,6 +118,13 @@ test('admin settings expose defaults and save sections', async () => {
     const general = await generalResponse.json();
     assert.equal(general.settings.general.storeName, 'Maria Clara MNL');
     assert.equal(general.settings.general.messengerUrl, 'https://m.me/mariaclaraclothing');
+
+    const marketingResponse = await fetch(
+      `http://127.0.0.1:${port}/api/admin/settings/marketing`,
+      adminRequest('PUT', { metaPixel: { enabled: true, pixelId: '595813035761213', requireConsent: true } })
+    );
+    assert.equal(marketingResponse.status, 200);
+    assert.equal((await marketingResponse.json()).settings.marketing.metaPixel.requireConsent, true);
 
     const invalidMessenger = await fetch(
       `http://127.0.0.1:${port}/api/admin/settings/general`,
@@ -262,6 +274,11 @@ test('public storefront settings expose only the safe subset', async () => {
     );
     assert.equal(body.settings.paymentMethods.find((method) => method.id === 'gcash').instructions, 'Send to 0917 000 0000.');
     assert.equal(body.settings.hero.secondaryButtonLink, '#freedom-of-mind');
+    assert.deepEqual(body.settings.metaPixel, {
+      enabled: true,
+      pixelId: '595813035761213',
+      requireConsent: false
+    });
 
     const raw = JSON.stringify(body);
     assert.equal(raw.includes('bank_transfer'), false);

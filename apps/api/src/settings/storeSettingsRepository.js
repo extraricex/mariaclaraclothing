@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-se
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
 const SETTINGS_KEY = 'storeSettings';
 const CREDENTIALS_KEY = 'adminCredentials';
-const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication'];
+const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication', 'marketing'];
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'gcash', 'bank_transfer'];
@@ -112,6 +112,13 @@ function defaultStoreSettings() {
     authentication: {
       googleEnabled: true,
       facebookEnabled: true
+    },
+    marketing: {
+      metaPixel: {
+        enabled: true,
+        pixelId: '595813035761213',
+        requireConsent: false
+      }
     },
     website: {
       ticker: [
@@ -490,6 +497,25 @@ function normalizeAuthentication(authentication) {
   };
 }
 
+function normalizeMarketing(marketing) {
+  const value = marketing && typeof marketing === 'object' ? marketing : {};
+  const incoming = value.metaPixel && typeof value.metaPixel === 'object' ? value.metaPixel : {};
+  const defaults = defaultStoreSettings().marketing.metaPixel;
+  const enabled = incoming.enabled === undefined ? defaults.enabled : Boolean(incoming.enabled);
+  const pixelId = String(incoming.pixelId === undefined ? defaults.pixelId : incoming.pixelId).trim();
+  if (pixelId && !/^\d{5,30}$/.test(pixelId)) {
+    throw badRequest('Meta Pixel ID must contain 5 to 30 digits.');
+  }
+  if (enabled && !pixelId) throw badRequest('Meta Pixel ID is required when Meta Pixel is enabled.');
+  return {
+    metaPixel: {
+      enabled,
+      pixelId,
+      requireConsent: incoming.requireConsent === undefined ? defaults.requireConsent : Boolean(incoming.requireConsent)
+    }
+  };
+}
+
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
   const storefrontCollections = normalizeStorefrontCollections(value.storefrontCollections);
@@ -500,6 +526,7 @@ function normalizeStoreSettings(settings) {
     website: normalizeWebsite(value.website),
     inventory: normalizeInventory(value.inventory),
     authentication: normalizeAuthentication(value.authentication),
+    marketing: normalizeMarketing(value.marketing),
     storefrontCollections,
     collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns, storefrontCollections)
   };
@@ -546,6 +573,7 @@ function normalizeSectionValue(section, value, current) {
   if (section === 'payments') return normalizePayments(value);
   if (section === 'inventory') return normalizeInventory(value);
   if (section === 'authentication') return normalizeAuthentication(value);
+  if (section === 'marketing') return normalizeMarketing(value);
   return normalizeWebsite(value, current.website);
 }
 

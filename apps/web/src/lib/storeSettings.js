@@ -39,6 +39,11 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     instagram: 'https://www.instagram.com/mariaclaraclothingshop/',
     tiktok: ''
   },
+  metaPixel: {
+    enabled: true,
+    pixelId: '595813035761213',
+    requireConsent: false
+  },
   shipping: {
     regions: [
       { id: 'metro_manila_cavite', label: 'Metro Manila & Cavite', feeCents: 8000, deliveryEstimate: 'Estimated delivery: Metro Manila and Cavite 2-4 days.' },

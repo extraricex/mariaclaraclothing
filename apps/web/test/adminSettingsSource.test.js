@@ -45,3 +45,11 @@ test('settings page includes the inventory card', async () => {
   assert.match(source, /\/api\/admin\/settings\/inventory/);
   assert.match(source, /Low stock threshold/);
 });
+
+test('settings page includes configurable Meta Pixel controls', async () => {
+  const settings = await readFile(settingsPath, 'utf8');
+  assert.match(settings, /Meta Pixel ID/);
+  assert.match(settings, /Enable Meta Pixel/);
+  assert.match(settings, /Require consent before Meta Pixel events/);
+  assert.match(settings, /\/api\/admin\/settings\/marketing/);
+});

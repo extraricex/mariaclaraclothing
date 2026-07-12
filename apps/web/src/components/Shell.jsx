@@ -60,21 +60,29 @@ function Ticker({ items }) {
   );
 }
 
-function PrivacyDialog({ onChoice, onClose }) {
+function PrivacyDialog({ onChoice, onClose, requireConsent }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/35 p-4 sm:items-center" role="presentation">
       <div className="w-full max-w-lg border border-line bg-paper p-5 shadow-2xl" role="dialog" aria-modal="true" aria-label="Privacy choices">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold">Privacy choices</p>
-            <p className="mt-1 text-sm text-ink-soft">Allow optional Meta analytics to help us measure store visits and purchases. The store works without it.</p>
+            <p className="mt-1 text-sm text-ink-soft">
+              {requireConsent
+                ? 'Allow optional Meta analytics to help us measure store visits and purchases. The store works without it.'
+                : 'Maria Clara Clothing uses Meta Pixel to measure store visits, shopping activity, and completed orders. You can review this disclosure in our Privacy terms.'}
+            </p>
           </div>
           <button type="button" className="text-action text-xs uppercase tracking-[0.12em] text-clay hover:text-ink" onClick={onClose}>Close</button>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" className="btn-ink !px-5 !py-2 text-xs" onClick={() => onChoice('accepted')}>Allow analytics</button>
-          <button type="button" className="btn-ghost !px-5 !py-2 text-xs" onClick={() => onChoice('declined')}>Decline</button>
-        </div>
+        {requireConsent ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" className="btn-ink !px-5 !py-2 text-xs" onClick={() => onChoice('accepted')}>Allow analytics</button>
+            <button type="button" className="btn-ghost !px-5 !py-2 text-xs" onClick={() => onChoice('declined')}>Decline</button>
+          </div>
+        ) : (
+          <button type="button" className="btn-ink mt-4 !px-5 !py-2 text-xs" onClick={onClose}>Close</button>
+        )}
       </div>
     </div>
   );
@@ -620,7 +628,7 @@ export default function Shell() {
       />
       <MessengerSupportLink href={storeInfo?.messengerUrl} />
       <ReportIssueWidget settings={storeInfo} cartItems={items} />
-      {privacyDialogOpen && <PrivacyDialog onChoice={chooseTrackingConsent} onClose={() => setPrivacyDialogOpen(false)} />}
+      {privacyDialogOpen && <PrivacyDialog onChoice={chooseTrackingConsent} onClose={() => setPrivacyDialogOpen(false)} requireConsent={Boolean(storeInfo?.metaPixel?.requireConsent)} />}
 
       <main className="flex-1">
         <PageTransition>

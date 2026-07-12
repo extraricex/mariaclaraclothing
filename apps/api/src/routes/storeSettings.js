@@ -19,6 +19,7 @@ router.get('/', async (_req, res, next) => {
         storeAddress: settings.general.storeAddress,
         messengerUrl: settings.general.messengerUrl,
         socialLinks: settings.general.socialLinks,
+        metaPixel: settings.marketing.metaPixel,
         shipping: settings.shipping,
         ticker: settings.website.ticker,
         seo: settings.website.seo,

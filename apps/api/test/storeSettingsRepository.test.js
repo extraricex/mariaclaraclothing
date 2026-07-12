@@ -34,6 +34,11 @@ test('store settings expose defaults, save sections, and validate input', async 
     assert.equal(defaults.payments.methods.find((method) => method.id === 'cash_on_delivery').enabled, true);
     assert.equal(defaults.payments.methods.find((method) => method.id === 'gcash').enabled, false);
     assert.deepEqual(defaults.authentication, { googleEnabled: true, facebookEnabled: true });
+    assert.deepEqual(defaults.marketing.metaPixel, {
+      enabled: true,
+      pixelId: '595813035761213',
+      requireConsent: false
+    });
 
     const updated = repository.updateSettingsSection('shipping', {
       regions: [{ id: 'luzon', feeCents: 15000 }],
@@ -55,6 +60,12 @@ test('store settings expose defaults, save sections, and validate input', async 
       repository.updateSettingsSection('authentication', { googleEnabled: false, facebookEnabled: true }).authentication,
       { googleEnabled: false, facebookEnabled: true }
     );
+    assert.deepEqual(repository.updateSettingsSection('marketing', {
+      metaPixel: { enabled: true, pixelId: '123456789', requireConsent: true }
+    }).marketing.metaPixel, { enabled: true, pixelId: '123456789', requireConsent: true });
+    assert.throws(() => repository.updateSettingsSection('marketing', {
+      metaPixel: { enabled: true, pixelId: 'not-a-pixel' }
+    }), /Meta Pixel ID/);
 
     assert.throws(() => repository.updateSettingsSection('shipping', { regions: [{ id: 'luzon', feeCents: -1 }] }),
       /must be a non-negative integer/);

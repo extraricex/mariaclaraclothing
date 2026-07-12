@@ -5,6 +5,7 @@ import {
   buildFacebookInitiateCheckout,
   buildFacebookPurchase,
   buildFacebookViewContent,
+  configureFacebookMetaPixel,
   facebookContentId,
   facebookMoneyValue,
   initializeFacebookMetaPixel,
@@ -13,6 +14,9 @@ import {
   purchaseEventId,
   setMetaTrackingConsent,
   shouldTrackFacebookPath,
+  trackFacebookAddToCart,
+  trackFacebookInitiateCheckout,
+  trackFacebookPageView,
   trackFacebookPurchase
 } from '../src/lib/metaPixel.js';
 
@@ -102,13 +106,34 @@ test('Pixel initializes detectably with revoked consent and sends no event until
   };
   const noConsentWindow = {};
   assert.equal(initializeFacebookMetaPixel({
-    windowRef: noConsentWindow, documentRef, enabled: true, pixelId: '123', path: '/', consent: false
+    windowRef: noConsentWindow, documentRef, enabled: true, pixelId: '123', path: '/', consent: false, requireConsent: true
   }), false);
   assert.equal(typeof noConsentWindow.fbq, 'function');
   assert.equal(noConsentWindow.__mariaClaraFacebookPixelId, '123');
   assert.deepEqual(noConsentWindow.fbq.queue.map((call) => call[0]), ['consent', 'init']);
   assert.equal(noConsentWindow.fbq.queue[0][1], 'revoke');
   assert.doesNotMatch(JSON.stringify(noConsentWindow.fbq.queue), /PageView/);
+});
+
+test('admin runtime setting can enable immediate Pixel events without consent', () => {
+  configureFacebookMetaPixel({ enabled: true, pixelId: '595813035761213', requireConsent: false });
+  const documentRef = {
+    createElement: () => ({}),
+    getElementsByTagName: () => [{ parentNode: { insertBefore: () => {} } }]
+  };
+  const windowRef = {};
+  assert.equal(initializeFacebookMetaPixel({ windowRef, documentRef, path: '/' }), true);
+  assert.equal(windowRef.__mariaClaraFacebookConsent, 'grant');
+  assert.equal(windowRef.__mariaClaraFacebookPixelId, '595813035761213');
+  assert.equal(trackFacebookPageView('/immediate-test', { windowRef, path: '/immediate-test' }), true);
+  assert.equal(trackFacebookPageView('/immediate-test', { windowRef, path: '/immediate-test' }), false);
+  const item = { variantId: 'V-IMMEDIATE', productName: 'Immediate Shirt', size: 'Large', quantity: 1, unitPriceCents: 79900 };
+  assert.equal(trackFacebookAddToCart(item, { windowRef, path: '/product/immediate' }), true);
+  assert.equal(trackFacebookInitiateCheckout([item], { totalCents: 79900 }, 'checkout:immediate', { windowRef, path: '/checkout' }), true);
+  assert.equal(trackFacebookInitiateCheckout([item], { totalCents: 79900 }, 'checkout:immediate', { windowRef, path: '/checkout' }), false);
+  assert.deepEqual(windowRef.fbq.queue.filter((call) => call[0] === 'track').map((call) => call[1]), [
+    'PageView', 'AddToCart', 'InitiateCheckout'
+  ]);
 });
 
 test('SPA page views skip repeated and admin paths', () => {
@@ -129,6 +154,9 @@ test('ViewContent uses the product ID and PHP price', () => {
     content_ids: ['P-1'],
     content_name: 'Maria Clara Shirt',
     content_type: 'product',
+    content_category: '',
+    content_variant: '',
+    contents: [{ id: 'P-1', quantity: 1, item_price: 799 }],
     currency: 'PHP',
     value: 799
   });
@@ -139,12 +167,15 @@ test('AddToCart and InitiateCheckout normalize variant contents', () => {
     externalPosVariantId: 'POS-1',
     variantId: 'V-1',
     productName: 'Maria Clara Shirt',
+    size: 'Large',
     quantity: 2,
     unitPriceCents: 79900
   };
   const add = buildFacebookAddToCart(item);
   assert.deepEqual(add.content_ids, ['POS-1']);
   assert.equal(add.value, 1598);
+  assert.equal(add.num_items, 2);
+  assert.equal(add.content_variant, 'Large');
   assert.equal(add.contents[0].quantity, 2);
 
   const checkout = buildFacebookInitiateCheckout([item, { productId: '', quantity: 1 }], { totalCents: 159800 });

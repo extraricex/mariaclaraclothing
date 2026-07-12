@@ -46,7 +46,15 @@ export default function Product() {
   }, [slug]);
 
   useEffect(() => {
-    if (product) trackFacebookViewContent(product);
+    if (!product) return;
+    const firstInStock = product.variants?.find((candidate) => Number(candidate.stockQuantity) > 0);
+    trackFacebookViewContent({
+      ...product,
+      variantId: firstInStock?.id || '',
+      externalPosVariantId: firstInStock?.externalPosVariantId || '',
+      size: firstInStock?.size || '',
+      priceCents: firstInStock?.priceCents ?? product.priceCents
+    }, { path: `/product/${product.slug}` });
   }, [product?.id]);
 
   const descriptionHtml = useMemo(
