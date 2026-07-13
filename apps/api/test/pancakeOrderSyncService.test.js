@@ -415,10 +415,14 @@ test('processOutboundOrderEvents reconciles an unpaid cancellation already remov
   await syncRepo.upsertOrderLink({
     orderNumber: 'MCC-REMOVED-1', pancakeOrderId: 'PK-REMOVED-1', shopId: 'shop-1', syncStatus: 'sync_failed'
   });
-  await syncRepo.enqueueSyncEvent({
+  const event = await syncRepo.enqueueSyncEvent({
     direction: 'outbound', entityType: 'order', entityId: 'MCC-REMOVED-1',
     orderNumber: 'MCC-REMOVED-1', pancakeOrderId: 'PK-REMOVED-1', eventKey: 'expired',
     payload: { changedFields: ['paymentStatus', 'status'] }
+  });
+  await syncRepo.markSyncEventRetryable(event.id, {
+    safeErrorCode: 'pancake_http_error',
+    nextAttemptAt: '2026-07-13T10:59:00.000Z'
   });
   let updateCalls = 0;
 
@@ -440,5 +444,7 @@ test('processOutboundOrderEvents reconciles an unpaid cancellation already remov
   assert.equal(detail.syncStatus, 'synced');
   assert.equal(detail.paymentSyncStatus, 'synced');
   assert.equal(detail.statusSyncStatus, 'synced');
+  assert.equal(detail.paymentSyncError, '');
+  assert.equal(detail.statusSyncError, '');
   assert.ok(detail.recentLogs.some((log) => /already applied/.test(log.message)));
 });

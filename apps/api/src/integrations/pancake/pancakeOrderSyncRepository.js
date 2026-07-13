@@ -289,12 +289,17 @@ async function getSyncEvent(id) {
 async function markSyncEventSucceeded(id) {
   if (!hasDatabaseUrl()) {
     const event = memory.events.find((item) => item.id === id);
-    if (event) Object.assign(event, { status: 'succeeded', processedAt: memoryNow(), updatedAt: memoryNow() });
+    if (event) Object.assign(event, {
+      status: 'succeeded',
+      safeErrorCode: '',
+      processedAt: memoryNow(),
+      updatedAt: memoryNow()
+    });
     return rowEvent(event);
   }
   const result = await query(
     `UPDATE pancake_sync_events
-     SET status='succeeded', processed_at=now(), updated_at=now()
+     SET status='succeeded', safe_error_code='', processed_at=now(), updated_at=now()
      WHERE id=$1 RETURNING *`,
     [id]
   );
