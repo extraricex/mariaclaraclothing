@@ -362,6 +362,9 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
   if (fields.has('trackingNumber')) {
     payload.partner = { extend_code: String(order.trackingNumber || '').trim() };
   }
+  if (fields.has('deliveryMethod')) {
+    payload.shipping_partner = String(order.deliveryMethod || '').trim();
+  }
   if (fields.has('customer')) {
     payload.bill_full_name = customerFullName(order.customer);
     payload.bill_phone_number = String(order.customer?.phone || '').trim();

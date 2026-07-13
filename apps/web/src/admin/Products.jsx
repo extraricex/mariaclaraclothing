@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { adminJson } from '../lib/adminApi.js';
+import { Link, useNavigate } from 'react-router-dom';
+import { adminDownload, adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
+import AdminActionMenu from './AdminActionMenu.jsx';
+import AdminConfirmDialog from './AdminConfirmDialog.jsx';
+import ProductImportDialog from './ProductImportDialog.jsx';
 import useAdminCollections from './useAdminCollections.js';
 
 const STOCK_FILTERS = [['', 'All stock'], ['in_stock', 'In stock'], ['low_stock', 'Low stock'], ['sold_out', 'Sold out']];
@@ -59,6 +62,7 @@ function SearchIcon() {
 }
 
 export default function Products() {
+  const navigate = useNavigate();
   const { collections } = useAdminCollections();
   const [products, setProducts] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -75,6 +79,11 @@ export default function Products() {
   const [pancakeStatuses, setPancakeStatuses] = useState({});
   const [pancakeBusy, setPancakeBusy] = useState(() => new Set());
   const [pancakeMessage, setPancakeMessage] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, hasPrevious: false, hasNext: false });
+  const [importOpen, setImportOpen] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [archiveRequest, setArchiveRequest] = useState(null);
 
   async function loadPancakeStatuses(records) {
     const slugs = (records || []).map((product) => product.slug).filter(Boolean);
@@ -96,14 +105,18 @@ export default function Products() {
     if (vendor) params.set('vendor', vendor);
     if (sort) params.set('sort', sort);
     if (query) params.set('q', query);
+    params.set('page', String(page));
+    params.set('pageSize', '25');
+    setError('');
     adminJson(`/api/admin/products?${params}`)
       .then((body) => {
         setProducts(body.products);
         setSummary(body.summary);
+        setPagination(body.pagination || { page: 1, totalPages: 1, total: body.products.length, hasPrevious: false, hasNext: false });
         loadPancakeStatuses(body.products);
       })
       .catch((err) => setError(err.message));
-  }, [status, stock, collection, category, vendor, sort, query]);
+  }, [status, stock, collection, category, vendor, sort, query, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -119,6 +132,7 @@ export default function Products() {
     setStatus(viewFilters.status);
     setStock(viewFilters.stock);
     setSelectedProducts(new Set());
+    setPage(1);
   }
 
   function toggleProductSelection(slug) {
@@ -187,6 +201,107 @@ export default function Products() {
     }
   }
 
+  function filterBody() {
+    return {
+      status, stock, collection, category, vendor, sort, q: query,
+      selectedSlugs: [...selectedProducts]
+    };
+  }
+
+  async function exportProducts() {
+    setPancakeMessage('Preparing product CSV...');
+    try {
+      await adminDownload('/api/admin/products/export', filterBody(), `maria-clara-products-${new Date().toISOString().slice(0, 10)}.csv`);
+      setPancakeMessage(`${selectedProducts.size ? `${selectedProducts.size} selected` : 'Filtered'} products exported.`);
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+    }
+  }
+
+  async function bulkAction(action, options = {}) {
+    if (!selectedProducts.size) return;
+    setActionBusy(true);
+    setPancakeMessage(`Applying ${action.replaceAll('_', ' ')}...`);
+    try {
+      const body = await adminSend('POST', '/api/admin/products/bulk', {
+        slugs: [...selectedProducts], action, ...options
+      });
+      setPancakeMessage(`${body.count} products updated successfully.`);
+      setSelectedProducts(new Set());
+      load();
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function duplicateProduct(product) {
+    setActionBusy(true);
+    setPancakeMessage(`Duplicating ${product.name}...`);
+    try {
+      const body = await adminSend('POST', `/api/admin/products/${encodeURIComponent(product.slug)}/duplicate`, {});
+      navigate(`/admin/products/${encodeURIComponent(body.product.slug)}`, {
+        state: { message: `“${body.product.name}” created as a draft with zero stock and no Pancake mapping.` }
+      });
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+      setActionBusy(false);
+    }
+  }
+
+  async function updateProductStatus(product, nextStatus) {
+    setActionBusy(true);
+    try {
+      await adminSend('PATCH', `/api/admin/products/${encodeURIComponent(product.slug)}/status`, { status: nextStatus });
+      setPancakeMessage(`${product.name} updated to ${nextStatus}.`);
+      load();
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function restoreProduct(product) {
+    setActionBusy(true);
+    try {
+      await adminSend('POST', `/api/admin/products/${encodeURIComponent(product.slug)}/restore`, {});
+      setPancakeMessage(`${product.name} restored as a draft.`);
+      load();
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function confirmArchive() {
+    const request = archiveRequest;
+    if (!request) return;
+    setActionBusy(true);
+    try {
+      if (request.products.length === 1) {
+        await adminJson(`/api/admin/products/${encodeURIComponent(request.products[0].slug)}`, { method: 'DELETE' });
+      } else {
+        await adminSend('POST', '/api/admin/products/bulk', { slugs: request.products.map((product) => product.slug), action: 'archive' });
+      }
+      setPancakeMessage(`${request.products.length} product${request.products.length === 1 ? '' : 's'} archived. Pancake products were not deleted.`);
+      setSelectedProducts(new Set());
+      setArchiveRequest(null);
+      load();
+    } catch (requestError) {
+      setPancakeMessage(requestError.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  function collectionAction(action) {
+    const name = window.prompt(`${action === 'add_collection' ? 'Add to' : 'Remove from'} collection:`)?.trim();
+    if (name) bulkAction(action, { collection: name });
+  }
+
   function syncLabel(sync) {
     const labels = {
       syncing: 'Syncing...', synced: 'Synced', failed: 'Sync failed',
@@ -204,9 +319,15 @@ export default function Products() {
           <p className="mt-2 max-w-2xl text-sm text-clay">Manage catalog visibility, inventory, organization, and storefront product records.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-secondary">Import</button>
-          <button type="button" className="btn-secondary">Export</button>
-          <button type="button" className="btn-secondary">More actions</button>
+          <button type="button" className="btn-secondary" onClick={() => setImportOpen(true)}>Import CSV</button>
+          <button type="button" className="btn-secondary" disabled={actionBusy} onClick={exportProducts}>Export CSV</button>
+          <AdminActionMenu
+            disabled={actionBusy}
+            items={[
+              { label: 'Export filtered products', onSelect: exportProducts },
+              { label: 'Apply oversized template', onSelect: applyOversizedTemplate }
+            ]}
+          />
           <button type="button" className="btn-secondary" onClick={applyOversizedTemplate}>Apply oversized template</button>
           <Link to="/admin/products/new" className="btn-ink">Add product</Link>
         </div>
@@ -248,27 +369,27 @@ export default function Products() {
               className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-clay"
               placeholder="Search products by title, SKU, category, or status"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => { setQuery(e.target.value); setPage(1); }}
             />
           </label>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <select className="field min-w-0" value={status} onChange={(e) => { setStatus(e.target.value); setActiveView('all'); }}>
+            <select className="field min-w-0" value={status} onChange={(e) => { setStatus(e.target.value); setActiveView('all'); setPage(1); }}>
               {STATUS_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <select className="field min-w-0" value={stock} onChange={(e) => { setStock(e.target.value); setActiveView('all'); }}>
+            <select className="field min-w-0" value={stock} onChange={(e) => { setStock(e.target.value); setActiveView('all'); setPage(1); }}>
               {STOCK_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <select className="field min-w-0" value={collection} onChange={(e) => setCollection(e.target.value)}>
+            <select className="field min-w-0" value={collection} onChange={(e) => { setCollection(e.target.value); setPage(1); }}>
               <option value="">All collections</option>
               {collections.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
-            <select className="field min-w-0" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <select className="field min-w-0" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }}>
               {CATEGORY_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <select className="field min-w-0" value={vendor} onChange={(e) => setVendor(e.target.value)}>
+            <select className="field min-w-0" value={vendor} onChange={(e) => { setVendor(e.target.value); setPage(1); }}>
               {VENDOR_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
-            <select className="field min-w-0" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select className="field min-w-0" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}>
               {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </div>
@@ -278,10 +399,20 @@ export default function Products() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-cream px-3 py-2 text-sm">
             <span className="font-semibold text-accent-deep">{selectedProducts.size} selected</span>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn-secondary">Set as active</button>
-              <button type="button" className="btn-secondary">Archive</button>
+              <button type="button" className="btn-secondary" disabled={actionBusy} onClick={() => bulkAction('publish')}>Publish</button>
+              <button type="button" className="btn-secondary" disabled={actionBusy} onClick={() => setArchiveRequest({ products: products.filter((product) => selectedProducts.has(product.slug)) })}>Delete / archive</button>
               <button type="button" className="btn-secondary" disabled={pancakeBusy.size > 0} onClick={syncSelectedProducts}>Sync selected to Pancake</button>
-              <button type="button" className="btn-secondary">More actions</button>
+              <AdminActionMenu
+                label="More actions"
+                disabled={actionBusy}
+                items={[
+                  { label: 'Unpublish to draft', onSelect: () => bulkAction('unpublish') },
+                  { label: 'Restore as draft', onSelect: () => bulkAction('restore') },
+                  { label: 'Add to collection', onSelect: () => collectionAction('add_collection') },
+                  { label: 'Remove from collection', onSelect: () => collectionAction('remove_collection') },
+                  { label: 'Export selected', onSelect: exportProducts }
+                ]}
+              />
             </div>
           </div>
         )}
@@ -305,6 +436,7 @@ export default function Products() {
                 <th className="p-3">Sales channels</th>
                 <th className="p-3">Price</th>
                 <th className="p-3">Pancake POS</th>
+                <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -328,8 +460,8 @@ export default function Products() {
                       ) : (
                         <span className="h-12 w-10 border border-line bg-cream" aria-hidden="true" />
                       )}
-                      <span>
-                        <span className="block font-semibold text-accent-deep underline">{product.name}</span>
+                      <span className="min-w-0 max-w-72">
+                        <span className="block truncate font-semibold text-accent-deep underline" title={product.name}>{product.name}</span>
                         <span className="block text-xs text-clay">/product/{product.publicHandle || product.slug}</span>
                       </span>
                     </Link>
@@ -363,14 +495,65 @@ export default function Products() {
                       {busy ? 'Syncing...' : 'Sync to Pancake POS'}
                     </button>
                   </td>
+                  <td className="p-3 text-right">
+                    <AdminActionMenu
+                      label="Actions"
+                      buttonClassName="btn-secondary !px-3 !py-1.5 text-xs"
+                      disabled={actionBusy || busy}
+                      items={[
+                        { label: 'Edit', onSelect: () => navigate(`/admin/products/${encodeURIComponent(product.slug)}`) },
+                        { label: 'Duplicate', onSelect: () => duplicateProduct(product) },
+                        product.status === 'active'
+                          ? { label: 'Unpublish to draft', onSelect: () => updateProductStatus(product, 'draft') }
+                          : { label: 'Publish', onSelect: () => updateProductStatus(product, 'active') },
+                        product.status === 'archived'
+                          ? { label: 'Restore as draft', onSelect: () => restoreProduct(product) }
+                          : { label: 'Archive', danger: true, onSelect: () => setArchiveRequest({ products: [product] }) },
+                        { label: 'Export product', onSelect: async () => {
+                          try {
+                            await adminDownload('/api/admin/products/export', { selectedSlugs: [product.slug] }, `${product.slug}.csv`);
+                            setPancakeMessage(`${product.name} exported.`);
+                          } catch (requestError) {
+                            setPancakeMessage(requestError.message);
+                          }
+                        } },
+                        { label: 'Sync to Pancake POS', disabled: sync?.status === 'missing_mapping', onSelect: () => syncProduct(product.slug) },
+                        product.status !== 'archived' && { label: 'Delete product', danger: true, onSelect: () => setArchiveRequest({ products: [product] }) }
+                      ]}
+                    />
+                  </td>
                 </tr>
                 );
               })}
-              {!products.length && <tr><td colSpan="8" className="p-6 text-center text-sm text-clay">No products match.</td></tr>}
+              {!products.length && <tr><td colSpan="9" className="p-6 text-center text-sm text-clay">No products match. Adjust the filters or add a product.</td></tr>}
             </tbody>
           </table>
         </div>
+        <div className="flex flex-col gap-3 border-t border-line p-3 text-sm text-clay sm:flex-row sm:items-center sm:justify-between">
+          <span>Page {pagination.page} of {pagination.totalPages} · {pagination.total} matching products</span>
+          <div className="flex gap-2">
+            <button type="button" className="btn-secondary !px-3 !py-1.5" disabled={!pagination.hasPrevious} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+            <button type="button" className="btn-secondary !px-3 !py-1.5" disabled={!pagination.hasNext} onClick={() => setPage((value) => value + 1)}>Next</button>
+          </div>
+        </div>
       </div>
+      <ProductImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImported={() => {
+        setPancakeMessage('Product import completed. Review draft products and Pancake mappings before publishing.');
+        setImportOpen(false);
+        setPage(1);
+        load();
+      }} />
+      <AdminConfirmDialog
+        open={Boolean(archiveRequest)}
+        title={archiveRequest?.products?.length === 1 ? `Delete ${archiveRequest.products[0].name}?` : `Delete ${archiveRequest?.products?.length || 0} products?`}
+        description="Delete this product? It will be removed from the shop, but previous order records will remain available."
+        warning="This archives the local product. It does not delete the connected Pancake POS product or its mapping history."
+        confirmLabel="Delete / archive"
+        danger
+        busy={actionBusy}
+        onCancel={() => setArchiveRequest(null)}
+        onConfirm={confirmArchive}
+      />
     </div>
   );
 }

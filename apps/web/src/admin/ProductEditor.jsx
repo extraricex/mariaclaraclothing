@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
 import {
   DESCRIPTION_COLORS,
@@ -21,6 +21,7 @@ import {
 import CollectionDropdown from './CollectionDropdown.jsx';
 import QueuedProductMedia from './QueuedProductMedia.jsx';
 import { productPath } from '../lib/productUrl.js';
+import AdminConfirmDialog from './AdminConfirmDialog.jsx';
 
 const STATUSES = ['active', 'draft', 'archived'];
 const DESCRIPTION_TOOLS = [
@@ -70,6 +71,7 @@ export default function ProductEditor() {
   const { slug } = useParams();
   const isNew = slug === 'new';
   const navigate = useNavigate();
+  const location = useLocation();
   const [product, setProduct] = useState(isNew ? EMPTY_PRODUCT : null);
   const [pricePeso, setPricePeso] = useState('');
   const [comparePeso, setComparePeso] = useState('');
@@ -78,6 +80,8 @@ export default function ProductEditor() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [pancakeSync, setPancakeSync] = useState(null);
   const [pancakeSyncBusy, setPancakeSyncBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const descriptionEditorRef = useRef(null);
   const queuedImagesRef = useRef([]);
 
@@ -91,6 +95,13 @@ export default function ProductEditor() {
       })
       .catch((err) => setMessage(err.message));
   }, [slug, isNew]);
+
+  useEffect(() => {
+    if (location.state?.message) {
+      setMessage(location.state.message);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (isNew || !slug) return;
@@ -356,6 +367,7 @@ export default function ProductEditor() {
         stockQuantity: Number(variant.stockQuantity) || 0
       }))
     };
+    setActionBusy(true);
     try {
       if (isNew) {
         const body = await adminJson('/api/admin/products', {
@@ -363,7 +375,7 @@ export default function ProductEditor() {
           body: buildNewProductBody(payload, queuedImages.map((image) => image.file))
         });
         queuedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
-        navigate(`/admin/products/${encodeURIComponent(body.product.slug)}`, { replace: true });
+        navigate(`/admin/products/${encodeURIComponent(body.product.slug)}`, { replace: true, state: { message: 'Product created successfully.' } });
       } else {
         const body = await adminSend('PUT', `/api/admin/products/${encodeURIComponent(slug)}`, payload);
         setProduct(body.product);
@@ -377,6 +389,8 @@ export default function ProductEditor() {
       setMessage(['failed', 'blocked', 'missing_mapping'].includes(savedPancakeStatus) ? 'Changes saved locally. Pancake sync is pending automatic retry; resolve any mapping warning shown below.' : 'Changes saved successfully.');
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -412,21 +426,42 @@ export default function ProductEditor() {
   }
 
   async function duplicateProduct() {
+    setActionBusy(true);
+    setMessage('Creating an independent draft copy...');
     try {
       const body = await adminSend('POST', `/api/admin/products/${encodeURIComponent(slug)}/duplicate`, {});
-      navigate(`/admin/products/${encodeURIComponent(body.product.slug)}`);
+      navigate(`/admin/products/${encodeURIComponent(body.product.slug)}`, {
+        state: { message: 'Product duplicated as a draft with zero stock and missing Pancake mapping.' }
+      });
     } catch (error) {
       setMessage(error.message);
+      setActionBusy(false);
     }
   }
 
   async function deleteProduct() {
-    if (!window.confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
+    setActionBusy(true);
     try {
       await adminJson(`/api/admin/products/${encodeURIComponent(slug)}`, { method: 'DELETE' });
-      navigate('/admin/products');
+      navigate('/admin/products', { state: { message: `${product.name} archived.` } });
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setArchiveOpen(false);
+      setActionBusy(false);
+    }
+  }
+
+  async function restoreProduct() {
+    setActionBusy(true);
+    try {
+      const body = await adminSend('POST', `/api/admin/products/${encodeURIComponent(slug)}/restore`, {});
+      setProduct(body.product);
+      setMessage('Product restored as a draft. Review inventory and mapping before publishing.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -458,11 +493,12 @@ export default function ProductEditor() {
           <p className="mt-2 text-sm text-clay">Edit storefront product details, photos, publishing, pricing, inventory, and organization.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" onClick={duplicateProduct}>Duplicate</button>}
+          {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" disabled={actionBusy} onClick={duplicateProduct}>{actionBusy ? 'Working...' : 'Duplicate'}</button>}
           {!isNew && <Link to={productPath(product)} className="btn-ghost !px-4 !py-2.5 text-xs">View</Link>}
           {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" disabled={pancakeSyncBusy || pancakeSync?.status === 'missing_mapping'} onClick={manualPancakeSync}>{pancakeSyncBusy ? 'Syncing...' : 'Sync to Pancake POS'}</button>}
-          {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs !border-accent-deep !text-accent-deep" onClick={deleteProduct}>Delete</button>}
-          <button type="button" className="btn-ink !px-5 !py-2.5 text-xs" onClick={save}>Save</button>
+          {!isNew && product.status === 'archived' && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" disabled={actionBusy} onClick={restoreProduct}>Restore as draft</button>}
+          {!isNew && product.status !== 'archived' && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs !border-accent-deep !text-accent-deep" disabled={actionBusy} onClick={() => setArchiveOpen(true)}>Delete</button>}
+          <button type="button" className="btn-ink !px-5 !py-2.5 text-xs" disabled={actionBusy} onClick={save}>{actionBusy ? 'Saving...' : 'Save'}</button>
         </div>
       </div>
       {message && <p className="mt-3 text-sm text-accent-deep" role="status">{message}</p>}
@@ -763,15 +799,6 @@ export default function ProductEditor() {
           </section>
 
           <section className="border border-line bg-paper p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Sales past 90 days</h2>
-            <ul className="mt-3 space-y-2 text-sm text-clay">
-              <li><strong className="text-ink">0</strong> units sold</li>
-              <li><strong className="text-ink">0</strong> buyers</li>
-              <li><strong className="text-ink">₱0.00</strong> net sales</li>
-            </ul>
-          </section>
-
-          <section className="border border-line bg-paper p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Collections</h2>
             <CollectionDropdown
               value={product.collections || []}
@@ -829,7 +856,8 @@ export default function ProductEditor() {
             </p>
             {!isNew && (
               <div className="mt-4 border-t border-line pt-4 text-xs text-clay">
-                <p><strong className="text-ink">Internal product ID:</strong> {product.slug}</p>
+                <p><strong className="text-ink">Product ID:</strong> {product.id || product.slug}</p>
+                <p className="mt-1"><strong className="text-ink">Internal slug:</strong> {product.slug}</p>
                 {(product.urlAliases || []).length > 0 && (
                   <div className="mt-3">
                     <p className="font-semibold uppercase tracking-[0.1em] text-ink">Redirected previous handles</p>
@@ -843,6 +871,17 @@ export default function ProductEditor() {
           </section>
         </div>
       </div>
+      <AdminConfirmDialog
+        open={archiveOpen}
+        title={`Delete ${product.name}?`}
+        description="Delete this product? It will be removed from the shop, but previous order records will remain available."
+        warning="The product will be archived locally. Its Pancake POS product will not be deleted, and it will show in Archived Products for restoration."
+        confirmLabel="Delete / archive"
+        danger
+        busy={actionBusy}
+        onCancel={() => setArchiveOpen(false)}
+        onConfirm={deleteProduct}
+      />
     </div>
   );
 }

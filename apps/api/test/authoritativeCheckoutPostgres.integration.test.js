@@ -41,6 +41,7 @@ test('PostgreSQL serializes matching checkout retries into one complete commerce
   const pool = new Pool({ connectionString: databaseUrl });
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const slug = `integration-shirt-${suffix}`;
+  const productId = `prod_integration_${suffix}`;
   const sku = `INTEGRATION-${suffix}`;
   const cartSessionId = `cart-${suffix}`;
   const quoteId = `quote-${suffix}`;
@@ -70,9 +71,10 @@ test('PostgreSQL serializes matching checkout retries into one complete commerce
 
   try {
     await pool.query(
-      `INSERT INTO products (slug, name, description, price_cents) VALUES ($1, 'Integration Shirt', '', 64900)
+      `INSERT INTO products (slug, product_id, public_handle, name, description, price_cents)
+       VALUES ($1, $2, $1, 'Integration Shirt', '', 64900)
        ON CONFLICT (slug) DO NOTHING`,
-      [slug]
+      [slug, productId]
     );
     await pool.query(
       `INSERT INTO product_variants (product_slug, size, sku, stock_quantity)

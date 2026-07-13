@@ -52,7 +52,9 @@ function eventTouches(event, fields) {
 
 function syncBreakdown(events = []) {
   const payment = events.find((event) => eventTouches(event, ['paymentMethod', 'paymentStatus']));
-  const status = events.find((event) => eventTouches(event, ['status', 'fulfillmentStatus', 'deliveryStatus']));
+  const status = events.find((event) => eventTouches(event, [
+    'status', 'fulfillmentStatus', 'deliveryStatus', 'trackingNumber', 'deliveryMethod'
+  ]));
   return {
     paymentSyncStatus: eventSyncStatus(payment),
     paymentLastSyncedAt: payment?.processedAt || '',

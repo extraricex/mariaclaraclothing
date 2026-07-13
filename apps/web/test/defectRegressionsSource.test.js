@@ -44,7 +44,8 @@ test('product links use public handles while carts retain internal product ident
   assert.match(productPage, /publicHandle: product\.publicHandle/);
   assert.match(productPage, /link\[rel="canonical"\]/);
   assert.match(editor, /Public handle/);
-  assert.match(editor, /Internal product ID/);
+  assert.match(editor, /Product ID/);
+  assert.match(editor, /Internal slug/);
   assert.match(editor, /Redirected previous handles/);
 });
 

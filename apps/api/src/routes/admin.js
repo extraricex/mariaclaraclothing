@@ -48,13 +48,19 @@ const {
   verifyAdminPassword
 } = require('../settings/storeSettingsRepository');
 const {
-  deleteEditableProduct,
+  archiveEditableProduct,
   findEditableProductBySlug,
   listEditableProducts,
-  replaceEditableProducts,
+  restoreEditableProduct,
   restockVariantStock,
-  saveEditableProduct
+  saveEditableProduct,
+  saveEditableProductsBatch
 } = require('../products/catalogRepository');
+const {
+  failedProductRowsCsv,
+  planProductCsvImport,
+  productsToCsv
+} = require('../products/productCsv');
 const {
   appendInventoryMovements,
   queryInventoryMovements
@@ -90,6 +96,7 @@ const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrder
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const { processOutboundOrderEvents } = require('../integrations/pancake/pancakeOrderSyncService');
 const { createPayMongoClient } = require('../payments/paymongoClient');
+const { releaseExpiredReservations } = require('../payments/paymongoPaymentService');
 const {
   listOrderRefunds,
   listPaymentAlerts,
@@ -151,6 +158,10 @@ const upload = multer({
     }
     return callback(null, true);
   }
+});
+const productCsvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 1, fileSize: 2 * 1024 * 1024 }
 });
 const bannerUpload = multer({
   storage: multer.diskStorage({
@@ -389,8 +400,15 @@ router.post('/inventory-movements/export', async (req, res, next) => {
 
 router.get('/products/export', async (req, res, next) => {
   try {
-    res.setHeader('content-disposition', 'attachment; filename="maria-clara-products.json"');
-    return res.json({ products: await listEditableProducts() });
+    return sendProductsCsv(res, await selectProductsForExport(req.query));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/products/export', async (req, res, next) => {
+  try {
+    return sendProductsCsv(res, await selectProductsForExport(req.body || {}));
   } catch (error) {
     return next(error);
   }
@@ -612,16 +630,45 @@ router.put('/settings/:section', async (req, res, next) => {
   }
 });
 
-router.post('/products/import', async (req, res, next) => {
+router.post('/products/import/preview', productCsvUpload.single('file'), async (req, res, next) => {
   try {
-    const incomingProducts = Array.isArray(req.body?.products) ? req.body.products : null;
+    assertProductCsvUpload(req.file);
+    const plan = planProductCsvImport(req.file.buffer, {
+      mode: req.body?.mode,
+      currentProducts: await listEditableProducts()
+    });
+    return res.json({
+      preview: plan.preview,
+      errorReportCsv: failedProductRowsCsv(plan.preview.rows)
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
 
-    if (!incomingProducts) {
-      return res.status(400).json({ error: 'Products import must include a products array' });
+router.post('/products/import', productCsvUpload.single('file'), async (req, res, next) => {
+  try {
+    assertProductCsvUpload(req.file);
+    const currentProducts = await listEditableProducts();
+    const plan = planProductCsvImport(req.file.buffer, {
+      mode: req.body?.mode,
+      currentProducts
+    });
+    if (!plan.products.length) {
+      return res.status(422).json({
+        error: 'No valid products are available to import.',
+        preview: plan.preview,
+        errorReportCsv: failedProductRowsCsv(plan.preview.rows)
+      });
     }
-
-    const products = await replaceEditableProducts(incomingProducts);
-    return res.json({ products, summary: productSummary(products, await activeLowStockThreshold()) });
+    const products = await saveEditableProductsBatch(plan.products);
+    const allProducts = await listEditableProducts();
+    return res.json({
+      products,
+      preview: plan.preview,
+      errorReportCsv: failedProductRowsCsv(plan.preview.rows),
+      summary: productSummary(allProducts, await activeLowStockThreshold())
+    });
   } catch (error) {
     return next(error);
   }
@@ -737,33 +784,19 @@ router.delete('/products/:slug/images/:index', async (req, res, next) => {
 
 router.get('/products', async (req, res, next) => {
   try {
-    const status = String(req.query.status || '').trim();
-    const collection = String(req.query.collection || '').trim().toLowerCase();
-    const category = String(req.query.category || '').trim().toLowerCase();
-    const vendor = String(req.query.vendor || '').trim().toLowerCase();
-    const query = String(req.query.q || '').trim().toLowerCase();
-    const stock = String(req.query.stock || '').trim();
-    const sort = String(req.query.sort || 'name_asc').trim();
     const allProducts = await listEditableProducts();
     const lowStockThreshold = await activeLowStockThreshold();
-    const collectionSettings = collection ? await getStoreSettings() : null;
-    const collectionDefinition = collectionSettings?.collectionDefinitions.find((item) => item.name.toLowerCase() === collection || item.slug === collection);
-    const acceptedCollectionNames = new Set([
-      collectionDefinition?.name || collection,
-      ...(collectionDefinition?.aliases || [])
-    ].map((name) => String(name || '').trim().toLowerCase()));
-    const products = sortProductRecords(allProducts
-      .filter((product) => !status || productStatus(product) === status)
-      .filter((product) => !collection || product.collections.some((item) => acceptedCollectionNames.has(item.toLowerCase())))
-      .filter((product) => !category || String(product.category || '').trim().toLowerCase() === category)
-      .filter((product) => !vendor || String(product.vendor || '').trim().toLowerCase() === vendor)
-      .filter((product) => !query || productSearchText(product).includes(query))
-      .filter((product) => !stock || productStockFilter(product, lowStockThreshold) === stock)
-      .map((product) => productSummaryRecord(product, lowStockThreshold)), sort);
+    const filtered = await filterProductRecords(allProducts, req.query, lowStockThreshold);
+    const requestedPage = normalizePageNumber(req.query.page, 1);
+    const pageSize = normalizePageSize(req.query.pageSize, 25, 100);
+    const page = Math.min(requestedPage, Math.max(1, Math.ceil(filtered.length / pageSize)));
+    const offset = (page - 1) * pageSize;
+    const products = filtered.slice(offset, offset + pageSize).map((product) => productSummaryRecord(product, lowStockThreshold));
 
     return res.json({
       products,
-      summary: productSummary(allProducts, lowStockThreshold)
+      summary: productSummary(allProducts, lowStockThreshold),
+      pagination: paginationRecord(filtered.length, page, pageSize)
     });
   } catch (error) {
     return next(error);
@@ -825,23 +858,34 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
+    const allProducts = await listEditableProducts();
     const copyName = String(req.body?.name || `${originalProduct.name} Copy`).trim();
-    const copySlug = String(req.body?.slug || `${originalProduct.slug}-copy`).trim();
+    const copySlug = uniqueProductIdentifier(
+      String(req.body?.slug || `${originalProduct.slug}-copy`).trim(),
+      new Set(allProducts.map((product) => product.slug))
+    );
+    const publicHandle = uniqueProductIdentifier(
+      String(req.body?.publicHandle || copyName).trim(),
+      new Set(allProducts.flatMap((product) => [product.publicHandle, product.slug, ...(product.urlAliases || [])]).map((value) => normalizeRouteText(value)))
+    );
     const duplicateSkuSuffix = crypto.randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase();
     const duplicateVariants = (originalProduct.variants || []).map((variant, index) => ({
       ...variant,
+      id: undefined,
       sku: `${String(variant.sku || `VARIANT-${index + 1}`).trim()}-COPY-${duplicateSkuSuffix}`,
       stockQuantity: 0,
       externalPosVariantId: ''
     }));
     const product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest({
       ...originalProduct,
+      id: undefined,
       name: copyName,
       slug: copySlug,
-      publicHandle: String(req.body?.publicHandle || copyName).trim(),
+      publicHandle,
       urlAliases: [],
       variants: duplicateVariants,
-      status: req.body?.status || 'draft'
+      status: 'draft',
+      featured: false
     })));
 
     return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
@@ -917,13 +961,92 @@ router.put('/products/:slug', async (req, res, next) => {
 
 router.delete('/products/:slug', async (req, res, next) => {
   try {
-    const product = await deleteEditableProduct(String(req.params.slug || '').trim());
+    const product = await archiveEditableProduct(String(req.params.slug || '').trim());
 
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    return res.json({ product, deleted: true, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
+    return res.json({
+      product,
+      archived: true,
+      warning: 'This local archive does not delete the connected product in Pancake POS.',
+      summary: productSummary(await listEditableProducts(), await activeLowStockThreshold())
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/products/:slug/restore', async (req, res, next) => {
+  try {
+    const product = await restoreEditableProduct(String(req.params.slug || '').trim());
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    return res.json({
+      product,
+      restored: true,
+      message: 'Product restored as a draft. Review it before publishing.',
+      summary: productSummary(await listEditableProducts(), await activeLowStockThreshold())
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch('/products/:slug/status', async (req, res, next) => {
+  try {
+    const slug = String(req.params.slug || '').trim();
+    const existing = await findEditableProductBySlug(slug);
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+    const status = validateEnum(req.body?.status, VALID_PRODUCT_STATUSES, 'Product status is invalid');
+    const product = await saveEditableProduct({
+      ...existing,
+      status,
+      ...(status !== 'active' ? { featured: false } : {})
+    }, slug);
+    return res.json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/products/bulk', async (req, res, next) => {
+  try {
+    const slugs = [...new Set((Array.isArray(req.body?.slugs) ? req.body.slugs : [])
+      .map((slug) => String(slug || '').trim()).filter(Boolean))];
+    if (!slugs.length || slugs.length > 100) {
+      return res.status(400).json({ error: 'Select between 1 and 100 products.' });
+    }
+    const action = String(req.body?.action || '').trim();
+    const statusByAction = { publish: 'active', unpublish: 'draft', archive: 'archived', restore: 'draft' };
+    const collection = String(req.body?.collection || '').trim();
+    if (!statusByAction[action] && !['add_collection', 'remove_collection'].includes(action)) {
+      return res.status(400).json({ error: 'Bulk product action is invalid.' });
+    }
+    if (['add_collection', 'remove_collection'].includes(action) && !collection) {
+      return res.status(400).json({ error: 'A collection is required for this action.' });
+    }
+    const catalog = await listEditableProducts();
+    const bySlug = new Map(catalog.map((product) => [product.slug, product]));
+    const missing = slugs.filter((slug) => !bySlug.has(slug));
+    if (missing.length) return res.status(404).json({ error: `Product not found: ${missing[0]}` });
+    const changed = slugs.map((slug) => {
+      const product = bySlug.get(slug);
+      if (statusByAction[action]) {
+        return { ...product, status: statusByAction[action], ...(statusByAction[action] !== 'active' ? { featured: false } : {}) };
+      }
+      const collections = new Set(product.collections || []);
+      if (action === 'add_collection') collections.add(collection);
+      else collections.delete(collection);
+      return { ...product, collections: [...collections].length ? [...collections] : ['Uncategorized'] };
+    });
+    const products = await saveEditableProductsBatch(changed);
+    return res.json({
+      products,
+      action,
+      count: products.length,
+      summary: productSummary(await listEditableProducts(), await activeLowStockThreshold())
+    });
   } catch (error) {
     return next(error);
   }
@@ -931,16 +1054,12 @@ router.delete('/products/:slug', async (req, res, next) => {
 
 router.get('/orders', async (req, res, next) => {
   try {
-    const status = String(req.query.status || '').trim();
-    const query = String(req.query.q || '').trim().toLowerCase();
-    const dateFilter = orderDateFilter(req.query);
-    const orders = (await listOrders())
-      .filter((order) => !status || order.status === status)
-      .filter((order) => !query || orderSearchText(order).includes(query))
-      .filter((order) => matchesOrderDateFilter(order, dateFilter))
-      .map(orderSummary);
-
-    return res.json({ orders });
+    const filtered = filterAndSortOrders(await listOrders(), req.query);
+    const pageSize = normalizePageSize(req.query.pageSize, 25, 100);
+    const requestedPage = normalizePageNumber(req.query.page, 1);
+    const page = Math.min(requestedPage, Math.max(1, Math.ceil(filtered.length / pageSize)));
+    const orders = filtered.slice((page - 1) * pageSize, page * pageSize).map(orderSummary);
+    return res.json({ orders, summary: orderListSummary(filtered), pagination: paginationRecord(filtered.length, page, pageSize) });
   } catch (error) {
     return next(error);
   }
@@ -1057,6 +1176,26 @@ router.post('/orders/export/jnt', async (req, res, next) => {
     res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('content-disposition', `attachment; filename="JNT_Orders_${exportedAt.slice(0, 10)}.xlsx"`);
     return res.send(buffer);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/orders/export', async (req, res, next) => {
+  try {
+    const filtered = filterAndSortOrders(await listOrders(), req.body || {});
+    const selectedInput = Array.isArray(req.body?.orderNumbers) ? req.body.orderNumbers : [];
+    const selected = new Set(selectedInput.map((value) => String(value || '').trim()).filter(Boolean));
+    const orders = selected.size ? filtered.filter((order) => selected.has(order.orderNumber)) : filtered;
+    if (!orders.length) return res.status(400).json({ error: 'No orders match the export selection.' });
+    const syncDetails = new Map();
+    for (const order of orders) {
+      syncDetails.set(order.orderNumber, await pancakeOrderSyncRepository.getOrderSyncDetail(order.orderNumber));
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader('content-disposition', `attachment; filename="maria-clara-orders-${date}.csv"`);
+    return res.send(`\uFEFF${ordersCsv(orders, syncDetails)}`);
   } catch (error) {
     return next(error);
   }
@@ -1218,6 +1357,13 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
     const { existingOrder, order } = result;
     if (existingOrder.status !== 'cancelled' && order.status === 'cancelled') {
       await pancakeOrderExportRepository.markOrderExportSkipped(order.orderNumber);
+      if (order.paymentMethod === 'paymongo' && order.paymentStatus === 'cancelled' && env.paymongo.configured) {
+        await releaseExpiredReservations({
+          client: createPayMongoClient(env.paymongo),
+          orderNumbers: [order.orderNumber],
+          limit: 1
+        });
+      }
     }
     const pancakeEvent = await enqueuePancakeOrderUpdateIfLinked(existingOrder, order);
     if (pancakeEvent?.status === 'pending' && env.pancake.mode === 'live' && env.pancake.apiKeyConfigured) {
@@ -1404,7 +1550,7 @@ function paymentOperationsCsv(operations) {
 
 function csvValue(value, protectFormula) {
   let text = value === null || value === undefined ? '' : String(value);
-  if (protectFormula && /^[=+\-@]/.test(text)) text = `'${text}`;
+  if (protectFormula && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 
@@ -1696,6 +1842,100 @@ async function activeLowStockThreshold() {
   return settings.inventory.lowStockThreshold;
 }
 
+function assertProductCsvUpload(file) {
+  if (!file?.buffer?.length) throw httpError(400, 'Choose a CSV file to import.');
+  if (path.extname(file.originalname || '').toLowerCase() !== '.csv') {
+    throw httpError(400, 'Product import supports CSV files only. XLSX import is disabled for safety.');
+  }
+  if (file.buffer.includes(0)) throw httpError(400, 'The CSV file contains invalid binary data.');
+}
+
+async function selectProductsForExport(input) {
+  const allProducts = await listEditableProducts();
+  const filtered = await filterProductRecords(allProducts, input || {}, await activeLowStockThreshold());
+  const selectedInput = Array.isArray(input?.selectedSlugs)
+    ? input.selectedSlugs
+    : String(input?.selectedSlugs || '').split(',');
+  const selected = new Set(selectedInput.map((slug) => String(slug || '').trim()).filter(Boolean));
+  return selected.size ? filtered.filter((product) => selected.has(product.slug)) : filtered;
+}
+
+async function sendProductsCsv(res, products) {
+  const syncStatuses = [];
+  for (let index = 0; index < products.length; index += 100) {
+    syncStatuses.push(...await pancakeProductSyncRepository.listProductSyncStatuses(
+      products.slice(index, index + 100).map((product) => product.slug)
+    ));
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  res.setHeader('content-type', 'text/csv; charset=utf-8');
+  res.setHeader('content-disposition', `attachment; filename="maria-clara-products-${date}.csv"`);
+  return res.send(`\uFEFF${productsToCsv(products, syncStatuses)}`);
+}
+
+async function filterProductRecords(allProducts, input, lowStockThreshold) {
+  const status = String(input?.status || '').trim();
+  const collection = String(input?.collection || '').trim().toLowerCase();
+  const category = String(input?.category || '').trim().toLowerCase();
+  const vendor = String(input?.vendor || '').trim().toLowerCase();
+  const search = String(input?.q || '').trim().toLowerCase();
+  const stock = String(input?.stock || '').trim();
+  const sort = String(input?.sort || 'name_asc').trim();
+  const collectionSettings = collection ? await getStoreSettings() : null;
+  const collectionDefinition = collectionSettings?.collectionDefinitions.find((item) => item.name.toLowerCase() === collection || item.slug === collection);
+  const acceptedCollectionNames = new Set([
+    collectionDefinition?.name || collection,
+    ...(collectionDefinition?.aliases || [])
+  ].map((name) => String(name || '').trim().toLowerCase()));
+  const filtered = allProducts
+    .filter((product) => !status || productStatus(product) === status)
+    .filter((product) => !collection || product.collections.some((item) => acceptedCollectionNames.has(item.toLowerCase())))
+    .filter((product) => !category || String(product.category || '').trim().toLowerCase() === category)
+    .filter((product) => !vendor || String(product.vendor || '').trim().toLowerCase() === vendor)
+    .filter((product) => !search || productSearchText(product).includes(search))
+    .filter((product) => !stock || productStockFilter(product, lowStockThreshold) === stock);
+  return filtered.slice().sort((a, b) => {
+    if (sort === 'name_desc') return b.name.localeCompare(a.name);
+    if (sort === 'inventory_asc') return productInventory(a) - productInventory(b);
+    if (sort === 'inventory_desc') return productInventory(b) - productInventory(a);
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function uniqueProductIdentifier(base, used) {
+  const root = normalizeRouteText(base) || 'product-copy';
+  let candidate = root;
+  let suffix = 2;
+  while (used.has(candidate)) candidate = `${root}-${suffix++}`;
+  return candidate;
+}
+
+function normalizeRouteText(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function normalizePageNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : fallback;
+}
+
+function normalizePageSize(value, fallback, maximum) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? Math.min(number, maximum) : fallback;
+}
+
+function paginationRecord(total, requestedPage, pageSize) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  return { page, pageSize, total, totalPages, hasPrevious: page > 1, hasNext: page < totalPages };
+}
+
+function httpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
 function productSummary(products, lowStockThreshold) {
   return {
     total: products.length,
@@ -1816,6 +2056,7 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
   }
   if (body.status !== undefined) {
     changes.status = validateEnum(body.status, VALID_ORDER_STATUSES, 'Order status is invalid');
+    Object.assign(changes, derivedOrderStatuses(changes.status, existingOrder));
   }
   if (body.fulfillmentStatus !== undefined) {
     changes.fulfillmentStatus = validateEnum(body.fulfillmentStatus, VALID_FULFILLMENT_STATUSES, 'Fulfillment status is invalid');
@@ -1878,6 +2119,13 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
     };
   }
 
+  if (changes.status === 'cancelled' && existingOrder.paymentMethod === 'paymongo') {
+    changes.inventoryReservationStatus = 'released';
+    if (['pending_payment', 'cod_pending'].includes(String(existingOrder.paymentStatus || ''))) {
+      changes.paymentStatus = 'cancelled';
+    }
+  }
+
   return changes;
 }
 
@@ -1918,6 +2166,9 @@ function changedPancakeFields(previousOrder, nextOrder) {
     'fulfillmentStatus',
     'deliveryStatus',
     'paymentStatus',
+    'paymentMethod',
+    'codConfirmationStatus',
+    'deliveryMethod',
     'trackingNumber',
     'notes'
   ]) {
@@ -1926,6 +2177,27 @@ function changedPancakeFields(previousOrder, nextOrder) {
   if (JSON.stringify(previousOrder?.customer || {}) !== JSON.stringify(nextOrder?.customer || {})) fields.push('customer');
   if (JSON.stringify(previousOrder?.address || {}) !== JSON.stringify(nextOrder?.address || {})) fields.push('address');
   return fields;
+}
+
+function derivedOrderStatuses(status, existingOrder = {}) {
+  const map = {
+    received: { fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' },
+    confirmed: { fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' },
+    packed: { fulfillmentStatus: 'packed', deliveryStatus: 'ready' },
+    shipped: { fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery' },
+    delivered: { fulfillmentStatus: 'delivered', deliveryStatus: 'delivered' },
+    cancelled: { fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' },
+    returned: { fulfillmentStatus: 'shipped', deliveryStatus: 'returned' },
+    failed: { fulfillmentStatus: 'cancelled', deliveryStatus: 'cancelled' },
+    unreachable: { fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }
+  };
+  const derived = { ...(map[status] || {}) };
+  if (String(existingOrder.paymentMethod || '') === 'cash_on_delivery') {
+    if (status === 'cancelled' || status === 'failed') derived.codConfirmationStatus = 'cancelled';
+    if (status === 'unreachable') derived.codConfirmationStatus = 'unreachable';
+    if (['confirmed', 'packed', 'shipped', 'delivered'].includes(status)) derived.codConfirmationStatus = 'confirmed';
+  }
+  return derived;
 }
 
 async function enqueuePancakeOrderUpdateIfLinked(previousOrder, nextOrder, { syncRepository = pancakeOrderSyncRepository } = {}) {
@@ -2114,6 +2386,78 @@ function orderSummary(order) {
   };
 }
 
+function filterAndSortOrders(orders, input = {}) {
+  const status = String(input.status || '').trim();
+  const fulfillmentStatus = String(input.fulfillmentStatus || '').trim();
+  const paymentStatus = String(input.paymentStatus || '').trim();
+  const search = String(input.q || '').trim().toLowerCase();
+  const dateFilter = orderDateFilter(input);
+  const sort = String(input.sort || 'placed_desc').trim();
+  return orders
+    .filter((order) => !status || order.status === status)
+    .filter((order) => !fulfillmentStatus || order.fulfillmentStatus === fulfillmentStatus)
+    .filter((order) => !paymentStatus || order.paymentStatus === paymentStatus)
+    .filter((order) => !search || orderSearchText(order).includes(search))
+    .filter((order) => matchesOrderDateFilter(order, dateFilter))
+    .sort((a, b) => {
+      if (sort === 'placed_asc') return new Date(a.placedAt || 0) - new Date(b.placedAt || 0);
+      if (sort === 'total_desc') return Number(b.totalCents || 0) - Number(a.totalCents || 0);
+      if (sort === 'total_asc') return Number(a.totalCents || 0) - Number(b.totalCents || 0);
+      if (sort === 'customer_asc') return normalizeCustomerName(a.customer).fullName.localeCompare(normalizeCustomerName(b.customer).fullName);
+      return new Date(b.placedAt || 0) - new Date(a.placedAt || 0);
+    });
+}
+
+function orderListSummary(orders) {
+  return {
+    total: orders.length,
+    codPending: orders.filter((order) => order.codConfirmationStatus === 'pending' && order.status !== 'cancelled').length,
+    jntReady: orders.filter((order) => jntExportSummary(order).status === 'ready').length,
+    totalSalesCents: orders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0),
+    totalItems: orders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0),
+    delivered: orders.filter((order) => order.status === 'delivered' || order.fulfillmentStatus === 'delivered' || order.deliveryStatus === 'delivered').length
+  };
+}
+
+function ordersCsv(orders, syncDetails = new Map()) {
+  const header = [
+    'Order Number', 'Placed At', 'Order Status', 'Fulfillment Status', 'Delivery Status',
+    'First Name', 'Last Name', 'Customer Name', 'Phone', 'Email', 'Address', 'Barangay',
+    'City', 'Province', 'ZIP Code', 'Product Name', 'SKU', 'Variant', 'Quantity',
+    'Unit Price PHP', 'Line Total PHP', 'Subtotal PHP', 'Discount PHP', 'Shipping PHP',
+    'Total PHP', 'Payment Method', 'Payment Status', 'COD Status', 'PayMongo Checkout Session ID',
+    'PayMongo Payment ID', 'Paid Amount PHP', 'Paid At', 'Courier', 'Tracking Number',
+    'Notes', 'Pancake Order ID', 'Pancake Sync Status', 'Pancake Last Synced At', 'Pancake Last Error'
+  ];
+  const rows = [];
+  for (const order of orders) {
+    const customer = normalizeCustomerName(order.customer);
+    const items = Array.isArray(order.items) && order.items.length ? order.items : [{}];
+    const sync = syncDetails.get(order.orderNumber) || {};
+    for (const item of items) {
+      rows.push([
+        order.orderNumber, order.placedAt, order.status, order.fulfillmentStatus, order.deliveryStatus,
+        customer.firstName, customer.lastName, customer.fullName, order.customer?.phone || '', order.customer?.email || '',
+        order.address?.addressLine || '', order.address?.barangay || '', order.address?.city || '',
+        order.address?.province || '', order.address?.postalCode || '', item.productName || '', item.sku || '',
+        item.size || '', item.quantity || '', moneyCsv(item.unitPriceCents),
+        moneyCsv(Number(item.unitPriceCents || 0) * Number(item.quantity || 0)), moneyCsv(order.subtotalCents),
+        moneyCsv(order.discountTotalCents), moneyCsv(order.shippingFeeCents), moneyCsv(order.totalCents),
+        order.paymentMethod, order.paymentStatus, order.codConfirmationStatus, order.providerCheckoutSessionId || '',
+        order.providerPaymentId || '', moneyCsv(order.paidAmountCents), order.paidAt || '',
+        order.deliveryMethod || '', order.trackingNumber || '', order.notes || '', sync.pancakeOrderId || '',
+        sync.syncStatus || 'not_linked', sync.lastSyncedAt || '', sync.safeErrorCode || ''
+      ]);
+    }
+  }
+  return [header, ...rows].map((row) => row.map((value) => csvValue(value, true)).join(',')).join('\r\n') + '\r\n';
+}
+
+function moneyCsv(cents) {
+  if (cents === null || cents === undefined || cents === '') return '';
+  return (Number(cents || 0) / 100).toFixed(2);
+}
+
 function jntExportSummary(order) {
   const missingFields = validateJntOrders([order])[0]?.missing || [];
   const exportedToJnt = Boolean(order.exportedToJnt);
@@ -2152,7 +2496,11 @@ function orderSearchText(order) {
     order.orderNumber,
     normalizeCustomerName(order.customer).fullName,
     order.customer?.phone,
-    order.address?.addressLine
+    order.customer?.email,
+    order.address?.addressLine,
+    order.trackingNumber,
+    order.deliveryMethod,
+    ...(order.items || []).flatMap((item) => [item.productName, item.sku, item.size])
   ].filter(Boolean).join(' ').toLowerCase();
 }
 

@@ -59,6 +59,18 @@ test('PayMongo client retrieves a checkout session with the server-side secret',
   assert.equal(session.id, 'cs_test_1');
 });
 
+test('PayMongo client explicitly expires an abandoned checkout session', async () => {
+  let request;
+  const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_live_secret' }, async (url, options) => {
+    request = { url, options };
+    return { ok: true, json: async () => ({ data: { id: 'cs_live_1', attributes: { status: 'expired' } } }) };
+  });
+  const session = await client.expireCheckoutSession('cs_live_1');
+  assert.equal(request.url, 'https://api.paymongo.com/v1/checkout_sessions/cs_live_1/expire');
+  assert.equal(request.options.method, 'POST');
+  assert.equal(session.attributes.status, 'expired');
+});
+
 test('PayMongo client retrieves a payment for authoritative refund checks', async () => {
   let requestedUrl = '';
   const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_live_secret' }, async (url) => {

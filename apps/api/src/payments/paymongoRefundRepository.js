@@ -200,6 +200,12 @@ async function listPaymentAlerts({ reservationMinutes = 30 } = {}) {
        SELECT 'payment_failed','error',o.order_number,'PayMongo payment is failed or expired.',COALESCE(o.updated_at,o.placed_at)
        FROM orders o WHERE o.payment_provider='paymongo' AND o.payment_status IN ('failed','expired')
        UNION ALL
+       SELECT 'payment_after_cancellation','error',o.order_number,
+         'A paid PayMongo order is cancelled and requires refund review.',COALESCE(o.paid_at,o.updated_at)
+       FROM orders o WHERE o.payment_provider='paymongo'
+         AND o.payment_status IN ('paid','partially_refunded')
+         AND (o.status='cancelled' OR o.payment_metadata->>'paymentAfterCancellation'='true')
+       UNION ALL
        SELECT CASE WHEN r.status='failed' THEN 'refund_failed' ELSE 'refund_pending' END,
          CASE WHEN r.status='failed' THEN 'error' ELSE 'warning' END,r.order_number,
          CASE

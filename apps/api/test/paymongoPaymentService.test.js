@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  checkoutSessionPayload, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
+  checkoutSessionPayload, closeCheckoutSessionForExpiry, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
 } = require('../src/payments/paymongoPaymentService');
 
 test('PayMongo checkout payload uses the authoritative total and approved hosted channels', () => {
@@ -95,4 +95,37 @@ test('paid checkout recovery produces the official webhook envelope', () => {
   assert.equal(payload.data.type, 'event');
   assert.equal(payload.data.attributes.type, 'checkout_session.payment.paid');
   assert.equal(parsePaidEvent(payload).paymentId, 'pay-1');
+});
+
+test('reservation expiry closes an active PayMongo session before releasing inventory', async () => {
+  const calls = [];
+  const outcome = await closeCheckoutSessionForExpiry({
+    retrieveCheckoutSession: async (id) => {
+      calls.push(`retrieve:${id}`);
+      return { id, attributes: { status: 'active', payments: [] } };
+    },
+    expireCheckoutSession: async (id) => {
+      calls.push(`expire:${id}`);
+      return { id, attributes: { status: 'expired', payments: [] } };
+    }
+  }, 'cs_active_1');
+  assert.equal(outcome.status, 'expired');
+  assert.deepEqual(calls, ['retrieve:cs_active_1', 'expire:cs_active_1']);
+});
+
+test('reservation expiry preserves a payment that completed before expiration', async () => {
+  let expireCalls = 0;
+  const outcome = await closeCheckoutSessionForExpiry({
+    retrieveCheckoutSession: async () => ({
+      id: 'cs_paid_1',
+      attributes: {
+        status: 'active', reference_number: 'MCC-PAID',
+        payments: [{ id: 'pay_paid_1', attributes: { status: 'paid', amount: 10000, currency: 'PHP' } }]
+      }
+    }),
+    expireCheckoutSession: async () => { expireCalls += 1; }
+  }, 'cs_paid_1');
+  assert.equal(outcome.status, 'paid');
+  assert.equal(expireCalls, 0);
+  assert.equal(parsePaidEvent(outcome.paidPayload).paymentId, 'pay_paid_1');
 });

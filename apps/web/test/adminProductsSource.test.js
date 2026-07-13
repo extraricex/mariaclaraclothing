@@ -26,6 +26,14 @@ test('admin products page exposes phase 1 filters and sort controls', async () =
   assert.match(source, /More actions/);
   assert.match(source, /Export/);
   assert.match(source, /Import/);
+  assert.match(source, /ProductImportDialog/);
+  assert.match(source, /AdminActionMenu/);
+  assert.match(source, /AdminConfirmDialog/);
+  assert.match(source, /duplicateProduct/);
+  assert.match(source, /confirmArchive/);
+  assert.match(source, /bulkAction/);
+  assert.match(source, /Export CSV/);
+  assert.match(source, /pagination/);
   assert.match(source, /Product status/);
   assert.match(source, /Product organization/);
   assert.match(source, /Sales channels/);
@@ -73,7 +81,8 @@ test('admin product editor exposes organization fields, variant price, and total
   assert.match(source, /Add photos/);
   assert.match(source, /Remove photo/);
   assert.match(source, /Publishing/);
-  assert.match(source, /Sales past 90 days/);
+  assert.doesNotMatch(source, /Sales past 90 days/);
+  assert.doesNotMatch(source, /₱0\.00 net sales/);
   assert.match(source, /category/);
   assert.match(source, /productType/);
   assert.match(source, /vendor/);
@@ -96,6 +105,9 @@ test('admin product editor exposes organization fields, variant price, and total
   assert.match(source, /removeSizeChartRow/);
   assert.match(source, /sizeChartRowIsComplete/);
   assert.match(source, /Complete every size chart field before saving/);
+  assert.match(source, /AdminConfirmDialog/);
+  assert.match(source, /restoreProduct/);
+  assert.match(source, /Product duplicated as a draft with zero stock and missing Pancake mapping/);
   assert.match(source, /queuedImages/);
   assert.match(source, /queueNewProductImages/);
   assert.match(source, /removeQueuedImage/);

@@ -29,4 +29,11 @@ test('admin orders page supports date filters, summaries, richer columns, and fi
   assert.match(source, /admin-metric-card/);
   assert.match(source, /admin-table-shell/);
   assert.match(source, /admin-status-/);
+  assert.match(source, /Export CSV/);
+  assert.match(source, /paymentStatus/);
+  assert.match(source, /fulfillmentStatus/);
+  assert.match(source, /ORDER_SORT_OPTIONS/);
+  assert.match(source, /pagination/);
+  assert.match(source, /AdminConfirmDialog/);
+  assert.match(source, /confirmCancellation/);
 });

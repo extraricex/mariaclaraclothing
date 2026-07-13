@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS products (
   slug text PRIMARY KEY,
+  product_id text,
   name text NOT NULL,
   description text NOT NULL,
   collections jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -21,6 +22,10 @@ CREATE TABLE IF NOT EXISTS products (
 );
 
 ALTER TABLE products ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'T-Shirts';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS product_id text;
+UPDATE products SET product_id = 'prod_' || substr(md5(slug), 1, 20) WHERE product_id IS NULL OR product_id = '';
+ALTER TABLE products ALTER COLUMN product_id SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS products_product_id_idx ON products(product_id);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS product_type text NOT NULL DEFAULT 'Tshirt';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS vendor text NOT NULL DEFAULT 'Maria Clara';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS tags jsonb NOT NULL DEFAULT '[]'::jsonb;

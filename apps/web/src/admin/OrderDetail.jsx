@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
 import { loadBarangays, loadCities, loadProvinces } from '../lib/addressGuide.js';
 import { adminProductDisplayParts, truncateAdminProductCode } from './adminProductDisplay.js';
 import { customerFullName, customerNameParts } from '../lib/customerName.js';
+import AdminActionMenu from './AdminActionMenu.jsx';
+import AdminConfirmDialog from './AdminConfirmDialog.jsx';
 
 const ENUMS = {
   status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'],
@@ -164,6 +166,7 @@ function MetricCard({ label, value, tone = 'info' }) {
 
 export default function OrderDetail() {
   const { orderNumber } = useParams();
+  const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [form, setForm] = useState(null);
   const [message, setMessage] = useState('');
@@ -174,7 +177,8 @@ export default function OrderDetail() {
   const [addressDraft, setAddressDraft] = useState({ house: '', provinceCode: '', cityCode: '', barangayCode: '' });
   const [history, setHistory] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [showActions, setShowActions] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [orderProductFilter, setOrderProductFilter] = useState('');
   const [noteTab, setNoteTab] = useState('All');
   const [jntPreview, setJntPreview] = useState(null);
@@ -257,8 +261,12 @@ export default function OrderDetail() {
     setEditAddress(true);
   }
 
-  async function save() {
+  async function save(confirmedCancellation = false) {
     setMessage('');
+    if (!confirmedCancellation && order.status !== 'cancelled' && form.status === 'cancelled') {
+      setCancelConfirmOpen(true);
+      return;
+    }
     const { items: _immutableItems, ...changes } = form;
     changes.customer = form.customer;
     if (editAddress) {
@@ -279,6 +287,7 @@ export default function OrderDetail() {
         postalCode: order.address?.postalCode || ''
       };
     }
+    setSaving(true);
     try {
       const body = await adminSend('PATCH', `/api/admin/orders/${encodeURIComponent(orderNumber)}`, changes);
       setOrder(body.order);
@@ -288,6 +297,9 @@ export default function OrderDetail() {
       setMessage('Changes saved successfully.');
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setSaving(false);
+      setCancelConfirmOpen(false);
     }
   }
 
@@ -334,8 +346,9 @@ export default function OrderDetail() {
     setIsEditing(true);
     setForm((previous) => ({
       ...previous,
+      status: 'returned',
       deliveryStatus: 'returned',
-      fulfillmentStatus: previous.fulfillmentStatus === 'delivered' ? 'delivered' : 'shipped'
+      fulfillmentStatus: 'shipped'
     }));
   }
 
@@ -343,12 +356,10 @@ export default function OrderDetail() {
     setForm(orderForm(order));
     setEditAddress(false);
     setIsEditing(false);
-    setShowActions(false);
     setMessage('Unsaved changes discarded.');
   }
 
   async function copyOrderNumber() {
-    setShowActions(false);
     try {
       await navigator.clipboard.writeText(order.orderNumber);
       setMessage('Order number copied.');
@@ -511,16 +522,18 @@ export default function OrderDetail() {
           </div>
           <div className="relative flex flex-wrap gap-2">
             <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => window.print()}>Print</button>
-            <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => setShowActions((value) => !value)}>More actions</button>
-            {showActions && (
-              <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-2 text-sm text-[var(--admin-text)] shadow-xl">
-                <button type="button" className="block w-full rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-[var(--admin-panel)]" onClick={copyOrderNumber}>Copy order number</button>
-                <button type="button" className="block w-full rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-[var(--admin-panel)]" onClick={resetChanges}>Discard unsaved changes</button>
-                <Link className="block rounded-[var(--radius-admin)] px-3 py-2 text-left hover:bg-[var(--admin-panel)]" to="/admin/orders" onClick={() => setShowActions(false)}>View all orders</Link>
-              </div>
-            )}
+            <AdminActionMenu
+              label="More actions"
+              buttonClassName="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel)] !py-2 !text-xs !text-[var(--admin-text)]"
+              disabled={saving}
+              items={[
+                { label: 'Copy order number', onSelect: copyOrderNumber },
+                { label: 'Discard unsaved changes', disabled: !isEditing, onSelect: resetChanges },
+                { label: 'View all orders', onSelect: () => navigate('/admin/orders') }
+              ]}
+            />
             <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => setIsEditing(true)}>{isEditing ? 'Editing' : 'Edit'}</button>
-            <button type="button" className="btn-ink !px-5 !py-2 text-xs" onClick={save}>Save</button>
+            <button type="button" className="btn-ink !px-5 !py-2 text-xs" disabled={saving} onClick={() => save(false)}>{saving ? 'Saving...' : 'Save'}</button>
           </div>
         </div>
 
@@ -1009,10 +1022,21 @@ export default function OrderDetail() {
             </select>
             <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={markAsReturned}>Returned</button>
             <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => window.print()}>Print</button>
-            <button type="button" className="btn-ink !px-5 !py-2 !text-xs" onClick={save}>Save</button>
+            <button type="button" className="btn-ink !px-5 !py-2 !text-xs" disabled={saving} onClick={() => save(false)}>{saving ? 'Saving...' : 'Save'}</button>
           </div>
         </div>
       </div>
+      <AdminConfirmDialog
+        open={cancelConfirmOpen}
+        title={`Cancel ${order.orderNumber}?`}
+        description="This saves the order as Cancelled, restores committed stock once, and queues cancellation for the linked Pancake POS order."
+        warning="Cancelled orders cannot be reopened. The local change is retained if Pancake is temporarily unavailable, and its sync remains queued for retry."
+        confirmLabel="Cancel order"
+        danger
+        busy={saving}
+        onCancel={() => setCancelConfirmOpen(false)}
+        onConfirm={() => save(true)}
+      />
     </div>
   );
 }

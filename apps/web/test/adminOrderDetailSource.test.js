@@ -41,6 +41,10 @@ test('admin order detail editor exposes contact and address editing while lockin
   assert.match(source, /Billing address/);
   assert.match(source, /Print/);
   assert.match(source, /More actions/);
+  assert.match(source, /AdminActionMenu/);
+  assert.match(source, /AdminConfirmDialog/);
+  assert.match(source, /status: 'returned'/);
+  assert.match(source, /cancelConfirmOpen/);
   assert.doesNotMatch(source, /productSearchQuery/);
   assert.doesNotMatch(source, /Search products to add/);
 });

@@ -77,6 +77,13 @@ function createPayMongoClient(config, fetchImpl = fetch) {
     return { id: String(data.id), attributes: data.attributes };
   }
 
+  async function expireCheckoutSession(checkoutSessionId) {
+    const id = String(checkoutSessionId || '').trim();
+    if (!/^cs_[A-Za-z0-9_-]+$/.test(id)) throw new PayMongoApiError('paymongo_invalid_response');
+    const data = await request(`/v1/checkout_sessions/${encodeURIComponent(id)}/expire`, { method: 'POST' });
+    return { id: String(data.id), attributes: data.attributes };
+  }
+
   async function retrievePayment(paymentId) {
     const id = String(paymentId || '').trim();
     if (!/^pay_[A-Za-z0-9_-]+$/.test(id)) throw new PayMongoApiError('paymongo_invalid_response');
@@ -108,7 +115,7 @@ function createPayMongoClient(config, fetchImpl = fetch) {
     return { id: String(data.id), attributes: data.attributes };
   }
 
-  return { createCheckoutSession, createRefund, retrieveCheckoutSession, retrievePayment };
+  return { createCheckoutSession, createRefund, expireCheckoutSession, retrieveCheckoutSession, retrievePayment };
 }
 
 module.exports = { PayMongoApiError, createPayMongoClient, providerErrorCode };

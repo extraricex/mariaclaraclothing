@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { hasDatabaseUrl, query, transaction } = require('../db/postgres');
 
 const productsPath = path.join(__dirname, '..', '..', 'data', 'products.json');
@@ -16,8 +17,8 @@ function usePostgresProducts() {
 
 function loadEditableProducts(filePath = activeProductsPath()) {
   const products = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  validateProducts(products);
   const normalized = products.map(normalizeEditableProduct);
+  validateProducts(normalized);
   validateProductRoutes(normalized);
   return normalized;
 }
@@ -100,24 +101,53 @@ function saveEditableProduct(product, originalSlug = '') {
 }
 
 function deleteEditableProduct(slug) {
+  return archiveEditableProduct(slug);
+}
+
+async function archiveEditableProduct(slug) {
+  const product = await Promise.resolve(findEditableProductBySlug(slug));
+  if (!product) return null;
+  return saveEditableProduct({ ...product, status: 'archived', featured: false }, slug);
+}
+
+async function restoreEditableProduct(slug) {
+  const product = await Promise.resolve(findEditableProductBySlug(slug));
+  if (!product) return null;
+  return saveEditableProduct({ ...product, status: 'draft', featured: false }, slug);
+}
+
+async function saveEditableProductsBatch(products) {
+  const normalizedProducts = products.map(normalizeEditableProduct);
+  const catalog = await Promise.resolve(listEditableProducts());
+  const bySlug = new Map(catalog.map((product) => [product.slug, product]));
+  normalizedProducts.forEach((product) => {
+    const previous = bySlug.get(product.slug);
+    bySlug.set(product.slug, normalizeEditableProduct({
+      ...product,
+      urlAliases: previous ? [
+        ...(previous.urlAliases || []),
+        previous.publicHandle,
+        previous.slug,
+        ...(product.urlAliases || [])
+      ] : product.urlAliases
+    }));
+  });
+  const nextCatalog = [...bySlug.values()];
+  validateProducts(nextCatalog);
+  validateProductRoutes(nextCatalog);
+  const changedProducts = normalizedProducts.map((product) => bySlug.get(product.slug));
+
   if (usePostgresProducts()) {
-    return Promise.resolve(findEditableProductBySlug(slug)).then(async (product) => {
-      if (!product) return null;
-      await query('DELETE FROM products WHERE slug = $1', [slug]);
-      return product;
+    await transaction(async (client) => {
+      for (const product of changedProducts) {
+        await savePostgresProduct(client, product);
+      }
     });
+    return Promise.all(changedProducts.map((product) => findEditableProductBySlug(product.slug)));
   }
 
-  const products = loadEditableProducts();
-  const index = products.findIndex((product) => product.slug === slug);
-
-  if (index === -1) {
-    return null;
-  }
-
-  const [deletedProduct] = products.splice(index, 1);
-  writeEditableProducts(products);
-  return deletedProduct;
+  writeEditableProducts(nextCatalog);
+  return changedProducts;
 }
 
 function replaceEditableProducts(products) {
@@ -271,6 +301,7 @@ function normalizeEditableProduct(product) {
 
   return {
     ...product,
+    id: String(product.id || stableEntityId('prod', slug)).trim(),
     slug,
     publicHandle,
     urlAliases,
@@ -302,8 +333,11 @@ function validateProducts(products) {
   }
 
   const slugs = new Set();
+  const productIds = new Set();
+  const variantIds = new Set();
   const skuOwners = new Map();
   products.forEach((product, index) => {
+    requireString(product.id, `products[${index}].id`);
     requireString(product.slug, `products[${index}].slug`);
     requireString(product.name, `products[${index}].name`);
     requireString(product.description, `products[${index}].description`);
@@ -317,6 +351,8 @@ function validateProducts(products) {
       throw new Error(`Duplicate product slug: ${product.slug}`);
     }
     slugs.add(product.slug);
+    if (productIds.has(product.id)) throw new Error(`Duplicate product ID: ${product.id}`);
+    productIds.add(product.id);
 
     if (!Array.isArray(product.collections) || product.collections.length < 1) {
       throw new Error(`products[${index}].collections must include at least one collection.`);
@@ -341,6 +377,7 @@ function validateProducts(products) {
     }
 
     product.variants.forEach((variant, variantIndex) => {
+      requireString(String(variant.id || ''), `products[${index}].variants[${variantIndex}].id`);
       requireString(variant.size, `products[${index}].variants[${variantIndex}].size`);
       requireString(variant.sku, `products[${index}].variants[${variantIndex}].sku`);
       requireNonNegativeNumber(variant.stockQuantity, `products[${index}].variants[${variantIndex}].stockQuantity`);
@@ -355,6 +392,8 @@ function validateProducts(products) {
         throw error;
       }
       skuOwners.set(normalizedSku, product.slug);
+      if (variantIds.has(String(variant.id))) throw new Error(`Duplicate product variant ID: ${variant.id}`);
+      variantIds.add(String(variant.id));
     });
   });
 }
@@ -483,10 +522,10 @@ async function savePostgresProduct(client, product) {
 
   await client.query(
     `INSERT INTO products (
-      slug, public_handle, name, description, collections, price_cents, compare_at_price_cents,
+      slug, product_id, public_handle, name, description, collections, price_cents, compare_at_price_cents,
       merchandising_status, status, featured, category, product_type, vendor, tags, seo,
       metafields, theme_template, product_page, parcel_weight_grams, updated_at
-    ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb, $17, $18::jsonb, $19, now())
+    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18, $19::jsonb, $20, now())
     ON CONFLICT (slug) DO UPDATE SET
       public_handle = EXCLUDED.public_handle,
       name = EXCLUDED.name,
@@ -509,6 +548,7 @@ async function savePostgresProduct(client, product) {
       updated_at = now()`,
     [
       product.slug,
+      product.id,
       product.publicHandle,
       product.name,
       product.description,
@@ -635,6 +675,7 @@ async function assertPostgresRouteAvailable(client, identifier, productSlug) {
 
 function fromPostgresProduct(row) {
   return {
+    id: row.product_id || stableEntityId('prod', row.slug),
     slug: row.slug,
     publicHandle: row.public_handle || row.slug,
     urlAliases: [],
@@ -671,6 +712,7 @@ function fromPostgresImage(row) {
 
 function fromPostgresVariant(row) {
   return {
+    id: String(row.id),
     productSlug: row.product_slug,
     size: normalizeSizeLabel(row.size),
     sku: row.sku,
@@ -716,6 +758,7 @@ function normalizeVariants(variants, slug) {
   return records.map((variant, index) => {
     const size = normalizeSizeLabel(variant.size || `Size ${index + 1}`);
     return {
+      id: String(variant.id || stableEntityId('var', `${slug}:${variant.sku || size}:${index}`)).trim(),
       size,
       sku: String(variant.sku || `${slug}-${size}`).trim(),
       priceCents: variant.priceCents === '' || variant.priceCents === null || variant.priceCents === undefined
@@ -725,6 +768,10 @@ function normalizeVariants(variants, slug) {
       externalPosVariantId: String(variant.externalPosVariantId || '').trim()
     };
   });
+}
+
+function stableEntityId(prefix, seed) {
+  return `${prefix}_${crypto.createHash('sha256').update(String(seed || '')).digest('hex').slice(0, 20)}`;
 }
 
 function normalizeSizeLabel(size) {
@@ -926,6 +973,7 @@ function requireNonNegativeNumber(value, field) {
 }
 
 module.exports = {
+  archiveEditableProduct,
   catalogProducts,
   editableProducts,
   deductVariantStock,
@@ -939,8 +987,10 @@ module.exports = {
   normalizePublicHandle,
   productsPath,
   replaceEditableProducts,
+  restoreEditableProduct,
   restockVariantStock,
   saveEditableProduct,
+  saveEditableProductsBatch,
   validateProducts,
   validateProductRoutes
 };

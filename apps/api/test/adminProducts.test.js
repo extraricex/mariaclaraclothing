@@ -5,6 +5,12 @@ const os = require('node:os');
 const path = require('node:path');
 
 const ADMIN_TOKEN = 'local-admin-token';
+process.env.ADMIN_TOKEN = ADMIN_TOKEN;
+process.env.ADMIN_CREDENTIALS_FILE = path.join(fsSyncTempDir(), 'admin-credentials.json');
+
+function fsSyncTempDir() {
+  return require('node:fs').mkdtempSync(path.join(os.tmpdir(), 'maria-clara-admin-products-auth-'));
+}
 
 test('admin products page includes product management controls', async () => {
   const root = path.join(__dirname, '..');
@@ -549,9 +555,21 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(duplicateBody.product.slug, 'admin-test-shirt-copy');
     assert.equal(duplicateBody.product.name, 'Admin Test Shirt Copy');
     assert.equal(duplicateBody.product.status, 'draft');
+    assert.notEqual(duplicateBody.product.id, draftBody.product.id);
+    assert.notEqual(duplicateBody.product.variants[0].id, draftBody.product.variants[0].id);
     assert.equal(duplicateBody.product.variants[0].stockQuantity, 0);
     assert.equal(duplicateBody.product.variants[0].externalPosVariantId, '');
     assert.match(duplicateBody.product.variants[0].sku, /^ADMIN-EDIT-S-COPY-[A-F0-9]{8}$/);
+
+    const secondDuplicateResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt/duplicate`, jsonAdminRequest('POST', {
+      slug: 'admin-test-shirt-copy',
+      name: 'Admin Test Shirt Copy'
+    }));
+    const secondDuplicateBody = await secondDuplicateResponse.json();
+    assert.equal(secondDuplicateResponse.status, 201);
+    assert.equal(secondDuplicateBody.product.slug, 'admin-test-shirt-copy-2');
+    assert.notEqual(secondDuplicateBody.product.id, duplicateBody.product.id);
+    assert.notEqual(secondDuplicateBody.product.variants[0].id, duplicateBody.product.variants[0].id);
 
     const originalAfterDuplicateResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt`, adminRequest());
     const originalAfterDuplicateBody = await originalAfterDuplicateResponse.json();
@@ -564,14 +582,37 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(storefrontDraftResponse.status, 404);
 
     const exportResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/export`, adminRequest());
-    const exportBody = await exportResponse.json();
+    const exportBody = await exportResponse.text();
     assert.equal(exportResponse.status, 200);
-    assert.ok(exportBody.products.some((product) => product.slug === 'admin-test-shirt'));
+    assert.match(exportResponse.headers.get('content-type'), /text\/csv/);
+    assert.match(exportBody, /"product_name"/);
+    assert.match(exportBody, /"admin-test-shirt"/);
+    assert.doesNotMatch(exportBody, /PANCAKE_API_KEY|PAYMONGO_SECRET_KEY/);
 
-    const importProducts = exportBody.products.map((product) => product.slug === 'admin-test-shirt'
-      ? { ...product, status: 'active', name: 'Imported Admin Test Shirt' }
-      : product);
-    const importResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/import`, jsonAdminRequest('POST', { products: importProducts }));
+    const unsafeSpreadsheetForm = new FormData();
+    unsafeSpreadsheetForm.append('file', new Blob(['not a workbook'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'products.xlsx');
+    unsafeSpreadsheetForm.append('mode', 'create_only');
+    const unsafeSpreadsheetResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/import/preview`, {
+      method: 'POST', headers: adminRequest().headers, body: unsafeSpreadsheetForm
+    });
+    assert.equal(unsafeSpreadsheetResponse.status, 400);
+
+    const importCsv = [
+      'product_name,slug,public_handle,status,description,product_details,shipping_details,size_chart_json,image_urls,price_php,compare_at_price_php,category,collections,tags,product_type,vendor,weight_grams,size,sku,variant_price_php,stock',
+      'Imported Admin Test Shirt,admin-test-shirt,imported-admin-test-shirt,active,Imported description,Imported details,Imported shipping,"[]",/product/admin-edited.png,699.00,999.00,T-Shirts,Freedom of Mind,black|cotton,Tshirt,Maria Clara,250,Small,ADMIN-EDIT-S,749.00,2'
+    ].join('\n');
+    const previewForm = productCsvForm(importCsv, 'update_by_sku');
+    const previewResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/import/preview`, {
+      method: 'POST', headers: adminRequest().headers, body: previewForm
+    });
+    const previewBody = await previewResponse.json();
+    assert.equal(previewResponse.status, 200);
+    assert.equal(previewBody.preview.validRows, 1);
+    assert.equal(previewBody.preview.productCount, 1);
+
+    const importResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/import`, {
+      method: 'POST', headers: adminRequest().headers, body: productCsvForm(importCsv, 'update_by_sku')
+    });
     const importBody = await importResponse.json();
 
     assert.equal(importResponse.status, 200);
@@ -584,10 +625,20 @@ test('admin product APIs require login and support product management', async ()
     const deleteBody = await deleteResponse.json();
 
     assert.equal(deleteResponse.status, 200);
-    assert.equal(deleteBody.deleted, true);
+    assert.equal(deleteBody.archived, true);
+    assert.match(deleteBody.warning, /Pancake POS/);
 
     const deletedResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt`, adminRequest());
-    assert.equal(deletedResponse.status, 404);
+    const deletedBody = await deletedResponse.json();
+    assert.equal(deletedResponse.status, 200);
+    assert.equal(deletedBody.product.status, 'archived');
+    const archivedStorefrontResponse = await fetch(`http://127.0.0.1:${port}/api/products/imported-admin-test-shirt`);
+    assert.equal(archivedStorefrontResponse.status, 404);
+
+    const restoreResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt/restore`, jsonAdminRequest('POST', {}));
+    const restoreBody = await restoreResponse.json();
+    assert.equal(restoreResponse.status, 200);
+    assert.equal(restoreBody.product.status, 'draft');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('PRODUCTS_DATA_FILE', previousProductsDataFile);
@@ -670,6 +721,13 @@ function jsonAdminRequest(method, body) {
   };
 }
 
+function productCsvForm(csv, mode) {
+  const form = new FormData();
+  form.append('file', new Blob([csv], { type: 'text/csv' }), 'products.csv');
+  form.append('mode', mode);
+  return form;
+}
+
 function createFreshApp() {
   delete require.cache[require.resolve('../src/app')];
   delete require.cache[require.resolve('../src/routes/admin')];
@@ -677,6 +735,7 @@ function createFreshApp() {
   delete require.cache[require.resolve('../src/products/catalogRepository')];
   delete require.cache[require.resolve('../src/products/catalogPresenter')];
   delete require.cache[require.resolve('../src/inventory/inventoryMovementRepository')];
+  delete require.cache[require.resolve('../src/settings/storeSettingsRepository')];
   return require('../src/app').createApp();
 }
 

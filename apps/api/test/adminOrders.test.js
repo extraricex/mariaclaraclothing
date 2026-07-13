@@ -8,9 +8,15 @@ const path = require('node:path');
 const nodeFsForProducts = require('node:fs');
 const nodeOsForProducts = require('node:os');
 const nodePathForProducts = require('node:path');
+process.env.ADMIN_TOKEN = 'local-admin-token';
+process.env.CHECKOUT_V2_REQUIRED = 'false';
 process.env.PRODUCTS_DATA_FILE = nodePathForProducts.join(
   nodeFsForProducts.mkdtempSync(nodePathForProducts.join(nodeOsForProducts.tmpdir(), 'mc-products-')),
   'products.json'
+);
+process.env.ADMIN_CREDENTIALS_FILE = nodePathForProducts.join(
+  nodeFsForProducts.mkdtempSync(nodePathForProducts.join(nodeOsForProducts.tmpdir(), 'mc-admin-order-auth-')),
+  'admin-credentials.json'
 );
 nodeFsForProducts.copyFileSync(
   nodePathForProducts.join(__dirname, '..', 'data', 'products.json'),
@@ -419,6 +425,21 @@ test('admin order APIs require login and support list detail and status updates'
     assert.equal(filteredResponse.status, 200);
     assert.equal(filteredBody.orders.length, 1);
     assert.equal(filteredBody.orders[0].status, 'confirmed');
+    assert.equal(filteredBody.pagination.total, 1);
+    assert.equal(filteredBody.summary.total, 1);
+
+    const exportResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders/export`, {
+      method: 'POST',
+      headers: { ...adminRequest(loginBody.token).headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ orderNumbers: [orderNumber], status: 'confirmed' })
+    });
+    const exportCsv = await exportResponse.text();
+    assert.equal(exportResponse.status, 200);
+    assert.match(exportResponse.headers.get('content-type'), /text\/csv/);
+    assert.match(exportCsv, new RegExp(orderNumber));
+    assert.match(exportCsv, /CURIOSITY OFFWHITE/);
+    assert.match(exportCsv, /ARISOFF-S/);
+    assert.doesNotMatch(exportCsv, /PAYMONGO_SECRET|PANCAKE_API_KEY/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);
@@ -483,6 +504,13 @@ test('admin order list supports date range filters', async () => {
     assert.equal(recentResponse.status, 200);
     assert.deepEqual(recentBody.orders.map((order) => order.orderNumber).sort(), [recentOrder, todayOrder].sort());
 
+    const pagedResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders?dateRange=last_7_days&page=2&pageSize=1&sort=placed_desc`, adminRequest('local-admin-token'));
+    const pagedBody = await pagedResponse.json();
+    assert.equal(pagedResponse.status, 200);
+    assert.equal(pagedBody.orders.length, 1);
+    assert.equal(pagedBody.pagination.page, 2);
+    assert.equal(pagedBody.pagination.totalPages, 2);
+
     const recentDate = recentIso.slice(0, 10);
     const customResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders?dateRange=custom&dateFrom=${recentDate}&dateTo=${recentDate}`, adminRequest('local-admin-token'));
     const customBody = await customResponse.json();
@@ -539,11 +567,7 @@ test('admin cancellation restores order stock and records restock movement', asy
         ...adminRequest('local-admin-token').headers,
         'content-type': 'application/json'
       },
-      body: JSON.stringify({
-        status: 'cancelled',
-        fulfillmentStatus: 'cancelled',
-        deliveryStatus: 'cancelled'
-      })
+      body: JSON.stringify({ status: 'cancelled' })
     });
     const cancelBody = await cancelResponse.json();
     const afterCancelProduct = await findEditableProductBySlug(slug);
@@ -555,6 +579,9 @@ test('admin cancellation restores order stock and records restock movement', asy
 
     assert.equal(cancelResponse.status, 200);
     assert.equal(cancelBody.order.status, 'cancelled');
+    assert.equal(cancelBody.order.fulfillmentStatus, 'cancelled');
+    assert.equal(cancelBody.order.deliveryStatus, 'cancelled');
+    assert.equal(cancelBody.order.codConfirmationStatus, 'cancelled');
     assert.equal(afterCancelStock, afterOrderStock + ORDER_ITEM.quantity);
     assert.ok(movements.some((movement) => movement.reason === 'order_created' && movement.quantityChange === -ORDER_ITEM.quantity));
     assert.ok(movements.some((movement) => movement.reason === 'order_cancelled' && movement.quantityChange === ORDER_ITEM.quantity));
@@ -617,7 +644,7 @@ test('admin order updates enqueue Pancake outbound sync events for linked orders
     items: [],
     notes: ''
   };
-  const next = { ...previous, status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery', trackingNumber: 'TRACK-1' };
+  const next = { ...previous, status: 'shipped', fulfillmentStatus: 'shipped', deliveryStatus: 'out_for_delivery', deliveryMethod: 'J&T Express', trackingNumber: 'TRACK-1' };
 
   try {
     const { enqueuePancakeOrderUpdateIfLinked } = require('../src/routes/admin');
@@ -628,6 +655,7 @@ test('admin order updates enqueue Pancake outbound sync events for linked orders
     const detail = await pancakeSync.getOrderSyncDetail('MCC-ADMIN-SYNC');
     assert.equal(detail.syncStatus, 'pending_sync');
     assert.equal(detail.statusSyncStatus, 'pending_sync');
+    assert.ok(result.payload.changedFields.includes('deliveryMethod'));
   } finally {
     if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previousDatabaseUrl;
@@ -700,6 +728,55 @@ test('admin order status updates reject unsupported statuses', async () => {
   }
 });
 
+test('admin cancellation releases a pending PayMongo reservation without allowing a second restock', () => {
+  const { normalizeOrderUpdate } = require('../src/routes/admin');
+  const changes = normalizeOrderUpdate({ status: 'cancelled', paymentStatus: 'pending_payment' }, {
+    status: 'pending_payment',
+    paymentMethod: 'paymongo',
+    paymentStatus: 'pending_payment',
+    inventoryReservationStatus: 'reserved'
+  });
+  assert.equal(changes.status, 'cancelled');
+  assert.equal(changes.paymentStatus, 'cancelled');
+  assert.equal(changes.inventoryReservationStatus, 'released');
+  assert.equal(changes.fulfillmentStatus, 'cancelled');
+  assert.equal(changes.deliveryStatus, 'cancelled');
+});
+
+test('historical order line snapshots survive product rename, repricing, and archive', async () => {
+  const previousOrdersDataFile = process.env.ORDERS_DATA_FILE;
+  process.env.ORDERS_DATA_FILE = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-order-snapshot-')), 'orders.json');
+  const app = createFreshApp();
+  const catalog = require('../src/products/catalogRepository');
+  const server = await new Promise((resolve, reject) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+    listener.on('error', reject);
+  });
+  const { port } = server.address();
+
+  try {
+    const orderNumber = await createOrder(port, {
+      fullName: 'Snapshot Customer', phone: '09171112222', houseAddress: '1 Snapshot Street',
+      barangay: 'Bucandala IV', city: 'Imus City', province: 'Cavite', shippingFeeCents: 8000
+    });
+    const productSlug = String(ORDER_ITEM.productId).replace(/^catalog-/, '');
+    const original = await catalog.findEditableProductBySlug(productSlug);
+    await catalog.saveEditableProduct({ ...original, name: 'Renamed After Purchase', priceCents: 99900 }, productSlug);
+    await catalog.archiveEditableProduct(productSlug);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/admin/orders/${encodeURIComponent(orderNumber)}`, adminRequest('local-admin-token'));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.order.items[0].productName, ORDER_ITEM.productName);
+    assert.equal(body.order.items[0].unitPriceCents, ORDER_ITEM.unitPriceCents);
+    assert.equal(body.order.items[0].sku, 'ARISOFF-S');
+    assert.equal(body.order.items[0].quantity, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    restoreEnv('ORDERS_DATA_FILE', previousOrdersDataFile);
+  }
+});
+
 function adminRequest(token) {
   return {
     headers: {
@@ -735,7 +812,7 @@ async function createOrder(port, customer) {
   });
   const body = await response.json();
 
-  assert.equal(response.status, 201);
+  assert.equal(response.status, 201, JSON.stringify(body));
   return body.orderNumber;
 }
 
@@ -747,6 +824,7 @@ function createFreshApp() {
   delete require.cache[require.resolve('../src/products/catalogRepository')];
   delete require.cache[require.resolve('../src/products/catalogPresenter')];
   delete require.cache[require.resolve('../src/inventory/inventoryMovementRepository')];
+  delete require.cache[require.resolve('../src/settings/storeSettingsRepository')];
   return require('../src/app').createApp();
 }
 

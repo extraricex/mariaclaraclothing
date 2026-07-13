@@ -109,16 +109,22 @@ async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
         : order;
       return { status: 'duplicate', orderNumber: order.orderNumber, order: duplicateOrder };
     }
+    const paidAfterCancellation = order.status === 'cancelled'
+      || order.paymentStatus === 'cancelled'
+      || order.inventoryReservationStatus === 'released';
     const updated = await updateOrder(order.orderNumber, {
-      status: 'confirmed', paymentMethod: 'paymongo', paymentStatus: 'paid', providerPaymentId: event.paymentId,
-      paidAmountCents: event.amountCents, paidAt: event.paidAt, inventoryReservationStatus: 'committed',
+      status: paidAfterCancellation ? 'cancelled' : 'confirmed',
+      paymentMethod: 'paymongo', paymentStatus: 'paid', providerPaymentId: event.paymentId,
+      paidAmountCents: event.amountCents, paidAt: event.paidAt,
+      inventoryReservationStatus: paidAfterCancellation ? 'released' : 'committed',
       paymentMetadata: {
         ...(order.paymentMetadata || {}),
         paymentMethodType: event.paymentMethodType,
-        providerLivemode: event.livemode
+        providerLivemode: event.livemode,
+        ...(paidAfterCancellation ? { paymentAfterCancellation: true } : {})
       }
     }, { client, existingOrder: order });
-    if (metaEnabled) {
+    if (metaEnabled && !paidAfterCancellation) {
       await insertMetaPurchaseOutbox(client, buildMetaPurchaseEvent({
         order: updated, requestContext: order.paymentMetadata?.metaRequestContext || {}
       }));
@@ -195,73 +201,113 @@ async function reconcilePendingPayments({ client, limit = 50, metaEnabled = fals
   return summary;
 }
 
-async function releaseExpiredReservations({ now = new Date(), limit = 50, client } = {}) {
+async function closeCheckoutSessionForExpiry(client, checkoutSessionId) {
+  if (!client?.retrieveCheckoutSession || !client?.expireCheckoutSession) return { status: 'retry' };
+  let session = await client.retrieveCheckoutSession(checkoutSessionId);
+  const paidPayload = paidSessionPayload(session);
+  if (paidPayload) return { status: 'paid', paidPayload, session };
+  if (String(session.attributes?.status || '') === 'active') {
+    session = await client.expireCheckoutSession(checkoutSessionId);
+  }
+  return {
+    status: String(session.attributes?.status || '') === 'expired' ? 'expired' : 'retry',
+    session
+  };
+}
+
+async function releaseExpiredReservations({ now = new Date(), limit = 50, client, orderNumbers = [] } = {}) {
+  const selected = [...new Set((Array.isArray(orderNumbers) ? orderNumbers : [])
+    .map((value) => String(value || '').trim()).filter(Boolean))];
   const due = await query(
-    `SELECT order_number FROM orders WHERE payment_method='paymongo' AND payment_status='pending_payment'
-      AND inventory_reservation_status='reserved' AND payment_expires_at<= $1
-      ORDER BY payment_expires_at LIMIT $2`,
-    [now.toISOString(), limit]
+    `SELECT order_number,provider_checkout_session_id FROM orders
+      WHERE payment_method='paymongo' AND provider_checkout_session_id<>''
+        AND (
+          (payment_status='pending_payment' AND inventory_reservation_status='reserved' AND payment_expires_at<= $1)
+          OR (status='cancelled' AND payment_status='cancelled'
+            AND COALESCE(payment_metadata->>'checkoutSessionExpiredAt','')='')
+        )
+        AND ($2::text[]='{}'::text[] OR order_number=ANY($2::text[]))
+      ORDER BY payment_expires_at NULLS FIRST LIMIT $3`,
+    [now.toISOString(), selected, limit]
   );
   const released = [];
+  const expiredSessions = [];
   for (const row of due.rows) {
-    if (!client?.retrieveCheckoutSession) continue;
-    let session;
+    let disposition;
     try {
-      session = await client.retrieveCheckoutSession(row.provider_checkout_session_id);
-      const paidPayload = paidSessionPayload(session);
-      if (paidPayload) {
-        await processPaidWebhook(paidPayload);
+      disposition = await closeCheckoutSessionForExpiry(client, row.provider_checkout_session_id);
+      if (disposition.status === 'paid') {
+        await processPaidWebhook(disposition.paidPayload);
         continue;
       }
     } catch (_error) {
       continue;
     }
-    if (session.attributes?.status !== 'expired') continue;
+    if (disposition.status !== 'expired') continue;
     const outcome = await transaction(async (client) => {
       const order = await findOrderByNumber(row.order_number, { client, forUpdate: true, includeRelated: false });
-      if (!order || order.paymentStatus !== 'pending_payment' || order.inventoryReservationStatus !== 'reserved') return null;
-      const items = restockItems(order);
-      await restockVariantStock(items, { client });
-      await appendInventoryMovements(items.map((item) => ({
-        orderNumber: order.orderNumber, source: 'paymongo', reason: 'payment_expired',
-        productSlug: item.slug, productName: item.productName, sku: item.sku, size: item.size,
-        quantityChange: item.quantity
-      })), { client });
-      await pancakeInventoryOutboxRepository.enqueueInventorySync([...new Set(items.map((item) => item.slug))], 'website_order', { client });
-      return updateOrder(order.orderNumber, {
-        status: 'cancelled', paymentStatus: 'expired', inventoryReservationStatus: 'released'
-      }, { client, existingOrder: order });
+      if (!order) return null;
+      const paymentMetadata = {
+        ...(order.paymentMetadata || {}),
+        checkoutSessionExpiredAt: new Date().toISOString()
+      };
+      if (order.paymentStatus === 'pending_payment' && order.inventoryReservationStatus === 'reserved') {
+        const items = restockItems(order);
+        await restockVariantStock(items, { client });
+        await appendInventoryMovements(items.map((item) => ({
+          orderNumber: order.orderNumber, source: 'paymongo', reason: 'payment_expired',
+          productSlug: item.slug, productName: item.productName, sku: item.sku, size: item.size,
+          quantityChange: item.quantity
+        })), { client });
+        await pancakeInventoryOutboxRepository.enqueueInventorySync([...new Set(items.map((item) => item.slug))], 'website_order', { client });
+        const updated = await updateOrder(order.orderNumber, {
+          status: 'cancelled', paymentStatus: 'expired', inventoryReservationStatus: 'released', paymentMetadata
+        }, { client, existingOrder: order });
+        return { order: updated, releasedInventory: true };
+      }
+      if (order.status === 'cancelled' && order.paymentStatus === 'cancelled') {
+        const updated = await updateOrder(order.orderNumber, { paymentMetadata }, { client, existingOrder: order });
+        return { order: updated, releasedInventory: false };
+      }
+      return null;
     });
     if (outcome) {
-      released.push(outcome.orderNumber);
-      const link = await pancakeOrderSyncRepository.getOrderSyncDetail(outcome.orderNumber);
-      const syncEvent = await pancakeOrderSyncRepository.enqueueSyncEvent({
-        direction: 'outbound', entityType: 'order', entityId: outcome.orderNumber,
-        orderNumber: outcome.orderNumber, pancakeOrderId: link.pancakeOrderId || '',
-        eventKey: `paymongo-expired:${outcome.orderNumber}`,
-        payload: { changedFields: ['paymentStatus', 'status'], source: 'paymongo' }
-      });
-      if (syncEvent?.status === 'pending' && link.pancakeOrderId) {
-        await pancakeOrderSyncRepository.upsertOrderLink({
-          ...link,
-          orderNumber: outcome.orderNumber,
-          pancakeOrderId: link.pancakeOrderId,
-          syncStatus: 'pending_sync',
-          lastLocalUpdatedAt: outcome.updatedAt || new Date().toISOString()
+      expiredSessions.push(outcome.order.orderNumber);
+      if (outcome.releasedInventory) {
+        released.push(outcome.order.orderNumber);
+        const link = await pancakeOrderSyncRepository.getOrderSyncDetail(outcome.order.orderNumber);
+        const syncEvent = await pancakeOrderSyncRepository.enqueueSyncEvent({
+          direction: 'outbound', entityType: 'order', entityId: outcome.order.orderNumber,
+          orderNumber: outcome.order.orderNumber, pancakeOrderId: link.pancakeOrderId || '',
+          eventKey: `paymongo-expired:${outcome.order.orderNumber}`,
+          payload: { changedFields: ['paymentStatus', 'status'], source: 'paymongo' }
         });
-        await pancakeOrderSyncRepository.appendSyncLog({
-          direction: 'outbound', entityType: 'order', entityId: outcome.orderNumber,
-          orderNumber: outcome.orderNumber, pancakeOrderId: link.pancakeOrderId,
-          level: 'info', code: 'pancake_order_expiration_queued',
-          message: 'Expired PayMongo order cancellation queued for Pancake POS.'
-        });
+        if (syncEvent?.status === 'pending' && link.pancakeOrderId) {
+          await pancakeOrderSyncRepository.upsertOrderLink({
+            ...link,
+            orderNumber: outcome.order.orderNumber,
+            pancakeOrderId: link.pancakeOrderId,
+            syncStatus: 'pending_sync',
+            lastLocalUpdatedAt: outcome.order.updatedAt || new Date().toISOString()
+          });
+          await pancakeOrderSyncRepository.appendSyncLog({
+            direction: 'outbound', entityType: 'order', entityId: outcome.order.orderNumber,
+            orderNumber: outcome.order.orderNumber, pancakeOrderId: link.pancakeOrderId,
+            level: 'info', code: 'pancake_order_expiration_queued',
+            message: 'Expired PayMongo order cancellation queued for Pancake POS.'
+          });
+        }
       }
     }
   }
-  return { releasedCount: released.length, orderNumbers: released };
+  return {
+    releasedCount: released.length,
+    expiredSessionCount: expiredSessions.length,
+    orderNumbers: released
+  };
 }
 
 module.exports = {
-  attachCheckoutSession, checkoutSessionPayload, parsePaidEvent, processPaidWebhook,
+  attachCheckoutSession, checkoutSessionPayload, closeCheckoutSessionForExpiry, parsePaidEvent, processPaidWebhook,
   paidSessionPayload, reconcilePendingPayments, releaseExpiredReservations, restockItems, withOrderParam
 };

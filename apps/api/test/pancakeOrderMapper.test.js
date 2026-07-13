@@ -128,15 +128,17 @@ test('builds outbound Pancake order update payload from local order changes', ()
       status: 'shipped',
       fulfillmentStatus: 'shipped',
       deliveryStatus: 'out_for_delivery',
+      deliveryMethod: 'J&T Express',
       trackingNumber: 'JNT123',
       customer: { fullName: 'Maria Customer', phone: '09171234567', email: 'buyer@example.com' },
       address: { addressLine: '123 Street, Barangay, Makati', postalCode: '1200' },
       notes: 'Pack carefully'
     },
-    changedFields: ['status', 'trackingNumber', 'customer', 'address', 'notes']
+    changedFields: ['status', 'trackingNumber', 'deliveryMethod', 'customer', 'address', 'notes']
   });
   assert.equal(payload.status, 2);
   assert.equal(payload.partner.extend_code, 'JNT123');
+  assert.equal(payload.shipping_partner, 'J&T Express');
   assert.equal(payload.bill_full_name, 'Maria Customer');
   assert.match(payload.note_print, /Pack carefully/);
   assert.match(payload.note_print, /website_status=shipped/);
