@@ -4,6 +4,7 @@ import { CART_DRAWER_EVENT, cartQuantity, getCartSessionId, removeFromCart, upda
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { createCheckoutQuote, fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
+import { productPath } from '../lib/productUrl.js';
 import { setMetaTrackingConsent, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
@@ -99,7 +100,7 @@ function ProductRecommendation({ product, onClose, onNavigate }) {
   const image = product.images[0];
   return (
     <aside className="relative flex items-center gap-3 border border-line bg-paper p-2.5 shadow-2xl" aria-label="You may also like">
-      <Link to={`/product/${encodeURIComponent(product.slug)}`} className="flex min-w-0 flex-1 items-center gap-3" onClick={onNavigate}>
+      <Link to={productPath(product)} className="flex min-w-0 flex-1 items-center gap-3" onClick={onNavigate}>
         <img
           src={image.url}
           alt={image.altText || product.name}
@@ -245,7 +246,7 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                 {items.map((item) => (
                   <article key={item.variantId} className="flex gap-4 py-5">
                     <Link
-                      to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`}
+                      to={productPath(item)}
                       className="aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20"
                       onClick={onClose}
                     >

@@ -20,6 +20,7 @@ import {
 } from './newProductMedia.js';
 import CollectionDropdown from './CollectionDropdown.jsx';
 import QueuedProductMedia from './QueuedProductMedia.jsx';
+import { productPath } from '../lib/productUrl.js';
 
 const STATUSES = ['active', 'draft', 'archived'];
 const DESCRIPTION_TOOLS = [
@@ -34,6 +35,8 @@ const DESCRIPTION_TOOLS = [
 ];
 const EMPTY_PRODUCT = {
   slug: '',
+  publicHandle: '',
+  urlAliases: [],
   name: '',
   description: '',
   category: 'T-Shirts',
@@ -456,7 +459,7 @@ export default function ProductEditor() {
         </div>
         <div className="flex flex-wrap gap-2">
           {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" onClick={duplicateProduct}>Duplicate</button>}
-          {!isNew && <Link to={`/product/${encodeURIComponent(product.slug)}`} className="btn-ghost !px-4 !py-2.5 text-xs">View</Link>}
+          {!isNew && <Link to={productPath(product)} className="btn-ghost !px-4 !py-2.5 text-xs">View</Link>}
           {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs" disabled={pancakeSyncBusy || pancakeSync?.status === 'missing_mapping'} onClick={manualPancakeSync}>{pancakeSyncBusy ? 'Syncing...' : 'Sync to Pancake POS'}</button>}
           {!isNew && <button type="button" className="btn-ghost !px-4 !py-2.5 text-xs !border-accent-deep !text-accent-deep" onClick={deleteProduct}>Delete</button>}
           <button type="button" className="btn-ink !px-5 !py-2.5 text-xs" onClick={save}>Save</button>
@@ -806,6 +809,37 @@ export default function ProductEditor() {
               <span className="eyebrow">Theme template</span>
               <input className="field mt-1" value={product.themeTemplate || ''} onChange={(e) => update('themeTemplate', e.target.value)} />
             </label>
+          </section>
+
+          <section className="border border-line bg-paper p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Storefront URL</h2>
+            <label className="mt-4 block">
+              <span className="eyebrow">Public handle</span>
+              <input
+                className="field mt-1"
+                value={product.publicHandle || ''}
+                onChange={(event) => update('publicHandle', event.target.value)}
+                placeholder="Generated from the product title"
+                autoCapitalize="none"
+                spellCheck="false"
+              />
+            </label>
+            <p className="mt-3 break-all text-xs text-clay">
+              /product/{product.publicHandle || 'generated-after-save'}
+            </p>
+            {!isNew && (
+              <div className="mt-4 border-t border-line pt-4 text-xs text-clay">
+                <p><strong className="text-ink">Internal product ID:</strong> {product.slug}</p>
+                {(product.urlAliases || []).length > 0 && (
+                  <div className="mt-3">
+                    <p className="font-semibold uppercase tracking-[0.1em] text-ink">Redirected previous handles</p>
+                    <ul className="mt-2 space-y-1">
+                      {product.urlAliases.map((alias) => <li key={alias} className="break-all">/product/{alias}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </div>
       </div>

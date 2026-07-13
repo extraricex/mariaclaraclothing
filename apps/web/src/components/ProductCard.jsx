@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { formatMoney } from '../lib/money.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { CustomerBadge } from './ui/Badge.jsx';
+import { productPath } from '../lib/productUrl.js';
 
 export function totalStock(product) {
   return product.variants.reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
@@ -18,7 +19,7 @@ export default function ProductCard({ product, index }) {
 
   return (
     <Link
-      to={`/product/${encodeURIComponent(product.slug)}`}
+      to={productPath(product)}
       className="group block text-center"
       aria-label={`View ${product.name}, ${formatMoney(product.priceCents)}${onSale ? `, previously ${formatMoney(product.compareAtPriceCents)}` : ''}`}
     >

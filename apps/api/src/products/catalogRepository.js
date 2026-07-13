@@ -17,7 +17,9 @@ function usePostgresProducts() {
 function loadEditableProducts(filePath = activeProductsPath()) {
   const products = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   validateProducts(products);
-  return products.map(normalizeEditableProduct);
+  const normalized = products.map(normalizeEditableProduct);
+  validateProductRoutes(normalized);
+  return normalized;
 }
 
 function listEditableProducts() {
@@ -49,7 +51,10 @@ function findEditableProductBySlug(slug) {
 }
 
 function findCatalogProductBySlug(slug) {
-  const product = findEditableProductBySlug(slug);
+  const identifier = normalizeRouteIdentifier(slug);
+  const product = usePostgresProducts()
+    ? resolvePostgresProduct(identifier)
+    : loadEditableProducts().find((candidate) => productMatchesRoute(candidate, identifier)) || null;
   if (isPromise(product)) {
     return product.then((record) => (!record || ['draft', 'archived'].includes(record.status)) ? null : toCatalogProduct(record));
   }
@@ -59,27 +64,39 @@ function findCatalogProductBySlug(slug) {
 
 function saveEditableProduct(product, originalSlug = '') {
   const normalized = normalizeEditableProduct(product);
+  if (originalSlug && String(originalSlug).trim() !== normalized.slug) {
+    const error = new Error('Internal product IDs cannot be changed. Edit the public handle instead.');
+    error.status = 400;
+    throw error;
+  }
 
   if (usePostgresProducts()) {
     return transaction(async (client) => {
       await savePostgresProduct(client, normalized);
-      if (originalSlug && originalSlug !== normalized.slug) {
-        await client.query('DELETE FROM products WHERE slug = $1', [originalSlug]);
-      }
-    }).then(() => normalized);
+    }).then(() => findEditableProductBySlug(normalized.slug));
   }
 
   const products = loadEditableProducts();
   const index = products.findIndex((item) => item.slug === (originalSlug || normalized.slug));
 
   if (index >= 0) {
-    products[index] = normalized;
+    const previous = products[index];
+    products[index] = normalizeEditableProduct({
+      ...normalized,
+      urlAliases: [
+        ...(previous.urlAliases || []),
+        previous.publicHandle,
+        previous.slug,
+        ...(normalized.urlAliases || [])
+      ]
+    });
   } else {
     products.push(normalized);
   }
 
+  validateProductRoutes(products);
   writeEditableProducts(products);
-  return normalized;
+  return products[index >= 0 ? index : products.length - 1];
 }
 
 function deleteEditableProduct(slug) {
@@ -105,6 +122,7 @@ function deleteEditableProduct(slug) {
 
 function replaceEditableProducts(products) {
   const normalizedProducts = products.map(normalizeEditableProduct);
+  validateProductRoutes(normalizedProducts);
 
   if (usePostgresProducts()) {
     return transaction(async (client) => {
@@ -121,6 +139,7 @@ function replaceEditableProducts(products) {
 
 function writeEditableProducts(products, filePath = activeProductsPath()) {
   validateProducts(products);
+  validateProductRoutes(products.map(normalizeEditableProduct));
   fs.writeFileSync(filePath, `${JSON.stringify(products, null, 2)}\n`);
 }
 
@@ -242,6 +261,8 @@ function isPromise(value) {
 function normalizeEditableProduct(product) {
   const name = String(product.name || '').trim();
   const slug = String(product.slug || slugify(name)).trim();
+  const publicHandle = normalizePublicHandle(product.publicHandle || product.seo?.handle, name || slug);
+  const urlAliases = normalizeUrlAliases(product.urlAliases, slug, publicHandle);
   const collections = normalizeStringList(product.collections || product.collection || 'Uncategorized');
   const images = normalizeImages(product.images, name);
   const variants = normalizeVariants(product.variants, slug);
@@ -251,6 +272,8 @@ function normalizeEditableProduct(product) {
   return {
     ...product,
     slug,
+    publicHandle,
+    urlAliases,
     name,
     description: String(product.description || ''),
     collections,
@@ -258,7 +281,7 @@ function normalizeEditableProduct(product) {
     productType: String(product.productType || product.type || 'Tshirt').trim(),
     vendor: String(product.vendor || 'Maria Clara').trim(),
     tags: normalizeOptionalStringList(product.tags),
-    seo: normalizeSeo(product.seo, name, slug, product.description),
+    seo: normalizeSeo(product.seo, name, publicHandle, product.description),
     metafields: normalizeMetafields(product.metafields),
     themeTemplate: String(product.themeTemplate || 'Default product').trim(),
     priceCents: normalizeMoneyCents(product.priceCents),
@@ -324,6 +347,24 @@ function validateProducts(products) {
   });
 }
 
+function validateProductRoutes(products) {
+  const routes = new Map();
+  for (const product of products) {
+    const identifiers = [product.publicHandle, product.slug, ...(product.urlAliases || [])]
+      .map(normalizeRouteIdentifier)
+      .filter(Boolean);
+    for (const identifier of identifiers) {
+      const owner = routes.get(identifier);
+      if (owner && owner !== product.slug) {
+        const error = new Error(`Product URL handle "${identifier}" is already used by another product.`);
+        error.status = 409;
+        throw error;
+      }
+      routes.set(identifier, product.slug);
+    }
+  }
+}
+
 function toCatalogProduct(product) {
   const imageRecords = [...product.images]
     .sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder));
@@ -340,6 +381,8 @@ function toCatalogProduct(product) {
 
   return {
     slug: product.slug,
+    publicHandle: product.publicHandle,
+    urlAliases: product.urlAliases || [],
     name: product.name,
     collection: product.collections[0],
     collections: product.collections,
@@ -380,25 +423,59 @@ async function listPostgresProducts(slug = '') {
     'SELECT * FROM product_variants WHERE product_slug = ANY($1::text[]) ORDER BY id ASC',
     [slugs]
   );
+  const aliasResult = await query(
+    'SELECT alias, product_slug FROM product_url_aliases WHERE product_slug = ANY($1::text[]) ORDER BY created_at ASC, alias ASC',
+    [slugs]
+  );
 
   const imagesBySlug = groupByProductSlug(imageResult.rows.map(fromPostgresImage));
   const variantsBySlug = groupByProductSlug(variantResult.rows.map(fromPostgresVariant));
+  const aliasesBySlug = groupByProductSlug(aliasResult.rows.map((row) => ({
+    productSlug: row.product_slug,
+    alias: row.alias
+  })));
 
   return products.map((product) => ({
     ...product,
     images: imagesBySlug.get(product.slug) || [],
-    variants: variantsBySlug.get(product.slug) || []
+    variants: variantsBySlug.get(product.slug) || [],
+    urlAliases: (aliasesBySlug.get(product.slug) || []).map((record) => record.alias)
   }));
 }
 
+async function resolvePostgresProduct(identifier) {
+  if (!identifier) return null;
+  const routeResult = await query(
+    `SELECT p.slug
+     FROM products p
+     LEFT JOIN product_url_aliases a ON a.product_slug = p.slug AND a.alias = $1
+     WHERE lower(p.public_handle) = $1 OR lower(p.slug) = $1 OR a.alias = $1
+     ORDER BY CASE WHEN lower(p.public_handle) = $1 THEN 0 WHEN lower(p.slug) = $1 THEN 1 ELSE 2 END
+     LIMIT 1`,
+    [identifier]
+  );
+  if (!routeResult.rows.length) return null;
+  const products = await listPostgresProducts(routeResult.rows[0].slug);
+  return products[0] || null;
+}
+
 async function savePostgresProduct(client, product) {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('maria_clara_product_url_routes'))");
+  const previousResult = await client.query(
+    'SELECT public_handle FROM products WHERE slug = $1',
+    [product.slug]
+  );
+  const previousHandle = normalizeRouteIdentifier(previousResult.rows[0]?.public_handle);
+  await assertPostgresRouteAvailable(client, product.publicHandle, product.slug);
+
   await client.query(
     `INSERT INTO products (
-      slug, name, description, collections, price_cents, compare_at_price_cents,
+      slug, public_handle, name, description, collections, price_cents, compare_at_price_cents,
       merchandising_status, status, featured, category, product_type, vendor, tags, seo,
       metafields, theme_template, product_page, parcel_weight_grams, updated_at
-    ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17::jsonb, $18, now())
+    ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16::jsonb, $17, $18::jsonb, $19, now())
     ON CONFLICT (slug) DO UPDATE SET
+      public_handle = EXCLUDED.public_handle,
       name = EXCLUDED.name,
       description = EXCLUDED.description,
       collections = EXCLUDED.collections,
@@ -419,6 +496,7 @@ async function savePostgresProduct(client, product) {
       updated_at = now()`,
     [
       product.slug,
+      product.publicHandle,
       product.name,
       product.description,
       JSON.stringify(product.collections),
@@ -438,6 +516,26 @@ async function savePostgresProduct(client, product) {
       product.parcelWeightGrams
     ]
   );
+
+  const aliases = new Set([
+    ...(product.urlAliases || []),
+    previousHandle,
+    normalizeRouteIdentifier(product.slug)
+  ].map(normalizeRouteIdentifier).filter((alias) => alias && alias !== product.publicHandle));
+  await client.query(
+    'DELETE FROM product_url_aliases WHERE alias = $1 AND product_slug = $2',
+    [product.publicHandle, product.slug]
+  );
+  for (const alias of aliases) {
+    await assertPostgresRouteAvailable(client, alias, product.slug);
+    await client.query(
+      `INSERT INTO product_url_aliases (alias, product_slug)
+       VALUES ($1, $2)
+       ON CONFLICT (alias) DO UPDATE SET product_slug = EXCLUDED.product_slug
+       WHERE product_url_aliases.product_slug = EXCLUDED.product_slug`,
+      [alias, product.slug]
+    );
+  }
 
   await client.query('DELETE FROM product_images WHERE product_slug = $1', [product.slug]);
   for (const image of product.images) {
@@ -479,9 +577,33 @@ async function savePostgresProduct(client, product) {
   );
 }
 
+async function assertPostgresRouteAvailable(client, identifier, productSlug) {
+  const route = normalizeRouteIdentifier(identifier);
+  if (!route) return;
+  const conflict = await client.query(
+    `SELECT owner_slug
+     FROM (
+       SELECT slug AS owner_slug FROM products
+       WHERE (lower(public_handle) = $1 OR lower(slug) = $1) AND slug <> $2
+       UNION ALL
+       SELECT product_slug AS owner_slug FROM product_url_aliases
+       WHERE alias = $1 AND product_slug <> $2
+     ) routes
+     LIMIT 1`,
+    [route, productSlug]
+  );
+  if (conflict.rows.length) {
+    const error = new Error(`Product URL handle "${route}" is already used by another product.`);
+    error.status = 409;
+    throw error;
+  }
+}
+
 function fromPostgresProduct(row) {
   return {
     slug: row.slug,
+    publicHandle: row.public_handle || row.slug,
+    urlAliases: [],
     name: row.name,
     description: row.description,
     collections: row.collections || [],
@@ -618,12 +740,12 @@ function normalizeOptionalStringList(value) {
   return values.map((item) => String(item || '').trim()).filter(Boolean);
 }
 
-function normalizeSeo(seo, name, slug, description) {
+function normalizeSeo(seo, name, publicHandle, description) {
   const record = seo && typeof seo === 'object' ? seo : {};
   return {
     title: String(record.title || name || '').trim(),
     description: String(record.description || description || '').trim(),
-    handle: String(record.handle || slug || '').trim()
+    handle: publicHandle
   };
 }
 
@@ -664,6 +786,28 @@ function slugify(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '') || 'product';
+}
+
+function normalizePublicHandle(value, fallback) {
+  const source = String(value || fallback || '').trim();
+  return source ? slugify(source).slice(0, 180) : '';
+}
+
+function normalizeRouteIdentifier(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeUrlAliases(value, slug, publicHandle) {
+  const aliases = Array.isArray(value) ? value : [];
+  return [...new Set([...aliases, slug]
+    .map(normalizeRouteIdentifier)
+    .filter((alias) => alias && alias !== publicHandle))];
+}
+
+function productMatchesRoute(product, identifier) {
+  if (!identifier) return false;
+  return [product.publicHandle, product.slug, ...(product.urlAliases || [])]
+    .some((route) => normalizeRouteIdentifier(route) === identifier);
 }
 
 function validateProductPage(productPage, field) {
@@ -758,9 +902,11 @@ module.exports = {
   listEditableProducts,
   loadEditableProducts,
   normalizeEditableProduct,
+  normalizePublicHandle,
   productsPath,
   replaceEditableProducts,
   restockVariantStock,
   saveEditableProduct,
-  validateProducts
+  validateProducts,
+  validateProductRoutes
 };

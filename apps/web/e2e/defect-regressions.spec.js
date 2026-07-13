@@ -18,6 +18,22 @@ test('unknown products leave loading and render a noindex product-not-found stat
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
 });
 
+test('legacy product URLs permanently redirect to the canonical public handle', async ({ request, page }) => {
+  const productResponse = await request.get(`/api/products/${PRODUCT_SLUG}`);
+  const { product } = await productResponse.json();
+  const productHandle = product.publicHandle;
+  expect(productHandle).toBeTruthy();
+
+  const legacy = await request.get(`/product/${PRODUCT_SLUG}`, { maxRedirects: 0 });
+  expect(legacy.status()).toBe(308);
+  expect(legacy.headers().location).toBe(`/product/${productHandle}`);
+
+  const canonical = await page.goto(`/product/${productHandle}`);
+  expect(canonical.status()).toBe(200);
+  await expect(page).toHaveURL(new RegExp(`/product/${productHandle}$`));
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', new RegExp(`/product/${productHandle}$`));
+});
+
 test('Freedom of Mind hash and category navigation reach real collection content', async ({ page }) => {
   await page.goto('/#freedom-of-mind');
   const section = page.locator('#freedom-of-mind');

@@ -22,8 +22,25 @@ test('unknown storefront and product routes render a noindex not-found page', as
   assert.match(product, /title="Product not found"/);
   assert.match(nginx, /error_page 404 =404 \/index\.html/);
   assert.match(nginx, /try_files \$uri \$uri\/ =404/);
-  assert.match(nginx, /auth_request \/_product_exists/);
-  assert.match(nginx, /rewrite \^ \/api\/products\/\$storefront_product_slug break/);
+  assert.match(nginx, /proxy_pass http:\/\/api:3000\/api\/products\/\$storefront_product_slug\/route/);
+  assert.match(nginx, /error_page 404 =404 \/index\.html/);
+});
+
+test('product links use public handles while carts retain internal product identifiers', async () => {
+  const [productUrl, productCard, productPage, editor] = await Promise.all([
+    source('src/lib/productUrl.js'),
+    source('src/components/ProductCard.jsx'),
+    source('src/pages/Product.jsx'),
+    source('src/admin/ProductEditor.jsx')
+  ]);
+  assert.match(productUrl, /product\?\.publicHandle \|\| product\?\.slug/);
+  assert.match(productCard, /to=\{productPath\(product\)\}/);
+  assert.match(productPage, /slug: product\.slug/);
+  assert.match(productPage, /publicHandle: product\.publicHandle/);
+  assert.match(productPage, /link\[rel="canonical"\]/);
+  assert.match(editor, /Public handle/);
+  assert.match(editor, /Internal product ID/);
+  assert.match(editor, /Redirected previous handles/);
 });
 
 test('collection navigation and delayed homepage hashes target real collection slugs', async () => {

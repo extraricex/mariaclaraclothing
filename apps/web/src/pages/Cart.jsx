@@ -4,6 +4,7 @@ import { createCheckoutQuote, fetchProducts } from '../lib/api.js';
 import { addToCart, cartQuantity, getCartSessionId, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookAddToCart, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
+import { productPath } from '../lib/productUrl.js';
 
 function firstAvailableVariant(product) {
   return (product.variants || []).find((variant) => Number(variant.stockQuantity || 0) > 0) || null;
@@ -62,6 +63,7 @@ export default function Cart() {
     const cartItem = {
       productId: product.id,
       slug: product.slug,
+      publicHandle: product.publicHandle,
       variantId: variant.id,
       productName: product.name,
       size: variant.size,
@@ -127,7 +129,7 @@ export default function Cart() {
       <div className="mt-8 divide-y divide-line border-y border-line">
         {items.map((item) => (
           <article key={item.variantId} className="flex min-w-0 gap-3 py-5 sm:gap-5 sm:py-6">
-            <Link to={`/product/${encodeURIComponent(item.slug || String(item.productId).replace(/^catalog-/, ''))}`} className="block h-28 w-20 shrink-0 overflow-hidden bg-transparent sm:h-32 sm:w-24">
+            <Link to={productPath(item)} className="block h-28 w-20 shrink-0 overflow-hidden bg-transparent sm:h-32 sm:w-24">
               {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="product-photo-blend h-full w-full object-contain" loading="lazy" />}
             </Link>
             <div className="flex min-w-0 flex-1 flex-col">
@@ -180,7 +182,7 @@ export default function Cart() {
               const image = product.images?.[0];
               return (
                 <article key={product.id} className="text-center">
-                  <Link to={`/product/${encodeURIComponent(product.slug)}`} className="block aspect-[4/5] overflow-hidden bg-transparent">
+                  <Link to={productPath(product)} className="block aspect-[4/5] overflow-hidden bg-transparent">
                     {image && <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" loading="lazy" />}
                   </Link>
                   <div className="mt-2 flex flex-col items-center">

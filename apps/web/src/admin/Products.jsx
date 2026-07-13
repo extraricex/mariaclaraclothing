@@ -330,7 +330,7 @@ export default function Products() {
                       )}
                       <span>
                         <span className="block font-semibold text-accent-deep underline">{product.name}</span>
-                        <span className="block text-xs text-clay">{product.slug}</span>
+                        <span className="block text-xs text-clay">/product/{product.publicHandle || product.slug}</span>
                       </span>
                     </Link>
                   </td>

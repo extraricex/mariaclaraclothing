@@ -8,10 +8,10 @@
 > **Historical note:** The 2026-07-12 scan found D1, D2, and D10 open. The collection,
 > routing, accessibility, and authentication code has changed since that scan.
 >
-> **Current re-verification (2026-07-13):** D1, D2, D3, D5, D6, D8, D9, and D10
-> are resolved. D4 was verified in source and was never a defect. D7 remains an
-> accepted low-severity SEO migration because the current product slugs are live
-> primary keys connected to inventory, orders, images, and Pancake mappings.
+> **Current re-verification (2026-07-13):** D1, D2, D3, D5, D6, D7, D8, D9, and
+> D10 are resolved. D4 was verified in source and was never a defect. D7 was
+> completed through a separate public-handle and alias migration; internal product
+> identifiers connected to inventory, orders, images, and Pancake were not renamed.
 
 ## Summary
 
@@ -23,7 +23,7 @@
 | D3 | Low | Accessibility | **Resolved** | Issue control has one explicit accessible name: `Report an issue` |
 | D5 | Low | Consistency | **Resolved** | Category URLs use the admin-managed collection slug |
 | D6 | Low | Consistency | **Resolved** | Logged-out desktop and mobile account links both say `Log in` |
-| D7 | Low | SEO / cosmetic | **Open migration** | Product vanity slugs do not match product names |
+| D7 | Low | SEO / cosmetic | **Resolved** | Clean public handles are separate from internal product IDs; old URLs permanently redirect |
 | D8 | Low | Accessibility | **Resolved defensively** | Contact and product-card links now provide explicit accessible names |
 | D4 | Info | Auth (source review) | **Verified, not a defect** | React intercepts submit and sends credentials with POST requests |
 | D9 | Info | Content | **Resolved** | Best Seller remains available internally but is hidden from homepage collections |
@@ -37,18 +37,20 @@
 - Invalid general route: HTTP 404 plus `Page not found` and recovery links
 - Freedom of Mind direct hash and `/collections/freedom-of-mind` navigation: verified
 - Report Issue and logged-out mobile account names: verified through the accessibility tree
+- Legacy product URL: HTTP 308 to its name-based public handle
+- Canonical product URL: HTTP 200 with a matching canonical link
+- Product URL collisions: rejected before save with HTTP 409
 
 ## Recommendations
 
 1. Keep the new defect regression tests in CI so blank routes, soft 404s, and
    collection navigation cannot regress.
-2. Treat D7 as a data migration, not a string replacement. Add a separate public
-   product handle plus an alias table before changing any live URL.
-3. Preserve every old product URL with a permanent redirect, migrate one product
-   at a time after a database backup, and verify inventory, order history, images,
-   Meta content IDs, and Pancake mappings after each change.
-4. Do not rename SKUs, Pancake product IDs, Pancake variant IDs, or historical
-   order item identifiers as part of the D7 URL cleanup.
+2. Keep public handles separate from internal product IDs. The Admin product editor
+   may change a public handle, while previous handles remain permanent aliases.
+3. Retain the collision and redirect regressions in CI so an Admin edit cannot
+   reuse another product's current or historical URL.
+4. Continue treating SKUs, Pancake product IDs, Pancake variant IDs, and historical
+   order item identifiers as immutable integration data.
 
 ---
 
@@ -116,9 +118,12 @@ Two distinct broken behaviors, both returning **HTTP 200** for resources that do
 - Desktop header shows **"Log in"** (`/login`); the mobile navigation drawer shows **"Account"**. Same destination, inconsistent wording. Pick one label.
 
 ### D7 — Product vanity slugs don't match product names  ·  Severity: Low (SEO/cosmetic)
-- **Status (2026-07-13): Open, accepted migration.** Directly renaming these live
-  primary keys would risk product images, variants, inventory outbox rows, order
-  references, and Pancake mapping integrity. Use the alias-and-redirect plan above.
+- **Status (2026-07-13): Resolved.** Products now have a unique, editable
+  name-based `public_handle`; existing `products.slug` primary keys remain intact.
+  The migration stores every old slug in `product_url_aliases`, storefront links use
+  the canonical handle, and Nginx returns a permanent HTTP 308 redirect for old
+  handles. Admin handle changes retain the former handle as another alias, and
+  cross-product route collisions are rejected.
 - Example: tile **"KAMALAYAN BLOOM BLACK"** → `/product/oversized-fit-shirt-mc-curiosity-offwhite-…-copy`; tile **"CURIOSITY BLACK"** → `/product/…mc-eye-black-…-copy-copy-copy`. **The links resolve to the correct product** (verified — the PDP `h1` matched the tile in both cases), so this is not a broken path. It's leftover Shopify duplicate-handle noise (`-copy`, `-copy-copy`) that hurts URL readability/SEO.
 
 ### D8 — Concatenated accessible names on Contact & product-card links  ·  Severity: Low (a11y) *(low confidence)*

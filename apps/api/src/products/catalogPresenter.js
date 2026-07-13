@@ -27,6 +27,7 @@ function toStorefrontProduct(product) {
   return {
     id: `catalog-${product.slug}`,
     slug: product.slug,
+    publicHandle: product.publicHandle || product.slug,
     name: product.name,
     description: product.description,
     priceCents: product.price,

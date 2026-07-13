@@ -69,6 +69,7 @@ export default function Account() {
         addToCart({
           productId: product.id,
           slug: product.slug,
+          publicHandle: product.publicHandle,
           variantId: variant.id,
           productName: product.name,
           size: variant.size,

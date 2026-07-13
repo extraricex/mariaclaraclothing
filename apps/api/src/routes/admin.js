@@ -776,6 +776,8 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
       ...originalProduct,
       name: copyName,
       slug: copySlug,
+      publicHandle: String(req.body?.publicHandle || copyName).trim(),
+      urlAliases: [],
       status: req.body?.status || 'draft'
     })));
 
@@ -825,6 +827,7 @@ router.put('/products/:slug', async (req, res, next) => {
     const product = await saveEditableProduct(withSyncedStorefrontProductPage({
       ...existingProduct,
       ...normalizeProductRequest(req.body || {}),
+      slug,
       productPage: req.body?.productPage || existingProduct.productPage
     }), slug);
     await appendInventoryMovements(stockCorrectionMovements(existingProduct, product));
@@ -1296,6 +1299,7 @@ function normalizeProductRequest(body) {
   return {
     ...body,
     slug: String(body.slug || '').trim(),
+    publicHandle: String(body.publicHandle || body.seo?.handle || body.name || body.slug || '').trim(),
     name: String(body.name || '').trim(),
     description: String(body.description || ''),
     collections: normalizeTags(body.collections || body.collection || 'Uncategorized'),

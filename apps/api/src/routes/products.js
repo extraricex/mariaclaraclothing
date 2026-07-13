@@ -56,6 +56,29 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
+router.get('/:slug/route', async (req, res, next) => {
+  try {
+    const product = await findCatalogProductBySlug(req.params.slug);
+    if (!product) {
+      res.status(404).end();
+      return;
+    }
+
+    res.set('X-Product-Canonical-Handle', product.publicHandle);
+    if (normalizeKey(req.params.slug) !== product.publicHandle) {
+      const query = new URLSearchParams(req.query).toString();
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.redirect(308, `/product/${encodeURIComponent(product.publicHandle)}${query ? `?${query}` : ''}`);
+      return;
+    }
+
+    res.set('X-Accel-Redirect', '/index.html');
+    res.status(200).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:slug', async (req, res, next) => {
   try {
     const product = await findCatalogProductBySlug(req.params.slug);
@@ -65,6 +88,7 @@ router.get('/:slug', async (req, res, next) => {
       return;
     }
 
+    res.set('X-Product-Canonical-Handle', product.publicHandle);
     res.json({ product, source: 'catalog' });
   } catch (error) {
     next(error);

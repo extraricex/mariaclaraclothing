@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart, getCart, openCartDrawer } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
@@ -10,9 +10,11 @@ import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
 import CollectionCountdown from '../components/CollectionCountdown.jsx';
 import NotFound from './NotFound.jsx';
+import { productPath } from '../lib/productUrl.js';
 
 export default function Product() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const settings = useStorefrontSettings();
   const [product, setProduct] = useState(null);
   const [error, setError] = useState('');
@@ -37,6 +39,9 @@ export default function Product() {
     fetchProduct(slug)
       .then((body) => {
         setProduct(body.product);
+        if (body.product.publicHandle && body.product.publicHandle !== slug) {
+          navigate(productPath(body.product), { replace: true });
+        }
         const firstInStock = body.product.variants.find((variant) => Number(variant.stockQuantity) > 0);
         setVariantId(firstInStock?.id || '');
       })
@@ -44,7 +49,27 @@ export default function Product() {
     fetchProducts()
       .then((body) => setRecommendations(body.products || []))
       .catch(() => setRecommendations([]));
-  }, [slug]);
+  }, [slug, navigate]);
+
+  useEffect(() => {
+    if (!product) return undefined;
+    const previousTitle = document.title;
+    let canonical = document.querySelector('link[rel="canonical"]');
+    const createdCanonical = !canonical;
+    const previousCanonical = canonical?.getAttribute('href') || '';
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    document.title = `${product.name} | Maria Clara Clothing`;
+    canonical.setAttribute('href', `${window.location.origin}${productPath(product)}`);
+    return () => {
+      document.title = previousTitle;
+      if (createdCanonical) canonical.remove();
+      else canonical.setAttribute('href', previousCanonical);
+    };
+  }, [product?.id, product?.name, product?.publicHandle]);
 
   useEffect(() => {
     if (!product) return;
@@ -55,7 +80,7 @@ export default function Product() {
       externalPosVariantId: firstInStock?.externalPosVariantId || '',
       size: firstInStock?.size || '',
       priceCents: firstInStock?.priceCents ?? product.priceCents
-    }, { path: `/product/${product.slug}` });
+    }, { path: productPath(product) });
   }, [product?.id]);
 
   const descriptionHtml = useMemo(
@@ -184,6 +209,7 @@ export default function Product() {
     const cartItem = {
       productId: product.id,
       slug: product.slug,
+      publicHandle: product.publicHandle,
       variantId: variant.id,
       productName: product.name,
       size: variant.size,

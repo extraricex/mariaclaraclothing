@@ -28,6 +28,20 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS seo jsonb NOT NULL DEFAULT '{}'::j
 ALTER TABLE products ADD COLUMN IF NOT EXISTS metafields jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS theme_template text NOT NULL DEFAULT 'Default product';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS parcel_weight_grams integer NOT NULL DEFAULT 250;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS public_handle text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS products_public_handle_lower_idx
+  ON products (lower(public_handle)) WHERE public_handle IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS product_url_aliases (
+  alias text PRIMARY KEY,
+  product_slug text NOT NULL REFERENCES products(slug) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (alias = lower(alias))
+);
+
+CREATE INDEX IF NOT EXISTS product_url_aliases_product_slug_idx
+  ON product_url_aliases(product_slug);
 
 CREATE TABLE IF NOT EXISTS product_images (
   id bigserial PRIMARY KEY,
