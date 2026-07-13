@@ -26,6 +26,11 @@ test('unknown storefront and product routes render a noindex not-found page', as
   assert.match(nginx, /error_page 404 =404 \/index\.html/);
 });
 
+test('production nginx serves the payment operations route as a normal SPA page', async () => {
+  const nginx = await source('nginx.conf');
+  assert.match(nginx, /\|\/payments\|/);
+});
+
 test('product links use public handles while carts retain internal product identifiers', async () => {
   const [productUrl, productCard, productPage, editor] = await Promise.all([
     source('src/lib/productUrl.js'),
