@@ -302,6 +302,7 @@ function validateProducts(products) {
   }
 
   const slugs = new Set();
+  const skuOwners = new Map();
   products.forEach((product, index) => {
     requireString(product.slug, `products[${index}].slug`);
     requireString(product.name, `products[${index}].name`);
@@ -343,6 +344,17 @@ function validateProducts(products) {
       requireString(variant.size, `products[${index}].variants[${variantIndex}].size`);
       requireString(variant.sku, `products[${index}].variants[${variantIndex}].sku`);
       requireNonNegativeNumber(variant.stockQuantity, `products[${index}].variants[${variantIndex}].stockQuantity`);
+      const normalizedSku = String(variant.sku).trim().toUpperCase();
+      const owner = skuOwners.get(normalizedSku);
+      if (owner) {
+        const message = owner === product.slug
+          ? `SKU "${variant.sku}" is duplicated within this product.`
+          : `SKU "${variant.sku}" is already used by another product.`;
+        const error = new Error(message);
+        error.status = 409;
+        throw error;
+      }
+      skuOwners.set(normalizedSku, product.slug);
     });
   });
 }
@@ -467,6 +479,7 @@ async function savePostgresProduct(client, product) {
   );
   const previousHandle = normalizeRouteIdentifier(previousResult.rows[0]?.public_handle);
   await assertPostgresRouteAvailable(client, product.publicHandle, product.slug);
+  await assertPostgresVariantSkusAvailable(client, product.variants, product.slug);
 
   await client.query(
     `INSERT INTO products (
@@ -550,14 +563,14 @@ async function savePostgresProduct(client, product) {
       `INSERT INTO product_variants (product_slug, size, sku, price_cents, stock_quantity, external_pos_variant_id)
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (sku) DO UPDATE SET
-         product_slug=EXCLUDED.product_slug,
          size=EXCLUDED.size,
          price_cents=EXCLUDED.price_cents,
          stock_quantity=EXCLUDED.stock_quantity,
          external_pos_variant_id=CASE
            WHEN EXCLUDED.external_pos_variant_id<>'' THEN EXCLUDED.external_pos_variant_id
            ELSE product_variants.external_pos_variant_id
-         END`,
+         END
+       WHERE product_variants.product_slug=EXCLUDED.product_slug`,
       [product.slug, variant.size, variant.sku, variant.priceCents || null, variant.stockQuantity, variant.externalPosVariantId || '']
     );
   }
@@ -575,6 +588,27 @@ async function savePostgresProduct(client, product) {
      WHERE m.local_variant_id=v.id AND v.product_slug=$1`,
     [product.slug]
   );
+}
+
+async function assertPostgresVariantSkusAvailable(client, variants, productSlug) {
+  const normalizedSkus = (variants || []).map((variant) => String(variant.sku || '').trim().toUpperCase());
+  if (new Set(normalizedSkus).size !== normalizedSkus.length) {
+    const error = new Error('Each product variant must use a unique SKU.');
+    error.status = 409;
+    throw error;
+  }
+  const conflict = await client.query(
+    `SELECT sku,product_slug
+     FROM product_variants
+     WHERE upper(trim(sku))=ANY($1::text[]) AND product_slug<>$2
+     LIMIT 1`,
+    [normalizedSkus, productSlug]
+  );
+  if (conflict.rows.length) {
+    const error = new Error(`SKU "${conflict.rows[0].sku}" is already used by another product.`);
+    error.status = 409;
+    throw error;
+  }
 }
 
 async function assertPostgresRouteAvailable(client, identifier, productSlug) {

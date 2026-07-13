@@ -780,12 +780,20 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
 
     const copyName = String(req.body?.name || `${originalProduct.name} Copy`).trim();
     const copySlug = String(req.body?.slug || `${originalProduct.slug}-copy`).trim();
+    const duplicateSkuSuffix = crypto.randomUUID().replaceAll('-', '').slice(0, 8).toUpperCase();
+    const duplicateVariants = (originalProduct.variants || []).map((variant, index) => ({
+      ...variant,
+      sku: `${String(variant.sku || `VARIANT-${index + 1}`).trim()}-COPY-${duplicateSkuSuffix}`,
+      stockQuantity: 0,
+      externalPosVariantId: ''
+    }));
     const product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest({
       ...originalProduct,
       name: copyName,
       slug: copySlug,
       publicHandle: String(req.body?.publicHandle || copyName).trim(),
       urlAliases: [],
+      variants: duplicateVariants,
       status: req.body?.status || 'draft'
     })));
 

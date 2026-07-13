@@ -407,7 +407,13 @@ test('admin product APIs require login and support product management', async ()
       priceCents: 69900,
       category: 'T-Shirts',
       images: [{ url: '/product/admin-edited.png', altText: 'Edited Admin Test Shirt', sortOrder: 0 }],
-      variants: [{ size: 'Small', sku: 'ADMIN-EDIT-S', priceCents: 74900, stockQuantity: 2 }],
+      variants: [{
+        size: 'Small',
+        sku: 'ADMIN-EDIT-S',
+        priceCents: 74900,
+        stockQuantity: 2,
+        externalPosVariantId: 'pancake-source-variant'
+      }],
       vendor: 'Maria Clara',
       productType: 'Tshirt',
       tags: ['black', 'cotton'],
@@ -542,6 +548,17 @@ test('admin product APIs require login and support product management', async ()
     assert.equal(duplicateResponse.status, 201);
     assert.equal(duplicateBody.product.slug, 'admin-test-shirt-copy');
     assert.equal(duplicateBody.product.name, 'Admin Test Shirt Copy');
+    assert.equal(duplicateBody.product.status, 'draft');
+    assert.equal(duplicateBody.product.variants[0].stockQuantity, 0);
+    assert.equal(duplicateBody.product.variants[0].externalPosVariantId, '');
+    assert.match(duplicateBody.product.variants[0].sku, /^ADMIN-EDIT-S-COPY-[A-F0-9]{8}$/);
+
+    const originalAfterDuplicateResponse = await fetch(`http://127.0.0.1:${port}/api/admin/products/admin-test-shirt`, adminRequest());
+    const originalAfterDuplicateBody = await originalAfterDuplicateResponse.json();
+    assert.equal(originalAfterDuplicateResponse.status, 200);
+    assert.equal(originalAfterDuplicateBody.product.variants[0].sku, 'ADMIN-EDIT-S');
+    assert.equal(originalAfterDuplicateBody.product.variants[0].stockQuantity, 2);
+    assert.equal(originalAfterDuplicateBody.product.variants[0].externalPosVariantId, 'pancake-source-variant');
 
     const storefrontDraftResponse = await fetch(`http://127.0.0.1:${port}/api/products/admin-test-shirt`);
     assert.equal(storefrontDraftResponse.status, 404);
