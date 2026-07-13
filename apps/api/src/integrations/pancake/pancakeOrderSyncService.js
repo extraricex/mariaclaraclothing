@@ -34,6 +34,46 @@ function changedFieldsForEvent(event = {}) {
   return Array.isArray(event.payload?.changedFields) ? event.payload.changedFields : [];
 }
 
+function canReconcileTerminalCancellation(event, order) {
+  const fields = new Set(changedFieldsForEvent(event));
+  const paidStatuses = new Set(['paid', 'partially_refunded']);
+  return order?.status === 'cancelled'
+    && !paidStatuses.has(String(order.paymentStatus || ''))
+    && (fields.has('status') || fields.has('fulfillmentStatus') || fields.has('deliveryStatus'));
+}
+
+async function providerAlreadyCancelled({ client, config, pancakeOrderId, event, order }) {
+  if (!client?.getOrder || !canReconcileTerminalCancellation(event, order)) return false;
+  try {
+    const providerOrder = await client.getOrder(config.shopId, pancakeOrderId);
+    return normalizePancakeOrder(providerOrder).status === 'cancelled';
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function completeOutboundEvent({ syncRepository, event, order, pancakeOrderId, config, now, alreadyApplied = false }) {
+  await syncRepository.markSyncEventSucceeded(event.id);
+  await syncRepository.upsertOrderLink({
+    orderNumber: event.orderNumber,
+    pancakeOrderId,
+    shopId: config.shopId,
+    syncStatus: 'synced',
+    lastSyncedAt: now().toISOString(),
+    lastLocalUpdatedAt: order.updatedAt || now().toISOString(),
+    safeErrorCode: ''
+  });
+  await syncRepository.appendSyncLog({
+    direction: 'outbound', entityType: 'order', entityId: event.orderNumber,
+    orderNumber: event.orderNumber, pancakeOrderId,
+    level: 'info', code: outboundLogCode(event, order, 'synced'),
+    message: alreadyApplied
+      ? 'Order cancellation was already applied in Pancake POS.'
+      : outboundLogMessage(event, order, 'synced'),
+    metadata: { changedFields: changedFieldsForEvent(event), alreadyApplied }
+  });
+}
+
 function outboundLogCode(event, order, outcome) {
   const fields = new Set(changedFieldsForEvent(event));
   const suffix = outcome === 'failed' ? 'failed' : 'synced';
@@ -306,6 +346,11 @@ async function processOutboundOrderEvents({
         summary.blockedCount += 1;
         continue;
       }
+      if (await providerAlreadyCancelled({ client, config, pancakeOrderId, event, order })) {
+        await completeOutboundEvent({ syncRepository, event, order, pancakeOrderId, config, now, alreadyApplied: true });
+        summary.updatedCount += 1;
+        continue;
+      }
       const payload = buildPancakeOrderUpdatePayload({ order, changedFields: event.payload.changedFields || [] });
       if (!Object.keys(payload).length) {
         await syncRepository.markSyncEventBlocked(event.id, 'pancake_order_update_not_supported');
@@ -313,23 +358,7 @@ async function processOutboundOrderEvents({
         continue;
       }
       await client.updateOrder(config.shopId, pancakeOrderId, payload);
-      await syncRepository.markSyncEventSucceeded(event.id);
-      await syncRepository.upsertOrderLink({
-        orderNumber: event.orderNumber,
-        pancakeOrderId,
-        shopId: config.shopId,
-        syncStatus: 'synced',
-        lastSyncedAt: now().toISOString(),
-        lastLocalUpdatedAt: order.updatedAt || now().toISOString(),
-        safeErrorCode: ''
-      });
-      await syncRepository.appendSyncLog({
-        direction: 'outbound', entityType: 'order', entityId: event.orderNumber,
-        orderNumber: event.orderNumber, pancakeOrderId,
-        level: 'info', code: outboundLogCode(event, order, 'synced'),
-        message: outboundLogMessage(event, order, 'synced'),
-        metadata: { changedFields: changedFieldsForEvent(event) }
-      });
+      await completeOutboundEvent({ syncRepository, event, order, pancakeOrderId, config, now });
       summary.updatedCount += 1;
     } catch (error) {
       const code = safeProviderCode(error);

@@ -91,6 +91,20 @@ test('Pancake client updates an order with JSON body', async () => {
   assert.match(calls[0].url, /\/shops\/shop-1\/orders\/PK-1/);
 });
 
+test('Pancake client retrieves one order for idempotent status reconciliation', async () => {
+  const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
+  const calls = [];
+  const client = createPancakeClient(CONFIG, async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true, data: { id: 'PK-1', status: 7 } }), { status: 200 });
+  });
+
+  const order = await client.getOrder('shop-1', 'PK-1');
+  assert.deepEqual(order, { id: 'PK-1', status: 7 });
+  assert.equal(calls[0].options.method, 'GET');
+  assert.match(calls[0].url, /\/shops\/shop-1\/orders\/PK-1/);
+});
+
 test('Pancake client uses official mapped product and bulk quantity update endpoints', async () => {
   const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
   const calls = [];

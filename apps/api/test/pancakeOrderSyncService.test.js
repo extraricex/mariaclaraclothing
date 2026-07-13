@@ -402,3 +402,43 @@ test('processOutboundOrderEvents retains failed updates for retry and exposes sy
   assert.equal(detail.statusSyncError, 'pancake_http_error');
   assert.ok(detail.recentLogs.some((log) => log.code === 'pancake_order_cancellation_failed'));
 });
+
+test('processOutboundOrderEvents reconciles an unpaid cancellation already removed in Pancake', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'MCC-REMOVED-1', status: 'cancelled', paymentMethod: 'paymongo',
+    paymentStatus: 'expired', customer: {}, address: {}, notes: ''
+  });
+  await syncRepo.upsertOrderLink({
+    orderNumber: 'MCC-REMOVED-1', pancakeOrderId: 'PK-REMOVED-1', shopId: 'shop-1', syncStatus: 'sync_failed'
+  });
+  await syncRepo.enqueueSyncEvent({
+    direction: 'outbound', entityType: 'order', entityId: 'MCC-REMOVED-1',
+    orderNumber: 'MCC-REMOVED-1', pancakeOrderId: 'PK-REMOVED-1', eventKey: 'expired',
+    payload: { changedFields: ['paymentStatus', 'status'] }
+  });
+  let updateCalls = 0;
+
+  const result = await service.processOutboundOrderEvents({
+    config: { shopId: 'shop-1' },
+    client: {
+      getOrder: async () => ({ id: 'PK-REMOVED-1', status: 7 }),
+      updateOrder: async () => { updateCalls += 1; }
+    },
+    orderRepository: orders,
+    syncRepository: syncRepo,
+    now: () => new Date('2026-07-13T11:00:00.000Z')
+  });
+  const detail = await syncRepo.getOrderSyncDetail('MCC-REMOVED-1');
+
+  assert.equal(result.status, 'complete');
+  assert.equal(result.updatedCount, 1);
+  assert.equal(updateCalls, 0);
+  assert.equal(detail.syncStatus, 'synced');
+  assert.equal(detail.paymentSyncStatus, 'synced');
+  assert.equal(detail.statusSyncStatus, 'synced');
+  assert.ok(detail.recentLogs.some((log) => /already applied/.test(log.message)));
+});

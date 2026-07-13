@@ -132,6 +132,17 @@ function createPancakeClient(config, fetchImpl = fetch) {
     return body;
   }
 
+  async function getOrder(shopId, orderId) {
+    const id = String(orderId || '').trim();
+    if (!id) throw new PancakeApiError('pancake_invalid_request');
+    const body = await request(shopPath(shopId, `/orders/${encodeURIComponent(id)}`));
+    const order = body.data || body.order || body;
+    if (!order || typeof order !== 'object' || Array.isArray(order)) {
+      throw new PancakeApiError('pancake_invalid_response');
+    }
+    return order;
+  }
+
   async function updateOrder(shopId, orderId, payload) {
     const id = String(orderId || '').trim();
     if (!id) throw new PancakeApiError('pancake_invalid_request');
@@ -162,6 +173,7 @@ function createPancakeClient(config, fetchImpl = fetch) {
 
   return {
     createOrder,
+    getOrder,
     listOrders,
     listShops: () => request('/shops'),
     listWarehouses: (shopId) => listData(shopId, '/warehouses'),
