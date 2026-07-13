@@ -13,6 +13,7 @@ ENV VITE_FACEBOOK_META_PIXEL_ENABLED=$VITE_FACEBOOK_META_PIXEL_ENABLED
 ENV VITE_FACEBOOK_META_PIXEL_ID=$VITE_FACEBOOK_META_PIXEL_ID
 
 COPY apps/web/index.html apps/web/vite.config.js ./apps/web/
+COPY apps/web/public ./apps/web/public
 COPY apps/web/src ./apps/web/src
 WORKDIR /workspace/apps/web
 RUN npm run build

@@ -26,7 +26,27 @@ function defaultSiteContent() {
     homepageBanners: [
       { url: '/brand/hero1v2-web.jpg', altText: 'Maria Clara Clothing models wearing oversized graphic shirts', sortOrder: 0 },
       { url: '/brand/hero2-web.jpg', altText: 'Maria Clara Clothing streetwear campaign photographed in Manila', sortOrder: 1 }
-    ]
+    ],
+    collectionBanner: defaultCollectionBanner()
+  };
+}
+
+function defaultCollectionBanner() {
+  return {
+    visible: true,
+    desktopImage: { url: '/brand/hero1v2-web.jpg', width: 2400, height: 902 },
+    mobileImage: { url: '', width: 0, height: 0 },
+    altText: 'Maria Clara Clothing Freedom of Mind collection campaign',
+    link: '/collections/freedom-of-mind',
+    openInNewTab: false,
+    label: '',
+    title: '',
+    subtitle: '',
+    buttonText: '',
+    buttonLink: '',
+    textAlignment: 'left',
+    textColor: 'light',
+    overlayOpacity: 0
   };
 }
 
@@ -93,6 +113,16 @@ function appendHomepageBanners(banners) {
   return updateHomepageBanners([...content.homepageBanners, ...banners]);
 }
 
+function updateCollectionBanner(banner) {
+  const content = getSiteContent();
+  if (isPromise(content)) {
+    return content.then((current) =>
+      saveSiteContent({ ...current, collectionBanner: normalizeCollectionBanner(banner) })
+    );
+  }
+  return saveSiteContent({ ...content, collectionBanner: normalizeCollectionBanner(banner) });
+}
+
 function updateLogo(logo) {
   const content = getSiteContent();
   if (isPromise(content)) {
@@ -147,7 +177,58 @@ function normalizeSiteContent(content) {
     blackLogo: normalizeLogo(content?.blackLogo || logo, 'Maria Clara Clothing black logo'),
     menuLogo: normalizeLogo(content?.menuLogo || logo, 'Maria Clara Clothing menu logo'),
     footerLogo: normalizeLogo(content?.footerLogo || logo, 'Maria Clara Clothing footer logo'),
-    homepageBanners: normalizeBanners(content?.homepageBanners)
+    homepageBanners: normalizeBanners(content?.homepageBanners),
+    collectionBanner: content?.collectionBanner === undefined
+      ? defaultCollectionBanner()
+      : normalizeCollectionBanner(content.collectionBanner)
+  };
+}
+
+function normalizeCollectionBannerImage(image) {
+  const record = typeof image === 'string' ? { url: image } : (image || {});
+  const width = Number(record.width || 0);
+  const height = Number(record.height || 0);
+  return {
+    url: String(record.url || '').trim(),
+    width: Number.isInteger(width) && width > 0 ? width : 0,
+    height: Number.isInteger(height) && height > 0 ? height : 0
+  };
+}
+
+function normalizeCollectionBannerLink(value) {
+  const link = String(value || '').trim();
+  if (!link) return '';
+  if ((link.startsWith('/') && !link.startsWith('//')) || link.startsWith('#')) return link;
+  try {
+    const parsed = new URL(link);
+    return ['http:', 'https:'].includes(parsed.protocol) ? link : '';
+  } catch (_error) {
+    return '';
+  }
+}
+
+function normalizeCollectionBanner(banner) {
+  const record = banner && typeof banner === 'object' ? banner : {};
+  const desktopImage = normalizeCollectionBannerImage(record.desktopImage || record.desktopImageUrl);
+  const mobileImage = normalizeCollectionBannerImage(record.mobileImage || record.mobileImageUrl);
+  const alignment = String(record.textAlignment || 'left').trim().toLowerCase();
+  const textColor = String(record.textColor || 'light').trim().toLowerCase();
+  const opacity = Number(record.overlayOpacity || 0);
+  return {
+    visible: Boolean(record.visible),
+    desktopImage,
+    mobileImage,
+    altText: String(record.altText || 'Maria Clara Clothing collection banner').trim(),
+    link: normalizeCollectionBannerLink(record.link),
+    openInNewTab: Boolean(record.openInNewTab),
+    label: String(record.label || '').trim(),
+    title: String(record.title || '').trim(),
+    subtitle: String(record.subtitle || '').trim(),
+    buttonText: String(record.buttonText || '').trim(),
+    buttonLink: normalizeCollectionBannerLink(record.buttonLink),
+    textAlignment: ['left', 'center', 'right'].includes(alignment) ? alignment : 'left',
+    textColor: ['light', 'dark'].includes(textColor) ? textColor : 'light',
+    overlayOpacity: Number.isFinite(opacity) ? Math.min(80, Math.max(0, Math.round(opacity))) : 0
   };
 }
 
@@ -175,13 +256,17 @@ function normalizeBanners(banners) {
 
 module.exports = {
   appendHomepageBanners,
+  defaultCollectionBanner,
   getSiteContent,
+  normalizeCollectionBanner,
+  normalizeCollectionBannerLink,
   normalizeLogo,
   saveSiteContent,
   updateBlackLogo,
   updateFooterLogo,
   updateLogo,
   updateMenuLogo,
+  updateCollectionBanner,
   updateHomepageBanners,
   normalizeBanners
 };

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const multer = require('multer');
+const sharp = require('sharp');
 const {
   appendOrderStatusEvent,
   appendOrderTrackingNotification,
@@ -27,7 +28,9 @@ const {
 const {
   appendHomepageBanners,
   getSiteContent,
+  normalizeCollectionBannerLink,
   updateBlackLogo,
+  updateCollectionBanner,
   updateFooterLogo,
   updateLogo,
   updateMenuLogo,
@@ -156,18 +159,21 @@ const bannerUpload = multer({
       fs.mkdirSync(uploadDir, { recursive: true });
       callback(null, uploadDir);
     },
-    filename: (_req, file, callback) => {
+    filename: (req, file, callback) => {
       const extension = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-      callback(null, `homepage-banner-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`);
+      const prefix = req.originalUrl?.includes('/collection-banner/') ? 'collection-banner' : 'homepage-banner';
+      callback(null, `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}${extension}`);
     }
   }),
   limits: {
-    fileSize: 8 * 1024 * 1024,
+    fileSize: MAX_PRODUCT_IMAGE_BYTES,
     files: 6
   },
   fileFilter: (_req, file, callback) => {
     if (!/^image\//.test(file.mimetype || '')) {
-      return callback(new Error('Only image uploads are allowed'));
+      const error = new Error('Only image uploads are allowed');
+      error.status = 400;
+      return callback(error);
     }
     return callback(null, true);
   }
@@ -424,6 +430,47 @@ router.post('/site-content/homepage-banners/images', bannerUpload.array('images'
 
     return res.status(201).json({ siteContent, banners: siteContent.homepageBanners, uploadedBanners });
   } catch (error) {
+    return next(error);
+  }
+});
+
+router.put('/site-content/collection-banner', async (req, res, next) => {
+  try {
+    const banner = req.body?.banner || {};
+    assertCollectionBannerRequest(banner);
+    const previous = (await getSiteContent()).collectionBanner;
+    const siteContent = await updateCollectionBanner(banner);
+    removeReplacedCollectionBannerImage(previous?.desktopImage?.url, siteContent.collectionBanner.desktopImage.url);
+    removeReplacedCollectionBannerImage(previous?.mobileImage?.url, siteContent.collectionBanner.mobileImage.url);
+    return res.json({ siteContent, collectionBanner: siteContent.collectionBanner });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/site-content/collection-banner/images/:slot', bannerUpload.single('image'), async (req, res, next) => {
+  try {
+    const slot = String(req.params.slot || '').trim().toLowerCase();
+    if (!['desktop', 'mobile'].includes(slot)) {
+      const error = new Error('Collection banner image slot is invalid');
+      error.status = 400;
+      throw error;
+    }
+    if (!req.file) {
+      const error = new Error('A collection banner image is required');
+      error.status = 400;
+      throw error;
+    }
+    await normalizeProductUploads([req.file]);
+    const metadata = await sharp(req.file.path).metadata();
+    const image = {
+      url: bannerUploadUrl(req.file.filename),
+      width: Number(metadata.width || 0),
+      height: Number(metadata.height || 0)
+    };
+    return res.status(201).json({ slot, image });
+  } catch (error) {
+    removeUploadedProductFiles(req.file ? [req.file] : []);
     return next(error);
   }
 });
@@ -1452,6 +1499,46 @@ function bannerUploadDir() {
 
 function bannerUploadUrl(filename) {
   return `/uploads/banners/${filename}`;
+}
+
+function assertCollectionBannerRequest(banner) {
+  const record = banner && typeof banner === 'object' ? banner : {};
+  for (const field of ['link', 'buttonLink']) {
+    const value = String(record[field] || '').trim();
+    if (value && normalizeCollectionBannerLink(value) !== value) {
+      const error = new Error(`${field === 'link' ? 'Banner' : 'Button'} link must be an internal path or an HTTP/HTTPS URL`);
+      error.status = 400;
+      throw error;
+    }
+  }
+  const limits = {
+    altText: 300,
+    label: 120,
+    title: 180,
+    subtitle: 600,
+    buttonText: 80,
+    link: 2048,
+    buttonLink: 2048
+  };
+  for (const [field, limit] of Object.entries(limits)) {
+    if (String(record[field] || '').length > limit) {
+      const error = new Error(`Collection banner ${field} is too long`);
+      error.status = 400;
+      throw error;
+    }
+  }
+}
+
+function removeReplacedCollectionBannerImage(previousUrl, nextUrl) {
+  const previous = String(previousUrl || '').trim();
+  if (!previous || previous === String(nextUrl || '').trim()) return;
+  const prefix = '/uploads/banners/collection-banner-';
+  if (!previous.startsWith(prefix)) return;
+  try {
+    fs.unlinkSync(path.join(bannerUploadDir(), path.basename(previous)));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
 }
 
 function logoUploadDir() {

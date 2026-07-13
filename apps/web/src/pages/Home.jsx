@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { buildStorefrontCollectionSections } from '../lib/storefrontCollections.js';
 import ProductCard from '../components/ProductCard.jsx';
+import CollectionBanner from '../components/CollectionBanner.jsx';
 import { CustomerButton } from '../components/ui/Button.jsx';
 import { CustomerCard } from '../components/ui/Card.jsx';
 
-function CollectionSection({ id, index, title, blurb, slug, products }) {
+function CollectionSection({ id, index, title, blurb, slug, products, compactTop = false }) {
   if (!products.length) return null;
   return (
-    <section id={id} className="mx-auto mt-8 max-w-7xl scroll-mt-36 px-5 sm:mt-14 lg:mt-20 lg:px-8">
+    <section id={id} className={`mx-auto max-w-7xl scroll-mt-36 px-5 lg:px-8 ${compactTop ? 'mt-4 sm:mt-6 lg:mt-8' : 'mt-8 sm:mt-14 lg:mt-20'}`}>
       <div className="flex flex-wrap items-end justify-between gap-4 border-t border-[var(--customer-border)] pt-6">
         <div>
           <p className="eyebrow">{index} / Collection</p>
@@ -36,6 +37,7 @@ export default function Home() {
   const location = useLocation();
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState([]);
+  const [collectionBanner, setCollectionBanner] = useState(null);
   const [collections, setCollections] = useState(DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
   const [storefrontSettings, setStorefrontSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
@@ -47,7 +49,10 @@ export default function Home() {
       .then((body) => setProducts(body.products))
       .catch((err) => setError(err.message));
     fetchSiteContent()
-      .then((body) => setBanners(body.siteContent?.homepageBanners || []))
+      .then((body) => {
+        setBanners(body.siteContent?.homepageBanners || []);
+        setCollectionBanner(body.siteContent?.collectionBanner || null);
+      })
       .catch(() => {});
     loadStorefrontSettings()
       .then((settings) => {
@@ -174,7 +179,16 @@ export default function Home() {
         <p className="mx-auto mt-16 max-w-7xl px-5 text-sm text-accent-deep lg:px-8">{error}</p>
       )}
 
-      {collectionSections.map((section) => <CollectionSection key={section.title} {...section} />)}
+      {collectionSections.map((section) => {
+        const isFreedomOfMind = String(section.slug || '').trim().toLowerCase() === 'freedom-of-mind';
+        const hasCollectionBanner = Boolean(isFreedomOfMind && collectionBanner?.visible && collectionBanner?.desktopImage?.url);
+        return (
+          <Fragment key={section.title}>
+            {isFreedomOfMind && <CollectionBanner banner={collectionBanner} />}
+            <CollectionSection {...section} compactTop={hasCollectionBanner} />
+          </Fragment>
+        );
+      })}
 
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

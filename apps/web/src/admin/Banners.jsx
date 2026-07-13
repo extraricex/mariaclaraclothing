@@ -3,6 +3,7 @@ import { adminFetch, adminJson, adminSend } from '../lib/adminApi.js';
 import TickerEditor from './TickerEditor.jsx';
 import InfoPagesEditor from './InfoPagesEditor.jsx';
 import HeroTextEditor from './HeroTextEditor.jsx';
+import CollectionBannerEditor from './CollectionBannerEditor.jsx';
 
 function notifySiteContentChanged() {
   window.dispatchEvent(new Event('maria-clara-site-content-changed'));
@@ -14,6 +15,7 @@ export default function Banners() {
   const [menuLogo, setMenuLogo] = useState(null);
   const [footerLogo, setFooterLogo] = useState(null);
   const [banners, setBanners] = useState([]);
+  const [collectionBanner, setCollectionBanner] = useState(null);
   const [message, setMessage] = useState('');
   const [website, setWebsite] = useState(null);
 
@@ -25,6 +27,7 @@ export default function Banners() {
         setMenuLogo(body.siteContent?.menuLogo || body.siteContent?.logo || null);
         setFooterLogo(body.siteContent?.footerLogo || body.siteContent?.logo || null);
         setBanners(body.siteContent?.homepageBanners || []);
+        setCollectionBanner(body.siteContent?.collectionBanner || null);
       })
       .catch((err) => setMessage(err.message));
   }
@@ -267,6 +270,8 @@ export default function Banners() {
           </div>
         </div>
       </section>
+
+      <CollectionBannerEditor initial={collectionBanner} />
 
       <div className="mt-8 space-y-4">
         {banners.map((banner, index) => (

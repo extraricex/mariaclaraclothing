@@ -10,5 +10,29 @@
       "altText": "Maria Clara Clothing streetwear campaign photographed in Manila",
       "sortOrder": 1
     }
-  ]
+  ],
+  "collectionBanner": {
+    "visible": true,
+    "desktopImage": {
+      "url": "/brand/hero1v2-web.jpg",
+      "width": 2400,
+      "height": 902
+    },
+    "mobileImage": {
+      "url": "",
+      "width": 0,
+      "height": 0
+    },
+    "altText": "Maria Clara Clothing Freedom of Mind collection campaign",
+    "link": "/collections/freedom-of-mind",
+    "openInNewTab": false,
+    "label": "",
+    "title": "",
+    "subtitle": "",
+    "buttonText": "",
+    "buttonLink": "",
+    "textAlignment": "left",
+    "textColor": "light",
+    "overlayOpacity": 0
+  }
 }

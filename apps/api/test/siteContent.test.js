@@ -40,7 +40,15 @@ test('site content APIs expose and update homepage banners', async () => {
     footerLogo: { url: '/brand/footer-logo.png', altText: 'Current footer logo' },
     homepageBanners: [
       { url: '/brand/hero1v2.jpg', altText: 'Current banner', sortOrder: 0 }
-    ]
+    ],
+    collectionBanner: {
+      visible: true,
+      desktopImage: { url: '/brand/hero1v2-web.jpg', width: 2400, height: 902 },
+      mobileImage: { url: '', width: 0, height: 0 },
+      altText: 'Current collection banner',
+      link: '/collections/freedom-of-mind',
+      openInNewTab: false
+    }
   }), 'utf8');
 
   const app = createApp();
@@ -60,6 +68,9 @@ test('site content APIs expose and update homepage banners', async () => {
     assert.equal(publicBody.siteContent.menuLogo.url, '/brand/logo-menu.png');
     assert.equal(publicBody.siteContent.footerLogo.url, '/brand/footer-logo.png');
     assert.equal(publicBody.siteContent.homepageBanners[0].url, '/brand/hero1v2.jpg');
+    assert.equal(publicBody.siteContent.collectionBanner.visible, true);
+    assert.equal(publicBody.siteContent.collectionBanner.desktopImage.width, 2400);
+    assert.equal(publicBody.siteContent.collectionBanner.link, '/collections/freedom-of-mind');
 
     const blockedResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content`);
     assert.equal(blockedResponse.status, 401);
@@ -89,6 +100,65 @@ test('site content APIs expose and update homepage banners', async () => {
     const savedContent = JSON.parse(await fs.readFile(siteContentFile, 'utf8'));
     assert.equal(savedContent.homepageBanners.length, 2);
     assert.equal(savedContent.homepageBanners[1].altText, 'Homepage banner');
+
+    const unsafeCollectionBannerResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/collection-banner`, adminRequest('PUT', {
+      banner: { ...publicBody.siteContent.collectionBanner, link: 'javascript:alert(1)' }
+    }));
+    assert.equal(unsafeCollectionBannerResponse.status, 400);
+
+    const collectionImageFixture = await fs.readFile(path.join(__dirname, '..', 'public', 'brand', 'logo.png'));
+    const desktopCollectionBody = new FormData();
+    desktopCollectionBody.append('image', new Blob([collectionImageFixture], { type: 'image/png' }), 'collection-desktop.png');
+    const desktopCollectionResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/collection-banner/images/desktop`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      body: desktopCollectionBody
+    });
+    const desktopCollectionJson = await desktopCollectionResponse.json();
+    assert.equal(desktopCollectionResponse.status, 201);
+    assert.match(desktopCollectionJson.image.url, /^\/uploads\/banners\/collection-banner-.*-optimized\.webp$/);
+    assert.ok(desktopCollectionJson.image.width > 0);
+    assert.ok(desktopCollectionJson.image.height > 0);
+
+    const mobileCollectionBody = new FormData();
+    mobileCollectionBody.append('image', new Blob([collectionImageFixture], { type: 'image/png' }), 'collection-mobile.png');
+    const mobileCollectionResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/collection-banner/images/mobile`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+      body: mobileCollectionBody
+    });
+    const mobileCollectionJson = await mobileCollectionResponse.json();
+    assert.equal(mobileCollectionResponse.status, 201);
+
+    const collectionBannerResponse = await fetch(`http://127.0.0.1:${port}/api/admin/site-content/collection-banner`, adminRequest('PUT', {
+      banner: {
+        visible: false,
+        desktopImage: desktopCollectionJson.image,
+        mobileImage: mobileCollectionJson.image,
+        altText: 'Freedom of Mind campaign',
+        link: '/collections/freedom-of-mind',
+        openInNewTab: true,
+        label: 'Collection',
+        title: 'Freedom of Mind',
+        subtitle: 'Premium graphic pieces.',
+        buttonText: 'Shop collection',
+        buttonLink: '/collections/freedom-of-mind',
+        textAlignment: 'center',
+        textColor: 'light',
+        overlayOpacity: 35
+      }
+    }));
+    const collectionBannerJson = await collectionBannerResponse.json();
+    assert.equal(collectionBannerResponse.status, 200);
+    assert.equal(collectionBannerJson.collectionBanner.visible, false);
+    assert.equal(collectionBannerJson.collectionBanner.mobileImage.url, mobileCollectionJson.image.url);
+    assert.equal(collectionBannerJson.collectionBanner.overlayOpacity, 35);
+
+    const publicCollectionResponse = await fetch(`http://127.0.0.1:${port}/api/site-content`);
+    const publicCollectionJson = await publicCollectionResponse.json();
+    assert.equal(publicCollectionJson.siteContent.collectionBanner.visible, false);
+    assert.equal(publicCollectionJson.siteContent.collectionBanner.title, 'Freedom of Mind');
+    assert.equal(publicCollectionJson.siteContent.collectionBanner.openInNewTab, true);
 
     const logoBody = new FormData();
     logoBody.append('image', new Blob([Buffer.from('logo bytes')], { type: 'image/png' }), 'new-logo.png');
