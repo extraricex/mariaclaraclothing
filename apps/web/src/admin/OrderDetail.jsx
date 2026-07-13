@@ -8,7 +8,7 @@ import { adminProductDisplayParts, truncateAdminProductCode } from './adminProdu
 const ENUMS = {
   status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'],
   fulfillmentStatus: ['unfulfilled', 'packed', 'shipped', 'delivered', 'cancelled'],
-  paymentStatus: ['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'refunded'],
+  paymentStatus: ['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'partially_refunded', 'refunded'],
   codConfirmationStatus: ['pending', 'confirmed', 'unreachable', 'cancelled'],
   deliveryStatus: ['pending', 'ready', 'out_for_delivery', 'delivered', 'returned', 'cancelled']
 };
@@ -176,6 +176,8 @@ export default function OrderDetail() {
   const [orderProductFilter, setOrderProductFilter] = useState('');
   const [noteTab, setNoteTab] = useState('All');
   const [jntPreview, setJntPreview] = useState(null);
+  const [refundForm, setRefundForm] = useState({ amount: '', reason: 'others', notes: '' });
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
 
   useEffect(() => {
     adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}`)
@@ -375,6 +377,53 @@ export default function OrderDetail() {
     }
   }
 
+  async function submitRefund() {
+    const amountCents = Math.round(Number(refundForm.amount) * 100);
+    if (!Number.isInteger(amountCents) || amountCents <= 0) {
+      setMessage('Enter a valid refund amount.');
+      return;
+    }
+    if (amountCents > remainingRefundCents) {
+      setMessage('Refund amount exceeds the remaining refundable payment.');
+      return;
+    }
+    if (!window.confirm(`Submit a ${formatMoney(amountCents)} PayMongo refund? This sends a real provider request and cannot be undone here.`)) return;
+    const requestKey = globalThis.crypto?.randomUUID?.() || `refund-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setRefundSubmitting(true);
+    setMessage('Submitting refund to PayMongo...');
+    try {
+      const body = await adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}/refunds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey },
+        body: JSON.stringify({ amountCents, reason: refundForm.reason, notes: refundForm.notes })
+      });
+      setOrder((previous) => ({ ...previous, ...body.order, refunds: body.refunds || [] }));
+      setForm(orderForm({ ...order, ...body.order }));
+      setRefundForm({ amount: '', reason: 'others', notes: '' });
+      setMessage(body.warning || `Refund recorded with status: ${titleCase(body.status)}.`);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setRefundSubmitting(false);
+    }
+  }
+
+  async function retryRefund(refund) {
+    if (!window.confirm(`Retry the failed ${formatMoney(refund.amountCents)} refund using its original idempotency key?`)) return;
+    setRefundSubmitting(true);
+    setMessage('Retrying refund...');
+    try {
+      const body = await adminSend('POST', `/api/admin/orders/${encodeURIComponent(orderNumber)}/refunds/${encodeURIComponent(refund.id)}/retry`, {});
+      setOrder((previous) => ({ ...previous, ...body.order, refunds: body.refunds || [] }));
+      setForm(orderForm({ ...order, ...body.order }));
+      setMessage(body.warning || `Refund retry recorded with status: ${titleCase(body.status)}.`);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setRefundSubmitting(false);
+    }
+  }
+
   const itemCount = form.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const variationCount = new Set(form.items.map((item) => item.variantId || item.sku || item.size || item.productName).filter(Boolean)).size;
   const subtotalCents = form.items.reduce((sum, item) => sum + Number(item.unitPriceCents || 0) * Number(item.quantity || 0), 0);
@@ -384,9 +433,16 @@ export default function OrderDetail() {
   const surchargeCents = Number(order.surchargeCents || 0);
   const discountAwareOrderTotalCents = subtotalCents - discountTotalCents + Number(order.shippingFeeCents || 0);
   const totalCents = Math.max(0, discountAwareOrderTotalCents + surchargeCents);
-  const paidCents = form.paymentStatus === 'paid' ? Number(order.paidAmountCents ?? totalCents) : 0;
-  const balanceCents = Math.max(totalCents - paidCents, 0);
-  const paymentPending = form.paymentStatus !== 'paid';
+  const paymentSettled = ['paid', 'partially_refunded', 'refunded'].includes(form.paymentStatus);
+  const paidCents = paymentSettled ? Number(order.paidAmountCents ?? totalCents) : 0;
+  const balanceCents = paymentSettled ? 0 : Math.max(totalCents - paidCents, 0);
+  const paymentPending = !paymentSettled;
+  const refunds = Array.isArray(order.refunds) ? order.refunds : [];
+  const refundedCents = refunds.filter((refund) => refund.status === 'succeeded').reduce((sum, refund) => sum + Number(refund.amountCents || 0), 0);
+  const pendingRefundCents = refunds.filter((refund) => ['requesting', 'pending', 'processing'].includes(refund.status)).reduce((sum, refund) => sum + Number(refund.amountCents || 0), 0);
+  const remainingRefundCents = Math.max(0, paidCents - refundedCents - pendingRefundCents);
+  const refundProvider = order.refundProvider || {};
+  const canRefund = order.paymentMethod === 'paymongo' && refundProvider.enabled && ['paid', 'partially_refunded'].includes(form.paymentStatus) && remainingRefundCents > 0;
   const unfulfilled = !['shipped', 'delivered', 'cancelled'].includes(form.fulfillmentStatus);
   const isCod = order.paymentMethod === 'cash_on_delivery' || !order.paymentMethod;
   const codAmountCents = isCod ? balanceCents : 0;
@@ -439,7 +495,7 @@ export default function OrderDetail() {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight text-[var(--admin-text)] sm:text-3xl">{order.orderNumber}</h1>
               <span className={orderStatusBadge(form.status, form.status === 'cancelled' ? 'danger' : 'neutral')}>{displayOrderStatus(form.status)}</span>
-              <span className={orderStatusBadge(form.paymentStatus, paymentPending ? 'warning' : 'success')}>{paymentPending ? 'Payment pending' : 'Paid'}</span>
+              <span className={orderStatusBadge(form.paymentStatus, paymentPending ? 'warning' : 'success')}>{paymentPending ? 'Payment pending' : titleCase(form.paymentStatus)}</span>
               <span className={orderStatusBadge(form.fulfillmentStatus, unfulfilled ? 'warning' : 'success')}>{unfulfilled ? 'Unfulfilled' : titleCase(form.fulfillmentStatus)}</span>
             </div>
             <p className="mt-1 text-sm text-[var(--admin-muted)]">
@@ -584,7 +640,7 @@ export default function OrderDetail() {
                 <InfoRow label="Payment timestamp" value={order.paidAt ? new Date(order.paidAt).toLocaleString('en-PH') : 'Not paid'} />
                 <InfoRow label="Paid amount" value={formatMoney(paidCents)} />
                 <InfoRow label="Missing balance" value={formatMoney(balanceCents)} strong={paymentPending} />
-                <InfoRow label="Amount due" value={formatMoney(totalCents)} strong />
+                <InfoRow label="Amount due" value={formatMoney(balanceCents)} strong />
               </dl>
               <div className="mt-3 flex flex-wrap gap-2">
                 {order.paymentMethod !== 'paymongo' && <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={markAsPaid}>Mark as paid</button>}
@@ -613,6 +669,69 @@ export default function OrderDetail() {
               </label>
               <p className="mt-2 text-xs text-[var(--admin-muted)]">Timeline comments and internal notes are saved to the order record.</p>
             </DetailCard>
+
+            {order.paymentMethod === 'paymongo' && (
+              <DetailCard title="PayMongo refunds" eyebrow={`${titleCase(refundProvider.mode || 'unknown')} mode`} className="xl:col-span-5">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Paid</p>
+                    <p className="mt-1 font-semibold">{formatMoney(paidCents)}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Refunded</p>
+                    <p className="mt-1 font-semibold">{formatMoney(refundedCents)}</p>
+                  </div>
+                  <div className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Available</p>
+                    <p className="mt-1 font-semibold">{formatMoney(remainingRefundCents)}</p>
+                  </div>
+                </div>
+
+                {!refundProvider.enabled && (
+                  <p className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-yellow)]/45 bg-[var(--admin-yellow)]/10 p-3 text-xs text-[#ffd166]">
+                    Refund submission is disabled in {titleCase(refundProvider.mode || 'unconfigured')} mode. Enable verified PayMongo live credentials before issuing real refunds.
+                  </p>
+                )}
+
+                {canRefund && (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="eyebrow !text-[var(--admin-muted)]">Amount (PHP)</span>
+                      <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" type="number" min="0.01" max={(remainingRefundCents / 100).toFixed(2)} step="0.01" value={refundForm.amount} onChange={(event) => setRefundForm((current) => ({ ...current, amount: event.target.value }))} placeholder={(remainingRefundCents / 100).toFixed(2)} />
+                    </label>
+                    <label className="block">
+                      <span className="eyebrow !text-[var(--admin-muted)]">Reason</span>
+                      <select className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={refundForm.reason} onChange={(event) => setRefundForm((current) => ({ ...current, reason: event.target.value }))}>
+                        <option value="others">Other</option>
+                        <option value="duplicate">Duplicate payment</option>
+                        <option value="fraudulent">Fraudulent payment</option>
+                      </select>
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="eyebrow !text-[var(--admin-muted)]">Provider note</span>
+                      <textarea className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" rows="2" maxLength="255" value={refundForm.notes} onChange={(event) => setRefundForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Reason for the refund" />
+                    </label>
+                    <button type="button" className="btn-ink !py-2 !text-xs sm:col-span-2" disabled={refundSubmitting} onClick={submitRefund}>{refundSubmitting ? 'Submitting...' : 'Submit PayMongo refund'}</button>
+                  </div>
+                )}
+
+                <div className="mt-4 space-y-2">
+                  {refunds.map((refund) => (
+                    <article key={refund.id} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold">{formatMoney(refund.amountCents)} · {titleCase(refund.reason)}</p>
+                        <span className={orderStatusBadge(refund.status, refund.status === 'succeeded' ? 'success' : refund.status === 'failed' ? 'danger' : 'warning')}>{titleCase(refund.status)}</span>
+                      </div>
+                      <p className="mt-2 break-all text-[var(--admin-muted)]">{refund.paymongoRefundId || 'Provider refund ID pending'}</p>
+                      <p className="mt-1 text-[var(--admin-muted)]">{refund.updatedAt ? new Date(refund.updatedAt).toLocaleString('en-PH') : 'Timestamp pending'}{refund.lastErrorCode ? ` · ${titleCase(refund.lastErrorCode)}` : ''}</p>
+                      {refund.status === 'failed' && refundProvider.enabled && <button type="button" className="mt-2 text-xs font-semibold text-[var(--admin-orange)] underline" disabled={refundSubmitting} onClick={() => retryRefund(refund)}>Retry safely</button>}
+                    </article>
+                  ))}
+                  {!refunds.length && <p className="text-xs text-[var(--admin-muted)]">No refund requests recorded for this order.</p>}
+                </div>
+                <p className="mt-3 text-xs text-[var(--admin-muted)]">Refunds do not restock items automatically. Review the return before changing inventory.</p>
+              </DetailCard>
+            )}
 
             <DetailCard title="Status history" className="xl:col-span-5">
               <label className="block">

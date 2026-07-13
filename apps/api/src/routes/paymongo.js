@@ -9,6 +9,7 @@ const {
 } = require('./orders');
 const { createPayMongoClient } = require('../payments/paymongoClient');
 const { attachCheckoutSession, checkoutSessionPayload, processPaidWebhook } = require('../payments/paymongoPaymentService');
+const { processRefundWebhook } = require('../payments/paymongoRefundService');
 const { verifyPayMongoSignature } = require('../payments/paymongoWebhookSignature');
 const { createPancakeClient } = require('../integrations/pancake/pancakeClient');
 const { processOutboundOrderEvents } = require('../integrations/pancake/pancakeOrderSyncService');
@@ -73,13 +74,16 @@ function createPayMongoRouter(dependencies = {}) {
         rawBody, header: req.get('Paymongo-Signature'), secret: config.webhookSecret, livemode: config.livemode
       });
       if (!valid) return res.status(401).json({ error: 'Invalid PayMongo signature.' });
-      const result = await processPaidWebhook(req.body, { metaEnabled: env.meta.enabled });
+      const eventType = String(req.body?.data?.attributes?.type || '');
+      const result = ['payment.refunded', 'payment.refund.updated'].includes(eventType)
+        ? await processRefundWebhook(req.body, { livemode: config.livemode })
+        : await processPaidWebhook(req.body, { metaEnabled: env.meta.enabled });
       console.info('PayMongo webhook processed.', {
-        eventType: req.body?.data?.attributes?.type || '',
+        eventType,
         orderNumber: result.orderNumber || '',
         status: result.status
       });
-      if (result.status === 'paid') {
+      if (result.status === 'paid' || (['payment.refunded', 'payment.refund.updated'].includes(eventType) && result.status === 'succeeded')) {
         try {
           const pancakeResult = await processPancakeOrderUpdates();
           if (pancakeResult?.status === 'failed') {

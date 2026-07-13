@@ -19,6 +19,7 @@ const PRODUCT_SUBNAV = [
 // Items below the two collapsible sections, in display order.
 const SECONDARY_NAV = [
   { to: '/admin/customers', label: 'Customers' },
+  { to: '/admin/payments', label: 'Payments' },
   { to: '/admin/discounts', label: 'Discounts' },
   { to: '/admin/issue-reports', label: 'Issue Reports', badge: true },
   { to: '/admin/banners', label: 'Website content' },

@@ -85,6 +85,13 @@ const { applyOversizedProductTemplate, isOversizedProduct } = require('../produc
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const { processOutboundOrderEvents } = require('../integrations/pancake/pancakeOrderSyncService');
+const { createPayMongoClient } = require('../payments/paymongoClient');
+const {
+  listOrderRefunds,
+  listPaymentAlerts,
+  listPaymentOperations
+} = require('../payments/paymongoRefundRepository');
+const { requestRefund, retryRefund } = require('../payments/paymongoRefundService');
 const {
   deleteIssueReport,
   findIssueReportById,
@@ -99,7 +106,7 @@ const VALID_ORDER_STATUSES = new Set([
   'received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'
 ]);
 const VALID_FULFILLMENT_STATUSES = new Set(['unfulfilled', 'packed', 'shipped', 'delivered', 'cancelled']);
-const VALID_PAYMENT_STATUSES = new Set(['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'refunded']);
+const VALID_PAYMENT_STATUSES = new Set(['cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'partially_refunded', 'refunded']);
 const VALID_COD_CONFIRMATION_STATUSES = new Set(['pending', 'confirmed', 'unreachable', 'cancelled']);
 const VALID_DELIVERY_STATUSES = new Set(['pending', 'ready', 'out_for_delivery', 'delivered', 'returned', 'cancelled']);
 const VALID_PRODUCT_STATUSES = new Set(['active', 'draft', 'archived']);
@@ -883,6 +890,43 @@ router.get('/orders', async (req, res, next) => {
   }
 });
 
+router.get('/payments', async (req, res, next) => {
+  try {
+    const status = String(req.query.status || '').trim();
+    const search = String(req.query.q || '').trim();
+    const operations = await listPaymentOperations({ status, search, limit: 500 });
+    const alerts = await listPaymentAlerts({ reservationMinutes: env.paymongo.reservationMinutes });
+    return res.json({
+      provider: {
+        configured: env.paymongo.configured,
+        mode: env.paymongo.livemode ? 'live' : 'test',
+        refundsEnabled: Boolean(env.paymongo.configured && env.paymongo.livemode)
+      },
+      summary: paymentOperationsSummary(operations),
+      operations,
+      alerts
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/payments/export', async (req, res, next) => {
+  try {
+    const operations = await listPaymentOperations({
+      status: String(req.query.status || '').trim(),
+      search: String(req.query.q || '').trim(),
+      limit: 5000
+    });
+    const exportedAt = new Date().toISOString();
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader('content-disposition', `attachment; filename="PayMongo_Payments_${exportedAt.slice(0, 10)}.csv"`);
+    return res.send(paymentOperationsCsv(operations));
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/cart-sessions', async (req, res, next) => {
   try {
     const status = String(req.query.status || '').trim();
@@ -974,8 +1018,62 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
       order: {
         ...order,
         notifications: await listOrderNotifications(order.orderNumber),
-        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(order.orderNumber)
+        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(order.orderNumber),
+        refunds: await listOrderRefunds(order.orderNumber),
+        refundProvider: paymongoRefundProvider()
       }
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/orders/:orderNumber/refunds', async (req, res, next) => {
+  try {
+    const orderNumber = String(req.params.orderNumber || '').trim();
+    const result = await requestRefund({
+      orderNumber,
+      amountCents: Number(req.body?.amountCents),
+      reason: req.body?.reason,
+      notes: req.body?.notes,
+      requestKey: req.get('Idempotency-Key') || ''
+    }, { config: env.paymongo, client: createPayMongoClient(env.paymongo) });
+    if (result.status === 'succeeded' && env.pancake.mode === 'live' && env.pancake.apiKeyConfigured) {
+      try {
+        await processOutboundOrderEvents({
+          config: env.pancake,
+          client: createPancakeClient(env.pancake),
+          syncRepository: pancakeOrderSyncRepository
+        });
+      } catch (error) {
+        console.error('Refund Pancake update remains queued for retry:', error?.message || error);
+      }
+    }
+    return res.status(result.status === 'duplicate' ? 200 : 201).json({
+      ...result,
+      order: await findOrderByNumber(orderNumber),
+      refunds: await listOrderRefunds(orderNumber)
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/orders/:orderNumber/refunds/:refundId/retry', async (req, res, next) => {
+  try {
+    const orderNumber = String(req.params.orderNumber || '').trim();
+    const refund = await listOrderRefunds(orderNumber);
+    if (!refund.some((item) => item.id === req.params.refundId)) {
+      return res.status(404).json({ error: 'Refund record not found.' });
+    }
+    const result = await retryRefund(req.params.refundId, {
+      config: env.paymongo,
+      client: createPayMongoClient(env.paymongo)
+    });
+    return res.json({
+      ...result,
+      order: await findOrderByNumber(orderNumber),
+      refunds: await listOrderRefunds(orderNumber)
     });
   } catch (error) {
     return next(error);
@@ -1014,7 +1112,14 @@ router.post('/orders/:orderNumber/tracking-notification', async (req, res, next)
     });
     const updatedOrder = await findOrderByNumber(order.orderNumber);
 
-    return res.json({ order: updatedOrder, notification });
+    return res.json({
+      order: {
+        ...updatedOrder,
+        refunds: await listOrderRefunds(orderNumber),
+        refundProvider: paymongoRefundProvider()
+      },
+      notification
+    });
   } catch (error) {
     return next(error);
   }
@@ -1076,7 +1181,9 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
       order: {
         ...refreshedOrder,
         notifications: await listOrderNotifications(orderNumber),
-        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(orderNumber)
+        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(orderNumber),
+        refunds: await listOrderRefunds(orderNumber),
+        refundProvider: paymongoRefundProvider()
       }
     });
   } catch (error) {
@@ -1177,6 +1284,61 @@ function inventoryMovementsCsv(movements) {
     movement.quantityChange
   ].map((value, index) => csvValue(value, index !== 8)).join(','));
 
+  return [header.join(','), ...rows].join('\n');
+}
+
+function paymentOperationsSummary(operations) {
+  return (operations || []).reduce((summary, operation) => {
+    summary.totalCount += 1;
+    summary.totalAmountCents += Number(operation.totalCents || 0);
+    if (['paid', 'partially_refunded', 'refunded'].includes(operation.paymentStatus)) {
+      summary.paidCount += 1;
+      summary.paidAmountCents += Number(operation.paidAmountCents ?? operation.totalCents ?? 0);
+    }
+    if (operation.paymentStatus === 'pending_payment') summary.pendingCount += 1;
+    if (['failed', 'expired'].includes(operation.paymentStatus)) summary.failedCount += 1;
+    summary.refundedAmountCents += Number(operation.refundedAmountCents || 0);
+    return summary;
+  }, {
+    totalCount: 0,
+    paidCount: 0,
+    pendingCount: 0,
+    failedCount: 0,
+    totalAmountCents: 0,
+    paidAmountCents: 0,
+    refundedAmountCents: 0
+  });
+}
+
+function paymongoRefundProvider() {
+  return {
+    configured: env.paymongo.configured,
+    mode: env.paymongo.livemode ? 'live' : 'test',
+    enabled: Boolean(env.paymongo.configured && env.paymongo.livemode)
+  };
+}
+
+function paymentOperationsCsv(operations) {
+  const header = [
+    'Order Number', 'Placed At', 'Payment Method', 'Payment Status', 'Total PHP',
+    'Paid PHP', 'Paid At', 'Checkout Session ID', 'Payment ID', 'Refunded PHP',
+    'Latest Refund Status', 'Pancake Order ID', 'Pancake Sync Status'
+  ];
+  const rows = (operations || []).map((operation) => [
+    operation.orderNumber,
+    operation.placedAt,
+    operation.paymentMethod,
+    operation.paymentStatus,
+    (Number(operation.totalCents || 0) / 100).toFixed(2),
+    (Number(operation.paidAmountCents || 0) / 100).toFixed(2),
+    operation.paidAt,
+    operation.checkoutSessionId,
+    operation.paymentId,
+    (Number(operation.refundedAmountCents || 0) / 100).toFixed(2),
+    operation.latestRefundStatus,
+    operation.pancakeOrderId,
+    operation.pancakeSyncStatus
+  ].map((value) => csvValue(value, true)).join(','));
   return [header.join(','), ...rows].join('\n');
 }
 

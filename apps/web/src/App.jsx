@@ -37,6 +37,7 @@ const DiscountDetail = lazy(() => import('./admin/DiscountDetail.jsx'));
 const Banners = lazy(() => import('./admin/Banners.jsx'));
 const Settings = lazy(() => import('./admin/Settings.jsx'));
 const IssueReports = lazy(() => import('./admin/IssueReports.jsx'));
+const Payments = lazy(() => import('./admin/Payments.jsx'));
 
 export default function App() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="orders/draft" element={<CartSessions status="draft" />} />
         <Route path="orders/abandoned-checkout" element={<CartSessions status="abandoned_checkout" />} />
         <Route path="orders/:orderNumber" element={<OrderDetail />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="products" element={<Products />} />
         <Route path="products/countdown" element={<ProductCountdown />} />
         <Route path="products/:slug" element={<ProductEditor />} />

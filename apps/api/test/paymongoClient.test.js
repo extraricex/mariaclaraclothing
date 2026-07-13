@@ -39,3 +39,27 @@ test('PayMongo client retrieves a checkout session with the server-side secret',
   assert.equal(requestedUrl, 'https://api.paymongo.com/v1/checkout_sessions/cs_test_1');
   assert.equal(session.id, 'cs_test_1');
 });
+
+test('PayMongo client creates an idempotent refund with centavo amount and server-side auth', async () => {
+  let request;
+  const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_live_secret' }, async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      json: async () => ({ data: { id: 'ref_123', attributes: { status: 'pending', amount: 12500, payment_id: 'pay_123' } } })
+    };
+  });
+  const refund = await client.createRefund({
+    amountCents: 12500,
+    paymentId: 'pay_123',
+    reason: 'others',
+    notes: 'Customer return approved'
+  }, { idempotencyKey: 'mcc-refund-123' });
+  assert.equal(request.url, 'https://api.paymongo.com/v1/refunds');
+  assert.equal(request.options.headers['Idempotency-Key'], 'mcc-refund-123');
+  assert.deepEqual(JSON.parse(request.options.body), {
+    data: { attributes: { amount: 12500, payment_id: 'pay_123', reason: 'others', notes: 'Customer return approved' } }
+  });
+  assert.equal(refund.id, 'ref_123');
+  assert.equal(refund.attributes.status, 'pending');
+});
