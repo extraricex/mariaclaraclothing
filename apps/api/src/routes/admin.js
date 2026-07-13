@@ -15,6 +15,7 @@ const { previewJntParcel } = require('../jnt/jntParcelService');
 const { enqueueDeliveredOrderNotifications } = require('../notifications/orderNotificationService');
 const { listForOrder: listOrderNotifications } = require('../notifications/orderNotificationOutboxRepository');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
+const { normalizeCustomerName } = require('../customers/customerName');
 const { cartSessionSummary, deleteCartSession, listCartSessions } = require('../cartSessions/cartSessionRepository');
 const {
   deleteDiscount,
@@ -1884,17 +1885,17 @@ async function enqueuePancakeOrderUpdateIfLinked(previousOrder, nextOrder, { syn
 }
 
 function normalizeOrderCustomerUpdate(customer) {
-  const fullName = String(customer?.fullName || '').trim();
+  const name = normalizeCustomerName(customer);
   const phone = String(customer?.phone || '').trim();
 
-  if (!fullName || !phone) {
-    const error = new Error('Customer name and contact number are required');
+  if (!name.firstName || !name.lastName || !phone) {
+    const error = new Error('Customer first name, last name, and contact number are required');
     error.status = 400;
     throw error;
   }
 
   return {
-    fullName,
+    ...name,
     phone,
     email: customer?.email ? String(customer.email).trim() : ''
   };
@@ -1984,9 +1985,10 @@ function validateEnum(value, validValues, message) {
 
 function orderSummary(order) {
   const jntExport = jntExportSummary(order);
+  const customerName = normalizeCustomerName(order.customer);
   return {
     orderNumber: order.orderNumber,
-    customerName: order.customer?.fullName || '',
+    customerName: customerName.fullName,
     phone: order.customer?.phone || '',
     channel: order.channel || 'Online Store',
     totalCents: order.totalCents,
@@ -2053,7 +2055,7 @@ function trackingNotificationMessage(order) {
 function orderSearchText(order) {
   return [
     order.orderNumber,
-    order.customer?.fullName,
+    normalizeCustomerName(order.customer).fullName,
     order.customer?.phone,
     order.address?.addressLine
   ].filter(Boolean).join(' ').toLowerCase();

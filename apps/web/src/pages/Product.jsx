@@ -26,7 +26,10 @@ export default function Product() {
   const [activeDetailTab, setActiveDetailTab] = useState(0);
   const [sizeChartOpen, setSizeChartOpen] = useState(false);
   const [recommendations, setRecommendations] = useState([]);
+  const [mainImageLoaded, setMainImageLoaded] = useState(false);
+  const [mainImageFailed, setMainImageFailed] = useState(false);
   const imageTouchStartX = useRef(null);
+  const thumbnailRefs = useRef([]);
 
   useEffect(() => {
     setProduct(null);
@@ -87,6 +90,33 @@ export default function Product() {
     () => sanitizeRichHtml(product?.productPage?.intro || product?.description || ''),
     [product]
   );
+  const productImages = useMemo(() => {
+    const seen = new Set();
+    return (product?.images || []).filter((candidate) => {
+      const url = String(candidate?.url || '').trim();
+      if (!url || seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    });
+  }, [product?.images]);
+
+  useEffect(() => {
+    if (activeImage < productImages.length) return;
+    setActiveImage(0);
+  }, [activeImage, productImages.length]);
+
+  useEffect(() => {
+    setMainImageLoaded(false);
+    setMainImageFailed(false);
+  }, [product?.id, activeImage]);
+
+  useEffect(() => {
+    thumbnailRefs.current[activeImage]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center'
+    });
+  }, [activeImage, productImages.length]);
 
   if (error) {
     return <NotFound eyebrow="Product" title="Product not found" message="This product is unavailable or its link has changed. Browse the current collection to find another piece." />;
@@ -102,7 +132,7 @@ export default function Product() {
   const variant = product.variants.find((candidate) => candidate.id === variantId) || null;
   const variantStock = Math.max(0, Math.trunc(Number(variant?.stockQuantity || 0)));
   const variantSoldOut = soldOut || !variant || variantStock <= 0;
-  const image = product.images[activeImage] || product.images[0];
+  const image = productImages[activeImage] || productImages[0];
   const productPage = product.productPage || {};
   const page = productPage;
   const sizeChartImageUrl = page.sizeChartImageUrl || settings.sizeChart?.imageUrl || '';
@@ -171,13 +201,13 @@ export default function Product() {
   }
 
   function showPreviousImage() {
-    if (product.images.length < 2) return;
-    setActiveImage((index) => (index - 1 + product.images.length) % product.images.length);
+    if (productImages.length < 2) return;
+    setActiveImage((index) => (index - 1 + productImages.length) % productImages.length);
   }
 
   function showNextImage() {
-    if (product.images.length < 2) return;
-    setActiveImage((index) => (index + 1) % product.images.length);
+    if (productImages.length < 2) return;
+    setActiveImage((index) => (index + 1) % productImages.length);
   }
 
   function handleImageTouchStart(event) {
@@ -185,13 +215,38 @@ export default function Product() {
   }
 
   function handleImageTouchEnd(event) {
-    if (imageTouchStartX.current === null || product.images.length < 2) return;
+    if (imageTouchStartX.current === null || productImages.length < 2) return;
     const endX = event.changedTouches[0]?.clientX ?? imageTouchStartX.current;
     const delta = endX - imageTouchStartX.current;
     imageTouchStartX.current = null;
     if (Math.abs(delta) < 40) return;
     if (delta < 0) showNextImage();
     else showPreviousImage();
+  }
+
+  function handleGalleryKeyDown(event) {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      showPreviousImage();
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      showNextImage();
+    }
+  }
+
+  function selectImage(index, moveFocus = false) {
+    setActiveImage(index);
+    if (moveFocus) requestAnimationFrame(() => thumbnailRefs.current[index]?.focus());
+  }
+
+  function handleThumbnailKeyDown(event, index) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'Home') selectImage(0, true);
+    else if (event.key === 'End') selectImage(productImages.length - 1, true);
+    else if (event.key === 'ArrowLeft') selectImage((index - 1 + productImages.length) % productImages.length, true);
+    else selectImage((index + 1) % productImages.length, true);
   }
 
   function handleAdd() {
@@ -216,7 +271,7 @@ export default function Product() {
       quantity: Math.min(variantStock - cartQuantity, Math.max(1, Number(quantity) || 1)),
       maxStock: variantStock,
       unitPriceCents: variant.priceCents ?? product.priceCents,
-      imageUrl: product.images[0]?.url || '',
+      imageUrl: productImages[0]?.url || '',
       externalPosProductId: product.externalPosProductId || '',
       externalPosVariantId: variant.externalPosVariantId || ''
     };
@@ -240,14 +295,33 @@ export default function Product() {
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
         <div className="min-w-0">
           <div
-            className="media-zoom relative aspect-[4/5] max-h-[72svh] overflow-hidden bg-transparent"
+            className="media-zoom relative aspect-[4/5] max-h-[72svh] touch-pan-y overflow-hidden bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
             onTouchStart={handleImageTouchStart}
             onTouchEnd={handleImageTouchEnd}
+            onKeyDown={handleGalleryKeyDown}
+            tabIndex={productImages.length > 1 ? 0 : undefined}
+            role={productImages.length > 1 ? 'region' : undefined}
+            aria-label={productImages.length > 1 ? `${product.name} image gallery` : undefined}
           >
-            {image && (
-              <img src={image.url} alt={image.altText || product.name} className="product-photo-blend h-full w-full object-contain" />
+            {image && !mainImageLoaded && !mainImageFailed && (
+              <span className="absolute inset-0 flex items-center justify-center text-xs uppercase tracking-[0.12em] text-clay" role="status">Loading image</span>
             )}
-            {product.images.length > 1 && (
+            {image && !mainImageFailed && (
+              <img
+                key={image.url}
+                src={image.url}
+                alt={image.altText || `${product.name}, image ${activeImage + 1}`}
+                className={`product-photo-blend h-full w-full object-contain transition-opacity duration-300 ${mainImageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                fetchPriority={activeImage === 0 ? 'high' : 'auto'}
+                decoding="async"
+                onLoad={() => setMainImageLoaded(true)}
+                onError={() => setMainImageFailed(true)}
+              />
+            )}
+            {(!image || mainImageFailed) && (
+              <div className="absolute inset-0 flex items-center justify-center bg-cream px-6 text-center text-xs uppercase tracking-[0.12em] text-clay">Product image unavailable</div>
+            )}
+            {productImages.length > 1 && (
               <>
                 <button
                   type="button"
@@ -273,18 +347,27 @@ export default function Product() {
               </span>
             )}
           </div>
-          {product.images.length > 1 && (
-            <div className="mt-3 flex items-center justify-center gap-2">
-              {product.images.map((thumb, index) => (
+          {productImages.length > 1 && (
+            <div className="product-gallery-thumbnails mt-3 flex max-w-full gap-2 overflow-x-auto pb-2" aria-label="Product image thumbnails">
+              {productImages.map((thumb, index) => (
                 <button
                   key={thumb.id || index}
+                  ref={(node) => { thumbnailRefs.current[index] = node; }}
                   type="button"
-                  onClick={() => setActiveImage(index)}
-                  className={`product-gallery-dot h-2 rounded-full transition-all ${index === activeImage ? 'w-7 bg-ink' : 'w-2 bg-clay/40'}`}
-                  aria-label={`Show product image ${index + 1}`}
+                  onClick={() => selectImage(index)}
+                  onKeyDown={(event) => handleThumbnailKeyDown(event, index)}
+                  className={`product-gallery-dot product-gallery-thumbnail relative h-14 w-14 shrink-0 overflow-hidden border bg-white p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 sm:h-16 sm:w-16 ${index === activeImage ? 'border-ink opacity-100' : 'border-line opacity-70 hover:border-clay hover:opacity-100'}`}
+                  aria-label={`View product image ${index + 1}`}
                   aria-current={index === activeImage ? 'true' : undefined}
                 >
-                  <span className="sr-only">Show product image {index + 1}</span>
+                  <img
+                    src={thumb.url}
+                    alt=""
+                    className="product-photo-blend h-full w-full object-cover"
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    onError={(event) => { event.currentTarget.hidden = true; }}
+                  />
                 </button>
               ))}
             </div>

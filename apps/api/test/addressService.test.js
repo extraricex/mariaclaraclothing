@@ -63,6 +63,8 @@ test('server maps a non-door-to-door barangay', () => {
   });
 
   assert.equal(result.doorToDoor, false);
+  assert.equal(result.postalCode, '');
+  assert.equal(result.addressLine.includes('  '), false);
 });
 
 test('server rejects missing and mismatched address hierarchy levels', () => {

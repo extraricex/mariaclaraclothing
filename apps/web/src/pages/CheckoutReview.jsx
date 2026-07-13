@@ -1,26 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createCheckoutQuote, createPayMongoCheckout, createQuoteBackedOrder } from '../lib/api.js';
+import { createCheckoutQuote, createPayMongoCheckout, createQuoteBackedOrder, fetchProduct, fetchProducts } from '../lib/api.js';
 import { customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import {
   cartQuantity,
+  addToCart,
   clearCart,
   clearCheckoutIdempotencyKey,
+  getCart,
   getCartSessionId,
   getCheckoutIdempotencyKey,
+  removeFromCart,
   resetCartSessionId,
   useCart
 } from '../lib/cart.js';
 import {
   checkoutDraftMatchesCart,
+  checkoutCartFingerprint,
   clearCheckoutReviewDraft,
   loadCheckoutReviewDraft,
   saveCheckoutReviewDraft
 } from '../lib/checkoutDraft.js';
 import { formatMoney } from '../lib/money.js';
-import { trackFacebookAddPaymentInfo, trackFacebookPurchase } from '../lib/metaPixel.js';
+import { trackFacebookAddPaymentInfo, trackFacebookAddToCart, trackFacebookPurchase } from '../lib/metaPixel.js';
 import { DEFAULT_STOREFRONT_SETTINGS, freeShippingHint, loadStorefrontSettings } from '../lib/storeSettings.js';
+import { customerNameParts } from '../lib/customerName.js';
+import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
 import CheckoutHeader from '../components/CheckoutHeader.jsx';
+import CheckoutUpsell from '../components/CheckoutUpsell.jsx';
 
 const REVIEWED_TOTAL_FIELDS = ['subtotalCents', 'discountTotalCents', 'shippingFeeCents', 'totalCents'];
 
@@ -49,23 +56,29 @@ export default function CheckoutReview() {
   const [discountError, setDiscountError] = useState('');
   const [pending, setPending] = useState(false);
   const [loadingQuote, setLoadingQuote] = useState(true);
+  const [catalogProducts, setCatalogProducts] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [pendingUpsellId, setPendingUpsellId] = useState('');
+  const [upsellMessage, setUpsellMessage] = useState('');
   const [status, setStatus] = useState({ tone: 'neutral', message: '' });
   const placingOrderRef = useRef(false);
+  const updatingCartRef = useRef(false);
   const cartSessionId = getCartSessionId();
   const draftMatchesCart = checkoutDraftMatchesCart(draft, items, cartSessionId);
 
-  function quotePayload(discountCode = draft?.discountCode || '') {
+  function quotePayload(discountCode = draft?.discountCode || '', quoteItems = items) {
     return {
       cartSessionId,
-      items,
+      items: quoteItems,
       discountCode,
       address: draft?.address
     };
   }
 
-  function storeReviewDraft(nextQuote, discountCode = draft?.discountCode || '') {
+  function storeReviewDraft(nextQuote, discountCode = draft?.discountCode || '', nextItems = items) {
     const next = saveCheckoutReviewDraft({
       ...draft,
+      cartFingerprint: checkoutCartFingerprint(nextItems),
       discountCode,
       quote: nextQuote
     });
@@ -84,12 +97,12 @@ export default function CheckoutReview() {
 
   useEffect(() => {
     if (!items.length) {
-      if (!placingOrderRef.current) {
+      if (!placingOrderRef.current && !updatingCartRef.current) {
         navigate('/cart', { replace: true, state: { message: 'Your cart is empty. Please add an item before checking out.' } });
       }
       return;
     }
-    if (!draftMatchesCart && !placingOrderRef.current) {
+    if (!draftMatchesCart && !placingOrderRef.current && !updatingCartRef.current) {
       navigate('/checkout', {
         replace: true,
         state: { message: 'Your cart changed or your checkout session expired. Please confirm your delivery information again.' }
@@ -102,6 +115,24 @@ export default function CheckoutReview() {
       .then(setSettings)
       .finally(() => setSettingsLoaded(true));
   }, []);
+
+  useEffect(() => {
+    fetchProducts()
+      .then((body) => setCatalogProducts(body.products || []))
+      .catch(() => setCatalogProducts([]));
+  }, []);
+
+  useEffect(() => {
+    if (!catalogProducts.length) {
+      setRecommendations([]);
+      return;
+    }
+    setRecommendations(selectStableCheckoutUpsells({
+      products: catalogProducts,
+      cartItems: items,
+      cartSessionId
+    }));
+  }, [catalogProducts, items, cartSessionId]);
 
   useEffect(() => {
     if (!settings.paymentMethods.some((method) => method.id === paymentMethod)) {
@@ -155,12 +186,72 @@ export default function CheckoutReview() {
     }
   }
 
-  async function saveCustomerAddress() {
-    if (!loggedIn || !draft?.saveAddress) return;
+  async function addUpsellProduct(product, selectedVariantId) {
+    if (!selectedVariantId || pending || pendingUpsellId) return;
+    updatingCartRef.current = true;
+    setPendingUpsellId(product.id);
+    setUpsellMessage('');
+    setStatus({ tone: 'neutral', message: '' });
+    setLoadingQuote(true);
+    let addedVariantId = '';
+    try {
+      const latestProduct = await fetchProduct(product.publicHandle || product.slug).then((body) => body.product);
+      const latestVariant = latestProduct.variants.find((variant) => variant.id === selectedVariantId);
+      if (!latestVariant || Number(latestVariant.stockQuantity || 0) < 1) {
+        throw new Error('That size just sold out. Choose another available item.');
+      }
+      if (getCart().some((item) => item.productId === latestProduct.id)) {
+        throw new Error('That product is already in your order.');
+      }
+
+      const cartItem = {
+        productId: latestProduct.id,
+        slug: latestProduct.slug,
+        publicHandle: latestProduct.publicHandle,
+        variantId: latestVariant.id,
+        productName: latestProduct.name,
+        size: latestVariant.size,
+        quantity: 1,
+        maxStock: Number(latestVariant.stockQuantity),
+        unitPriceCents: latestVariant.priceCents ?? latestProduct.priceCents,
+        imageUrl: latestProduct.images?.[0]?.url || '',
+        externalPosProductId: latestProduct.externalPosProductId || '',
+        externalPosVariantId: latestVariant.externalPosVariantId || ''
+      };
+      const addResult = addToCart(cartItem);
+      addedVariantId = latestVariant.id;
+      if (!addResult?.ok) throw new Error('That size is no longer available in the requested quantity.');
+
+      const nextItems = getCart();
+      clearCheckoutIdempotencyKey();
+      const nextQuote = await createCheckoutQuote(quotePayload(draft.discountCode || '', nextItems))
+        .then((body) => body.quote);
+      if (!nextQuote?.finalizable) throw new Error('The updated order could not be prepared for payment.');
+      storeReviewDraft(nextQuote, draft.discountCode || '', nextItems);
+      trackFacebookAddToCart(cartItem, {
+        eventId: `upsell:${cartSessionId}:${latestVariant.id}:${nextItems.length}`
+      });
+      setUpsellMessage('Item added to your order.');
+    } catch (error) {
+      if (addedVariantId) removeFromCart(addedVariantId);
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      updatingCartRef.current = false;
+      setPendingUpsellId('');
+      setLoadingQuote(false);
+    }
+  }
+
+  async function saveCustomerDetails() {
+    if (!loggedIn) return;
     const address = draft.address;
-    await customerJson('/api/customer/me', {
-      method: 'PUT',
-      body: JSON.stringify({ savedAddress: {
+    const changes = {
+      firstName: draft.customer.firstName,
+      lastName: draft.customer.lastName,
+      fullName: draft.customer.fullName
+    };
+    if (draft.saveAddress) {
+      changes.savedAddress = {
         houseAddress: address.houseAddress,
         provinceCode: address.provinceCode,
         province: address.province,
@@ -169,7 +260,11 @@ export default function CheckoutReview() {
         barangayCode: address.barangayCode,
         barangay: address.barangay,
         postalCode: address.postalCode
-      } })
+      };
+    }
+    await customerJson('/api/customer/me', {
+      method: 'PUT',
+      body: JSON.stringify(changes)
     });
   }
 
@@ -199,7 +294,7 @@ export default function CheckoutReview() {
         ? await createPayMongoCheckout(payload, latestQuote.id, idempotencyKey)
         : await createQuoteBackedOrder(payload, latestQuote.id, idempotencyKey);
 
-      saveCustomerAddress().catch(() => {});
+      saveCustomerDetails().catch(() => {});
       sessionStorage.setItem('maria-clara-last-order', JSON.stringify({
         orderNumber: result.orderNumber,
         confirmationToken: result.confirmationToken
@@ -229,32 +324,44 @@ export default function CheckoutReview() {
   const displayItems = quote?.items?.length ? quote.items : items;
   const selectedPayment = settings.paymentMethods.find((method) => method.id === paymentMethod);
   const address = draft.address;
+  const customerName = customerNameParts(draft.customer);
 
   return (
     <div className="customer-checkout-shell min-h-screen min-w-0 overflow-x-hidden bg-[var(--customer-bg)]">
       <CheckoutHeader current="review" />
-      <main className="mx-auto grid max-w-6xl gap-7 px-5 pb-14 pt-7 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)] lg:px-8">
-        <form className="customer-card rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={placeOrder}>
+      <main className="mx-auto grid w-full min-w-0 max-w-6xl gap-7 px-5 pb-14 pt-7 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)] lg:px-8">
+        <form className="customer-card w-full min-w-0 max-w-full rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={placeOrder}>
           <p className="eyebrow">Final review</p>
           <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Review and payment</h1>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">Confirm your delivery details, then choose how you would like to pay.</p>
 
-          <section className="mt-7 rounded-[8px] border border-line bg-white p-4 sm:p-5" aria-labelledby="customer-review-heading">
+          <section className="mt-7 min-w-0 max-w-full rounded-[8px] border border-line bg-white p-4 sm:p-5" aria-labelledby="customer-review-heading">
             <div className="flex items-start justify-between gap-4">
               <h2 id="customer-review-heading" className="text-sm font-semibold uppercase tracking-[0.12em]">Customer information</h2>
               <Link to="/checkout" className="shrink-0 text-xs font-semibold text-accent underline">Edit</Link>
             </div>
             <dl className="mt-4 grid min-w-0 gap-3 text-sm sm:grid-cols-2">
-              <div className="min-w-0"><dt className="text-clay">Name</dt><dd className="break-words font-semibold">{draft.customer.fullName}</dd></div>
+              <div className="min-w-0"><dt className="text-clay">First Name</dt><dd className="break-words font-semibold">{customerName.firstName}</dd></div>
+              <div className="min-w-0"><dt className="text-clay">Last Name</dt><dd className="break-words font-semibold">{customerName.lastName}</dd></div>
               <div className="min-w-0"><dt className="text-clay">Mobile</dt><dd className="break-words">{draft.customer.phone}</dd></div>
               {draft.customer.email && <div className="min-w-0 sm:col-span-2"><dt className="text-clay">Email</dt><dd className="break-all">{draft.customer.email}</dd></div>}
               <div className="min-w-0 sm:col-span-2">
                 <dt className="text-clay">Delivery address</dt>
-                <dd className="break-words">{address.houseAddress}, {address.barangay}, {address.city}, {address.province} {address.postalCode}, Philippines</dd>
+                <dd className="break-words">{address.houseAddress}, {address.barangay}, {address.city}, {address.province}{address.postalCode ? ` ${address.postalCode}` : ''}, Philippines</dd>
               </div>
               {draft.notes && <div className="min-w-0 sm:col-span-2"><dt className="text-clay">Delivery notes</dt><dd className="break-words">{draft.notes}</dd></div>}
             </dl>
           </section>
+
+          <CheckoutUpsell
+            recommendations={recommendations}
+            items={items}
+            settings={settings}
+            quote={quote}
+            pendingProductId={pendingUpsellId}
+            message={upsellMessage}
+            onAdd={addUpsellProduct}
+          />
 
           <fieldset className="mt-7 space-y-3">
             <legend className="mb-3 text-sm font-semibold uppercase tracking-[0.12em]">Payment method</legend>
@@ -280,7 +387,7 @@ export default function CheckoutReview() {
               {status.message}
             </p>
           )}
-          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending || loadingQuote || !settingsLoaded || !selectedPayment}>
+          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending || pendingUpsellId || loadingQuote || !settingsLoaded || !selectedPayment}>
             {pending
               ? (paymentMethod === 'paymongo' ? 'Preparing payment...' : 'Placing order...')
               : paymentMethod === 'paymongo'
@@ -294,7 +401,7 @@ export default function CheckoutReview() {
           </p>
         </form>
 
-        <aside className="customer-order-summary self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6" aria-label="Order summary">
+        <aside className="customer-order-summary w-full min-w-0 max-w-full self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6" aria-label="Order summary">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order summary</h2>
             <Link to="/cart" className="text-xs text-accent underline">Edit cart</Link>
@@ -334,7 +441,9 @@ export default function CheckoutReview() {
             <div className="flex justify-between gap-4 border-t border-line pt-3 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(quote?.totalCents || 0)}</dd></div>
           </dl>
           <p className="mt-4 bg-cream px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">
-            {quote?.freeShippingUnlocked ? 'Free shipping unlocked.' : freeShippingHint(settings, cartQuantity(items))}
+            {quote?.freeShippingUnlocked
+              ? 'FREE shipping unlocked!'
+              : freeShippingHint(settings, cartQuantity(items))}
           </p>
         </aside>
       </main>

@@ -9,7 +9,9 @@ test('product page includes reference-style gallery, tabs, and upsell markers', 
   assert.match(source, /aria-label="Previous product image"/);
   assert.match(source, /aria-label="Next product image"/);
   assert.match(source, /product-gallery-dot/);
-  assert.match(source, /aria-label=\{`Show product image \$\{index \+ 1\}`\}/);
+  assert.match(source, /aria-label=\{`View product image \$\{index \+ 1\}`\}/);
+  assert.match(source, /product-gallery-thumbnail/);
+  assert.match(source, /scrollIntoView/);
   assert.match(source, /object-contain/);
   assert.match(source, /You May Also Like/);
   assert.match(source, /Add 2 or more items and get free shipping/);

@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { loadBarangays, loadCities, loadProvinces } from '../lib/addressGuide.js';
+import { customerNameParts } from '../lib/customerName.js';
 
 export default function AccountSettings() {
   const navigate = useNavigate();
   const loggedIn = useCustomerLoggedIn();
   const [customer, setCustomer] = useState(null);
   const [message, setMessage] = useState({ tone: 'neutral', text: '' });
-  const [profile, setProfile] = useState({ fullName: '', phone: '' });
+  const [profile, setProfile] = useState({ firstName: '', lastName: '', phone: '' });
   const [editAddress, setEditAddress] = useState(false);
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
@@ -22,8 +23,9 @@ export default function AccountSettings() {
     }
     customerJson('/api/customer/me')
       .then((body) => {
+        const name = customerNameParts(body.customer);
         setCustomer(body.customer);
-        setProfile({ fullName: body.customer.fullName, phone: body.customer.phone });
+        setProfile({ firstName: name.firstName, lastName: name.lastName, phone: body.customer.phone });
       })
       .catch((err) => setMessage({ tone: 'error', text: err.message }));
   }, [loggedIn, navigate]);
@@ -47,7 +49,12 @@ export default function AccountSettings() {
   async function save() {
     setMessage({ tone: 'neutral', text: '' });
     try {
-      const changes = { fullName: profile.fullName, phone: profile.phone };
+      const changes = {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        fullName: `${profile.firstName.trim()} ${profile.lastName.trim()}`,
+        phone: profile.phone
+      };
       if (editAddress) {
         const province = provinces.find((item) => item.code === draft.provinceCode);
         const city = cities.find((item) => item.code === draft.cityCode);
@@ -96,10 +103,16 @@ export default function AccountSettings() {
         <section className="border border-line bg-white p-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Profile</h2>
           <div className="mt-4 space-y-4">
-            <label className="block">
-              <span className="eyebrow">Full name</span>
-              <input className="field mt-1" value={profile.fullName} onChange={(e) => setProfile((p) => ({ ...p, fullName: e.target.value }))} autoComplete="name" />
-            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="eyebrow">First name</span>
+                <input className="field mt-1" value={profile.firstName} onChange={(e) => setProfile((p) => ({ ...p, firstName: e.target.value }))} autoComplete="given-name" />
+              </label>
+              <label className="block">
+                <span className="eyebrow">Last name</span>
+                <input className="field mt-1" value={profile.lastName} onChange={(e) => setProfile((p) => ({ ...p, lastName: e.target.value }))} autoComplete="family-name" />
+              </label>
+            </div>
             <label className="block">
               <span className="eyebrow">Mobile number</span>
               <input className="field mt-1" value={profile.phone} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} autoComplete="tel" />

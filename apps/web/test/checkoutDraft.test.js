@@ -26,7 +26,7 @@ test('checkout review draft is session-scoped, versioned, and cart-bound', () =>
     customer: { fullName: 'Maria Clara' }
   }, storage);
 
-  assert.equal(draft.version, 1);
+  assert.equal(draft.version, 2);
   assert.equal(loadCheckoutReviewDraft(storage).customer.fullName, 'Maria Clara');
   assert.equal(checkoutDraftMatchesCart(draft, items, 'cart-1'), true);
   assert.equal(checkoutDraftMatchesCart(draft, [{ ...items[0], quantity: 1 }], 'cart-1'), false);
@@ -40,4 +40,3 @@ test('checkout review draft expires after two hours', () => {
   const draft = saveCheckoutReviewDraft({ cartSessionId: 'cart-1' }, storage);
   assert.equal(loadCheckoutReviewDraft(storage, draft.savedAt + (2 * 60 * 60 * 1000) + 1), null);
 });
-

@@ -12,7 +12,7 @@ function requestFixture(overrides = {}) {
     quoteId: 'quote-1',
     cartSessionId: 'cart-1',
     idempotencyKey: 'idem-1234567890123456',
-    customer: { fullName: 'Maria Test', phone: '09171234567', email: '' },
+    customer: { firstName: 'Maria', lastName: 'Test', fullName: 'Maria Test', phone: '09171234567', email: '' },
     paymentMethod: 'cash_on_delivery',
     notes: '',
     requestContext: {},
@@ -112,6 +112,15 @@ test('same key with a different normalized request is rejected', async () => {
   await assert.rejects(
     placeAuthoritativeCheckout(requestFixture(), deps),
     (error) => error.code === 'idempotency_conflict' && error.status === 409
+  );
+});
+
+test('checkout requires both customer name parts', async () => {
+  await assert.rejects(
+    placeAuthoritativeCheckout(requestFixture({
+      customer: { firstName: 'Maria', lastName: '', fullName: 'Maria', phone: '09171234567' }
+    }), createDependencies()),
+    (error) => error.code === 'checkout_invalid' && /last name/i.test(error.message)
   );
 });
 

@@ -4,6 +4,7 @@ import { adminJson, adminSend } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
 import { loadBarangays, loadCities, loadProvinces } from '../lib/addressGuide.js';
 import { adminProductDisplayParts, truncateAdminProductCode } from './adminProductDisplay.js';
+import { customerFullName, customerNameParts } from '../lib/customerName.js';
 
 const ENUMS = {
   status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'],
@@ -36,6 +37,7 @@ const ORDER_ACTION_STATUSES = [
 const NOTE_TABS = ['All', 'Internal', 'Printing', 'Conversation'];
 
 function orderForm(order) {
+  const customerName = customerNameParts(order.customer);
   return {
     status: order.status,
     fulfillmentStatus: order.fulfillmentStatus,
@@ -48,7 +50,7 @@ function orderForm(order) {
     deliveryMethod: order.deliveryMethod || 'Standard shipping',
     parcelWeightOverrideGrams: order.parcelWeightOverrideGrams ?? '',
     customer: {
-      fullName: order.customer?.fullName || '',
+      ...customerName,
       phone: order.customer?.phone || '',
       email: order.customer?.email || ''
     },
@@ -216,10 +218,13 @@ export default function OrderDetail() {
 
   function updateCustomer(field, value) {
     setIsEditing(true);
-    setForm((previous) => ({
-      ...previous,
-      customer: { ...previous.customer, [field]: value }
-    }));
+    setForm((previous) => {
+      const customer = { ...previous.customer, [field]: value };
+      if (field === 'firstName' || field === 'lastName') {
+        customer.fullName = customerFullName(customer);
+      }
+      return { ...previous, customer };
+    });
   }
 
   async function startAddressEdit() {
@@ -821,10 +826,14 @@ export default function OrderDetail() {
             </DetailCard>
 
             <DetailCard title="Customer" className="xl:col-span-4">
-              <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="eyebrow !text-[var(--admin-muted)]">Full name</span>
-                  <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={form.customer.fullName} disabled={!isEditing} onChange={(e) => updateCustomer('fullName', e.target.value)} />
+                  <span className="eyebrow !text-[var(--admin-muted)]">First name</span>
+                  <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={form.customer.firstName} disabled={!isEditing} onChange={(e) => updateCustomer('firstName', e.target.value)} />
+                </label>
+                <label className="block">
+                  <span className="eyebrow !text-[var(--admin-muted)]">Last name</span>
+                  <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={form.customer.lastName} disabled={!isEditing} onChange={(e) => updateCustomer('lastName', e.target.value)} />
                 </label>
                 <label className="block">
                   <span className="eyebrow !text-[var(--admin-muted)]">Phone number</span>
@@ -851,7 +860,7 @@ export default function OrderDetail() {
               </div>
               {!editAddress ? (
                 <dl className="mt-3">
-                  <InfoRow label="Customer name" value={fallback(form.customer.fullName, 'No name provided')} />
+                  <InfoRow label="Customer name" value={fallback(customerFullName(form.customer), 'No name provided')} />
                   <InfoRow label="Phone number" value={fallback(form.customer.phone, 'No phone provided')} />
                   <InfoRow label="Complete address" value={fallback(fullAddress, 'No address provided')} />
                   <InfoRow label="House / Street" value={fallback(order.address?.houseAddress, 'No house / street')} />

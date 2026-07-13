@@ -45,8 +45,9 @@ test('product page gallery uses smaller arrows and touch swipe navigation', asyn
   assert.match(product, /handleImageTouchEnd/);
   assert.match(product, /onTouchStart=\{handleImageTouchStart\}/);
   assert.match(product, /onTouchEnd=\{handleImageTouchEnd\}/);
-  assert.match(product, /aria-label=\{`Show product image \$\{index \+ 1\}`\}/);
+  assert.match(product, /aria-label=\{`View product image \$\{index \+ 1\}`\}/);
   assert.match(product, /product-gallery-dot/);
+  assert.match(product, /product-gallery-thumbnail/);
   assert.match(product, /h-8 w-8/);
   assert.doesNotMatch(product, /rounded-full bg-white\/90 text-2xl/);
   assert.match(product, /min-w-10 rounded-full border border-line px-3 py-2 text-\[11px\]/);

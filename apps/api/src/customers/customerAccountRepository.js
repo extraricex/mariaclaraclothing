@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { hasDatabaseUrl, query, transaction } = require('../db/postgres');
+const { normalizeCustomerName } = require('./customerName');
 
 const DEFAULT_ACCOUNTS_FILE = path.join(__dirname, '..', '..', 'data', 'customer-accounts.json');
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -76,10 +77,11 @@ function normalizeSavedAddress(address) {
 
 function publicCustomer(account) {
   if (!account) return null;
+  const name = normalizeCustomerName(account);
   return {
     id: account.id,
     email: account.email,
-    fullName: account.fullName,
+    ...name,
     phone: account.phone,
     savedAddress: account.savedAddress || null,
     createdAt: account.createdAt,
@@ -99,12 +101,17 @@ function writeAccountsFile(customerAccounts) {
 }
 
 function fromPostgresAccount(row) {
+  const name = normalizeCustomerName({
+    firstName: row.first_name,
+    lastName: row.last_name,
+    fullName: row.full_name
+  });
   return {
     id: row.id,
     email: row.email,
     passwordHash: row.password_hash,
     passwordSalt: row.password_salt,
-    fullName: row.full_name,
+    ...name,
     phone: row.phone,
     savedAddress: row.saved_address || null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
@@ -130,13 +137,14 @@ function findAccountById(id) {
   return readAccountsFile().find((account) => account.id === id) || null;
 }
 
-async function createAccount({ fullName, email, phone, password }) {
+async function createAccount({ firstName, lastName, fullName, email, phone, password }) {
   const now = new Date().toISOString();
+  const name = normalizeCustomerName({ firstName, lastName, fullName });
   const account = {
     id: crypto.randomUUID(),
     email: normalizeEmail(email),
     ...hashPassword(password),
-    fullName: String(fullName || '').trim(),
+    ...name,
     phone: String(phone || '').trim(),
     savedAddress: null,
     createdAt: now,
@@ -145,10 +153,11 @@ async function createAccount({ fullName, email, phone, password }) {
 
   if (usePostgresAccounts()) {
     await query(
-      `INSERT INTO customer_accounts (id, email, password_hash, password_salt, full_name, phone, saved_address, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`,
+      `INSERT INTO customer_accounts
+        (id, email, password_hash, password_salt, full_name, first_name, last_name, phone, saved_address, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)`,
       [account.id, account.email, account.passwordHash, account.passwordSalt, account.fullName,
-        account.phone, JSON.stringify(account.savedAddress), account.createdAt, account.updatedAt]
+        account.firstName, account.lastName, account.phone, JSON.stringify(account.savedAddress), account.createdAt, account.updatedAt]
     );
     return account;
   }
@@ -168,6 +177,7 @@ async function findOrCreateOAuthAccount({ provider, providerUserId, email, fullN
   const normalizedProvider = String(provider || '').trim().toLowerCase();
   const normalizedProviderUserId = String(providerUserId || '').trim();
   const normalizedName = String(fullName || '').trim();
+  const name = normalizeCustomerName({ fullName: normalizedName });
   if (!['google', 'facebook'].includes(normalizedProvider) || !normalizedProviderUserId || !normalizedEmail) {
     throw new Error('OAuth identity is incomplete');
   }
@@ -193,10 +203,10 @@ async function findOrCreateOAuthAccount({ provider, providerUserId, email, fullN
           const id = crypto.randomUUID();
           const inserted = await client.query(
             `INSERT INTO customer_accounts
-              (id, email, password_hash, password_salt, full_name, phone, saved_address, created_at, updated_at)
-             VALUES ($1, $2, NULL, NULL, $3, '', NULL, now(), now())
+              (id, email, password_hash, password_salt, full_name, first_name, last_name, phone, saved_address, created_at, updated_at)
+             VALUES ($1, $2, NULL, NULL, $3, $4, $5, '', NULL, now(), now())
              RETURNING *`,
-            [id, normalizedEmail, normalizedName]
+            [id, normalizedEmail, name.fullName, name.firstName, name.lastName]
           );
           accountRow = inserted.rows[0];
         }
@@ -217,8 +227,10 @@ async function findOrCreateOAuthAccount({ provider, providerUserId, email, fullN
       }
       if (!String(accountRow.full_name || '').trim() && normalizedName) {
         const updated = await client.query(
-          'UPDATE customer_accounts SET full_name = $2, updated_at = now() WHERE id = $1 RETURNING *',
-          [accountRow.id, normalizedName]
+          `UPDATE customer_accounts
+              SET full_name = $2, first_name = $3, last_name = $4, updated_at = now()
+            WHERE id = $1 RETURNING *`,
+          [accountRow.id, name.fullName, name.firstName, name.lastName]
         );
         accountRow = updated.rows[0];
       }
@@ -239,7 +251,7 @@ async function findOrCreateOAuthAccount({ provider, providerUserId, email, fullN
   if (!account) {
     account = {
       id: crypto.randomUUID(), email: normalizedEmail, passwordHash: null, passwordSalt: null,
-      fullName: normalizedName, phone: '', savedAddress: null, authIdentities: [], createdAt: now, updatedAt: now
+      ...name, phone: '', savedAddress: null, authIdentities: [], createdAt: now, updatedAt: now
     };
     accounts.push(account);
   }
@@ -256,7 +268,7 @@ async function findOrCreateOAuthAccount({ provider, providerUserId, email, fullN
   } else {
     account.authIdentities.push({ provider: normalizedProvider, providerUserId: normalizedProviderUserId, providerEmail: normalizedEmail, createdAt: now, updatedAt: now });
   }
-  if (!account.fullName && normalizedName) account.fullName = normalizedName;
+  if (!account.fullName && normalizedName) Object.assign(account, name);
   account.updatedAt = now;
   writeAccountsFile(accounts);
   return { ...account, loginProviders: account.authIdentities.map((identity) => identity.provider).sort() };
@@ -278,9 +290,19 @@ async function updateAccount(id, changes) {
   const existing = await findAccountById(id);
   if (!existing) return null;
 
+  const existingName = normalizeCustomerName(existing);
+  const hasNameParts = changes.firstName !== undefined || changes.lastName !== undefined;
+  const name = hasNameParts
+    ? normalizeCustomerName({
+      firstName: changes.firstName !== undefined ? changes.firstName : existingName.firstName,
+      lastName: changes.lastName !== undefined ? changes.lastName : existingName.lastName
+    })
+    : changes.fullName !== undefined
+      ? normalizeCustomerName({ fullName: changes.fullName })
+      : existingName;
   const updated = {
     ...existing,
-    fullName: changes.fullName !== undefined ? String(changes.fullName || '').trim() : existing.fullName,
+    ...name,
     phone: changes.phone !== undefined ? String(changes.phone || '').trim() : existing.phone,
     savedAddress: changes.savedAddress !== undefined ? normalizeSavedAddress(changes.savedAddress) : existing.savedAddress,
     updatedAt: new Date().toISOString()
@@ -288,8 +310,11 @@ async function updateAccount(id, changes) {
 
   if (usePostgresAccounts()) {
     await query(
-      `UPDATE customer_accounts SET full_name = $2, phone = $3, saved_address = $4::jsonb, updated_at = $5 WHERE id = $1`,
-      [id, updated.fullName, updated.phone, JSON.stringify(updated.savedAddress), updated.updatedAt]
+      `UPDATE customer_accounts
+          SET full_name = $2, first_name = $3, last_name = $4, phone = $5, saved_address = $6::jsonb, updated_at = $7
+        WHERE id = $1`,
+      [id, updated.fullName, updated.firstName, updated.lastName, updated.phone,
+        JSON.stringify(updated.savedAddress), updated.updatedAt]
     );
     return updated;
   }

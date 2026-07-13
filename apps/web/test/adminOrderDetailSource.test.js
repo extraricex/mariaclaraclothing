@@ -7,7 +7,9 @@ test('admin order detail editor exposes contact and address editing while lockin
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'OrderDetail.jsx'), 'utf8');
 
   assert.match(source, /customer:\s*\{/);
-  assert.match(source, /fullName:\s*order\.customer\?\.fullName/);
+  assert.match(source, /customerNameParts\(order\.customer\)/);
+  assert.match(source, /value=\{form\.customer\.firstName\}/);
+  assert.match(source, /value=\{form\.customer\.lastName\}/);
   assert.match(source, /phone:\s*order\.customer\?\.phone/);
   assert.match(source, /email:\s*order\.customer\?\.email/);
   assert.match(source, /items:\s*\(order\.items/);

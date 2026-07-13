@@ -160,7 +160,7 @@ export function isFreeShipping(settings, quantity) {
 export function freeShippingHint(settings, quantity) {
   if (!settings.shipping.freeShippingEnabled) return 'Standard shipping rates apply.';
   const needed = Math.max(0, settings.shipping.freeShippingMinimumItems - quantity);
-  return `Add ${needed} more item${needed === 1 ? '' : 's'} to unlock free shipping.`;
+  return `Add ${needed} more item${needed === 1 ? '' : 's'} to unlock FREE shipping.`;
 }
 
 function upsertMetaTag(attribute, name, content) {

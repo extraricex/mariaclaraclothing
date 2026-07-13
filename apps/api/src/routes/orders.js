@@ -29,6 +29,7 @@ const { buildAuthoritativeQuote } = require('../checkout/checkoutQuoteService');
 const { deriveConfirmationToken, hashConfirmationToken, verifyConfirmationToken } = require('../checkout/confirmationToken');
 const { sha256Object } = require('../checkout/requestHash');
 const { CommerceError } = require('../checkout/commerceError');
+const { customerFullName, normalizeCustomerName } = require('../customers/customerName');
 
 const { enqueueOrderExport } = pancakeOrderExportRepository;
 
@@ -176,7 +177,7 @@ function createOrderNumber() {
 function orderConfirmationPayload(order) {
   return {
     orderNumber: order.orderNumber,
-    customerName: order.customer.fullName,
+    customerName: customerFullName(order.customer),
     paymentMethod: 'Cash on Delivery',
     addressLine: order.address.addressLine,
     shippingRegionLabel: order.shippingRegionLabel,
@@ -204,8 +205,9 @@ function orderConfirmationPayload(order) {
 }
 
 async function normalizeCheckout(body) {
-  if (!body.customer?.fullName || !body.customer?.phone) {
-    const error = new Error('Full name and mobile number are required');
+  const customerName = normalizeCustomerName(body.customer);
+  if (!customerName.firstName || !customerName.lastName || !body.customer?.phone) {
+    const error = new Error('First name, last name, and mobile number are required');
     error.status = 400;
     throw error;
   }
@@ -251,7 +253,7 @@ async function normalizeCheckout(body) {
 
   return {
     customer: {
-      fullName: String(body.customer.fullName).trim(),
+      ...customerName,
       phone: String(body.customer.phone).trim(),
       email: body.customer.email ? String(body.customer.email).trim() : ''
     },
@@ -375,13 +377,15 @@ function publicOrderPayload(order) {
 }
 
 function privateOrderPayload(order) {
+  const customerName = normalizeCustomerName(order.customer);
   const paymentMethodLabel = order.paymentMethod === 'cash_on_delivery'
     ? 'Cash on Delivery'
     : String(order.paymentMethod || '').replaceAll('_', ' ');
   return {
     orderNumber: order.orderNumber,
-    customerName: String(order.customer?.fullName || '').trim(),
-    customerFirstName: String(order.customer?.fullName || '').trim().split(/\s+/)[0] || '',
+    customerName: customerName.fullName,
+    customerFirstName: customerName.firstName,
+    customerLastName: customerName.lastName,
     addressLine: order.address?.addressLine || '',
     address: order.address || {},
     paymentMethod: order.paymentMethod,

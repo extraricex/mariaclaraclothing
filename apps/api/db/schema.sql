@@ -261,6 +261,8 @@ CREATE TABLE IF NOT EXISTS customer_accounts (
   password_hash text,
   password_salt text,
   full_name text NOT NULL DEFAULT '',
+  first_name text NOT NULL DEFAULT '',
+  last_name text NOT NULL DEFAULT '',
   phone text NOT NULL DEFAULT '',
   saved_address jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),

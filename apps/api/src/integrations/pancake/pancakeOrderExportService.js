@@ -1,6 +1,7 @@
 const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
 const inventoryOutboxRepositoryDefault = require('./pancakeInventoryOutboxRepository');
 const { buildPancakeOrderNote, buildPancakePaymentPayload } = require('./pancakeOrderMapper');
+const { customerFullName } = require('../../customers/customerName');
 
 class PancakeOrderExportError extends Error {
   constructor(code) {
@@ -65,7 +66,7 @@ function shippingAddress(order) {
     address.country || 'Philippines'
   ].map((part) => String(part || '').trim()).filter(Boolean);
   return {
-    full_name: String(customer.fullName || '').trim(),
+    full_name: customerFullName(customer),
     phone_number: String(customer.phone || '').trim(),
     address: String(address.houseAddress || address.addressLine || '').trim(),
     full_address: String(address.addressLine || parts.join(', ')).trim(),
@@ -105,7 +106,7 @@ function buildPancakeOrderPayload(order, readiness) {
     shop_id: safeShopId(readiness.shopId),
     warehouse_id: String(readiness.warehouseId || ''),
     custom_id: String(order.orderNumber || ''),
-    bill_full_name: String(customer.fullName || '').trim(),
+    bill_full_name: customerFullName(customer),
     bill_phone_number: String(customer.phone || '').trim(),
     bill_email: String(customer.email || '').trim().toLowerCase(),
     shipping_address: shippingAddress(order),

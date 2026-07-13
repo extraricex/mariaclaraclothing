@@ -67,7 +67,7 @@ const ORDER_ITEM = {
 
 function checkoutPayload(phone = '09171230001') {
   return {
-    customer: { fullName: 'Maria Test', phone, email: '' },
+    customer: { firstName: 'Maria', lastName: 'Test', fullName: 'Maria Test', phone, email: '' },
     address: {
       addressLine: '12 Test St, BUCANDALA IV, IMUS, CAVITE, Philippines',
       houseAddress: '12 Test St',
@@ -101,6 +101,7 @@ test('customer accounts: register, login, profile, order linking', async () => {
       body: JSON.stringify(checkoutPayload('09171230001'))
     });
     assert.equal(guestOrder.status, 201);
+    await guestOrder.json();
 
     // register
     const registerResponse = await jsonRequest(port, '/api/customer/register', {
@@ -111,6 +112,8 @@ test('customer accounts: register, login, profile, order linking', async () => {
     const { token, customer } = await registerResponse.json();
     assert.ok(token);
     assert.equal(customer.email, 'maria@example.com');
+    assert.equal(customer.firstName, 'Maria');
+    assert.equal(customer.lastName, 'Test');
     assert.equal(customer.savedAddress, null);
     assert.equal(customer.passwordHash, undefined);
 
@@ -155,6 +158,27 @@ test('customer accounts: register, login, profile, order linking', async () => {
     const me = await jsonRequest(port, '/api/customer/me', { token: loginBody.token });
     assert.equal(me.status, 200);
 
+    // Older clients that still send fullName continue to update both stored parts.
+    const legacyNameUpdate = await jsonRequest(port, '/api/customer/me', {
+      method: 'PUT',
+      token: loginBody.token,
+      body: JSON.stringify({ fullName: 'Legacy Name Update' })
+    });
+    assert.equal(legacyNameUpdate.status, 200);
+    const legacyNameCustomer = (await legacyNameUpdate.json()).customer;
+    assert.equal(legacyNameCustomer.firstName, 'Legacy');
+    assert.equal(legacyNameCustomer.lastName, 'Name Update');
+    assert.equal(legacyNameCustomer.fullName, 'Legacy Name Update');
+
+    const splitNameUpdate = await jsonRequest(port, '/api/customer/me', {
+      method: 'PUT',
+      token: loginBody.token,
+      body: JSON.stringify({ firstName: 'Maria', lastName: 'Customer' })
+    });
+    assert.equal(splitNameUpdate.status, 200);
+    const splitNameCustomer = (await splitNameUpdate.json()).customer;
+    assert.equal(splitNameCustomer.fullName, 'Maria Customer');
+
     // save address
     const updateResponse = await jsonRequest(port, '/api/customer/me', {
       method: 'PUT',
@@ -181,6 +205,7 @@ test('customer accounts: register, login, profile, order linking', async () => {
       body: JSON.stringify(checkoutPayload('09998887777'))
     });
     assert.equal(memberOrder.status, 201);
+    await memberOrder.json();
 
     // History contains only the explicitly account-stamped order.
     const ordersResponse = await jsonRequest(port, '/api/customer/orders', { headers: { cookie: customerCookie } });

@@ -40,11 +40,13 @@
   html {
     @apply bg-paper text-ink antialiased;
     font-family: var(--font-body);
+    overflow-x: clip;
   }
   body,
   #root {
     min-width: 0;
     max-width: 100%;
+    overflow-x: clip;
   }
   ::selection {
     @apply bg-accent text-paper;
@@ -693,6 +695,25 @@
 }
 .media-zoom:hover img {
   transform: scale(1.04);
+}
+.product-gallery-thumbnails,
+.checkout-upsell-strip {
+  max-width: 100%;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--customer-border) transparent;
+}
+.checkout-upsell-viewport {
+  contain: layout inline-size paint;
+  width: 100%;
+}
+.product-gallery-thumbnails::-webkit-scrollbar,
+.checkout-upsell-strip::-webkit-scrollbar {
+  height: 4px;
+}
+.product-gallery-thumbnails::-webkit-scrollbar-thumb,
+.checkout-upsell-strip::-webkit-scrollbar-thumb {
+  background: var(--customer-border);
 }
 
 /* grain overlay for hero */

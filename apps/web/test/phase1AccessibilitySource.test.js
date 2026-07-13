@@ -63,5 +63,5 @@ test('mobile menu and checkout actions use accessible compact controls', async (
   assert.match(shell, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
   assert.match(checkout, /btn-ink customer-compact-button mt-6 w-full/);
   assert.match(review, /btn-ink customer-compact-button mt-6 w-full/);
-  assert.match(review, /disabled=\{pending \|\| loadingQuote \|\| !settingsLoaded \|\| !selectedPayment\}/);
+  assert.match(review, /disabled=\{pending \|\| pendingUpsellId \|\| loadingQuote \|\| !settingsLoaded \|\| !selectedPayment\}/);
 });

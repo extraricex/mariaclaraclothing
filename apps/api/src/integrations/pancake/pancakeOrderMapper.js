@@ -1,3 +1,5 @@
+const { customerFullName, normalizeCustomerName } = require('../../customers/customerName');
+
 const STATUS_MAP = new Map([
   ['new', { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
   ['waiting for confirmation', { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
@@ -256,7 +258,7 @@ function normalizePancakeOrder(payload = {}) {
     orderNumber,
     pancakeUpdatedAt: updatedAt,
     customer: {
-      fullName: String(payload.bill_full_name || payload.customer?.name || '').trim(),
+      ...normalizeCustomerName({ fullName: payload.bill_full_name || payload.customer?.name }),
       phone: String(payload.bill_phone_number || payload.customer?.phone || '').trim(),
       email: String(payload.bill_email || payload.customer?.email || '').trim().toLowerCase()
     },
@@ -361,7 +363,7 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
     payload.partner = { extend_code: String(order.trackingNumber || '').trim() };
   }
   if (fields.has('customer')) {
-    payload.bill_full_name = String(order.customer?.fullName || '').trim();
+    payload.bill_full_name = customerFullName(order.customer);
     payload.bill_phone_number = String(order.customer?.phone || '').trim();
     payload.bill_email = String(order.customer?.email || '').trim().toLowerCase();
   }

@@ -4,6 +4,7 @@ import { customerJson, customerLogout, useCustomerLoggedIn } from '../lib/custom
 import { fetchProduct } from '../lib/api.js';
 import { addToCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
+import { customerNameParts } from '../lib/customerName.js';
 
 const STATUS_STEPS = ['received', 'confirmed', 'packed', 'shipped', 'delivered'];
 
@@ -53,6 +54,8 @@ export default function Account() {
     return <div className="mx-auto max-w-7xl px-5 py-16 text-sm text-clay lg:px-8">{message || 'Loading account…'}</div>;
   }
 
+  const customerName = customerNameParts(customer);
+
   async function buyAgain(order) {
     setBuyAgainNote('Checking stock…');
     const added = [];
@@ -96,7 +99,7 @@ export default function Account() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Account</p>
-          <h1 className="display mt-1 text-4xl sm:text-5xl">Hi, {customer.fullName.split(' ')[0]}</h1>
+          <h1 className="display mt-1 text-4xl sm:text-5xl">Hi, {customerName.firstName}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Link to="/account/settings" className="btn-ghost !px-5 !py-2.5 text-xs">Account settings</Link>
@@ -119,7 +122,7 @@ export default function Account() {
             <dl className="mt-3 space-y-3 text-sm">
               <div>
                 <dt className="text-xs uppercase tracking-[0.1em] text-clay">Name</dt>
-                <dd className="font-semibold">{customer.fullName}</dd>
+                <dd className="font-semibold">{customerName.fullName}</dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-[0.1em] text-clay">Mobile</dt>

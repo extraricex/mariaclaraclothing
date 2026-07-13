@@ -1,15 +1,17 @@
 const { CommerceError } = require('./commerceError');
+const { normalizeCustomerName } = require('../customers/customerName');
 
 function fail(message, code, status = 409, details) {
   throw new CommerceError(message, { code, status, details });
 }
 
 function normalizedRequest(input) {
+  const customerName = normalizeCustomerName(input.customer);
   return {
     quoteId: String(input.quoteId || '').trim(),
     cartSessionId: String(input.cartSessionId || '').trim(),
     customer: {
-      fullName: String(input.customer?.fullName || '').trim(),
+      ...customerName,
       phone: String(input.customer?.phone || '').trim(),
       email: String(input.customer?.email || '').trim().toLowerCase()
     },
@@ -107,8 +109,8 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     fail('Idempotency-Key must be between 16 and 200 characters.', 'idempotency_key_invalid', 400);
   }
   const request = normalizedRequest(input);
-  if (!request.quoteId || !request.cartSessionId || !request.customer.fullName || !request.customer.phone) {
-    fail('Quote, cart session, full name, and mobile number are required.', 'checkout_invalid', 400);
+  if (!request.quoteId || !request.cartSessionId || !request.customer.firstName || !request.customer.lastName || !request.customer.phone) {
+    fail('Quote, cart session, first name, last name, and mobile number are required.', 'checkout_invalid', 400);
   }
   const now = deps.now();
   const requestHash = deps.hashRequest(request);

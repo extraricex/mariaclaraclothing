@@ -33,6 +33,7 @@ const {
 } = require('../auth/sessionHttp');
 const { env } = require('../config/env');
 const { getStoreSettings } = require('../settings/storeSettingsRepository');
+const { normalizeCustomerName } = require('../customers/customerName');
 const {
   authorizationUrl,
   exchangeOAuthCode,
@@ -183,17 +184,17 @@ router.get('/oauth/:provider/callback', async (req, res, next) => {
 });
 
 function normalizeRegistration(body) {
-  const fullName = String(body.fullName || '').trim();
+  const name = normalizeCustomerName(body);
   const email = normalizeEmail(body.email);
   const phone = String(body.phone || '').trim();
   const password = String(body.password || '');
 
-  if (!fullName) throw badRequest('Full name is required');
+  if (!name.fullName) throw badRequest('Full name is required');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest('A valid email address is required');
   if (!normalizePhilippinePhone(phone)) throw badRequest('A valid Philippine mobile number is required');
   if (password.length < 8) throw badRequest('Password must be at least 8 characters');
 
-  return { fullName, email, phone, password };
+  return { ...name, email, phone, password };
 }
 
 router.post('/register', async (req, res, next) => {
@@ -251,8 +252,19 @@ router.put('/me', requireCustomer, requireCustomerCsrf, async (req, res, next) =
   try {
     const body = req.body || {};
 
-    if (body.fullName !== undefined && !String(body.fullName).trim()) {
-      throw badRequest('Full name is required');
+    if (body.fullName !== undefined || body.firstName !== undefined || body.lastName !== undefined) {
+      const existingName = normalizeCustomerName(req.customerAccount);
+      const hasNameParts = body.firstName !== undefined || body.lastName !== undefined;
+      const name = hasNameParts
+        ? normalizeCustomerName({
+          firstName: body.firstName !== undefined ? body.firstName : existingName.firstName,
+          lastName: body.lastName !== undefined ? body.lastName : existingName.lastName
+        })
+        : normalizeCustomerName({ fullName: body.fullName });
+      if (!name.firstName || !name.lastName) {
+        throw badRequest('First name and last name are required');
+      }
+      Object.assign(body, name);
     }
     if (body.phone !== undefined && !normalizePhilippinePhone(String(body.phone))) {
       throw badRequest('A valid Philippine mobile number is required');
