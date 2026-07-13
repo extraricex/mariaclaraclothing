@@ -52,7 +52,7 @@ function parseRefundEvent(payload) {
     reason: REFUND_REASONS.has(String(attributes.reason || '')) ? String(attributes.reason) : 'others',
     notes: String(attributes.notes || '').slice(0, 255),
     status: normalizeRefundStatus(attributes.status, eventType),
-    livemode: Boolean(envelopeAttributes.livemode ?? resourceAttributes.livemode),
+    livemode: Boolean(envelopeAttributes.livemode ?? envelope.livemode ?? resourceAttributes.livemode),
     providerCreatedAt: timestamp(attributes.created_at),
     providerUpdatedAt: timestamp(attributes.updated_at),
     digest

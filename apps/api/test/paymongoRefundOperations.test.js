@@ -64,6 +64,28 @@ test('payment.refunded defaults to succeeded when the nested refund omits status
   assert.equal(normalizeRefundStatus('unexpected'), 'pending');
 });
 
+test('refund parser accepts the current PayMongo event envelope with top-level livemode', () => {
+  const event = parseRefundEvent({
+    event_type: 'send.webhook',
+    data: {
+      type: 'payment.refund.updated',
+      livemode: true,
+      data: {
+        id: 'ref_current_1',
+        type: 'refund',
+        attributes: {
+          payment_id: 'pay_current_1', amount: 5000, currency: 'PHP', status: 'processing'
+        }
+      }
+    }
+  });
+  assert.equal(event.eventType, 'payment.refund.updated');
+  assert.equal(event.refundId, 'ref_current_1');
+  assert.equal(event.paymentId, 'pay_current_1');
+  assert.equal(event.livemode, true);
+  assert.equal(event.status, 'processing');
+});
+
 test('refund service blocks provider calls outside verified live mode', async () => {
   let called = false;
   await assert.rejects(
