@@ -8,6 +8,7 @@ function ContactLink({ href, label, value }) {
       target={href.startsWith('http') ? '_blank' : undefined}
       rel={href.startsWith('http') ? 'noreferrer' : undefined}
       className="group flex items-center justify-between gap-4 border-t border-line py-4 text-sm"
+      aria-label={`${label}: ${value}`}
     >
       <span className="font-semibold uppercase tracking-[0.12em]">{label}</span>
       <span className="min-w-0 truncate text-right text-ink-soft group-hover:text-accent">{value}</span>

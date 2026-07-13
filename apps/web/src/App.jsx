@@ -13,6 +13,7 @@ const Cart = lazy(() => import('./pages/Cart.jsx'));
 const Checkout = lazy(() => import('./pages/Checkout.jsx'));
 const CheckoutReview = lazy(() => import('./pages/CheckoutReview.jsx'));
 const ThankYou = lazy(() => import('./pages/ThankYou.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 const InfoPage = lazy(() => import('./pages/InfoPage.jsx'));
 const Contact = lazy(() => import('./pages/Contact.jsx'));
 const SizeChart = lazy(() => import('./pages/SizeChart.jsx'));
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/terms" element={<InfoPage title="Terms of service" pageKey="terms" />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/size-chart" element={<SizeChart />} />
+        <Route path="*" element={<NotFound />} />
       </Route>
       <Route path="/checkout" element={<MaintenanceGate><PageTransition><Checkout /></PageTransition></MaintenanceGate>} />
       <Route path="/checkout/review" element={<MaintenanceGate><PageTransition><CheckoutReview /></PageTransition></MaintenanceGate>} />
@@ -79,7 +81,6 @@ export default function App() {
         <Route path="pancake" element={<PancakePos />} />
         <Route path="issue-reports" element={<IssueReports />} />
       </Route>
-      <Route path="*" element={<MaintenanceGate><Shell /></MaintenanceGate>} />
       </Routes>
     </Suspense>
   );

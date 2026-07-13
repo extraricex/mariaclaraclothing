@@ -9,6 +9,7 @@ import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
 import CollectionCountdown from '../components/CollectionCountdown.jsx';
+import NotFound from './NotFound.jsx';
 
 export default function Product() {
   const { slug } = useParams();
@@ -63,13 +64,7 @@ export default function Product() {
   );
 
   if (error) {
-    return (
-      <div className="mx-auto max-w-3xl px-5 py-24 text-center">
-        <p className="display text-3xl">Not found</p>
-        <p className="mt-3 text-sm text-ink-soft">{error}</p>
-        <Link to="/" className="btn-ink mt-8">Back to shop</Link>
-      </div>
-    );
+    return <NotFound eyebrow="Product" title="Product not found" message="This product is unavailable or its link has changed. Browse the current collection to find another piece." />;
   }
 
   if (!product) {

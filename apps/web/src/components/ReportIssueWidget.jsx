@@ -122,6 +122,7 @@ export default function ReportIssueWidget({ settings, cartItems }) {
         type="button"
         className={`fixed bottom-[calc(max(0.5rem,env(safe-area-inset-bottom))+3.25rem)] z-[45] rounded-full border border-ink/10 bg-paper px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-ink shadow-2xl transition-transform hover:-translate-y-1 sm:bottom-[5.25rem] sm:px-4 sm:py-2.5 ${rightSide ? 'right-2 sm:right-4' : 'left-2 sm:left-4'}`}
         onClick={() => setOpen(true)}
+        aria-label="Report an issue"
       >
         <span className="sm:hidden">{config.mobileButtonLabel || 'Issue?'}</span>
         <span className="hidden sm:inline">{config.buttonLabel || 'Report Issue'}</span>

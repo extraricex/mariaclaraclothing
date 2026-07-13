@@ -17,7 +17,11 @@ export default function ProductCard({ product, index }) {
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
 
   return (
-    <Link to={`/product/${encodeURIComponent(product.slug)}`} className="group block text-center">
+    <Link
+      to={`/product/${encodeURIComponent(product.slug)}`}
+      className="group block text-center"
+      aria-label={`View ${product.name}, ${formatMoney(product.priceCents)}${onSale ? `, previously ${formatMoney(product.compareAtPriceCents)}` : ''}`}
+    >
       <article>
         <div className="media-zoom relative aspect-[4/5] overflow-hidden bg-transparent">
           {image && (

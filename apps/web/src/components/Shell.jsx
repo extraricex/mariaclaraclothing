@@ -594,7 +594,7 @@ export default function Shell() {
               onClick={() => setMenuOpen(false)}
               className="text-action text-[12px] font-semibold uppercase tracking-[0.18em] text-accent"
             >
-              {loggedIn ? 'Account' : 'Account'}
+              {loggedIn ? 'Account' : 'Log in'}
             </Link>
             <div className="mt-5 flex gap-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-clay">
               <a href={instagramUrl} target="_blank" rel="noreferrer" className="text-action">Instagram</a>

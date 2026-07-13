@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { buildStorefrontCollectionSections } from '../lib/storefrontCollections.js';
@@ -33,6 +33,7 @@ function CollectionSection({ id, index, title, blurb, slug, products }) {
 }
 
 export default function Home() {
+  const location = useLocation();
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState([]);
   const [collections, setCollections] = useState(DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
@@ -58,6 +59,20 @@ export default function Home() {
   const collectionSections = buildStorefrontCollectionSections(products, collections);
   const activeBanner = banners[activeHeroIndex] || banners[0] || null;
   const heroCopy = storefrontSettings.hero || DEFAULT_STOREFRONT_SETTINGS.hero;
+
+  useEffect(() => {
+    if (!location.hash || !collectionSections.length) return undefined;
+    let targetId = '';
+    try {
+      targetId = decodeURIComponent(location.hash.slice(1));
+    } catch (_error) {
+      return undefined;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.hash, collectionSections.length]);
 
   useEffect(() => {
     if (activeHeroIndex >= banners.length) setActiveHeroIndex(0);
