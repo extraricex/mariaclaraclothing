@@ -47,10 +47,11 @@ test('cart drawer exposes modal keyboard behavior', async () => {
   assert.match(shell, /closeCartDrawer/);
 });
 
-test('mobile menu and compact storefront controls use phase one behavior', async () => {
-  const [shell, checkout] = await Promise.all([
+test('mobile menu and checkout actions use accessible compact controls', async () => {
+  const [shell, checkout, review] = await Promise.all([
     source('src/components/Shell.jsx'),
     source('src/pages/Checkout.jsx'),
+    source('src/pages/CheckoutReview.jsx'),
   ]);
 
   assert.match(shell, /menuButtonRef/);
@@ -60,6 +61,7 @@ test('mobile menu and compact storefront controls use phase one behavior', async
   assert.match(shell, /id="storefront-mobile-menu"/);
   assert.match(shell, /className="touch-target px-3 py-1\.5" aria-label="Decrease quantity" onClick=\{\(\) => decreaseItem\(item\)\}/);
   assert.match(shell, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
-  assert.match(checkout, /className="touch-target border border-line px-2 py-0\.5"[^\n]*aria-label="Decrease quantity"/);
-  assert.match(checkout, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
+  assert.match(checkout, /btn-ink customer-compact-button mt-6 w-full/);
+  assert.match(review, /btn-ink customer-compact-button mt-6 w-full/);
+  assert.match(review, /disabled=\{pending \|\| loadingQuote \|\| !settingsLoaded \|\| !selectedPayment\}/);
 });

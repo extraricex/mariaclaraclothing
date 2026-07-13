@@ -11,8 +11,10 @@ test('customer checkout uses server totals and private confirmation', async ({ p
   });
 
   let orderRequest;
+  let orderCreateCount = 0;
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/orders') {
+      orderCreateCount += 1;
       orderRequest = {
         body: request.postDataJSON(),
         idempotencyKey: request.headers()['idempotency-key']
@@ -31,12 +33,19 @@ test('customer checkout uses server totals and private confirmation', async ({ p
   await selects.nth(0).selectOption({ label: 'CAVITE' });
   await selects.nth(1).selectOption({ label: 'IMUS' });
   await selects.nth(2).selectOption({ label: 'BUCANDALA IV' });
-  await page.getByRole('button', { name: /continue to review/i }).click();
-  await page.getByRole('button', { name: /place cod order/i }).click();
+  await page.getByPlaceholder('ZIP code').fill('4103');
+
+  await page.getByRole('button', { name: 'Continue to Checkout', exact: true }).click();
+  await expect(page).toHaveURL(/\/checkout\/review$/);
+  await expect(page.getByRole('heading', { name: 'Review and payment', exact: true })).toBeVisible();
+  await expect(page.getByText('12 Test Street, BUCANDALA IV, IMUS, CAVITE 4103, Philippines')).toBeVisible();
+  expect(orderCreateCount).toBe(0);
+  await page.getByRole('button', { name: 'Place Order - Cash on Delivery', exact: true }).click();
 
   await expect(page).toHaveURL(/\/thank-you\?order=/);
   await expect(page.getByText(/Order received/i)).toBeVisible();
   await expect(page.getByText(/Total due/i)).toBeVisible();
+  expect(orderCreateCount).toBe(1);
   expect(orderRequest.idempotencyKey).toBeTruthy();
   expect(orderRequest.body.quoteId).toBeTruthy();
   for (const forbidden of ['items', 'shippingFeeCents', 'shippingRegion', 'totalCents']) {

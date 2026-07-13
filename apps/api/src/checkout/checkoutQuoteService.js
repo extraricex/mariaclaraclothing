@@ -225,7 +225,8 @@ async function buildAuthoritativeQuote(input = {}, dependencyOverrides = {}) {
       houseAddress: address.houseAddress,
       provinceCode: address.provinceCode,
       cityCode: address.cityCode,
-      barangayCode: address.barangayCode
+      barangayCode: address.barangayCode,
+      postalCode: address.postalCode
     } : null,
     discountCode
   });

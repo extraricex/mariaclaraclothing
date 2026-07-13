@@ -33,6 +33,7 @@ test('storefront content transitions while shell chrome and admin stay stable', 
   assert.match(shell, /<main className="flex-1">\s*<PageTransition>\s*<Outlet \/>\s*<\/PageTransition>\s*<\/main>/);
   assert.match(app, /import PageTransition from '\.\/components\/PageTransition\.jsx'/);
   assert.match(app, /path="\/checkout" element=\{<MaintenanceGate><PageTransition><Checkout \/><\/PageTransition><\/MaintenanceGate>\}/);
+  assert.match(app, /path="\/checkout\/review" element=\{<MaintenanceGate><PageTransition><CheckoutReview \/><\/PageTransition><\/MaintenanceGate>\}/);
   assert.match(app, /<Route path="\/admin" element=\{<AdminLayout \/>\}>/);
   assert.doesNotMatch(admin, /PageTransition/);
 });

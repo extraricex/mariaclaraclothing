@@ -26,14 +26,14 @@ test('quote request sends only item identity, quantity, cart session, discount, 
     discountCode: ' SAVE ',
     address: {
       houseAddress: '12 Test', provinceCode: 'CAVITE', cityCode: 'CAVITE|IMUS',
-      barangayCode: 'B', province: 'client claim', shippingRegion: 'client claim'
+      barangayCode: 'B', postalCode: '4103', province: 'client claim', shippingRegion: 'client claim'
     }
   }), {
     cartSessionId: 'cart-1',
     items: [{ productId: 'P-1', variantId: 'V-1', quantity: 2 }],
     discountCode: 'SAVE',
     address: {
-      houseAddress: '12 Test', provinceCode: 'CAVITE', cityCode: 'CAVITE|IMUS', barangayCode: 'B'
+      houseAddress: '12 Test', provinceCode: 'CAVITE', cityCode: 'CAVITE|IMUS', barangayCode: 'B', postalCode: '4103'
     }
   });
 });

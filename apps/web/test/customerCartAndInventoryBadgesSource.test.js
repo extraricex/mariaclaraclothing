@@ -34,12 +34,12 @@ test('product cards keep total-stock limited pieces logic', async () => {
   assert.doesNotMatch(source, /border-\[#f6d88b\]/);
 });
 
-test('customer variant quantity controls respect per-size stock limits', async () => {
-  const [product, cart, shell, checkout] = await Promise.all([
+test('customer quantity controls and final review respect per-size stock limits', async () => {
+  const [product, cart, shell, review] = await Promise.all([
     readFile(path.join(root, 'pages', 'Product.jsx'), 'utf8'),
     readFile(path.join(root, 'pages', 'Cart.jsx'), 'utf8'),
     readFile(path.join(root, 'components', 'Shell.jsx'), 'utf8'),
-    readFile(path.join(root, 'pages', 'Checkout.jsx'), 'utf8')
+    readFile(path.join(root, 'pages', 'CheckoutReview.jsx'), 'utf8')
   ]);
 
   assert.match(product, /variantStock/);
@@ -52,6 +52,7 @@ test('customer variant quantity controls respect per-size stock limits', async (
   assert.match(cart, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
   assert.match(shell, /Maximum available quantity added\./);
   assert.match(shell, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
-  assert.match(checkout, /Maximum available quantity added\./);
-  assert.match(checkout, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
+  assert.match(review, /createCheckoutQuote\(quotePayload/);
+  assert.match(review, /totalsChanged\(quote, latestQuote\)/);
+  assert.doesNotMatch(review, /updateQuantity|increaseItem/);
 });

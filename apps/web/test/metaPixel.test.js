@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildFacebookAddToCart,
+  buildFacebookAddPaymentInfo,
   buildFacebookInitiateCheckout,
   buildFacebookPurchase,
   buildFacebookViewContent,
@@ -15,6 +16,7 @@ import {
   setMetaTrackingConsent,
   shouldTrackFacebookPath,
   trackFacebookAddToCart,
+  trackFacebookAddPaymentInfo,
   trackFacebookInitiateCheckout,
   trackFacebookPageView,
   trackFacebookPurchase
@@ -199,6 +201,28 @@ test('AddToCart and InitiateCheckout normalize variant contents', () => {
   assert.deepEqual(checkout.content_ids, ['POS-1']);
   assert.equal(checkout.num_items, 2);
   assert.equal(checkout.value, 1598);
+});
+
+test('AddPaymentInfo includes the selected method and dispatches once per event ID', () => {
+  configureFacebookMetaPixel({ enabled: true, pixelId: '595813035761213', requireConsent: false });
+  const item = { variantId: 'V-1', quantity: 1, unitPriceCents: 79900 };
+  const payload = buildFacebookAddPaymentInfo([item], { totalCents: 89900 }, 'paymongo');
+  assert.equal(payload.payment_type, 'paymongo');
+  assert.equal(payload.value, 899);
+
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value)
+  };
+  const calls = [];
+  const windowRef = { fbq: (...args) => calls.push(args) };
+  const options = { windowRef, storage, path: '/checkout/review' };
+  assert.equal(trackFacebookAddPaymentInfo([item], { totalCents: 89900 }, 'paymongo', 'payment:1', options), true);
+  assert.equal(trackFacebookAddPaymentInfo([item], { totalCents: 89900 }, 'paymongo', 'payment:1', options), false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][1], 'AddPaymentInfo');
+  assert.deepEqual(calls[0][3], { eventID: 'payment:1' });
 });
 
 test('Purchase dispatches once with the server event ID', () => {

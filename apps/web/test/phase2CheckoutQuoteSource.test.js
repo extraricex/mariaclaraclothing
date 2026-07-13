@@ -25,18 +25,18 @@ test('cart page displays backend quote totals instead of hardcoded promo totals'
   assert.doesNotMatch(source, /quantity >= 2 \? '✓ Free shipping unlocked' : 'Add 1 more item to unlock free shipping'/);
 });
 
-test('checkout gates order placement behind backend quote review', async () => {
-  const source = await readFile(path.join(root, 'pages', 'Checkout.jsx'), 'utf8');
+test('checkout gates order placement behind a separate backend-quoted review route', async () => {
+  const details = await readFile(path.join(root, 'pages', 'Checkout.jsx'), 'utf8');
+  const review = await readFile(path.join(root, 'pages', 'CheckoutReview.jsx'), 'utf8');
 
-  assert.match(source, /createCheckoutQuote/);
-  assert.match(source, /const \[step, setStep\]/);
-  assert.match(source, /const \[reviewQuote, setReviewQuote\]/);
-  assert.match(source, /async function handleReview/);
-  assert.match(source, /setStep\('review'\)/);
-  assert.match(source, /Back to details/);
-  assert.match(source, /Review and place order/);
-  assert.match(source, /getCheckoutIdempotencyKey/);
-  assert.match(source, /createQuoteBackedOrder/);
-  assert.doesNotMatch(source, /shippingFeeCents:\s*submitTotals/);
-  assert.doesNotMatch(source, /\/api\/discounts\/validate/);
+  assert.match(details, /createCheckoutQuote/);
+  assert.match(details, /saveCheckoutReviewDraft/);
+  assert.match(details, /navigate\('\/checkout\/review'\)/);
+  assert.doesNotMatch(details, /createQuoteBackedOrder|createPayMongoCheckout/);
+  assert.match(review, /Review and payment/);
+  assert.match(review, /getCheckoutIdempotencyKey/);
+  assert.match(review, /createQuoteBackedOrder/);
+  assert.match(review, /createPayMongoCheckout/);
+  assert.match(review, /totalsChanged\(quote, latestQuote\)/);
+  assert.doesNotMatch(review, /shippingFeeCents:\s*submitTotals/);
 });

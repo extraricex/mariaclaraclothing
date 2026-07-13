@@ -1,59 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { createCheckoutQuote, createPayMongoCheckout, createQuoteBackedOrder, fetchProducts } from '../lib/api.js';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import CheckoutHeader from '../components/CheckoutHeader.jsx';
+import { createCheckoutQuote } from '../lib/api.js';
 import { customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
-import { addToCart, cartQuantity, clearCart, clearCheckoutIdempotencyKey, getCartSessionId, getCheckoutIdempotencyKey, removeFromCart, resetCartSessionId, subtotalCents, syncCartSession, updateQuantity, useCart } from '../lib/cart.js';
-import { formatMoney } from '../lib/money.js';
-import { trackFacebookAddToCart, trackFacebookPurchase } from '../lib/metaPixel.js';
-import {
-  loadBarangays,
-  loadCities,
-  loadProvinces,
-  regionForProvince,
-  regionLabel
-} from '../lib/addressGuide.js';
-import {
-  DEFAULT_STOREFRONT_SETTINGS,
-  freeShippingHint,
-  isFreeShipping,
-  loadStorefrontSettings,
-  regionEstimate,
-  regionFee
-} from '../lib/storeSettings.js';
-
-function checkoutTotals(items, region, discountTotalCents, settings) {
-  const subtotal = subtotalCents(items);
-  const freeShippingUnlocked = isFreeShipping(settings, cartQuantity(items));
-  const shippingFeeCents = items.length && !freeShippingUnlocked && region !== 'pending_address'
-    ? regionFee(settings, region)
-    : 0;
-  const discount = Math.min(discountTotalCents, subtotal);
-  return {
-    subtotalCents: subtotal,
-    shippingFeeCents,
-    discountTotalCents: discount,
-    totalCents: subtotal - discount + shippingFeeCents,
-    shippingRegion: region,
-    shippingRegionLabel: regionLabel(region),
-    freeShippingUnlocked
-  };
-}
-
-function quoteTotals(quote, fallbackTotals) {
-  if (!quote) return fallbackTotals;
-  return {
-    ...fallbackTotals,
-    subtotalCents: quote.subtotalCents,
-    shippingFeeCents: quote.shippingFeeCents,
-    discountTotalCents: quote.discountTotalCents,
-    totalCents: quote.totalCents,
-    freeShippingUnlocked: quote.freeShippingUnlocked
-  };
-}
+import { cartQuantity, getCartSessionId, subtotalCents, syncCartSession, useCart } from '../lib/cart.js';
+import { checkoutCartFingerprint, loadCheckoutReviewDraft, saveCheckoutReviewDraft } from '../lib/checkoutDraft.js';
+import { trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
+import { loadBarangays, loadCities, loadProvinces, regionForProvince } from '../lib/addressGuide.js';
+import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings, regionEstimate } from '../lib/storeSettings.js';
 
 export default function Checkout() {
   const items = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
+  const loggedIn = useCustomerLoggedIn();
+  const initialDraft = useMemo(() => loadCheckoutReviewDraft(), []);
 
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
@@ -61,74 +22,53 @@ export default function Checkout() {
   const [provinceCode, setProvinceCode] = useState('');
   const [cityCode, setCityCode] = useState('');
   const [barangayCode, setBarangayCode] = useState('');
-  const [house, setHouse] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [notes, setNotes] = useState('');
-  const [status, setStatus] = useState({ tone: 'neutral', message: '' });
-  const [pending, setPending] = useState(false);
-  const [discountInput, setDiscountInput] = useState('');
-  const [activeDiscountCode, setActiveDiscountCode] = useState('');
-  const [discountError, setDiscountError] = useState('');
-  const [quote, setQuote] = useState(null);
-  const [reviewQuote, setReviewQuote] = useState(null);
-  const [step, setStep] = useState('details');
-  const loggedIn = useCustomerLoggedIn();
-  const [prefillAddress, setPrefillAddress] = useState(null);
-  const [saveAddress, setSaveAddress] = useState(true);
+  const [house, setHouse] = useState(initialDraft?.address?.houseAddress || '');
+  const [postalCode, setPostalCode] = useState(initialDraft?.address?.postalCode || '');
+  const [fullName, setFullName] = useState(initialDraft?.customer?.fullName || '');
+  const [phone, setPhone] = useState(initialDraft?.customer?.phone || '');
+  const [email, setEmail] = useState(initialDraft?.customer?.email || '');
+  const [notes, setNotes] = useState(initialDraft?.notes || '');
+  const [prefillAddress, setPrefillAddress] = useState(initialDraft?.address || null);
+  const [saveAddress, setSaveAddress] = useState(initialDraft?.saveAddress ?? true);
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
-  const [paymentMethod, setPaymentMethod] = useState('cash_on_delivery');
-  const [missingFields, setMissingFields] = useState({});
-  const [suggestedProducts, setSuggestedProducts] = useState([]);
   const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
-  const placingOrderRef = useRef(false);
+  const [missingFields, setMissingFields] = useState({});
+  const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState({
+    tone: location.state?.message ? 'error' : 'neutral',
+    message: location.state?.message || ''
+  });
   const checkoutFieldRefs = {
     fullName: useRef(null),
     phone: useRef(null),
+    email: useRef(null),
     house: useRef(null),
     province: useRef(null),
     city: useRef(null),
-    barangay: useRef(null)
+    barangay: useRef(null),
+    postalCode: useRef(null)
   };
 
   useEffect(() => {
     loadProvinces().then(setProvinces);
+    loadStorefrontSettings().then(setSettings);
     fetch('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
-      .then((response) => response.json()).then((body) => setSocialProviders(body.providers || { google: false, facebook: false }))
+      .then((response) => response.json())
+      .then((body) => setSocialProviders(body.providers || { google: false, facebook: false }))
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (!items.length && !placingOrderRef.current) {
+    if (!items.length) {
       navigate('/cart', { replace: true, state: { message: 'Your cart is empty. Please add an item before checking out.' } });
+      return;
     }
-  }, [items.length, navigate]);
-
-  useEffect(() => {
-    loadStorefrontSettings().then(setSettings);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchProducts()
-      .then((body) => {
-        if (!cancelled) setSuggestedProducts(body.products || []);
-      })
-      .catch(() => {
-        if (!cancelled) setSuggestedProducts([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // if an admin disables the chosen method between loads, fall back to COD
-  useEffect(() => {
-    if (!settings.paymentMethods.some((method) => method.id === paymentMethod)) {
-      setPaymentMethod('cash_on_delivery');
-    }
-  }, [settings, paymentMethod]);
+    trackFacebookInitiateCheckout(
+      items,
+      { subtotalCents: subtotalCents(items), totalCents: subtotalCents(items) },
+      `checkout:${getCartSessionId()}`
+    );
+  }, [items, navigate]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -137,18 +77,19 @@ export default function Checkout() {
         setFullName((value) => value || customer.fullName);
         setPhone((value) => value || customer.phone);
         setEmail((value) => value || customer.email);
-        if (customer.savedAddress) {
+        if (!initialDraft?.address && customer.savedAddress) {
           setHouse((value) => value || customer.savedAddress.houseAddress);
+          setPostalCode((value) => value || customer.savedAddress.postalCode);
           setPrefillAddress(customer.savedAddress);
         }
       })
       .catch(() => {});
-  }, [loggedIn]);
+  }, [loggedIn, initialDraft]);
 
-  // cascade the saved address through the dependent selects as each level loads
   useEffect(() => {
     if (!prefillAddress || !provinces.length) return;
-    const match = provinces.find((item) => item.name === String(prefillAddress.province).toUpperCase());
+    const match = provinces.find((item) =>
+      item.code === prefillAddress.provinceCode || item.name === String(prefillAddress.province || '').toUpperCase());
     if (match) setProvinceCode(match.code);
   }, [prefillAddress, provinces]);
 
@@ -162,7 +103,8 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!prefillAddress || !cities.length) return;
-    const match = cities.find((item) => item.name === String(prefillAddress.city).toUpperCase());
+    const match = cities.find((item) =>
+      item.code === prefillAddress.cityCode || item.name === String(prefillAddress.city || '').toUpperCase());
     if (match) setCityCode(match.code);
   }, [prefillAddress, cities]);
 
@@ -174,51 +116,17 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!prefillAddress || !barangays.length) return;
-    const match = barangays.find((item) => item.name === String(prefillAddress.barangay).toUpperCase());
-    if (match) {
-      setBarangayCode(match.code);
-      setPrefillAddress(null);
-    }
+    const match = barangays.find((item) =>
+      item.code === prefillAddress.barangayCode || item.name === String(prefillAddress.barangay || '').toUpperCase());
+    if (match) setBarangayCode(match.code);
+    setPrefillAddress(null);
   }, [prefillAddress, barangays]);
 
   const province = provinces.find((item) => item.code === provinceCode) || null;
   const city = cities.find((item) => item.code === cityCode) || null;
   const barangay = barangays.find((item) => item.code === barangayCode) || null;
-  const addressReady = Boolean(house.trim() && provinceCode && cityCode && barangayCode);
-  const region = addressReady ? regionForProvince(province) : 'pending_address';
-  const fallbackTotals = useMemo(() => checkoutTotals(items, region, 0, settings), [items, region, settings]);
-  const totals = quoteTotals(reviewQuote || quote, fallbackTotals);
+  const region = province ? regionForProvince(province) : 'pending_address';
   const doorToDoorWarning = Boolean(barangay) && String(barangay.doorToDoor || '').toUpperCase() !== 'YES';
-  const oneItemCheckout = cartQuantity(items) === 1;
-  const suggestedCheckoutProducts = useMemo(() => {
-    const cartProductKeys = new Set(items.map((item) => item.slug || item.productId));
-    return suggestedProducts
-      .filter((product) => !cartProductKeys.has(product.slug) && !cartProductKeys.has(product.id))
-      .filter((product) => product.merchandisingStatus !== 'sold_out')
-      .filter((product) => product.images?.[0]?.url)
-      .filter((product) => product.variants?.some((variant) => Number(variant.stockQuantity) > 0))
-      .slice(0, 4);
-  }, [items, suggestedProducts]);
-
-  function quotePayload(discountCode = activeDiscountCode) {
-    return {
-      cartSessionId: getCartSessionId(),
-      items,
-      discountCode,
-      ...(addressReady ? { address: {
-        houseAddress: house.trim(),
-        provinceCode,
-        cityCode,
-        barangayCode
-      } } : {})
-    };
-  }
-
-  async function refreshQuote(discountCode = activeDiscountCode) {
-    const body = await createCheckoutQuote(quotePayload(discountCode));
-    setQuote(body.quote || null);
-    return body.quote || null;
-  }
 
   useEffect(() => {
     if (!items.length) return;
@@ -226,95 +134,15 @@ export default function Checkout() {
       checkoutStarted: true,
       customer: { fullName, phone, email },
       address: {
-        addressLine: [house, barangay?.name, city?.name, province?.name].filter(Boolean).join(', '),
+        addressLine: [house, barangay?.name, city?.name, province?.name, postalCode].filter(Boolean).join(', '),
         province: province?.name || '',
         city: city?.name || '',
-        barangay: barangay?.name || ''
+        barangay: barangay?.name || '',
+        postalCode
       },
       items
     });
-  }, [items, fullName, phone, email, house, province, city, barangay]);
-
-  useEffect(() => {
-    setReviewQuote(null);
-    setStep('details');
-  }, [items, provinceCode, cityCode, barangayCode, house, activeDiscountCode]);
-
-  useEffect(() => {
-    if (!items.length) {
-      setQuote(null);
-      return;
-    }
-    let cancelled = false;
-    createCheckoutQuote(quotePayload(activeDiscountCode))
-      .then((body) => {
-        if (!cancelled) setQuote(body.quote || null);
-      })
-      .catch(() => {
-        if (!cancelled) setQuote(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [items, region, activeDiscountCode, settings]);
-
-  async function applyDiscount() {
-    const code = discountInput.trim();
-    setDiscountError('');
-    if (!code) {
-      setActiveDiscountCode('');
-      setReviewQuote(null);
-      refreshQuote('').catch(() => {});
-      return;
-    }
-    try {
-      const nextQuote = await refreshQuote(code);
-      setActiveDiscountCode(nextQuote?.discountCode || code);
-      setReviewQuote(null);
-    } catch (error) {
-      setActiveDiscountCode('');
-      setDiscountError(error.message);
-    }
-  }
-
-  function addSuggestedProductToCart(product) {
-    const variant = product.variants?.find((candidate) => Number(candidate.stockQuantity) > 0);
-    if (!variant) return;
-    const cartItem = {
-      productId: product.id,
-      slug: product.slug,
-      variantId: variant.id,
-      productName: product.name,
-      size: variant.size,
-      quantity: 1,
-      maxStock: Number(variant.stockQuantity || 0),
-      unitPriceCents: variant.priceCents ?? product.priceCents,
-      imageUrl: product.images?.[0]?.url || '',
-      externalPosProductId: product.externalPosProductId || '',
-      externalPosVariantId: variant.externalPosVariantId || ''
-    };
-    const result = addToCart(cartItem);
-    if (result?.limited) {
-      setStatus({ tone: 'error', message: 'Maximum available quantity added.' });
-      return;
-    }
-    trackFacebookAddToCart(cartItem);
-    setStatus({ tone: 'neutral', message: `${product.name} was added to your cart.` });
-  }
-
-  function increaseItem(item) {
-    const result = updateQuantity(item.variantId, Number(item.quantity) + 1);
-    if (result?.limited) {
-      setStatus({ tone: 'error', message: 'Maximum available quantity added.' });
-      return;
-    }
-    setStatus({ tone: 'neutral', message: '' });
-  }
-
-  function decreaseItem(item) {
-    setStatus({ tone: 'neutral', message: '' });
-    updateQuantity(item.variantId, Number(item.quantity) - 1);
-  }
+  }, [items, fullName, phone, email, house, province, city, barangay, postalCode]);
 
   function fieldClass(fieldName) {
     return `field customer-input ${missingFields[fieldName] ? 'checkout-field-error' : ''}`;
@@ -339,114 +167,67 @@ export default function Checkout() {
   }
 
   function validateDetails() {
-    if (!items.length) {
+    const invalid = [];
+    if (!fullName.trim()) invalid.push({ key: 'fullName', label: 'Full name' });
+    if (!phone.trim()) invalid.push({ key: 'phone', label: 'Mobile number' });
+    else if (!/^(?:\+?63|0)9\d{9}$/.test(phone.replace(/[\s()-]/g, ''))) invalid.push({ key: 'phone', label: 'Valid Philippine mobile number' });
+    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) invalid.push({ key: 'email', label: 'Valid email address' });
+    if (!house.trim()) invalid.push({ key: 'house', label: 'House number / street / building / unit' });
+    if (!province) invalid.push({ key: 'province', label: 'Province' });
+    if (!city) invalid.push({ key: 'city', label: 'City / municipality' });
+    if (!barangay) invalid.push({ key: 'barangay', label: 'Barangay' });
+    if (!/^\d{4}$/.test(postalCode.trim())) invalid.push({ key: 'postalCode', label: '4-digit ZIP code' });
+    if (!invalid.length) {
       setMissingFields({});
-      setStatus({ tone: 'error', message: 'Your cart is empty. Add an item before placing an order.' });
-      return false;
+      return true;
     }
-    const missing = [];
-    if (!fullName.trim()) missing.push({ key: 'fullName', label: 'Full name' });
-    if (!phone.trim()) missing.push({ key: 'phone', label: 'Mobile number' });
-    if (!house.trim()) missing.push({ key: 'house', label: 'House Number / Street / Building / Unit' });
-    if (!province) missing.push({ key: 'province', label: 'Province' });
-    if (!city) missing.push({ key: 'city', label: 'City / Municipality' });
-    if (!barangay) missing.push({ key: 'barangay', label: 'Barangay' });
-    if (missing.length) {
-      setMissingFields(Object.fromEntries(missing.map((field) => [field.key, true])));
-      setStatus({ tone: 'error', message: `Please complete the missing checkout information: ${missing.map((field) => field.label).join(', ')}.` });
-      focusMissingField(missing[0].key);
-      return false;
-    }
-    setMissingFields({});
-    return true;
+    setMissingFields(Object.fromEntries(invalid.map((field) => [field.key, true])));
+    setStatus({ tone: 'error', message: `Please complete the missing checkout information: ${invalid.map((field) => field.label).join(', ')}.` });
+    focusMissingField(invalid[0].key);
+    return false;
   }
 
-  async function handleReview(event) {
+  async function continueToReview(event) {
     event.preventDefault();
-    setDiscountError('');
-    if (!validateDetails()) return;
-
-    setStatus({ tone: 'neutral', message: 'Reviewing current prices and promos...' });
+    if (!items.length || !validateDetails()) return;
     setPending(true);
-    try {
-      const manualDiscountCode = discountInput.trim();
-      const nextQuote = await refreshQuote(manualDiscountCode);
-      setReviewQuote(nextQuote);
-      if (discountInput.trim()) {
-        setActiveDiscountCode(nextQuote?.discountCode || discountInput.trim());
-      }
-      setStep('review');
-      setStatus({ tone: 'neutral', message: '' });
-    } catch (error) {
-      setStatus({ tone: 'error', message: error.message });
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault();
-    if (!validateDetails()) return;
-
-    setStatus({ tone: 'neutral', message: 'Placing your order...' });
-    setPending(true);
-
-    const orderDiscountCode = activeDiscountCode ? discountInput.trim() : '';
-    const latestQuote = await refreshQuote(orderDiscountCode).catch((error) => {
-      setStatus({ tone: 'error', message: error.message });
-      return null;
-    });
-    if (!latestQuote) {
-      setPending(false);
-      return;
-    }
-    const reviewedTotals = ['subtotalCents', 'discountTotalCents', 'shippingFeeCents', 'totalCents'];
-    if (!reviewQuote || reviewedTotals.some((field) => reviewQuote[field] !== latestQuote[field])) {
-      setReviewQuote(latestQuote);
-      setStatus({ tone: 'error', message: 'Checkout totals changed. Review the updated total before placing your order.' });
-      setPending(false);
-      return;
-    }
-    const payload = {
-      cartSessionId: getCartSessionId(),
-      customer: { fullName: fullName.trim(), phone: phone.trim(), email: email.trim() },
-      paymentMethod,
-      notes: notes.trim(),
+    setStatus({ tone: 'neutral', message: 'Checking stock and preparing your review...' });
+    const cartSessionId = getCartSessionId();
+    const address = {
+      houseAddress: house.trim(),
+      provinceCode,
+      province: province.name,
+      cityCode,
+      city: city.name,
+      barangayCode,
+      barangay: barangay.name,
+      postalCode: postalCode.trim()
     };
-
     try {
-      const idempotencyKey = getCheckoutIdempotencyKey(latestQuote.id);
-      const result = paymentMethod === 'paymongo'
-        ? await createPayMongoCheckout(payload, latestQuote.id, idempotencyKey)
-        : await createQuoteBackedOrder(payload, latestQuote.id, idempotencyKey);
-      if (paymentMethod !== 'paymongo') trackFacebookPurchase(result, result.items, result.trackingEventId);
-      if (loggedIn && saveAddress) {
-        customerJson('/api/customer/me', {
-          method: 'PUT',
-          body: JSON.stringify({ savedAddress: {
-            houseAddress: house.trim(),
-            provinceCode, province: province.name,
-            cityCode, city: city.name,
-            barangayCode, barangay: barangay.name,
-            postalCode: ''
-          } })
-        }).catch(() => {});
-      }
-      sessionStorage.setItem('maria-clara-last-order', JSON.stringify({
-        orderNumber: result.orderNumber,
-        confirmationToken: result.confirmationToken
-      }));
-      if (paymentMethod === 'paymongo') {
-        placingOrderRef.current = true;
-        window.location.assign(result.checkoutUrl);
+      const body = await createCheckoutQuote({
+        cartSessionId,
+        items,
+        discountCode: initialDraft?.discountCode || '',
+        address
+      });
+      const quote = body.quote;
+      if (!quote?.finalizable) throw new Error('Your checkout information is not ready for review.');
+      saveCheckoutReviewDraft({
+        cartSessionId,
+        cartFingerprint: checkoutCartFingerprint(items),
+        customer: { fullName: fullName.trim(), phone: phone.trim(), email: email.trim() },
+        address,
+        notes: notes.trim(),
+        saveAddress,
+        discountCode: initialDraft?.discountCode || '',
+        quote
+      });
+      navigate('/checkout/review');
+    } catch (error) {
+      if (['insufficient_stock', 'product_unavailable', 'variant_unavailable', 'cart_invalid'].includes(error.code)) {
+        navigate('/cart', { replace: true, state: { message: error.message } });
         return;
       }
-      placingOrderRef.current = true;
-      clearCheckoutIdempotencyKey();
-      clearCart();
-      resetCartSessionId();
-      navigate(`/thank-you?order=${encodeURIComponent(result.orderNumber)}`);
-    } catch (error) {
       setStatus({ tone: 'error', message: error.message });
     } finally {
       setPending(false);
@@ -454,254 +235,84 @@ export default function Checkout() {
   }
 
   return (
-    <div className="customer-checkout-shell min-h-screen bg-[var(--customer-bg)]">
-      <header className="border-b border-[var(--customer-border)] bg-[var(--customer-surface)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 lg:px-8">
-          <Link to="/" className="display text-xl">Maria<span className="text-accent">Clara</span></Link>
-          <Link to="/cart" className="text-[12px] font-semibold uppercase tracking-[0.18em] hover:text-accent">Back to cart</Link>
-        </div>
-      </header>
+    <div className="customer-checkout-shell min-h-screen min-w-0 overflow-x-hidden bg-[var(--customer-bg)]">
+      <CheckoutHeader current="information" />
+      <main className="mx-auto max-w-4xl px-5 pb-14 pt-7 lg:px-8">
+        <form className="customer-card mx-auto max-w-3xl rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={continueToReview} noValidate>
+          <p className="eyebrow">Checkout information</p>
+          <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Where do we send it?</h1>
+          <p className="mt-3 text-sm leading-relaxed text-ink-soft">Enter your contact and delivery details. You will review the products, total, and payment method on the next page.</p>
 
-      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-10 lg:grid-cols-[1.1fr_1fr] lg:px-8">
-        <form className="customer-card rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-6" onSubmit={step === 'review' ? handleSubmit : handleReview} noValidate>
-          <p className="eyebrow">Secure checkout</p>
-          <h1 className="display mt-2 text-2xl leading-tight sm:text-4xl">{step === 'review' ? 'Review and place order' : 'Where do we send it?'}</h1>
           {!loggedIn && (
-            <div className="mt-4 border-b border-line pb-5"><p className="text-sm text-ink-soft"><Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to prefill your saved address, or continue as guest.</p><div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {socialProviders.google ? <a className="btn-ghost text-center" href="/api/customer/oauth/google/start?returnTo=%2Fcheckout">Continue with Google</a> : <button type="button" className="btn-ghost" disabled>Continue with Google</button>}
-              {socialProviders.facebook ? <a className="btn-ghost text-center" href="/api/customer/oauth/facebook/start?returnTo=%2Fcheckout">Continue with Facebook</a> : <button type="button" className="btn-ghost" disabled>Continue with Facebook</button>}
-            </div></div>
+            <div className="mt-6 border-y border-line py-5">
+              <p className="text-sm text-ink-soft"><Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to prefill your saved address, or continue as guest.</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {socialProviders.google ? <a className="btn-ghost text-center" href="/api/customer/oauth/google/start?returnTo=%2Fcheckout">Continue with Google</a> : <button type="button" className="btn-ghost" disabled>Continue with Google</button>}
+                {socialProviders.facebook ? <a className="btn-ghost text-center" href="/api/customer/oauth/facebook/start?returnTo=%2Fcheckout">Continue with Facebook</a> : <button type="button" className="btn-ghost" disabled>Continue with Facebook</button>}
+              </div>
+            </div>
           )}
 
-          <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
-            <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
-            <input ref={checkoutFieldRefs.fullName} className={fieldClass('fullName')} required placeholder="Full name" value={fullName} onChange={(e) => { setFullName(e.target.value); clearMissingField('fullName'); }} autoComplete="name" />
-            <input ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(e) => { setPhone(e.target.value); clearMissingField('phone'); }} autoComplete="tel" />
-            <input className="field customer-input" type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <fieldset className="mt-8 grid gap-4 sm:grid-cols-2">
+            <legend className="mb-4 text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
+            <input ref={checkoutFieldRefs.fullName} className={fieldClass('fullName')} required placeholder="Full name" value={fullName} onChange={(event) => { setFullName(event.target.value); clearMissingField('fullName'); }} autoComplete="name" />
+            <input ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" inputMode="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(event) => { setPhone(event.target.value); clearMissingField('phone'); }} autoComplete="tel" />
+            <input ref={checkoutFieldRefs.email} className={`${fieldClass('email')} sm:col-span-2`} type="email" placeholder="Email (optional)" value={email} onChange={(event) => { setEmail(event.target.value); clearMissingField('email'); }} autoComplete="email" />
           </fieldset>
 
-          <fieldset className="mt-8 space-y-4" disabled={step === 'review'}>
-            <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Shipping address</legend>
-            <input ref={checkoutFieldRefs.house} className={fieldClass('house')} required placeholder="House no. / Street / Building / Unit" value={house} onChange={(e) => { setHouse(e.target.value); clearMissingField('house'); }} autoComplete="street-address" />
-            <select ref={checkoutFieldRefs.province} className={fieldClass('province')} required value={provinceCode} onChange={(e) => { setProvinceCode(e.target.value); clearMissingField('province'); }}>
+          <fieldset className="mt-8 grid gap-4 sm:grid-cols-2">
+            <legend className="mb-4 text-sm font-semibold uppercase tracking-[0.12em]">Delivery address</legend>
+            <input ref={checkoutFieldRefs.house} className={`${fieldClass('house')} sm:col-span-2`} required placeholder="House no. / Street / Building / Unit" value={house} onChange={(event) => { setHouse(event.target.value); clearMissingField('house'); }} autoComplete="street-address" />
+            <select ref={checkoutFieldRefs.province} className={fieldClass('province')} required value={provinceCode} onChange={(event) => { setPrefillAddress(null); setProvinceCode(event.target.value); clearMissingField('province'); }} autoComplete="address-level1">
               <option value="">Select province</option>
               {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
-            <select ref={checkoutFieldRefs.city} className={fieldClass('city')} required value={cityCode} disabled={!cities.length} onChange={(e) => { setCityCode(e.target.value); clearMissingField('city'); }}>
+            <select ref={checkoutFieldRefs.city} className={fieldClass('city')} required value={cityCode} disabled={!cities.length} onChange={(event) => { setPrefillAddress(null); setCityCode(event.target.value); clearMissingField('city'); }} autoComplete="address-level2">
               <option value="">{provinceCode ? 'Select city / municipality' : 'Select province first'}</option>
               {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
-            <select ref={checkoutFieldRefs.barangay} className={fieldClass('barangay')} required value={barangayCode} disabled={!barangays.length} onChange={(e) => { setBarangayCode(e.target.value); clearMissingField('barangay'); }}>
+            <select ref={checkoutFieldRefs.barangay} className={fieldClass('barangay')} required value={barangayCode} disabled={!barangays.length} onChange={(event) => { setPrefillAddress(null); setBarangayCode(event.target.value); clearMissingField('barangay'); }} autoComplete="address-level3">
               <option value="">{cityCode ? 'Select barangay' : 'Select city / municipality first'}</option>
               {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
-            {doorToDoorWarning && (
-              <p className="border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent-deep">
-                J&T door-to-door delivery is not confirmed for this barangay. We will review before shipping.
-              </p>
-            )}
-            <textarea className="field customer-input" rows="2" placeholder="Order notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <input ref={checkoutFieldRefs.postalCode} className={fieldClass('postalCode')} required inputMode="numeric" maxLength="4" placeholder="ZIP code" value={postalCode} onChange={(event) => { setPostalCode(event.target.value.replace(/\D/g, '').slice(0, 4)); clearMissingField('postalCode'); }} autoComplete="postal-code" />
+            <textarea className="field customer-input sm:col-span-2" rows="3" placeholder="Delivery notes (optional)" value={notes} onChange={(event) => setNotes(event.target.value)} />
             {loggedIn && (
-              <label className="flex items-center gap-2 text-sm text-ink-soft">
-                <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} />
+              <label className="flex items-center gap-2 text-sm text-ink-soft sm:col-span-2">
+                <input type="checkbox" checked={saveAddress} onChange={(event) => setSaveAddress(event.target.checked)} />
                 Save this address to my account
               </label>
             )}
           </fieldset>
 
-          <fieldset className="mt-8 space-y-3" disabled={step === 'review'}>
-            <legend className="text-sm font-semibold uppercase tracking-[0.12em]">Payment</legend>
-            {settings.paymentMethods.map((method) => (
-              <label key={method.id} className="flex items-start gap-3 rounded-[8px] border border-line bg-white px-4 py-3 text-sm">
-                <input
-                  type="radio"
-                  name="payment-method"
-                  value={method.id}
-                  checked={paymentMethod === method.id}
-                  onChange={() => setPaymentMethod(method.id)}
-                />
-                <span>
-                  <span className="font-semibold">{method.label}</span>
-                  {paymentMethod === method.id && method.instructions && (
-                    <span className="mt-1 block text-xs text-ink-soft">{method.instructions}</span>
-                  )}
-                </span>
-              </label>
-            ))}
-          </fieldset>
-
-          <p className="mt-6 text-sm text-ink-soft">{addressReady ? regionEstimate(settings, region) : 'Complete your address to see estimated delivery time.'}</p>
-
+          {doorToDoorWarning && (
+            <p className="mt-4 border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent-deep">
+              J&T door-to-door delivery is not confirmed for this barangay. We will review before shipping.
+            </p>
+          )}
+          {province && <p className="mt-5 text-sm text-ink-soft">{regionEstimate(settings, region)}</p>}
           {settings.shipping.freeShippingEnabled && (
             <section className="checkout-free-shipping-reminder mt-5 rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-accent-soft)]/45 p-4 text-left">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink">Buy 2 or more items and get FREE shipping.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-ink">Buy {settings.shipping.freeShippingMinimumItems} or more items and get FREE shipping.</p>
               <p className="mt-1 text-sm leading-relaxed text-ink-soft">
                 {cartQuantity(items) >= settings.shipping.freeShippingMinimumItems
                   ? 'Free shipping is already unlocked for this order.'
-                  : `Add ${Math.max(0, settings.shipping.freeShippingMinimumItems - cartQuantity(items))} more ${Math.max(0, settings.shipping.freeShippingMinimumItems - cartQuantity(items)) === 1 ? 'item' : 'items'} to remove the delivery fee.`}
-              </p>
-            </section>
-          )}
-
-          {settings.shipping.freeShippingEnabled && oneItemCheckout && (
-            <section className="checkout-one-item-offer mt-4 rounded-[8px] border border-accent/25 bg-white px-4 py-3 text-left shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-accent-deep">Add one more item to get FREE shipping.</p>
-              <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                You are one piece away from unlocking the shipping offer before placing this order.
+                  : `Add ${settings.shipping.freeShippingMinimumItems - cartQuantity(items)} more ${settings.shipping.freeShippingMinimumItems - cartQuantity(items) === 1 ? 'item' : 'items'} to unlock free shipping.`}
               </p>
             </section>
           )}
 
           {status.message && (
-            <p className={`mt-4 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role={status.tone === 'error' ? 'alert' : 'status'}>
+            <p className={`mt-5 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role={status.tone === 'error' ? 'alert' : 'status'}>
               {status.message}
             </p>
           )}
-
-          {step === 'review' && (
-            <section className="mt-6 rounded-[8px] border border-line bg-white p-4 text-sm">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Review</h2>
-              <dl className="mt-3 space-y-2">
-                <div><dt className="font-semibold">Customer</dt><dd>{fullName} · {phone}</dd></div>
-                <div><dt className="font-semibold">Delivery address</dt><dd>{house.trim()}, {barangay?.name}, {city?.name}, {province?.name}, Philippines</dd></div>
-                <div><dt className="font-semibold">Payment</dt><dd>{settings.paymentMethods.find((method) => method.id === paymentMethod)?.label || 'Cash on Delivery'}</dd></div>
-              </dl>
-            </section>
-          )}
-
-          {step === 'review' && (
-            <button type="button" className="btn-ghost customer-compact-button mt-6 w-full" onClick={() => setStep('details')} disabled={pending}>
-              Back to details
-            </button>
-          )}
           <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending}>
-            {pending
-              ? (step === 'review' ? 'Placing order...' : 'Preparing review...')
-              : step === 'review'
-                ? (paymentMethod === 'cash_on_delivery' ? 'Place Order' : 'Continue to Payment')
-                : 'Continue to review'}
+            {pending ? 'Checking stock...' : 'Continue to Checkout'}
           </button>
-          <p className="mt-3 text-xs text-clay">
-            {paymentMethod === 'cash_on_delivery'
-              ? 'No advance payment is needed. Pay cash to the rider when your order arrives.'
-              : 'Pay securely using GCash, Maya, card, QRPh, or online banking through PayMongo.'}
-          </p>
+          <p className="mt-3 text-center text-xs text-clay">No order is created and no stock is deducted until you confirm on the review page.</p>
         </form>
-
-        <aside className="customer-order-summary self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order summary</h2>
-          {!items.length ? (
-            <div className="mt-6">
-              <p className="text-sm text-ink-soft">Your cart is empty.</p>
-              <Link to="/#new-arrivals" className="btn-ghost mt-4">Continue shopping</Link>
-            </div>
-          ) : (
-            <>
-              <div className="mt-6 space-y-5">
-                {items.map((item) => (
-                  <article key={item.variantId} className="flex min-w-0 gap-3 sm:gap-4">
-                    <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20">
-                      {item.imageUrl && (
-                        <img
-                          src={item.imageUrl}
-                          alt={item.productName}
-                          className="product-photo-blend block h-full w-full object-contain"
-                          loading="lazy"
-                        />
-                      )}
-                      <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-paper">{item.quantity}</span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="break-words text-sm font-semibold leading-snug">{item.productName}</h3>
-                      <p className="text-xs uppercase tracking-[0.12em] text-clay">{item.size}</p>
-                      <div className="mt-1 flex items-center gap-3 text-xs">
-                        <button type="button" className="touch-target border border-line px-2 py-0.5" onClick={() => decreaseItem(item)} aria-label="Decrease quantity">−</button>
-                        <button type="button" className="touch-target border border-line px-2 py-0.5 disabled:cursor-not-allowed disabled:text-clay" disabled={Number(item.maxStock) > 0 && Number(item.quantity) >= Number(item.maxStock)} onClick={() => increaseItem(item)} aria-label="Increase quantity">+</button>
-                        <button type="button" className="text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>Remove</button>
-                      </div>
-                    </div>
-                    <strong className="shrink-0 text-sm">{formatMoney(Number(item.unitPriceCents) * Number(item.quantity))}</strong>
-                  </article>
-                ))}
-              </div>
-              <div className="mt-8 border-t border-line pt-4">
-                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-                  <input
-                    className="field customer-input flex-1 uppercase"
-                    placeholder="Discount code"
-                    value={discountInput}
-                    onChange={(e) => setDiscountInput(e.target.value)}
-                  />
-                  <button type="button" className="btn-ghost !px-4" onClick={applyDiscount}>Apply</button>
-                </div>
-                {discountError && <p className="mt-2 text-xs text-accent-deep" role="alert">{discountError}</p>}
-                {activeDiscountCode && (
-                  <p className="mt-2 text-xs text-[#2f7d32]">
-                    Code {activeDiscountCode} applied — you save {formatMoney(totals.discountTotalCents)}.{' '}
-                    <button type="button" className="underline" onClick={() => { setActiveDiscountCode(''); setDiscountInput(''); setReviewQuote(null); }}>Remove</button>
-                  </p>
-                )}
-              </div>
-              <dl className="mt-4 space-y-2 text-sm">
-                <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(totals.subtotalCents)}</dd></div>
-                {totals.discountTotalCents > 0 && (
-                  <div className="flex justify-between text-[#2f7d32]"><dt>Discount{activeDiscountCode ? ` (${activeDiscountCode})` : ''}</dt><dd>−{formatMoney(totals.discountTotalCents)}</dd></div>
-                )}
-                <div className="flex justify-between">
-                  <dt className="text-ink-soft">Shipping</dt>
-                  <dd>{addressReady ? (totals.shippingFeeCents ? formatMoney(totals.shippingFeeCents) : 'Free') : 'Calculated after address'}</dd>
-                </div>
-                <div className="flex justify-between border-t border-line pt-3 text-base font-semibold">
-                  <dt>Total</dt><dd>{formatMoney(totals.totalCents)}</dd>
-                </div>
-              </dl>
-              <p className="mt-4 bg-cream px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">
-                {totals.freeShippingUnlocked ? 'Free shipping unlocked.' : freeShippingHint(settings, cartQuantity(items))}
-              </p>
-            </>
-          )}
-        </aside>
-      </div>
-
-      {suggestedCheckoutProducts.length > 0 && (
-        <section className="checkout-upsell-products mx-auto max-w-6xl px-5 pb-12 lg:px-8" aria-label="Suggested products">
-          <div className="border-t border-[var(--customer-border)] pt-6">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="eyebrow">Complete the order</p>
-                <h2 className="display mt-2 text-2xl leading-tight sm:text-3xl">Add one more favorite</h2>
-              </div>
-              <p className="max-w-xs text-sm text-ink-soft">Small add-ons that can help unlock free shipping before checkout.</p>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
-              {suggestedCheckoutProducts.map((product) => {
-                const image = product.images[0];
-                return (
-                  <article key={product.id} className="min-w-0 text-center">
-                    <Link to={`/product/${encodeURIComponent(product.slug)}`} className="block aspect-[4/5] overflow-hidden bg-transparent">
-                      <img
-                        src={image.url}
-                        alt={image.altText || `Product photo for ${product.name}`}
-                        className="product-photo-blend h-full w-full object-contain"
-                        loading="lazy"
-                      />
-                    </Link>
-                    <h3 className="mt-2 line-clamp-2 text-center text-sm font-semibold leading-snug">{product.name}</h3>
-                    <p className="mt-1 text-center text-sm font-semibold">{formatMoney(product.priceCents)}</p>
-                    <button
-                      type="button"
-                      className="btn-ghost customer-compact-button mt-3 w-full !px-3 !py-2 text-[10px]"
-                      onClick={() => addSuggestedProductToCart(product)}
-                    >
-                      Add to Cart
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      )}
+      </main>
     </div>
   );
 }

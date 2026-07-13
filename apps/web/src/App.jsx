@@ -11,6 +11,7 @@ const Product = lazy(() => import('./pages/Product.jsx'));
 const Collection = lazy(() => import('./pages/Collection.jsx'));
 const Cart = lazy(() => import('./pages/Cart.jsx'));
 const Checkout = lazy(() => import('./pages/Checkout.jsx'));
+const CheckoutReview = lazy(() => import('./pages/CheckoutReview.jsx'));
 const ThankYou = lazy(() => import('./pages/ThankYou.jsx'));
 const InfoPage = lazy(() => import('./pages/InfoPage.jsx'));
 const Contact = lazy(() => import('./pages/Contact.jsx'));
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/size-chart" element={<SizeChart />} />
       </Route>
       <Route path="/checkout" element={<MaintenanceGate><PageTransition><Checkout /></PageTransition></MaintenanceGate>} />
+      <Route path="/checkout/review" element={<MaintenanceGate><PageTransition><CheckoutReview /></PageTransition></MaintenanceGate>} />
       <Route path="/admin/login" element={<Login />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />

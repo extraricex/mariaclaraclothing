@@ -8,8 +8,8 @@ test('cart drawer and checkout keep complete product photos in responsive frames
     path.join(import.meta.dirname, '..', 'src', 'components', 'Shell.jsx'),
     'utf8'
   );
-  const checkout = await readFile(
-    path.join(import.meta.dirname, '..', 'src', 'pages', 'Checkout.jsx'),
+  const checkoutReview = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'pages', 'CheckoutReview.jsx'),
     'utf8'
   );
 
@@ -27,15 +27,15 @@ test('cart drawer and checkout keep complete product photos in responsive frames
   );
 
   assert.match(
-    checkout,
+    checkoutReview,
     /className="relative aspect-\[4\/5\] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20"/
   );
   assert.match(
-    checkout,
+    checkoutReview,
     /alt=\{item\.productName\}\s+className="product-photo-blend block h-full w-full object-contain"/
   );
   assert.doesNotMatch(
-    checkout,
+    checkoutReview,
     /alt=\{item\.productName\} className="[^"]*object-cover[^"]*"/
   );
 });

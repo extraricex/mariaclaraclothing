@@ -6,6 +6,7 @@ import path from 'node:path';
 test('storefront cart and checkout sync cart sessions to the API', async () => {
   const cartSource = await readFile(path.join(import.meta.dirname, '..', 'src', 'lib', 'cart.js'), 'utf8');
   const checkoutSource = await readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'Checkout.jsx'), 'utf8');
+  const reviewSource = await readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'CheckoutReview.jsx'), 'utf8');
 
   assert.match(cartSource, /CART_SESSION_KEY/);
   assert.match(cartSource, /getCartSessionId/);
@@ -14,8 +15,8 @@ test('storefront cart and checkout sync cart sessions to the API', async () => {
   assert.match(cartSource, /\/api\/cart-sessions\/\$\{encodeURIComponent\(sessionId\)\}/);
   assert.match(checkoutSource, /syncCartSession/);
   assert.match(checkoutSource, /checkoutStarted:\s*true/);
-  assert.match(checkoutSource, /cartSessionId:\s*getCartSessionId\(\)/);
-  assert.match(checkoutSource, /resetCartSessionId\(\)/);
+  assert.match(checkoutSource, /const cartSessionId = getCartSessionId\(\)/);
+  assert.match(reviewSource, /resetCartSessionId\(\)/);
 });
 
 test('admin has real draft and abandoned checkout pages backed by cart sessions API', async () => {

@@ -161,8 +161,8 @@ export default function Cart() {
         )}
         <p className="text-sm text-ink-soft">Shipping <span className="ml-4 text-base font-semibold text-ink">{quote?.freeShippingUnlocked ? 'Free' : 'Calculated at checkout'}</span></p>
         <p className="text-base font-semibold">Total <span className="ml-4 text-lg">{formatMoney(displayTotal)}</span></p>
-        <p className="text-xs text-clay">Final delivery fee is confirmed after your address · COD nationwide</p>
-        <Link to="/checkout" className="btn-ink customer-compact-button mt-3 w-full sm:w-auto" onClick={trackCheckout}>Check out — Cash on Delivery</Link>
+        <p className="text-xs text-clay">Final delivery fee is confirmed after your address.</p>
+        <Link to="/checkout" className="btn-ink customer-compact-button mt-3 w-full sm:w-auto" onClick={trackCheckout}>Continue to checkout</Link>
       </div>
 
       {cartUpsells.length > 0 && (

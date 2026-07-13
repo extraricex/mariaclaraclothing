@@ -33,50 +33,58 @@ test('checkout redirects empty carts back to cart with a clear message', async (
 });
 
 test('checkout does not redirect to cart while a completed order is navigating to thank you', async () => {
-  const checkout = await source('pages/Checkout.jsx');
+  const review = await source('pages/CheckoutReview.jsx');
 
-  assert.match(checkout, /placingOrderRef/);
-  assert.match(checkout, /!placingOrderRef\.current/);
-  assert.match(checkout, /placingOrderRef\.current = true;[\s\S]*clearCart\(\);[\s\S]*navigate\(`\/thank-you\?order=/);
+  assert.match(review, /placingOrderRef/);
+  assert.match(review, /!placingOrderRef\.current/);
+  assert.match(review, /placingOrderRef\.current = true;[\s\S]*clearCart\(\);[\s\S]*navigate\(`\/thank-you\?order=/);
 });
 
-test('checkout shows a premium free shipping upsell reminder', async () => {
+test('checkout details page shows a premium free shipping reminder', async () => {
   const checkout = await source('pages/Checkout.jsx');
 
   assert.match(checkout, /checkout-free-shipping-reminder/);
-  assert.match(checkout, /Buy 2 or more items and get FREE shipping\./);
+  assert.match(checkout, /Buy \{settings\.shipping\.freeShippingMinimumItems\} or more items and get FREE shipping\./);
   assert.match(checkout, /cartQuantity\(items\)/);
   assert.match(checkout, /settings\.shipping\.freeShippingMinimumItems/);
 });
 
-test('checkout does not turn automatic free-shipping promos into manual discount codes', async () => {
-  const checkout = await source('pages/Checkout.jsx');
+test('review keeps automatic promotions separate from manually entered discount codes', async () => {
+  const review = await source('pages/CheckoutReview.jsx');
 
-  assert.doesNotMatch(checkout, /setReviewQuote\(nextQuote\);\s*setActiveDiscountCode\(nextQuote\?\.discountCode \|\| discountInput\.trim\(\)\)/);
-  assert.doesNotMatch(checkout, /const latestQuote = await refreshQuote\(discountInput\.trim\(\)\)/);
-  assert.match(checkout, /if \(discountInput\.trim\(\)\) \{\s*setActiveDiscountCode\(nextQuote\?\.discountCode \|\| discountInput\.trim\(\)\);/);
-  assert.match(checkout, /const orderDiscountCode = activeDiscountCode \? discountInput\.trim\(\) : '';/);
+  assert.match(review, /storeReviewDraft\(nextQuote, discountCode\)/);
+  assert.match(review, /const code = discountInput\.trim\(\)/);
+  assert.doesNotMatch(review, /discountCode:\s*nextQuote\?\.discountCode/);
+  assert.match(review, /quotePayload\(draft\.discountCode \|\| ''\)/);
 });
 
-test('checkout highlights one-item carts with a direct free shipping prompt', async () => {
-  const checkout = await source('pages/Checkout.jsx');
+test('checkout and review are separate routes with exact customer action labels', async () => {
+  const [app, checkout, review] = await Promise.all([
+    source('App.jsx'),
+    source('pages/Checkout.jsx'),
+    source('pages/CheckoutReview.jsx')
+  ]);
 
-  assert.match(checkout, /cartQuantity\(items\) === 1/);
-  assert.match(checkout, /checkout-one-item-offer/);
-  assert.match(checkout, /Add one more item to get FREE shipping\./);
+  assert.match(app, /path="\/checkout\/review"/);
+  assert.match(checkout, /Continue to Checkout/);
+  assert.doesNotMatch(checkout, /name="payment-method"/);
+  assert.match(review, /Place Order - Cash on Delivery/);
+  assert.match(review, /Proceed to Online Payment/);
+  assert.match(review, /name="payment-method"/);
 });
 
-test('checkout renders responsive product upsells that add items to the cart', async () => {
-  const checkout = await source('pages/Checkout.jsx');
+test('review renders responsive authoritative product and total details', async () => {
+  const review = await source('pages/CheckoutReview.jsx');
 
-  assert.match(checkout, /fetchProducts/);
-  assert.match(checkout, /addToCart/);
-  assert.match(checkout, /checkout-upsell-products/);
-  assert.match(checkout, /suggestedCheckoutProducts/);
-  assert.match(checkout, /addSuggestedProductToCart/);
-  assert.match(checkout, /Product photo/);
-  assert.match(checkout, /Add to Cart/);
-  assert.match(checkout, /grid-cols-2[\s\S]*lg:grid-cols-4/);
+  assert.match(review, /quote\?\.items/);
+  assert.match(review, /item\.productName/);
+  assert.match(review, /item\.imageUrl/);
+  assert.match(review, /item\.unitPriceCents/);
+  assert.match(review, /item\.quantity/);
+  assert.match(review, /quote\?\.subtotalCents/);
+  assert.match(review, /quote\?\.shippingFeeCents/);
+  assert.match(review, /quote\?\.totalCents/);
+  assert.match(review, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(340px,0\.8fr\)\]/);
 });
 
 test('homepage banner height is responsive without excessive mobile black space', async () => {

@@ -77,6 +77,8 @@ function shippingRegionForProvince(code) {
 function resolveCheckoutAddress(input = {}) {
   const houseAddress = String(input.houseAddress || '').trim();
   if (!houseAddress) invalidAddress('houseAddress', 'House address is required.');
+  const postalCode = String(input.postalCode || '').trim();
+  if (postalCode && !/^\d{4}$/.test(postalCode)) invalidAddress('postalCode', 'ZIP code must contain 4 digits.');
 
   const provinceCode = normalizeCode(input.provinceCode);
   const province = provinceByCode.get(provinceCode);
@@ -107,7 +109,8 @@ function resolveCheckoutAddress(input = {}) {
     city: cityName,
     barangayCode,
     barangay: barangayName,
-    addressLine: `${houseAddress}, ${barangayName}, ${cityName}, ${provinceName}, Philippines`,
+    postalCode,
+    addressLine: `${houseAddress}, ${barangayName}, ${cityName}, ${provinceName}${postalCode ? ` ${postalCode}` : ''}, Philippines`,
     doorToDoor: normalizeCode(doorToDoorValue) === 'YES',
     shippingRegion: shippingRegionForProvince(provinceCode),
     datasetVersion: String(guide.metadata?.generatedAt || '')

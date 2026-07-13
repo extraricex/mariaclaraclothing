@@ -35,7 +35,8 @@ export function buildCheckoutQuoteRequest(input) {
     houseAddress: String(input.address.houseAddress || '').trim(),
     provinceCode: String(input.address.provinceCode || '').trim(),
     cityCode: String(input.address.cityCode || '').trim(),
-    barangayCode: String(input.address.barangayCode || '').trim()
+    barangayCode: String(input.address.barangayCode || '').trim(),
+    postalCode: String(input.address.postalCode || '').trim()
   } : null;
   return {
     cartSessionId: input.cartSessionId,

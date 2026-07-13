@@ -7,14 +7,16 @@ test('server resolves a valid J&T address and Cavite shipping region', () => {
     houseAddress: ' 12 Test St ',
     provinceCode: 'CAVITE',
     cityCode: 'CAVITE|IMUS',
-    barangayCode: 'CAVITE|IMUS|BUCANDALA IV'
+    barangayCode: 'CAVITE|IMUS|BUCANDALA IV',
+    postalCode: '4103'
   });
 
   assert.equal(result.houseAddress, '12 Test St');
   assert.equal(result.province, 'CAVITE');
   assert.equal(result.city, 'IMUS');
   assert.equal(result.barangay, 'BUCANDALA IV');
-  assert.equal(result.addressLine, '12 Test St, BUCANDALA IV, IMUS, CAVITE, Philippines');
+  assert.equal(result.postalCode, '4103');
+  assert.equal(result.addressLine, '12 Test St, BUCANDALA IV, IMUS, CAVITE 4103, Philippines');
   assert.equal(result.shippingRegion, 'metro_manila_cavite');
   assert.equal(result.doorToDoor, true);
   assert.match(result.datasetVersion, /^2026-06-05/);
@@ -90,5 +92,9 @@ test('server rejects missing and mismatched address hierarchy levels', () => {
   assert.throws(
     () => resolveCheckoutAddress({ ...valid, barangayCode: 'CEBU|ALCOY|ATABAY' }),
     (error) => error.code === 'address_invalid' && error.details.level === 'barangay'
+  );
+  assert.throws(
+    () => resolveCheckoutAddress({ ...valid, postalCode: '41A3' }),
+    (error) => error.code === 'address_invalid' && error.details.level === 'postalCode'
   );
 });

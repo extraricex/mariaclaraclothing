@@ -209,6 +209,13 @@ export function buildFacebookInitiateCheckout(items = [], totals = {}) {
   };
 }
 
+export function buildFacebookAddPaymentInfo(items = [], totals = {}, paymentMethod = '') {
+  return {
+    ...buildFacebookInitiateCheckout(items, totals),
+    payment_type: String(paymentMethod || '')
+  };
+}
+
 export function trackFacebookEvent(eventName, payload = {}, options = {}) {
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
   const path = options.path ?? windowRef?.location?.pathname ?? '';
@@ -286,6 +293,19 @@ export function trackFacebookInitiateCheckout(items, totals, eventId, options = 
   if (!payload.content_ids.length) return false;
   const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId });
   if (tracked) lastCheckoutEventId = eventId;
+  return tracked;
+}
+
+export function trackFacebookAddPaymentInfo(items, totals, paymentMethod, eventId, options = {}) {
+  const normalizedEventId = String(eventId || '').trim();
+  if (!normalizedEventId) return false;
+  const payload = buildFacebookAddPaymentInfo(items, totals, paymentMethod);
+  if (!payload.content_ids.length) return false;
+  const storage = options.storage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+  const storageKey = `maria-clara-facebook-${normalizedEventId}`;
+  if (storage?.getItem(storageKey)) return false;
+  const tracked = trackFacebookEvent('AddPaymentInfo', payload, { ...options, eventId: normalizedEventId });
+  if (tracked) storage?.setItem(storageKey, 'tracked');
   return tracked;
 }
 

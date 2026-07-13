@@ -16,5 +16,5 @@ test('admin products and editor expose mapped Pancake sync status and retry cont
   assert.match(products, /Apply oversized template/);
   assert.match(products, /templates\/oversized\/preview/);
   assert.match(editor, /pancakeVariantId/);
-  assert.match(editor, /Automatic Pancake sync did not complete/);
+  assert.match(editor, /Pancake sync is pending automatic retry/);
 });

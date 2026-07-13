@@ -4,6 +4,7 @@ import { fetchOrderConfirmation } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { clearCart, clearCheckoutIdempotencyKey, resetCartSessionId } from '../lib/cart.js';
+import { clearCheckoutReviewDraft } from '../lib/checkoutDraft.js';
 import { trackFacebookPurchase } from '../lib/metaPixel.js';
 
 function storedConfirmation() {
@@ -41,7 +42,7 @@ export default function ThankYou() {
   useEffect(() => {
     if (order?.paymentMethod !== 'paymongo' || order.paymentStatus !== 'paid') return;
     trackFacebookPurchase({ ...order, trackingEventId: `purchase:${order.orderNumber}` }, order.items || [], `purchase:${order.orderNumber}`);
-    clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
+    clearCheckoutReviewDraft(); clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
   }, [order]);
 
   useEffect(() => {
