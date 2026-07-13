@@ -1,18 +1,30 @@
 class PayMongoApiError extends Error {
-  constructor(code, { status = 0, retryable = false } = {}) {
+  constructor(code, { status = 0, retryable = false, providerCode = '' } = {}) {
+    const providerMessages = {
+      payment_not_found: 'PayMongo could not find this payment in the current account or mode.',
+      payment_not_refundable: 'PayMongo does not allow this payment to be refunded.',
+      refund_amount_exceeds_payment: 'PayMongo rejected an amount greater than the remaining refundable payment.',
+      insufficient_balance: 'The PayMongo balance is insufficient to process this refund.'
+    };
     super({
       paymongo_auth_failed: 'PayMongo authentication failed.',
       paymongo_rejected: 'PayMongo rejected the checkout request.',
       paymongo_timeout: 'PayMongo request timed out.',
       paymongo_network_error: 'PayMongo could not be reached.',
       paymongo_invalid_response: 'PayMongo returned an invalid response.',
-      paymongo_refund_rejected: 'PayMongo rejected the refund request.'
+      paymongo_refund_rejected: providerMessages[providerCode] || 'PayMongo rejected the refund request.'
     }[code] || 'PayMongo request failed.');
     this.name = 'PayMongoApiError';
     this.code = code;
     this.status = status;
     this.retryable = retryable;
+    this.providerCode = providerCode;
   }
+}
+
+function providerErrorCode(body) {
+  const code = String(body?.errors?.[0]?.code || '').trim();
+  return /^[a-z0-9_]{1,100}$/.test(code) ? code : '';
 }
 
 function createPayMongoClient(config, fetchImpl = fetch) {
@@ -38,14 +50,15 @@ function createPayMongoClient(config, fetchImpl = fetch) {
     } finally {
       clearTimeout(timeout);
     }
+    const body = await response.json().catch(() => null);
     if (!response.ok) {
       if ([401, 403].includes(response.status)) throw new PayMongoApiError('paymongo_auth_failed', { status: response.status });
       throw new PayMongoApiError(options.errorCode || 'paymongo_rejected', {
         status: response.status,
-        retryable: response.status === 429 || response.status >= 500
+        retryable: response.status === 429 || response.status >= 500,
+        providerCode: providerErrorCode(body)
       });
     }
-    const body = await response.json().catch(() => null);
     if (!body?.data?.id || !body.data?.attributes) throw new PayMongoApiError('paymongo_invalid_response');
     return body.data;
   }
@@ -61,6 +74,13 @@ function createPayMongoClient(config, fetchImpl = fetch) {
     const id = String(checkoutSessionId || '').trim();
     if (!/^cs_[A-Za-z0-9_-]+$/.test(id)) throw new PayMongoApiError('paymongo_invalid_response');
     const data = await request(`/v1/checkout_sessions/${encodeURIComponent(id)}`);
+    return { id: String(data.id), attributes: data.attributes };
+  }
+
+  async function retrievePayment(paymentId) {
+    const id = String(paymentId || '').trim();
+    if (!/^pay_[A-Za-z0-9_-]+$/.test(id)) throw new PayMongoApiError('paymongo_invalid_response');
+    const data = await request(`/v1/payments/${encodeURIComponent(id)}`);
     return { id: String(data.id), attributes: data.attributes };
   }
 
@@ -88,7 +108,7 @@ function createPayMongoClient(config, fetchImpl = fetch) {
     return { id: String(data.id), attributes: data.attributes };
   }
 
-  return { createCheckoutSession, createRefund, retrieveCheckoutSession };
+  return { createCheckoutSession, createRefund, retrieveCheckoutSession, retrievePayment };
 }
 
-module.exports = { PayMongoApiError, createPayMongoClient };
+module.exports = { PayMongoApiError, createPayMongoClient, providerErrorCode };

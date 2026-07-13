@@ -442,7 +442,9 @@ export default function OrderDetail() {
   const pendingRefundCents = refunds.filter((refund) => ['requesting', 'pending', 'processing'].includes(refund.status)).reduce((sum, refund) => sum + Number(refund.amountCents || 0), 0);
   const remainingRefundCents = Math.max(0, paidCents - refundedCents - pendingRefundCents);
   const refundProvider = order.refundProvider || {};
-  const canRefund = order.paymentMethod === 'paymongo' && refundProvider.enabled && ['paid', 'partially_refunded'].includes(form.paymentStatus) && remainingRefundCents > 0;
+  const refundMethodSupported = refundProvider.supported !== false;
+  const canRefund = order.paymentMethod === 'paymongo' && refundProvider.enabled && refundMethodSupported
+    && ['paid', 'partially_refunded'].includes(form.paymentStatus) && remainingRefundCents > 0;
   const unfulfilled = !['shipped', 'delivered', 'cancelled'].includes(form.fulfillmentStatus);
   const isCod = order.paymentMethod === 'cash_on_delivery' || !order.paymentMethod;
   const codAmountCents = isCod ? balanceCents : 0;
@@ -672,6 +674,11 @@ export default function OrderDetail() {
 
             {order.paymentMethod === 'paymongo' && (
               <DetailCard title="PayMongo refunds" eyebrow={`${titleCase(refundProvider.mode || 'unknown')} mode`} className="xl:col-span-5">
+                {refundProvider.paymentMethodType && (
+                  <p className="mb-3 text-xs text-[var(--admin-muted)]">
+                    Payment channel: <span className="font-semibold text-[var(--admin-text)]">{titleCase(refundProvider.paymentMethodType)}</span>
+                  </p>
+                )}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Paid</p>
@@ -683,13 +690,19 @@ export default function OrderDetail() {
                   </div>
                   <div className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Available</p>
-                    <p className="mt-1 font-semibold">{formatMoney(remainingRefundCents)}</p>
+                    <p className="mt-1 font-semibold">{refundMethodSupported ? formatMoney(remainingRefundCents) : 'External refund only'}</p>
                   </div>
                 </div>
 
                 {!refundProvider.enabled && (
                   <p className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-yellow)]/45 bg-[var(--admin-yellow)]/10 p-3 text-xs text-[#ffd166]">
                     Refund submission is disabled in {titleCase(refundProvider.mode || 'unconfigured')} mode. Enable verified PayMongo live credentials before issuing real refunds.
+                  </p>
+                )}
+
+                {refundProvider.enabled && !refundMethodSupported && (
+                  <p className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-yellow)]/45 bg-[var(--admin-yellow)]/10 p-3 text-xs text-[#ffd166]">
+                    {refundProvider.unavailableReason || 'This payment channel cannot be refunded through PayMongo.'}
                   </p>
                 )}
 
@@ -724,7 +737,7 @@ export default function OrderDetail() {
                       </div>
                       <p className="mt-2 break-all text-[var(--admin-muted)]">{refund.paymongoRefundId || 'Provider refund ID pending'}</p>
                       <p className="mt-1 text-[var(--admin-muted)]">{refund.updatedAt ? new Date(refund.updatedAt).toLocaleString('en-PH') : 'Timestamp pending'}{refund.lastErrorCode ? ` · ${titleCase(refund.lastErrorCode)}` : ''}</p>
-                      {refund.status === 'failed' && refundProvider.enabled && <button type="button" className="mt-2 text-xs font-semibold text-[var(--admin-orange)] underline" disabled={refundSubmitting} onClick={() => retryRefund(refund)}>Retry safely</button>}
+                      {refund.status === 'failed' && refundProvider.enabled && refundMethodSupported && <button type="button" className="mt-2 text-xs font-semibold text-[var(--admin-orange)] underline" disabled={refundSubmitting} onClick={() => retryRefund(refund)}>Retry safely</button>}
                     </article>
                   ))}
                   {!refunds.length && <p className="text-xs text-[var(--admin-muted)]">No refund requests recorded for this order.</p>}

@@ -54,6 +54,9 @@ function parsePaidEvent(payload) {
   const attributes = session.attributes || {};
   const payment = (attributes.payments || []).find((item) => item?.attributes?.status === 'paid') || (attributes.payments || [])[0] || {};
   const paymentAttributes = payment.attributes || {};
+  const paymentMethodType = String(
+    attributes.payment_method_used || paymentAttributes.source?.type || paymentAttributes.payment_method_type || ''
+  ).trim().toLowerCase();
   const digest = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   return {
     eventId: String(envelope?.id || payload?.id || payload?.event_id || `${eventType}:${session.id || digest}`),
@@ -63,6 +66,8 @@ function parsePaidEvent(payload) {
     paymentId: String(payment.id || ''),
     amountCents: Number(paymentAttributes.amount),
     currency: String(paymentAttributes.currency || '').toUpperCase(),
+    paymentMethodType,
+    livemode: Boolean(attributes.livemode ?? paymentAttributes.livemode),
     paidAt: paymentAttributes.paid_at ? new Date(Number(paymentAttributes.paid_at) * 1000).toISOString() : new Date().toISOString(),
     digest
   };
@@ -95,10 +100,23 @@ async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
     if (event.currency !== 'PHP' || !Number.isInteger(event.amountCents) || event.amountCents !== Number(order.totalCents)) {
       const error = new Error('PayMongo paid amount does not match the order total.'); error.status = 409; error.code = 'paymongo_amount_mismatch'; throw error;
     }
-    if (order.paymentStatus === 'paid') return { status: 'duplicate', orderNumber: order.orderNumber, order };
+    if (order.paymentStatus === 'paid') {
+      const paymentMetadata = event.paymentMethodType && order.paymentMetadata?.paymentMethodType !== event.paymentMethodType
+        ? { ...(order.paymentMetadata || {}), paymentMethodType: event.paymentMethodType, providerLivemode: event.livemode }
+        : order.paymentMetadata;
+      const duplicateOrder = paymentMetadata !== order.paymentMetadata
+        ? await updateOrder(order.orderNumber, { paymentMetadata }, { client, existingOrder: order })
+        : order;
+      return { status: 'duplicate', orderNumber: order.orderNumber, order: duplicateOrder };
+    }
     const updated = await updateOrder(order.orderNumber, {
       status: 'confirmed', paymentMethod: 'paymongo', paymentStatus: 'paid', providerPaymentId: event.paymentId,
-      paidAmountCents: event.amountCents, paidAt: event.paidAt, inventoryReservationStatus: 'committed'
+      paidAmountCents: event.amountCents, paidAt: event.paidAt, inventoryReservationStatus: 'committed',
+      paymentMetadata: {
+        ...(order.paymentMetadata || {}),
+        paymentMethodType: event.paymentMethodType,
+        providerLivemode: event.livemode
+      }
     }, { client, existingOrder: order });
     if (metaEnabled) {
       await insertMetaPurchaseOutbox(client, buildMetaPurchaseEvent({

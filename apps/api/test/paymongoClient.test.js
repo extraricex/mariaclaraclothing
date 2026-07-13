@@ -29,6 +29,25 @@ test('PayMongo client never exposes provider response bodies in errors', async (
   });
 });
 
+test('PayMongo client retains only a sanitized provider rejection code', async () => {
+  const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_live_secret' }, async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ errors: [{ code: 'payment_not_refundable', detail: 'private provider detail' }] })
+  }));
+  await assert.rejects(client.createRefund({
+    amountCents: 100,
+    paymentId: 'pay_123',
+    reason: 'others'
+  }, { idempotencyKey: 'refund-key' }), (error) => {
+    assert.equal(error.code, 'paymongo_refund_rejected');
+    assert.equal(error.providerCode, 'payment_not_refundable');
+    assert.equal(error.message, 'PayMongo does not allow this payment to be refunded.');
+    assert.equal(error.message.includes('private provider detail'), false);
+    return true;
+  });
+});
+
 test('PayMongo client retrieves a checkout session with the server-side secret', async () => {
   let requestedUrl = '';
   const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_test_secret' }, async (url) => {
@@ -38,6 +57,20 @@ test('PayMongo client retrieves a checkout session with the server-side secret',
   const session = await client.retrieveCheckoutSession('cs_test_1');
   assert.equal(requestedUrl, 'https://api.paymongo.com/v1/checkout_sessions/cs_test_1');
   assert.equal(session.id, 'cs_test_1');
+});
+
+test('PayMongo client retrieves a payment for authoritative refund checks', async () => {
+  let requestedUrl = '';
+  const client = createPayMongoClient({ apiBaseUrl: 'https://api.paymongo.com', secretKey: 'sk_live_secret' }, async (url) => {
+    requestedUrl = url;
+    return {
+      ok: true,
+      json: async () => ({ data: { id: 'pay_123', attributes: { status: 'paid', amount: 400, livemode: true, source: { type: 'qrph' } } } })
+    };
+  });
+  const payment = await client.retrievePayment('pay_123');
+  assert.equal(requestedUrl, 'https://api.paymongo.com/v1/payments/pay_123');
+  assert.equal(payment.attributes.source.type, 'qrph');
 });
 
 test('PayMongo client creates an idempotent refund with centavo amount and server-side auth', async () => {

@@ -91,7 +91,7 @@ const {
   listPaymentAlerts,
   listPaymentOperations
 } = require('../payments/paymongoRefundRepository');
-const { requestRefund, retryRefund } = require('../payments/paymongoRefundService');
+const { paymentMethodRefundPolicy, requestRefund, retryRefund } = require('../payments/paymongoRefundService');
 const {
   deleteIssueReport,
   findIssueReportById,
@@ -1020,7 +1020,7 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
         notifications: await listOrderNotifications(order.orderNumber),
         pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(order.orderNumber),
         refunds: await listOrderRefunds(order.orderNumber),
-        refundProvider: paymongoRefundProvider()
+        refundProvider: paymongoRefundProvider(order)
       }
     });
   } catch (error) {
@@ -1116,7 +1116,7 @@ router.post('/orders/:orderNumber/tracking-notification', async (req, res, next)
       order: {
         ...updatedOrder,
         refunds: await listOrderRefunds(orderNumber),
-        refundProvider: paymongoRefundProvider()
+        refundProvider: paymongoRefundProvider(updatedOrder)
       },
       notification
     });
@@ -1183,7 +1183,7 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
         notifications: await listOrderNotifications(orderNumber),
         pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(orderNumber),
         refunds: await listOrderRefunds(orderNumber),
-        refundProvider: paymongoRefundProvider()
+        refundProvider: paymongoRefundProvider(refreshedOrder)
       }
     });
   } catch (error) {
@@ -1310,11 +1310,15 @@ function paymentOperationsSummary(operations) {
   });
 }
 
-function paymongoRefundProvider() {
+function paymongoRefundProvider(order = {}) {
+  const policy = paymentMethodRefundPolicy(order.paymentMetadata?.paymentMethodType);
   return {
     configured: env.paymongo.configured,
     mode: env.paymongo.livemode ? 'live' : 'test',
-    enabled: Boolean(env.paymongo.configured && env.paymongo.livemode)
+    enabled: Boolean(env.paymongo.configured && env.paymongo.livemode),
+    paymentMethodType: policy.paymentMethodType,
+    supported: policy.supported,
+    unavailableReason: policy.message
   };
 }
 

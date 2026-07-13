@@ -6,6 +6,7 @@ const refundRepository = require('./paymongoRefundRepository');
 
 const REFUND_REASONS = new Set(['duplicate', 'fraudulent', 'others']);
 const REFUND_STATUSES = new Set(['pending', 'processing', 'succeeded', 'failed']);
+const NON_REFUNDABLE_PAYMENT_METHODS = new Set(['qrph', 'qr_ph', 'ubp', 'online_banking_ubp']);
 
 function serviceError(code, message, status = 400) {
   const error = new Error(message);
@@ -23,6 +24,64 @@ function timestamp(value) {
   if (Number.isFinite(Number(value))) return new Date(Number(value) * 1000).toISOString();
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf()) ? '' : parsed.toISOString();
+}
+
+function normalizePaymentMethodType(value) {
+  return String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function paymentMethodRefundPolicy(value) {
+  const paymentMethodType = normalizePaymentMethodType(value);
+  if (NON_REFUNDABLE_PAYMENT_METHODS.has(paymentMethodType)) {
+    const isQrPh = ['qrph', 'qr_ph'].includes(paymentMethodType);
+    return {
+      paymentMethodType,
+      supported: false,
+      code: 'paymongo_refund_method_not_supported',
+      message: isQrPh
+        ? 'QR Ph payments cannot be refunded through PayMongo. Return the amount using an agreed external method and record the resolution in the order notes.'
+        : 'This payment channel cannot be refunded through PayMongo. Return the amount using an agreed external method and record the resolution in the order notes.'
+    };
+  }
+  return { paymentMethodType, supported: true, code: '', message: '' };
+}
+
+function providerPaymentMethod(payment) {
+  return normalizePaymentMethodType(
+    payment?.attributes?.source?.type
+      || payment?.attributes?.payment_method?.type
+      || payment?.attributes?.payment_method_type
+  );
+}
+
+function validateRefundableOrder(order) {
+  if (!order) throw serviceError('paymongo_order_not_found', 'Order not found.', 404);
+  if (order.paymentProvider !== 'paymongo' || !order.providerPaymentId || !['paid', 'partially_refunded'].includes(order.paymentStatus)) {
+    throw serviceError('paymongo_order_not_refundable', 'Only verified paid PayMongo orders can be refunded.', 409);
+  }
+}
+
+async function verifyProviderRefundEligibility(order, amountCents, { client, config }) {
+  validateRefundableOrder(order);
+  let paymentMethodType = normalizePaymentMethodType(order.paymentMetadata?.paymentMethodType);
+  if (client?.retrievePayment) {
+    const payment = await client.retrievePayment(order.providerPaymentId);
+    const attributes = payment?.attributes || {};
+    if (payment.id !== order.providerPaymentId || attributes.livemode !== Boolean(config.livemode)) {
+      throw serviceError('paymongo_payment_mode_mismatch', 'The PayMongo payment does not belong to the active payment mode.', 409);
+    }
+    if (String(attributes.status || '') !== 'paid') {
+      throw serviceError('paymongo_order_not_refundable', 'PayMongo does not report this payment as paid.', 409);
+    }
+    const providerAmount = Number(attributes.amount);
+    if (!Number.isInteger(providerAmount) || providerAmount < amountCents) {
+      throw serviceError('refund_amount_exceeds_available', 'Refund amount exceeds the provider payment amount.', 409);
+    }
+    paymentMethodType = providerPaymentMethod(payment) || paymentMethodType;
+  }
+  const policy = paymentMethodRefundPolicy(paymentMethodType);
+  if (!policy.supported) throw serviceError(policy.code, policy.message, 409);
+  return policy;
 }
 
 function normalizeRefundStatus(value, eventType = '') {
@@ -141,12 +200,12 @@ async function requestRefund(input, { config, client }) {
   if (!REFUND_REASONS.has(reason)) throw serviceError('refund_reason_invalid', 'Refund reason is invalid.');
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw serviceError('refund_amount_invalid', 'Refund amount must be greater than zero.');
 
+  const preliminaryOrder = await findOrderByNumber(orderNumber, { includeRelated: false });
+  await verifyProviderRefundEligibility(preliminaryOrder, amountCents, { client, config });
+
   const created = await transaction(async (db) => {
     const order = await findOrderByNumber(orderNumber, { client: db, forUpdate: true, includeRelated: false });
-    if (!order) throw serviceError('paymongo_order_not_found', 'Order not found.', 404);
-    if (order.paymentProvider !== 'paymongo' || !order.providerPaymentId || !['paid', 'partially_refunded'].includes(order.paymentStatus)) {
-      throw serviceError('paymongo_order_not_refundable', 'Only verified paid PayMongo orders can be refunded.', 409);
-    }
+    validateRefundableOrder(order);
     const totals = await refundedTotals(orderNumber, db);
     const paidAmount = Number(order.paidAmountCents || order.totalCents || 0);
     if (amountCents > paidAmount - totals.succeeded - totals.inflight) {
@@ -170,10 +229,11 @@ async function requestRefund(input, { config, client }) {
       notes: created.refund.notes
     }, { idempotencyKey: created.refund.providerIdempotencyKey });
   } catch (error) {
-    await refundRepository.updateRefund(created.refund.id, { status: 'failed', lastErrorCode: error.code || 'paymongo_refund_failed' });
+    const failureCode = error.providerCode || error.code || 'paymongo_refund_failed';
+    await refundRepository.updateRefund(created.refund.id, { status: 'failed', lastErrorCode: failureCode });
     await recordOperation({
       eventType: 'refund_request_failed', level: 'error', orderNumber,
-      code: error.code || 'paymongo_refund_failed', message: 'PayMongo refund request failed and needs review.'
+      code: failureCode, message: `PayMongo refund request failed (${failureCode}) and needs review.`
     });
     throw error;
   }
@@ -211,6 +271,8 @@ async function retryRefund(refundId, { config, client }) {
   if (Date.now() - new Date(refund.createdAt).valueOf() > 23 * 60 * 60 * 1000) {
     throw serviceError('paymongo_refund_reconcile_required', 'This refund is too old for a safe retry. Reconcile it in PayMongo first.', 409);
   }
+  const order = await findOrderByNumber(refund.orderNumber, { includeRelated: false });
+  await verifyProviderRefundEligibility(order, refund.amountCents, { client, config });
   await refundRepository.updateRefund(refund.id, {
     status: 'requesting', attemptCount: refund.attemptCount + 1, lastErrorCode: ''
   });
@@ -221,7 +283,9 @@ async function retryRefund(refundId, { config, client }) {
       reason: refund.reason, notes: refund.notes
     }, { idempotencyKey: refund.providerIdempotencyKey });
   } catch (error) {
-    await refundRepository.updateRefund(refund.id, { status: 'failed', lastErrorCode: error.code || 'paymongo_refund_failed' });
+    await refundRepository.updateRefund(refund.id, {
+      status: 'failed', lastErrorCode: error.providerCode || error.code || 'paymongo_refund_failed'
+    });
     throw error;
   }
   const updated = await refundRepository.updateRefund(refund.id, refundResult(provider));
@@ -302,9 +366,12 @@ async function processRefundWebhook(payload, { livemode = false } = {}) {
 }
 
 module.exports = {
+  normalizePaymentMethodType,
   normalizeRefundStatus,
   parseRefundEvent,
+  paymentMethodRefundPolicy,
   processRefundWebhook,
   requestRefund,
-  retryRefund
+  retryRefund,
+  verifyProviderRefundEligibility
 };

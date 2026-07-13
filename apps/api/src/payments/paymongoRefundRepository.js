@@ -202,7 +202,12 @@ async function listPaymentAlerts({ reservationMinutes = 30 } = {}) {
        UNION ALL
        SELECT CASE WHEN r.status='failed' THEN 'refund_failed' ELSE 'refund_pending' END,
          CASE WHEN r.status='failed' THEN 'error' ELSE 'warning' END,r.order_number,
-         CASE WHEN r.status='failed' THEN 'PayMongo refund failed and needs review.' ELSE 'PayMongo refund is still pending.' END,r.updated_at
+         CASE
+           WHEN r.last_error_code='paymongo_refund_method_not_supported'
+             THEN 'This payment channel requires an external customer refund; record the resolution in the order notes.'
+           WHEN r.status='failed' THEN 'PayMongo refund failed and needs review.'
+           ELSE 'PayMongo refund is still pending.'
+         END,r.updated_at
        FROM paymongo_refunds r WHERE r.status='failed' OR (r.status IN ('requesting','pending','processing') AND r.updated_at < now() - interval '15 minutes')
        UNION ALL
        SELECT e.code,e.level,e.order_number,e.message,e.created_at FROM payment_operation_events e WHERE e.level IN ('warning','error')

@@ -36,6 +36,8 @@ test('PayMongo paid event parser extracts session, payment, amount, and referenc
         id: 'cs-1',
         attributes: {
           reference_number: 'MCC-1001',
+          payment_method_used: 'gcash',
+          livemode: true,
           payments: [{ id: 'pay-1', attributes: { status: 'paid', amount: 72900, currency: 'PHP', paid_at: 1783785600 } }]
         }
         }
@@ -49,6 +51,31 @@ test('PayMongo paid event parser extracts session, payment, amount, and referenc
     eventId: 'evt-1', eventType: 'checkout_session.payment.paid', checkoutSessionId: 'cs-1',
     orderNumber: 'MCC-1001', paymentId: 'pay-1', amountCents: 72900, currency: 'PHP'
   });
+  assert.equal(event.paymentMethodType, 'gcash');
+  assert.equal(event.livemode, true);
+});
+
+test('PayMongo paid event parser falls back to the payment source type', () => {
+  const event = parsePaidEvent({
+    data: {
+      id: 'evt-qrph',
+      attributes: {
+        type: 'checkout_session.payment.paid',
+        data: {
+          id: 'cs-qrph',
+          attributes: {
+            reference_number: 'MCC-QRPH',
+            payments: [{
+              id: 'pay-qrph',
+              attributes: { status: 'paid', amount: 400, currency: 'PHP', livemode: true, source: { type: 'qrph' } }
+            }]
+          }
+        }
+      }
+    }
+  });
+  assert.equal(event.paymentMethodType, 'qrph');
+  assert.equal(event.livemode, true);
 });
 
 test('expired reservation restock data preserves exact product variant quantities', () => {

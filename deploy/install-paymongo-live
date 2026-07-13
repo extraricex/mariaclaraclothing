@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+repo_dir="${MARIACLARA_REPO_DIR:-/var/www/mariaclara}"
+env_file="${repo_dir}/deploy/production.env"
+compose_file="${repo_dir}/deploy/docker-compose.production.yml"
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ ${EUID} -eq 0 ]] || fail "Run this installer as root."
+[[ -d ${repo_dir} ]] || fail "Repository not found at ${repo_dir}."
+[[ -f ${env_file} ]] || fail "Environment file not found at ${env_file}."
+[[ -f ${compose_file} ]] || fail "Compose file not found at ${compose_file}."
+command -v docker >/dev/null || fail "Docker is not installed."
+
+printf '%s\n' "Maria Clara Clothing - PayMongo live credential installer"
+printf '%s\n' "Credentials are hidden while you type and are not stored in shell history."
+printf '%s\n' "Use the signing secret from a webhook created in PayMongo Live Mode."
+printf '\n'
+
+IFS= read -r -s -p "PayMongo live public key (pk_live_...): " public_key
+printf '\n'
+IFS= read -r -s -p "PayMongo live secret key (sk_live_...): " secret_key
+printf '\n'
+IFS= read -r -s -p "PayMongo LIVE webhook secret (whsk_...): " webhook_secret
+printf '\n'
+IFS= read -r -p "Approved methods [card,gcash,paymaya,qrph]: " payment_methods
+payment_methods="${payment_methods:-card,gcash,paymaya,qrph}"
+
+[[ ${public_key} == pk_live_* ]] || fail "The public key must begin with pk_live_."
+[[ ${secret_key} == sk_live_* ]] || fail "The secret key must begin with sk_live_."
+[[ ${webhook_secret} == whsk_* ]] || fail "The webhook secret must begin with whsk_."
+[[ ${payment_methods} =~ ^(card|gcash|paymaya|qrph)(,(card|gcash|paymaya|qrph))*$ ]] || \
+  fail "Methods must be a comma-separated subset of card,gcash,paymaya,qrph with no spaces."
+
+printf '\nThis will enable real customer charges. Type LIVE to continue: '
+IFS= read -r confirmation
+[[ ${confirmation} == LIVE ]] || fail "No changes were made."
+
+cd "${repo_dir}"
+
+if [[ -x /usr/local/bin/mariaclara-backup ]]; then
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fxq "${repo_dir}"; then
+    git config --global --add safe.directory "${repo_dir}"
+  fi
+  printf '%s\n' "Running the configured production backup..."
+  /usr/local/bin/mariaclara-backup
+fi
+
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+backup_file="/root/mariaclara-production.env.pre-paymongo-live.${timestamp}"
+install -m 600 "${env_file}" "${backup_file}"
+
+tmp_file="$(mktemp "${env_file}.tmp.XXXXXX")"
+cleanup() {
+  rm -f "${tmp_file}"
+  unset PM_PUBLIC_KEY PM_SECRET_KEY PM_WEBHOOK_SECRET PM_PAYMENT_METHODS
+}
+trap cleanup EXIT
+
+export PM_PUBLIC_KEY="${public_key}"
+export PM_SECRET_KEY="${secret_key}"
+export PM_WEBHOOK_SECRET="${webhook_secret}"
+export PM_PAYMENT_METHODS="${payment_methods}"
+unset public_key secret_key webhook_secret
+
+awk -F= '
+  BEGIN {
+    replacement["PAYMONGO_ENABLED"] = "true"
+    replacement["PAYMONGO_API_BASE_URL"] = "https://api.paymongo.com"
+    replacement["PAYMONGO_PUBLIC_KEY"] = ENVIRON["PM_PUBLIC_KEY"]
+    replacement["PAYMONGO_SECRET_KEY"] = ENVIRON["PM_SECRET_KEY"]
+    replacement["PAYMONGO_WEBHOOK_SECRET"] = ENVIRON["PM_WEBHOOK_SECRET"]
+    replacement["PAYMONGO_SUCCESS_URL"] = "https://mariaclaraclothing.com/thank-you"
+    replacement["PAYMONGO_CANCEL_URL"] = "https://mariaclaraclothing.com/checkout"
+    replacement["PAYMONGO_PAYMENT_METHOD_TYPES"] = ENVIRON["PM_PAYMENT_METHODS"]
+    replacement["PAYMONGO_RESERVATION_MINUTES"] = "30"
+  }
+  {
+    key = $1
+    if (key in replacement) {
+      if (!seen[key]++) print key "=" replacement[key]
+      next
+    }
+    print
+  }
+  END {
+    for (key in replacement) {
+      if (!seen[key]) print key "=" replacement[key]
+    }
+  }
+' "${env_file}" >"${tmp_file}"
+
+install -m 600 "${tmp_file}" "${env_file}"
+unset PM_PUBLIC_KEY PM_SECRET_KEY PM_WEBHOOK_SECRET PM_PAYMENT_METHODS
+
+printf '%s\n' "Restarting the production API and web containers..."
+if ! docker compose --env-file "${env_file}" -f "${compose_file}" up -d --build api web; then
+  printf '%s\n' "Restart failed. Restoring the previous environment..." >&2
+  install -m 600 "${backup_file}" "${env_file}"
+  docker compose --env-file "${env_file}" -f "${compose_file}" up -d api web || true
+  fail "Live credentials were rolled back."
+fi
+
+mode="$({
+  docker compose --env-file "${env_file}" -f "${compose_file}" exec -T api \
+    node -e 'process.stdout.write((process.env.PAYMONGO_SECRET_KEY || "").startsWith("sk_live_") ? "LIVE" : "NOT LIVE")'
+} 2>/dev/null || true)"
+
+if [[ ${mode} != LIVE ]]; then
+  printf '%s\n' "The restarted API did not load a live secret key. Rolling back..." >&2
+  install -m 600 "${backup_file}" "${env_file}"
+  docker compose --env-file "${env_file}" -f "${compose_file}" up -d api web || true
+  fail "Live credentials were rolled back."
+fi
+
+healthy=false
+for _ in {1..30}; do
+  if curl -fsS https://mariaclaraclothing.com/api/health >/dev/null 2>&1; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+
+if [[ ${healthy} != true ]]; then
+  printf '%s\n' "Containers restarted in LIVE mode, but the public health check did not pass." >&2
+  printf '%s\n' "Review: docker compose --env-file deploy/production.env -f deploy/docker-compose.production.yml logs --since=10m api" >&2
+  exit 1
+fi
+
+printf '\n%s\n' "PayMongo is installed in LIVE mode and the public API health check passed."
+printf '%s\n' "Protected rollback copy: ${backup_file}"
+printf '%s\n' "Next: verify Admin > Payments, then run one controlled low-value live purchase."

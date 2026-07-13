@@ -6,7 +6,9 @@ const path = require('node:path');
 const {
   normalizeRefundStatus,
   parseRefundEvent,
-  requestRefund
+  paymentMethodRefundPolicy,
+  requestRefund,
+  verifyProviderRefundEligibility
 } = require('../src/payments/paymongoRefundService');
 
 test('refund migration stores idempotency, provider state, audit events, and safe constraints', () => {
@@ -96,4 +98,35 @@ test('refund service blocks provider calls outside verified live mode', async ()
     (error) => error.code === 'paymongo_live_refunds_required' && error.status === 409
   );
   assert.equal(called, false);
+});
+
+test('refund policy blocks QR Ph and explains the external resolution', () => {
+  const policy = paymentMethodRefundPolicy('qrph');
+  assert.equal(policy.supported, false);
+  assert.equal(policy.code, 'paymongo_refund_method_not_supported');
+  assert.match(policy.message, /cannot be refunded through PayMongo/);
+});
+
+test('refund policy permits supported card and e-wallet methods', () => {
+  assert.equal(paymentMethodRefundPolicy('card').supported, true);
+  assert.equal(paymentMethodRefundPolicy('gcash').supported, true);
+  assert.equal(paymentMethodRefundPolicy('paymaya').supported, true);
+});
+
+test('refund preflight reads the authoritative provider method and blocks QR Ph', async () => {
+  const order = {
+    paymentProvider: 'paymongo',
+    providerPaymentId: 'pay_live_qrph',
+    paymentStatus: 'paid',
+    paymentMetadata: {}
+  };
+  await assert.rejects(verifyProviderRefundEligibility(order, 400, {
+    config: { livemode: true },
+    client: {
+      retrievePayment: async () => ({
+        id: 'pay_live_qrph',
+        attributes: { status: 'paid', amount: 400, livemode: true, source: { type: 'qrph' } }
+      })
+    }
+  }), (error) => error.code === 'paymongo_refund_method_not_supported' && error.status === 409);
 });
