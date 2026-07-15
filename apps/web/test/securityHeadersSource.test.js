@@ -9,5 +9,7 @@ test('nginx applies security headers to the SPA and proxied assets', async () =>
   assert.match(source, /X-Frame-Options\s+"DENY"\s+always/);
   assert.match(source, /Referrer-Policy\s+"strict-origin-when-cross-origin"\s+always/);
   assert.match(source, /Permissions-Policy/);
+  assert.match(source, /Strict-Transport-Security\s+"max-age=15552000"\s+always/);
   assert.match(source, /Content-Security-Policy-Report-Only/);
+  assert.match(source, /location \^~ \/assets\/[\s\S]*expires 1y/);
 });

@@ -120,6 +120,24 @@ export async function fetchOrderConfirmation(orderNumber, token, fetchImpl = fet
   return body;
 }
 
+export function claimMetaPurchase(orderNumber, token) {
+  return request(`/api/orders/${encodeURIComponent(orderNumber)}/meta-purchase/claim`, {
+    method: 'POST',
+    headers: { 'X-Order-Confirmation': token }
+  });
+}
+
+export function completeMetaPurchase(orderNumber, token, claimId, sent) {
+  return request(`/api/orders/${encodeURIComponent(orderNumber)}/meta-purchase/complete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Order-Confirmation': token
+    },
+    body: JSON.stringify({ claimId, sent: Boolean(sent) })
+  });
+}
+
 export function quoteCart(payload) {
   return request('/api/discounts/quote', {
     method: 'POST',

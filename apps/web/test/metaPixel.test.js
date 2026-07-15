@@ -23,7 +23,9 @@ import {
   trackFacebookEvent,
   trackFacebookInitiateCheckout,
   trackFacebookPageView,
-  trackFacebookPurchase
+  trackFacebookPurchase,
+  trackFacebookPurchasePayload,
+  wasFacebookPurchaseTracked
 } from '../src/lib/metaPixel.js';
 
 test('Facebook money values convert cents to decimal PHP', () => {
@@ -296,6 +298,36 @@ test('Purchase dispatches once with the server event ID', () => {
   assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-1', { windowRef, storage, path: '/checkout', consent: true }), false);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][3], { eventID: 'purchase_MCC-1' });
+});
+
+test('server-claimed browser Purchase payload stays numeric and dispatches once', () => {
+  const calls = [];
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value)
+  };
+  const purchase = {
+    eventId: 'purchase_MCC-CLAIMED',
+    payload: {
+      content_ids: ['V-1'], content_type: 'product',
+      contents: [{ id: 'V-1', quantity: 2, item_price: 649 }],
+      currency: 'PHP', num_items: 2, order_id: 'MCC-CLAIMED', value: 1298
+    }
+  };
+  const options = { windowRef: { fbq: (...args) => calls.push(args) }, storage, path: '/thank-you' };
+  assert.equal(trackFacebookPurchasePayload(purchase, options), true);
+  assert.equal(wasFacebookPurchaseTracked(purchase.eventId, storage), true);
+  assert.equal(trackFacebookPurchasePayload(purchase, options), false);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][3], { eventID: purchase.eventId });
+  assert.equal(typeof calls[0][2].value, 'number');
+  for (const invalid of [
+    { ...purchase, payload: { ...purchase.payload, value: '1298' } },
+    { ...purchase, eventId: 'invalid-zero', payload: { ...purchase.payload, value: 0 } },
+    { ...purchase, eventId: 'invalid-currency', payload: { ...purchase.payload, currency: 'PHP 1298' } },
+    { ...purchase, eventId: 'invalid-quantity', payload: { ...purchase.payload, num_items: 1 } }
+  ]) assert.equal(trackFacebookPurchasePayload(invalid, options), false);
 });
 
 test('Purchase remains safe when browser storage is unavailable and rejects invalid line contents', () => {

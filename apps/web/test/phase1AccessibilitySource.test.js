@@ -15,7 +15,7 @@ test('phase one provides accessible contrast and touch targets', async () => {
   assert.match(css, /\.carousel-dot\[aria-current="true"\]::after\s*{[^}]*background:\s*currentColor;/s);
 });
 
-test('homepage carousel slides sideways with dots and mobile swipe support', async () => {
+test('homepage carousel swaps one optimized image with dots and mobile swipe support', async () => {
   const home = await source('src/pages/Home.jsx');
 
   assert.match(home, /window\.setInterval/);
@@ -26,13 +26,15 @@ test('homepage carousel slides sideways with dots and mobile swipe support', asy
   assert.match(home, /handleHeroTouchEnd/);
   assert.match(home, /showNextHero/);
   assert.match(home, /showPreviousHero/);
-  assert.match(home, /translateX\(\$\{\(index - activeHeroIndex\) \* 100\}%\)/);
+  assert.match(home, /const activeBanner = banners\[activeHeroIndex\]/);
+  assert.match(home, /key=\{activeBanner\.url\}/);
+  assert.match(home, /preload\.src = nextBanner\.url/);
   assert.match(home, /className="absolute bottom-2 left-1\/2 flex -translate-x-1\/2 items-center justify-center sm:bottom-3"/);
   assert.match(home, /className="carousel-dot"/);
   assert.match(home, /aria-label={`Show banner \$\{index \+ 1\}`}/);
   assert.match(home, /onClick=\{\(\) => setActiveHeroIndex\(index\)\}/);
   assert.match(home, /hero-slide absolute inset-0/);
-  assert.match(home, /transition-transform duration-700/);
+  assert.doesNotMatch(home, /banners\.map\(\(banner, index\) => \(\s*<img/);
 });
 
 test('cart drawer exposes modal keyboard behavior', async () => {

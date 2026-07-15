@@ -1,6 +1,6 @@
 const express = require('express');
 const { listCatalogProducts, findCatalogProductBySlug } = require('../products/catalogPresenter');
-const { listOrders } = require('../orders/orderRepository');
+const { productSalesCounts } = require('../orders/orderRepository');
 const { reviewSummariesByProduct } = require('../reviews/reviewRepository');
 
 const router = express.Router();
@@ -40,8 +40,8 @@ function salesCountsByProduct(orders) {
   return counts;
 }
 
-function annotateBestSellerCounts(products, orders) {
-  const counts = salesCountsByProduct(orders);
+function annotateBestSellerCounts(products, ordersOrCounts) {
+  const counts = ordersOrCounts instanceof Map ? ordersOrCounts : salesCountsByProduct(ordersOrCounts);
   return products.map((product) => ({
     ...product,
     successfulOrderCount: counts.get(product.id) || counts.get(`catalog-${product.slug}`) || 0
@@ -57,10 +57,10 @@ function annotateReviewSummaries(products, summaries) {
 
 router.get('/', async (_req, res, next) => {
   try {
-    const [products, orders, reviewSummaries] = await Promise.all([
-      listCatalogProducts(), listOrders(), reviewSummariesByProduct()
+    const [products, salesCounts, reviewSummaries] = await Promise.all([
+      listCatalogProducts(), productSalesCounts(), reviewSummariesByProduct()
     ]);
-    res.json({ products: annotateReviewSummaries(annotateBestSellerCounts(products, orders), reviewSummaries), source: 'catalog' });
+    res.json({ products: annotateReviewSummaries(annotateBestSellerCounts(products, salesCounts), reviewSummaries), source: 'catalog' });
   } catch (error) {
     next(error);
   }

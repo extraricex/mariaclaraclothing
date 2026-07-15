@@ -349,3 +349,51 @@ test('public lookup returns no PII and private confirmation requires its header 
     assert.equal(allowedBody.order.totalCents, 72900);
   });
 });
+
+test('Meta browser Purchase claim and completion require the private confirmation token', async () => {
+  const calls = [];
+  await withOrderServer({
+    claimBrowserMetaPurchase: async (input) => {
+      calls.push(['claim', input]);
+      if (input.confirmationToken !== 'right-token') return null;
+      return {
+        shouldSend: true,
+        claimId: 'claim-1',
+        purchase: {
+          eventId: 'purchase_MCC-1',
+          payload: {
+            content_ids: ['V-1'], content_type: 'product',
+            contents: [{ id: 'V-1', quantity: 1, item_price: 649 }],
+            currency: 'PHP', num_items: 1, order_id: 'MCC-1', value: 729
+          }
+        }
+      };
+    },
+    completeBrowserMetaPurchase: async (input) => {
+      calls.push(['complete', input]);
+      if (input.confirmationToken !== 'right-token') return null;
+      return { completed: input.sent, reason: input.sent ? 'sent' : 'not_sent' };
+    }
+  }, async (port) => {
+    const denied = await fetch(`http://127.0.0.1:${port}/api/orders/MCC-1/meta-purchase/claim`, { method: 'POST' });
+    assert.equal(denied.status, 404);
+
+    const claimed = await fetch(`http://127.0.0.1:${port}/api/orders/MCC-1/meta-purchase/claim`, {
+      method: 'POST', headers: { 'X-Order-Confirmation': 'right-token' }
+    });
+    const claimBody = await claimed.json();
+    assert.equal(claimed.status, 200);
+    assert.equal(claimBody.purchase.eventId, 'purchase_MCC-1');
+    assert.equal(typeof claimBody.purchase.payload.value, 'number');
+
+    const completed = await fetch(`http://127.0.0.1:${port}/api/orders/MCC-1/meta-purchase/complete`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Order-Confirmation': 'right-token' },
+      body: JSON.stringify({ claimId: 'claim-1', sent: true })
+    });
+    assert.equal(completed.status, 200);
+    assert.equal((await completed.json()).completed, true);
+  });
+  assert.equal(calls.filter(([name]) => name === 'claim').length, 2);
+  assert.equal(calls.filter(([name]) => name === 'complete').length, 1);
+});

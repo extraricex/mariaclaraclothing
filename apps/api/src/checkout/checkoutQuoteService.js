@@ -254,6 +254,8 @@ async function buildAuthoritativeQuote(input = {}, dependencyOverrides = {}) {
     subtotalCents,
     discountTotalCents,
     totalCents,
+    freeShippingEnabled: Boolean(settings.shipping?.freeShippingEnabled),
+    freeShippingMinimumItems: Math.max(0, Number(settings.shipping?.freeShippingMinimumItems || 0)),
     freeShippingUnlocked,
     finalizable: Boolean(address)
   };

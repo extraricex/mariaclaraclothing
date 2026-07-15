@@ -22,7 +22,7 @@ import {
   saveCheckoutReviewDraft
 } from '../lib/checkoutDraft.js';
 import { formatMoney } from '../lib/money.js';
-import { trackFacebookAddPaymentInfo, trackFacebookAddToCart, trackFacebookPurchase } from '../lib/metaPixel.js';
+import { trackFacebookAddPaymentInfo, trackFacebookAddToCart } from '../lib/metaPixel.js';
 import { DEFAULT_STOREFRONT_SETTINGS, freeShippingHint, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { customerNameParts } from '../lib/customerName.js';
 import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
@@ -37,7 +37,7 @@ function totalsChanged(previous, latest) {
 
 function paymentDescription(method) {
   if (method.id === 'paymongo') {
-    return 'Pay securely using GCash, Maya, card, QRPh, or online banking through PayMongo.';
+    return method.instructions || 'Continue to PayMongo secure checkout. The payment methods available for your order will appear there.';
   }
   return method.instructions || 'Pay cash to the rider when your order arrives.';
 }
@@ -305,7 +305,6 @@ export default function CheckoutReview() {
         return;
       }
 
-      trackFacebookPurchase(result, result.items, result.trackingEventId);
       clearCheckoutReviewDraft();
       clearCheckoutIdempotencyKey();
       clearCart();

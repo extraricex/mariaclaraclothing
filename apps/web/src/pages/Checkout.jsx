@@ -14,6 +14,10 @@ export default function Checkout() {
   const items = useCart();
   const navigate = useNavigate();
   const location = useLocation();
+  const paymentWasCancelled = useMemo(
+    () => new URLSearchParams(location.search).get('payment') === 'cancelled',
+    [location.search]
+  );
   const loggedIn = useCustomerLoggedIn();
   const initialDraft = useMemo(() => loadCheckoutReviewDraft(), []);
   const initialCustomerName = useMemo(() => customerNameParts(initialDraft?.customer), [initialDraft]);
@@ -38,8 +42,10 @@ export default function Checkout() {
   const [missingFields, setMissingFields] = useState({});
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState({
-    tone: location.state?.message ? 'error' : 'neutral',
-    message: location.state?.message || ''
+    tone: (location.state?.message || paymentWasCancelled) ? 'error' : 'neutral',
+    message: location.state?.message || (paymentWasCancelled
+      ? 'Online payment was cancelled. Your delivery details and cart are still saved. Review them below, then continue to retry or choose Cash on Delivery.'
+      : '')
   });
   const checkoutFieldRefs = {
     firstName: useRef(null),
@@ -265,10 +271,12 @@ export default function Checkout() {
           {!loggedIn && (
             <div className="mt-6 border-y border-line py-5">
               <p className="text-sm text-ink-soft"><Link to="/login" state={{ from: '/checkout' }} className="text-accent underline">Log in</Link> to prefill your saved address, or continue as guest.</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {socialProviders.google ? <a className="btn-ghost text-center" href="/api/customer/oauth/google/start?returnTo=%2Fcheckout">Continue with Google</a> : <button type="button" className="btn-ghost" disabled>Continue with Google</button>}
-                {socialProviders.facebook ? <a className="btn-ghost text-center" href="/api/customer/oauth/facebook/start?returnTo=%2Fcheckout">Continue with Facebook</a> : <button type="button" className="btn-ghost" disabled>Continue with Facebook</button>}
-              </div>
+              {(socialProviders.google || socialProviders.facebook) && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {socialProviders.google && <a className="btn-ghost text-center" href="/api/customer/oauth/google/start?returnTo=%2Fcheckout">Continue with Google</a>}
+                  {socialProviders.facebook && <a className="btn-ghost text-center" href="/api/customer/oauth/facebook/start?returnTo=%2Fcheckout">Continue with Facebook</a>}
+                </div>
+              )}
             </div>
           )}
 
@@ -284,31 +292,58 @@ export default function Checkout() {
               <input ref={checkoutFieldRefs.lastName} className={fieldClass('lastName')} required aria-invalid={Boolean(missingFields.lastName)} aria-describedby={missingFields.lastName ? 'checkout-last-name-error' : undefined} placeholder="Last name" value={lastName} onChange={(event) => { setLastName(event.target.value); clearMissingField('lastName'); }} autoComplete="family-name" />
               {missingFields.lastName && <span id="checkout-last-name-error" className="mt-1 block text-xs text-accent-deep" role="alert">Last Name is required.</span>}
             </label>
-            <input ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" inputMode="tel" placeholder="Mobile number (09XXXXXXXXX)" value={phone} onChange={(event) => { setPhone(event.target.value); clearMissingField('phone'); }} autoComplete="tel" />
-            <input ref={checkoutFieldRefs.email} className={`${fieldClass('email')} sm:col-span-2`} type="email" placeholder="Email (optional)" value={email} onChange={(event) => { setEmail(event.target.value); clearMissingField('email'); }} autoComplete="email" />
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold">Mobile Number <span aria-hidden="true">*</span></span>
+              <input ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" inputMode="tel" aria-invalid={Boolean(missingFields.phone)} aria-describedby={missingFields.phone ? 'checkout-phone-error' : undefined} placeholder="09XXXXXXXXX" value={phone} onChange={(event) => { setPhone(event.target.value); clearMissingField('phone'); }} autoComplete="tel" />
+              {missingFields.phone && <span id="checkout-phone-error" className="mt-1 block text-xs text-accent-deep" role="alert">Enter a valid Philippine mobile number, such as 09171234567.</span>}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold">Email <span className="font-normal text-clay">(optional)</span></span>
+              <input ref={checkoutFieldRefs.email} className={fieldClass('email')} type="email" aria-invalid={Boolean(missingFields.email)} aria-describedby={missingFields.email ? 'checkout-email-error' : undefined} placeholder="you@example.com" value={email} onChange={(event) => { setEmail(event.target.value); clearMissingField('email'); }} autoComplete="email" />
+              {missingFields.email && <span id="checkout-email-error" className="mt-1 block text-xs text-accent-deep" role="alert">Enter a valid email address or leave this field blank.</span>}
+            </label>
           </fieldset>
 
           <fieldset className="mt-8 grid gap-4 sm:grid-cols-2">
             <legend className="mb-4 text-sm font-semibold uppercase tracking-[0.12em]">Delivery address</legend>
-            <input ref={checkoutFieldRefs.house} className={`${fieldClass('house')} sm:col-span-2`} required placeholder="House no. / Street / Building / Unit" value={house} onChange={(event) => { setHouse(event.target.value); clearMissingField('house'); }} autoComplete="street-address" />
-            <select ref={checkoutFieldRefs.province} className={fieldClass('province')} required value={provinceCode} onChange={(event) => { setPrefillAddress(null); setProvinceCode(event.target.value); clearMissingField('province'); }} autoComplete="address-level1">
-              <option value="">Select province</option>
-              {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-            </select>
-            <select ref={checkoutFieldRefs.city} className={fieldClass('city')} required value={cityCode} disabled={!cities.length} onChange={(event) => { setPrefillAddress(null); setCityCode(event.target.value); clearMissingField('city'); }} autoComplete="address-level2">
-              <option value="">{provinceCode ? 'Select city / municipality' : 'Select province first'}</option>
-              {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-            </select>
-            <select ref={checkoutFieldRefs.barangay} className={fieldClass('barangay')} required value={barangayCode} disabled={!barangays.length} onChange={(event) => { setPrefillAddress(null); setBarangayCode(event.target.value); clearMissingField('barangay'); }} autoComplete="address-level3">
-              <option value="">{cityCode ? 'Select barangay' : 'Select city / municipality first'}</option>
-              {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-            </select>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-semibold">House / Street / Building / Unit <span aria-hidden="true">*</span></span>
+              <input ref={checkoutFieldRefs.house} className={fieldClass('house')} required aria-invalid={Boolean(missingFields.house)} aria-describedby={missingFields.house ? 'checkout-house-error' : undefined} placeholder="House no. / Street / Building / Unit" value={house} onChange={(event) => { setHouse(event.target.value); clearMissingField('house'); }} autoComplete="street-address" />
+              {missingFields.house && <span id="checkout-house-error" className="mt-1 block text-xs text-accent-deep" role="alert">Enter the complete house, street, building, or unit address.</span>}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold">Province <span aria-hidden="true">*</span></span>
+              <select ref={checkoutFieldRefs.province} className={fieldClass('province')} required aria-invalid={Boolean(missingFields.province)} aria-describedby={missingFields.province ? 'checkout-province-error' : undefined} value={provinceCode} onChange={(event) => { setPrefillAddress(null); setProvinceCode(event.target.value); clearMissingField('province'); }} autoComplete="address-level1">
+                <option value="">Select province</option>
+                {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
+              </select>
+              {missingFields.province && <span id="checkout-province-error" className="mt-1 block text-xs text-accent-deep" role="alert">Select a province.</span>}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold">City / Municipality <span aria-hidden="true">*</span></span>
+              <select ref={checkoutFieldRefs.city} className={fieldClass('city')} required aria-invalid={Boolean(missingFields.city)} aria-describedby={missingFields.city ? 'checkout-city-error' : undefined} value={cityCode} disabled={!cities.length} onChange={(event) => { setPrefillAddress(null); setCityCode(event.target.value); clearMissingField('city'); }} autoComplete="address-level2">
+                <option value="">{provinceCode ? 'Select city / municipality' : 'Select province first'}</option>
+                {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
+              </select>
+              {missingFields.city && <span id="checkout-city-error" className="mt-1 block text-xs text-accent-deep" role="alert">Select a city or municipality.</span>}
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold">Barangay <span aria-hidden="true">*</span></span>
+              <select ref={checkoutFieldRefs.barangay} className={fieldClass('barangay')} required aria-invalid={Boolean(missingFields.barangay)} aria-describedby={missingFields.barangay ? 'checkout-barangay-error' : undefined} value={barangayCode} disabled={!barangays.length} onChange={(event) => { setPrefillAddress(null); setBarangayCode(event.target.value); clearMissingField('barangay'); }} autoComplete="address-level3">
+                <option value="">{cityCode ? 'Select barangay' : 'Select city / municipality first'}</option>
+                {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
+              </select>
+              {missingFields.barangay && <span id="checkout-barangay-error" className="mt-1 block text-xs text-accent-deep" role="alert">Select a barangay.</span>}
+            </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">ZIP Code <span className="font-normal text-clay">(optional)</span></span>
-              <input ref={checkoutFieldRefs.postalCode} className={fieldClass('postalCode')} aria-invalid={Boolean(missingFields.postalCode)} inputMode="numeric" maxLength="4" placeholder="ZIP code (optional)" value={postalCode} onChange={(event) => { setPostalCode(event.target.value.replace(/\D/g, '').slice(0, 4)); clearMissingField('postalCode'); }} autoComplete="postal-code" />
-              {missingFields.postalCode && <span className="mt-1 block text-xs text-accent-deep" role="alert">ZIP Code must contain 4 digits when provided.</span>}
+              <input ref={checkoutFieldRefs.postalCode} className={fieldClass('postalCode')} aria-invalid={Boolean(missingFields.postalCode)} aria-describedby={missingFields.postalCode ? 'checkout-postal-code-error' : undefined} inputMode="numeric" maxLength="4" placeholder="ZIP code (optional)" value={postalCode} onChange={(event) => { setPostalCode(event.target.value.replace(/\D/g, '').slice(0, 4)); clearMissingField('postalCode'); }} autoComplete="postal-code" />
+              {missingFields.postalCode && <span id="checkout-postal-code-error" className="mt-1 block text-xs text-accent-deep" role="alert">ZIP Code must contain 4 digits when provided.</span>}
             </label>
-            <textarea className="field customer-input sm:col-span-2" rows="3" placeholder="Delivery notes (optional)" value={notes} onChange={(event) => setNotes(event.target.value)} />
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-xs font-semibold">Delivery Notes <span className="font-normal text-clay">(optional)</span></span>
+              <textarea className="field customer-input" rows="3" placeholder="Landmark or delivery instructions" value={notes} onChange={(event) => setNotes(event.target.value)} />
+            </label>
             {loggedIn && (
               <label className="flex items-center gap-2 text-sm text-ink-soft sm:col-span-2">
                 <input type="checkbox" checked={saveAddress} onChange={(event) => setSaveAddress(event.target.checked)} />
@@ -340,9 +375,12 @@ export default function Checkout() {
             </p>
           )}
           <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending}>
-            {pending ? 'Checking stock...' : 'Continue to Checkout'}
+            {pending ? 'Checking stock...' : 'Review order'}
           </button>
           <p className="mt-3 text-center text-xs text-clay">No order is created and no stock is deducted until you confirm on the review page.</p>
+          <p className="mt-2 text-center text-xs leading-relaxed text-clay">
+            We use your contact and delivery details to fulfill your order. See our <Link className="underline" to="/terms">privacy information</Link>.
+          </p>
         </form>
       </main>
     </div>

@@ -367,7 +367,7 @@ function AuthenticationCard({ initial }) {
   );
 }
 
-function MarketingCard({ initial }) {
+function MarketingCard({ initial, provider = {} }) {
   const [form, setForm] = useState(initial.metaPixel);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -394,8 +394,9 @@ function MarketingCard({ initial }) {
           Enable Meta Pixel
         </label>
         <Field label="Meta Pixel ID">
-          <input className="field mt-1" inputMode="numeric" value={form.pixelId || ''} onChange={(event) => setForm((current) => ({ ...current, pixelId: event.target.value.replace(/\D/g, '') }))} />
+          <input className="field mt-1" inputMode="numeric" value={form.pixelId || ''} disabled={Boolean(provider.pixelIdLocked)} onChange={(event) => setForm((current) => ({ ...current, pixelId: event.target.value.replace(/\D/g, '') }))} />
         </Field>
+        {provider.pixelIdLocked && <p className="text-xs text-clay">Locked to the same dataset used by the server Conversions API so Purchase events can deduplicate.</p>}
         <label className="flex items-start gap-3 text-sm">
           <input type="checkbox" checked={Boolean(form.requireConsent)} onChange={(event) => setForm((current) => ({ ...current, requireConsent: event.target.checked }))} />
           <span>
@@ -609,7 +610,11 @@ export default function Settings() {
 
   useEffect(() => {
     adminJson('/api/admin/settings')
-      .then((body) => setSettings({ ...body.settings, paymentProviders: body.paymentProviders || {} }))
+      .then((body) => setSettings({
+        ...body.settings,
+        paymentProviders: body.paymentProviders || {},
+        metaProvider: body.metaProvider || {}
+      }))
       .catch((loadError) => setError(loadError.message));
   }, []);
 
@@ -629,7 +634,7 @@ export default function Settings() {
         <PaymentsCard initial={settings.payments} providers={settings.paymentProviders || {}} />
         <InventoryCard initial={settings.inventory} />
         <AuthenticationCard initial={settings.authentication} />
-        <MarketingCard initial={settings.marketing} />
+        <MarketingCard initial={settings.marketing} provider={settings.metaProvider} />
         <SeoCard initial={settings.website.seo} />
         <SizeChartCard initial={settings.website.sizeChart} />
         <ReportIssueCard initial={settings.website.reportIssue} />

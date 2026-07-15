@@ -13,6 +13,7 @@ const { issueReportsRouter } = require('./routes/issueReports');
 const { pancakeWebhookRouter } = require('./routes/pancakeWebhook');
 const { paymongoRouter } = require('./routes/paymongo');
 const { reviewsRouter } = require('./routes/reviews');
+const { sitemapRouter } = require('./routes/sitemap');
 const { methodOnly, postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
@@ -153,6 +154,8 @@ function createApp() {
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, service: 'maria-clara-clothing' });
   });
+
+  app.use('/sitemap.xml', sitemapRouter);
 
   app.use('/api/admin/login', loginRateLimit);
   app.use('/api/orders', checkoutRateLimit);

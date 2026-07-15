@@ -124,6 +124,24 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_metadata jsonb NOT NULL DEFA
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_sent_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_status text NOT NULL DEFAULT 'not_queued';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_error text NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_event_id text NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_tracking_version integer NOT NULL DEFAULT 1;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_browser_purchase_claim_id text NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_browser_purchase_claimed_at timestamptz;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_browser_purchase_sent_at timestamptz;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_capi_purchase_queued_at timestamptz;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_capi_purchase_sent_at timestamptz;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_status text NOT NULL DEFAULT 'legacy';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_last_error text NOT NULL DEFAULT '';
+
+UPDATE orders
+SET meta_purchase_event_id = 'purchase_' || order_number
+WHERE meta_purchase_event_id = '';
+
+CREATE UNIQUE INDEX IF NOT EXISTS orders_meta_purchase_event_id_idx
+  ON orders(meta_purchase_event_id) WHERE meta_purchase_event_id <> '';
+CREATE INDEX IF NOT EXISTS orders_meta_purchase_status_idx
+  ON orders(meta_purchase_status, placed_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_provider_checkout_session_idx
   ON orders(provider_checkout_session_id) WHERE provider_checkout_session_id<>'';
@@ -396,6 +414,23 @@ CREATE TABLE IF NOT EXISTS marketing_event_outbox (
 
 CREATE INDEX IF NOT EXISTS marketing_event_outbox_pending_idx
   ON marketing_event_outbox(status, next_attempt_at, created_at);
+
+UPDATE orders AS order_record
+SET meta_capi_purchase_queued_at = COALESCE(order_record.meta_capi_purchase_queued_at, event.created_at),
+    meta_capi_purchase_sent_at = COALESCE(order_record.meta_capi_purchase_sent_at, event.sent_at),
+    meta_purchase_status = CASE
+      WHEN event.sent_at IS NOT NULL AND order_record.meta_browser_purchase_sent_at IS NOT NULL THEN 'complete'
+      WHEN event.sent_at IS NOT NULL THEN 'capi_sent'
+      WHEN order_record.meta_purchase_tracking_version >= 2 THEN order_record.meta_purchase_status
+      ELSE 'legacy'
+    END,
+    meta_purchase_last_error = CASE
+      WHEN order_record.meta_purchase_tracking_version >= 2 THEN order_record.meta_purchase_last_error
+      ELSE COALESCE(event.last_error, '')
+    END
+FROM marketing_event_outbox AS event
+WHERE event.event_name = 'Purchase'
+  AND event.event_id = order_record.meta_purchase_event_id;
 
 CREATE TABLE IF NOT EXISTS pancake_connections (
   connection_key text PRIMARY KEY DEFAULT 'primary',

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import useModalFocus from '../hooks/useModalFocus.js';
 
 const ISSUE_TYPES = [
   ['checkout_problem', 'Checkout problem'],
@@ -24,7 +25,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export default function ReportIssueWidget({ settings, cartItems }) {
+export default function ReportIssueWidget({ settings, cartItems, inline = false }) {
   const location = useLocation();
   const config = settings?.reportIssue || {};
   const [open, setOpen] = useState(false);
@@ -38,15 +39,11 @@ export default function ReportIssueWidget({ settings, cartItems }) {
   });
   const [status, setStatus] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const closeDialog = useCallback(() => setOpen(false), []);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    function closeOnEscape(event) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [open]);
+  useModalFocus({ open, containerRef: dialogRef, initialFocusRef: closeButtonRef, onClose: closeDialog });
 
   const orderNumber = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -120,24 +117,25 @@ export default function ReportIssueWidget({ settings, cartItems }) {
     <>
       <button
         type="button"
-        className={`fixed bottom-[calc(max(0.5rem,env(safe-area-inset-bottom))+3.25rem)] z-[45] rounded-full border border-ink/10 bg-paper px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-ink shadow-2xl transition-transform hover:-translate-y-1 sm:bottom-[5.25rem] sm:px-4 sm:py-2.5 ${rightSide ? 'right-2 sm:right-4' : 'left-2 sm:left-4'}`}
+        className={inline
+          ? 'text-action inline-flex text-sm text-paper/80 underline hover:text-accent sm:hidden'
+          : `fixed bottom-[5.25rem] z-[45] hidden rounded-full border border-ink/10 bg-paper px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink shadow-2xl transition-transform hover:-translate-y-1 sm:block ${rightSide ? 'right-4' : 'left-4'}`}
         onClick={() => setOpen(true)}
         aria-label="Report an issue"
       >
-        <span className="sm:hidden">{config.mobileButtonLabel || 'Issue?'}</span>
-        <span className="hidden sm:inline">{config.buttonLabel || 'Report Issue'}</span>
+        {inline ? 'Report an issue' : (config.buttonLabel || 'Report Issue')}
       </button>
 
       {open && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/50 p-3 sm:items-center sm:p-6" role="presentation">
-          <form onSubmit={submit} className="max-h-[90svh] w-full max-w-xl overflow-y-auto border border-line bg-paper p-5 shadow-2xl sm:p-6" role="dialog" aria-modal="true" aria-label="Report website issue">
+          <form ref={dialogRef} tabIndex={-1} onSubmit={submit} className="max-h-[90svh] w-full max-w-xl overflow-y-auto border border-line bg-paper p-5 shadow-2xl sm:p-6" role="dialog" aria-modal="true" aria-label="Report website issue">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="eyebrow">Website feedback</p>
                 <h2 className="display mt-1 text-3xl">Report Issue</h2>
                 <p className="mt-2 text-sm text-ink-soft">Tell us what went wrong. We automatically include page and device details.</p>
               </div>
-              <button type="button" className="touch-target text-2xl leading-none text-ink" onClick={() => setOpen(false)} aria-label="Close report issue form">×</button>
+              <button ref={closeButtonRef} type="button" className="touch-target text-2xl leading-none text-ink" onClick={closeDialog} aria-label="Close report issue form">×</button>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -165,7 +163,7 @@ export default function ReportIssueWidget({ settings, cartItems }) {
             )}
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               <button type="submit" className="btn-ink customer-compact-button flex-1" disabled={submitting}>{submitting ? 'Submitting…' : 'Submit report'}</button>
-              <button type="button" className="btn-ghost customer-compact-button flex-1" onClick={() => setOpen(false)}>Cancel</button>
+              <button type="button" className="btn-ghost customer-compact-button flex-1" onClick={closeDialog}>Cancel</button>
             </div>
           </form>
         </div>

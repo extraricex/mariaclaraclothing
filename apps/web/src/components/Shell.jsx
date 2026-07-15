@@ -21,13 +21,13 @@ const TICKER_ITEMS = [
 ];
 
 const NAV_LINKS = [
-  { to: '/', label: 'Shop' },
+  { to: '/shop', label: 'Shop' },
   { to: '/faq', label: 'FAQ' },
   { to: '/terms', label: 'Terms' },
   { to: '/contact', label: 'Contact' }
 ];
 const MENU_LINKS = [
-  { href: '/', label: 'Shop' },
+  { href: '/shop', label: 'Shop' },
   { href: '/faq', label: 'FAQ' },
   { href: '/terms', label: 'Terms' },
   { href: '/contact', label: 'Contact' }
@@ -121,7 +121,7 @@ function ProductRecommendation({ product, onClose, onNavigate }) {
 function OfferDock({ offer, product, offerCount, mobileOffersOpen, dockRef, onToggle, onNavigate, onCloseOffer, onCloseProduct }) {
   if (!offerCount) return null;
   return (
-    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] w-[min(13.5rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:w-72">
+    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] hidden w-[min(13.5rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:block sm:w-72">
       <div id="storefront-offer-cards" className={`${mobileOffersOpen ? 'grid' : 'hidden'} pointer-events-auto mb-2 gap-1.5 sm:grid sm:gap-2`}>
         <div className={offer ? 'hidden sm:block' : ''}>
           <ProductRecommendation product={product} onClose={onCloseProduct} onNavigate={onNavigate} />
@@ -148,11 +148,11 @@ function MessengerSupportLink({ href }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-2 z-[45] flex h-11 items-center gap-2 rounded-full border border-paper/30 bg-ink px-3 text-paper shadow-2xl transition-transform hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:bottom-4 sm:right-4 sm:h-14 sm:gap-3 sm:px-4"
+      className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-2 z-[45] flex h-11 w-11 items-center justify-center rounded-full border border-paper/30 bg-ink p-0 text-paper shadow-2xl transition-transform hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:bottom-4 sm:right-4 sm:h-14 sm:w-auto sm:gap-3 sm:px-4"
       aria-label="Chat Support — open Messenger"
       title="Chat Support — open Messenger"
     >
-      <span className="text-[10px] font-bold uppercase tracking-[0.11em]"><span className="hidden sm:inline">Chat Support</span><span className="sm:hidden">Chat</span></span>
+      <span className="hidden text-[10px] font-bold uppercase tracking-[0.11em] sm:inline">Chat Support</span>
       <svg viewBox="0 0 24 24" className="h-5 w-5 sm:h-7 sm:w-7" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 9.2 9.2 0 0 1-3.8-.8L3 21l1.4-4.4A8.2 8.2 0 0 1 3 12C3 7.3 7 4 12 4s9 3 9 7.5Z" />
         <path d="m7.5 14 3-3 2.3 2 3.7-3" />
@@ -315,7 +315,7 @@ export default function Shell() {
   const [storeInfo, setStoreInfo] = useState(null);
   const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
   const [recommendation, setRecommendation] = useState(null);
-  const [mobileOffersOpen, setMobileOffersOpen] = useState(true);
+  const [mobileOffersOpen, setMobileOffersOpen] = useState(false);
   const [recommendationDismissed, setRecommendationDismissed] = useState(() => {
     try {
       return window.sessionStorage.getItem(RECOMMENDATION_DISMISSED) === 'true';
@@ -485,6 +485,7 @@ export default function Shell() {
   const offerCount = Number(Boolean(visibleShippingOffer)) + Number(Boolean(visibleRecommendation));
   const instagramUrl = storeInfo?.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothingshop/';
   const facebookUrl = storeInfo?.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
+  const onlinePaymentEnabled = storeInfo?.paymentMethods?.some((method) => method.id === 'paymongo');
   const shopCollections = normalizeCollectionDefinitions(storeInfo?.collectionDefinitions || [])
     .filter((collection) => collection.visible && collection.showOnShop);
 
@@ -661,12 +662,15 @@ export default function Shell() {
                 <li><Link to="/faq" className="text-action hover:text-accent">FAQ</Link></li>
                 <li><Link to="/shipping-returns" className="text-action hover:text-accent">Shipping & returns</Link></li>
                 <li><Link to="/terms" className="text-action hover:text-accent">Terms of service</Link></li>
+                <li><ReportIssueWidget settings={storeInfo} cartItems={items} inline /></li>
               </ul>
             </div>
             <div>
               <p className="eyebrow text-paper/60">Product details</p>
               <p className="mt-3 max-w-xs text-sm text-paper/80">
-                Premium 240 GSM cotton, cut oversized. Cash on delivery nationwide, with every order reviewed before shipment.
+                Premium 240 GSM cotton, cut oversized. {onlinePaymentEnabled
+                  ? 'Choose Cash on Delivery or secure online checkout through PayMongo.'
+                  : 'Cash on delivery is available nationwide, with every order reviewed before shipment.'}
               </p>
               {storeInfo && (storeInfo.contactEmail || storeInfo.contactNumber || storeInfo.storeAddress) && (
                 <ul className="mt-4 space-y-1 text-sm text-paper/80">

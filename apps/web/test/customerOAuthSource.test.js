@@ -11,6 +11,9 @@ test('customer login exposes only configured real Google and Facebook OAuth rout
   assert.match(login, /Continue with Google/);
   assert.match(login, /Continue with Facebook/);
   assert.match(login, /\/api\/customer\/oauth\/\$\{provider\}\/start/);
+  assert.doesNotMatch(login, /temporarily unavailable/);
+  assert.doesNotMatch(login, /disabled>Continue with Google/);
+  assert.doesNotMatch(login, /disabled>Continue with Facebook/);
   assert.doesNotMatch(login, /localStorage.*google|localStorage.*facebook/i);
 });
 

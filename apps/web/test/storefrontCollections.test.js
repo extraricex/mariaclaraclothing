@@ -82,7 +82,7 @@ test('customer collection route has product and empty states', async () => {
   const page = await readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'Collection.jsx'), 'utf8');
   assert.match(app, /path="\/collections\/:slug"/);
   assert.match(page, /collectionMembers/);
-  assert.match(page, /No products linked yet/);
+  assert.match(page, /No pieces available right now/);
   assert.match(page, /Collection unavailable/);
 });
 

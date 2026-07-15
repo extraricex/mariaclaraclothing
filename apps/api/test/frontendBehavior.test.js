@@ -27,7 +27,7 @@ test('customer storefront pages are prepared for Meta Pixel without tracking adm
   }
 });
 
-test('Meta Pixel wrapper initializes only when configured and exposes standard ecommerce events', () => {
+test('legacy storefront exposes pre-purchase events but cannot emit Purchase', () => {
   const config = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'meta-pixel-config.js'), 'utf8');
   const pixel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'meta-pixel.js'), 'utf8');
   const storefront = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'storefront.js'), 'utf8');
@@ -45,16 +45,16 @@ test('Meta Pixel wrapper initializes only when configured and exposes standard e
   assert.match(pixel, /trackMetaPixelEvent\('ViewContent'/);
   assert.match(pixel, /trackMetaPixelEvent\('AddToCart'/);
   assert.match(pixel, /trackMetaPixelEvent\('InitiateCheckout'/);
-  assert.match(pixel, /trackMetaPixelEvent\('Purchase'/);
+  assert.doesNotMatch(pixel, /trackMetaPixelEvent\('Purchase'/);
+  assert.match(pixel, /if \(eventName === 'Purchase'\) return false/);
 
   assert.match(storefront, /trackMetaPixelViewContent\?\.\(product, selectedVariant\)/);
   assert.match(storefront, /trackMetaPixelAddToCart\?\.\(product, selectedVariant/);
   assert.doesNotMatch(cart, /trackMetaPixelInitiateCheckout/);
   assert.doesNotMatch(checkout, /trackMetaPixelInitiateCheckout\?\.\(items, checkoutTotals\(items/);
   assert.match(checkout, /const totals = checkoutTotals\(currentItems, selectedShippingRegion\(\)\);\s*window\.trackMetaPixelInitiateCheckout\?\.\(currentItems, totals\)/);
-  assert.match(checkout, /trackMetaPixelPurchase\?\.\(result, result\.items \|\| currentItems\)/);
-  assert.match(thankYou, /trackMetaPixelPurchase\?\.\(order\)/);
-  assert.match(thankYou, /!\['paid', 'cod_pending'\]\.includes\(order\.paymentStatus\)/);
+  assert.doesNotMatch(checkout, /trackMetaPixelPurchase/);
+  assert.doesNotMatch(thankYou, /trackMetaPixelPurchase/);
   assert.match(checkout, /totalCents: Number\(order\.totalCents\)/);
 });
 

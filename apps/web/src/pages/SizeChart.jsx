@@ -23,7 +23,7 @@ export default function SizeChart() {
           />
         ) : (
           <div className="p-8 text-sm text-ink-soft">
-            Size chart image is not configured yet.
+            Please message us for the current product measurements before ordering.
           </div>
         )}
       </div>

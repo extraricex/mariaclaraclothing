@@ -84,6 +84,38 @@ async function listOrders() {
     .map((order) => ({ ...order, statusEvents: [] }));
 }
 
+async function productSalesCounts() {
+  if (usePostgresOrders()) {
+    const result = await query(
+      `SELECT COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', '')) AS product_id,
+              SUM(GREATEST(0, CASE
+                WHEN COALESCE(item->>'quantity', '') ~ '^\\d+$' THEN (item->>'quantity')::integer
+                ELSE 0
+              END))::integer AS quantity
+         FROM orders
+         CROSS JOIN LATERAL jsonb_array_elements(items) AS item
+        WHERE lower(status) NOT IN ('cancelled','canceled','returned','failed','expired','unreachable','draft','pending_payment','abandoned_checkout')
+          AND lower(payment_status) NOT IN ('unpaid','failed','expired','pending_payment','cancelled','canceled','refunded')
+          AND COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', '')) IS NOT NULL
+        GROUP BY COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', ''))`
+    );
+    return new Map(result.rows.map((row) => [String(row.product_id), Number(row.quantity || 0)]));
+  }
+  const store = await readOrderStore();
+  const counts = new Map();
+  const excludedStatuses = new Set(['cancelled', 'canceled', 'returned', 'failed', 'expired', 'unreachable', 'draft', 'pending_payment', 'abandoned_checkout']);
+  const excludedPayments = new Set(['unpaid', 'failed', 'expired', 'pending_payment', 'cancelled', 'canceled', 'refunded']);
+  for (const order of store.orders) {
+    if (excludedStatuses.has(String(order.status || '').toLowerCase()) || excludedPayments.has(String(order.paymentStatus || '').toLowerCase())) continue;
+    for (const item of order.items || []) {
+      const productId = String(item.productId || item.slug || '').trim();
+      if (!productId) continue;
+      counts.set(productId, (counts.get(productId) || 0) + Math.max(0, Math.trunc(Number(item.quantity || 0))));
+    }
+  }
+  return counts;
+}
+
 async function findOrderByNumber(orderNumber, options = {}) {
   if (usePostgresOrders()) {
     const executor = options.client || { query };
@@ -176,6 +208,112 @@ async function updateOrderAdminEmailState(orderNumber, changes = {}, options = {
     updatedAt: new Date().toISOString()
   };
   store.orders[existingIndex] = updated;
+  await writeOrderStore(store);
+  return updated;
+}
+
+async function claimOrderMetaBrowserPurchase(orderNumber, {
+  claimId,
+  claimedAt = new Date(),
+  staleBefore = new Date(Date.now() - 2 * 60_000)
+} = {}, options = {}) {
+  const normalizedClaimId = String(claimId || '').trim();
+  if (!normalizedClaimId) return null;
+
+  if (usePostgresOrders()) {
+    const executor = options.client || { query };
+    const result = await executor.query(
+      `UPDATE orders
+          SET meta_browser_purchase_claim_id = $2,
+              meta_browser_purchase_claimed_at = $3,
+              meta_purchase_status = CASE
+                WHEN meta_capi_purchase_sent_at IS NOT NULL THEN 'capi_sent_browser_claimed'
+                ELSE 'browser_claimed'
+              END,
+              meta_purchase_last_error = '',
+              updated_at = now()
+        WHERE order_number = $1
+          AND meta_purchase_tracking_version >= 2
+          AND meta_browser_purchase_sent_at IS NULL
+          AND (meta_browser_purchase_claimed_at IS NULL OR meta_browser_purchase_claimed_at <= $4)
+        RETURNING *`,
+      [orderNumber, normalizedClaimId, claimedAt, staleBefore]
+    );
+    return result.rows[0] ? fromPostgresOrder(result.rows[0]) : null;
+  }
+
+  const store = await readOrderStore();
+  const index = store.orders.findIndex((order) => order.orderNumber === orderNumber);
+  if (index < 0) return null;
+  const existing = store.orders[index];
+  const previousClaimAt = new Date(existing.metaBrowserPurchaseClaimedAt || 0).getTime();
+  if (Number(existing.metaPurchaseTrackingVersion || 1) < 2 || existing.metaBrowserPurchaseSentAt || previousClaimAt > staleBefore.getTime()) {
+    return null;
+  }
+  const updated = {
+    ...existing,
+    metaBrowserPurchaseClaimId: normalizedClaimId,
+    metaBrowserPurchaseClaimedAt: claimedAt.toISOString(),
+    metaPurchaseStatus: existing.metaCapiPurchaseSentAt ? 'capi_sent_browser_claimed' : 'browser_claimed',
+    metaPurchaseLastError: '',
+    updatedAt: new Date().toISOString()
+  };
+  store.orders[index] = updated;
+  await writeOrderStore(store);
+  return updated;
+}
+
+async function completeOrderMetaBrowserPurchase(orderNumber, { claimId, sent, completedAt = new Date() } = {}, options = {}) {
+  const normalizedClaimId = String(claimId || '').trim();
+  if (!normalizedClaimId) return null;
+
+  if (usePostgresOrders()) {
+    const executor = options.client || { query };
+    const result = await executor.query(
+      `UPDATE orders
+          SET meta_browser_purchase_claim_id = '',
+              meta_browser_purchase_claimed_at = NULL,
+              meta_browser_purchase_sent_at = CASE
+                WHEN $3::boolean THEN COALESCE(meta_browser_purchase_sent_at, $4)
+                ELSE meta_browser_purchase_sent_at
+              END,
+              meta_purchase_status = CASE
+                WHEN $3::boolean AND meta_capi_purchase_sent_at IS NOT NULL THEN 'complete'
+                WHEN $3::boolean THEN 'browser_sent'
+                WHEN meta_capi_purchase_sent_at IS NOT NULL THEN 'capi_sent'
+                WHEN meta_capi_purchase_queued_at IS NOT NULL THEN 'capi_queued'
+                ELSE 'eligible'
+              END,
+              updated_at = now()
+        WHERE order_number = $1
+          AND meta_browser_purchase_claim_id = $2
+        RETURNING *`,
+      [orderNumber, normalizedClaimId, Boolean(sent), completedAt]
+    );
+    return result.rows[0] ? fromPostgresOrder(result.rows[0]) : null;
+  }
+
+  const store = await readOrderStore();
+  const index = store.orders.findIndex((order) => order.orderNumber === orderNumber);
+  if (index < 0 || store.orders[index].metaBrowserPurchaseClaimId !== normalizedClaimId) return null;
+  const existing = store.orders[index];
+  const updated = {
+    ...existing,
+    metaBrowserPurchaseClaimId: '',
+    metaBrowserPurchaseClaimedAt: '',
+    metaBrowserPurchaseSentAt: sent
+      ? (existing.metaBrowserPurchaseSentAt || completedAt.toISOString())
+      : (existing.metaBrowserPurchaseSentAt || ''),
+    metaPurchaseStatus: sent
+      ? (existing.metaCapiPurchaseSentAt ? 'complete' : 'browser_sent')
+      : existing.metaCapiPurchaseSentAt
+        ? 'capi_sent'
+        : existing.metaCapiPurchaseQueuedAt
+          ? 'capi_queued'
+          : 'eligible',
+    updatedAt: new Date().toISOString()
+  };
+  store.orders[index] = updated;
   await writeOrderStore(store);
   return updated;
 }
@@ -294,12 +432,15 @@ async function upsertPostgresOrder(order, transactionClient) {
       admin_editable_totals, placed_at, updated_at, discount_code, customer_account_id, discount_snapshot,
       checkout_idempotency_key, confirmation_token_hash, confirmation_token_created_at,
       parcel_weight_grams, parcel_weight_override_grams,payment_provider,provider_checkout_session_id,
-      provider_payment_id,paid_amount_cents,paid_at,payment_expires_at,inventory_reservation_status,payment_metadata
+      provider_payment_id,paid_amount_cents,paid_at,payment_expires_at,inventory_reservation_status,payment_metadata,
+      meta_purchase_event_id,meta_purchase_tracking_version,meta_browser_purchase_claim_id,
+      meta_browser_purchase_claimed_at,meta_browser_purchase_sent_at,meta_capi_purchase_queued_at,
+      meta_capi_purchase_sent_at,meta_purchase_status,meta_purchase_last_error
     ) VALUES (
       $1, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10,
       $11, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20,
       $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33, $34, $35, $36, $37,
-      $38,$39,$40,$41,$42,$43,$44,$45::jsonb
+      $38,$39,$40,$41,$42,$43,$44,$45::jsonb,$46,$47,$48,$49,$50,$51,$52,$53,$54
     )
     ON CONFLICT (order_number) DO UPDATE SET
       customer = EXCLUDED.customer,
@@ -393,7 +534,16 @@ async function upsertPostgresOrder(order, transactionClient) {
       order.paidAt || null,
       order.paymentExpiresAt || null,
       order.inventoryReservationStatus || 'committed',
-      JSON.stringify(order.paymentMetadata || {})
+      JSON.stringify(order.paymentMetadata || {}),
+      order.metaPurchaseEventId || '',
+      Number(order.metaPurchaseTrackingVersion || 1),
+      order.metaBrowserPurchaseClaimId || '',
+      order.metaBrowserPurchaseClaimedAt || null,
+      order.metaBrowserPurchaseSentAt || null,
+      order.metaCapiPurchaseQueuedAt || null,
+      order.metaCapiPurchaseSentAt || null,
+      order.metaPurchaseStatus || 'legacy',
+      String(order.metaPurchaseLastError || '').slice(0, 1000)
     ]
   );
 }
@@ -441,6 +591,23 @@ function fromPostgresOrder(row) {
     adminEmailSentAt: row.admin_email_sent_at ? new Date(row.admin_email_sent_at).toISOString() : '',
     adminEmailStatus: row.admin_email_status || 'not_queued',
     adminEmailError: row.admin_email_error || '',
+    metaPurchaseEventId: row.meta_purchase_event_id || '',
+    metaPurchaseTrackingVersion: Number(row.meta_purchase_tracking_version || 1),
+    metaBrowserPurchaseClaimId: row.meta_browser_purchase_claim_id || '',
+    metaBrowserPurchaseClaimedAt: row.meta_browser_purchase_claimed_at
+      ? new Date(row.meta_browser_purchase_claimed_at).toISOString()
+      : '',
+    metaBrowserPurchaseSentAt: row.meta_browser_purchase_sent_at
+      ? new Date(row.meta_browser_purchase_sent_at).toISOString()
+      : '',
+    metaCapiPurchaseQueuedAt: row.meta_capi_purchase_queued_at
+      ? new Date(row.meta_capi_purchase_queued_at).toISOString()
+      : '',
+    metaCapiPurchaseSentAt: row.meta_capi_purchase_sent_at
+      ? new Date(row.meta_capi_purchase_sent_at).toISOString()
+      : '',
+    metaPurchaseStatus: row.meta_purchase_status || 'legacy',
+    metaPurchaseLastError: row.meta_purchase_last_error || '',
     codConfirmationStatus: row.cod_confirmation_status,
     deliveryStatus: row.delivery_status,
     deliveryMethod: row.delivery_method,
@@ -510,11 +677,14 @@ function fromPostgresTrackingNotification(row) {
 module.exports = {
   appendOrderStatusEvent,
   appendOrderTrackingNotification,
+  claimOrderMetaBrowserPurchase,
+  completeOrderMetaBrowserPurchase,
   findOrderByIdempotencyKey,
   findOrderByNumber,
   listOrderStatusEvents,
   listOrderTrackingNotifications,
   listOrders,
+  productSalesCounts,
   resetOrderRepositoryForTests,
   saveOrder,
   updateOrder,

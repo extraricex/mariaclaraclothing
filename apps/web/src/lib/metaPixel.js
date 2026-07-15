@@ -22,6 +22,12 @@ function defaultConsentStorage() {
   return typeof localStorage !== 'undefined' ? localStorage : null;
 }
 
+export function wasFacebookPurchaseTracked(eventId, storage = defaultConsentStorage()) {
+  const normalizedEventId = String(eventId || '').trim();
+  if (!normalizedEventId) return false;
+  return trackedPurchaseEventIds.has(normalizedEventId) || Boolean(storageGet(storage, `maria-clara-facebook-${normalizedEventId}`));
+}
+
 export function getMetaTrackingConsent(storage = defaultConsentStorage()) {
   const value = storageGet(storage, META_CONSENT_KEY);
   return value === 'accepted' || value === 'declined' ? value : 'unset';
@@ -388,24 +394,38 @@ export function trackFacebookPurchase(order, items, eventId, options = {}) {
   const normalizedEventId = String(eventId || '').trim();
   if (!normalizedEventId || !order?.orderNumber) return false;
 
-  const storage = options.storage || (typeof localStorage !== 'undefined' ? localStorage : null);
-  const storageKey = `maria-clara-facebook-${normalizedEventId}`;
-  if (trackedPurchaseEventIds.has(normalizedEventId) || storageGet(storage, storageKey)) return false;
-
   const event = buildFacebookPurchase(order, items, normalizedEventId);
   if (!event) {
     logFacebookPurchaseDevelopment(order, normalizedEventId, items, false, 'invalid_purchase_data');
     return false;
   }
-  const tracked = trackFacebookEvent('Purchase', event.payload, {
-    ...options,
-    eventId: normalizedEventId
-  });
+  const tracked = trackFacebookPurchasePayload(event, options);
+  logFacebookPurchaseDevelopment(order, normalizedEventId, items, tracked, tracked ? 'sent' : 'not_sent');
+  return tracked;
+}
+
+export function trackFacebookPurchasePayload(purchase = {}, options = {}) {
+  const eventId = String(purchase.eventId || '').trim();
+  const payload = purchase.payload;
+  const contents = Array.isArray(payload?.contents) ? payload.contents : [];
+  const contentIds = Array.isArray(payload?.content_ids) ? payload.content_ids.map(String) : [];
+  const validContents = contents.length > 0 && contents.every((item) => (
+    String(item?.id || '').trim() &&
+    Number.isInteger(item?.quantity) && item.quantity > 0 &&
+    typeof item?.item_price === 'number' && Number.isFinite(item.item_price) && item.item_price > 0
+  ));
+  const quantity = validContents ? contents.reduce((sum, item) => sum + item.quantity, 0) : 0;
+  if (!eventId || !hasValidMonetaryPayload('Purchase', payload) || !validContents ||
+      contentIds.length !== contents.length || payload.num_items !== quantity) return false;
+
+  const storage = options.storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+  const storageKey = `maria-clara-facebook-${eventId}`;
+  if (wasFacebookPurchaseTracked(eventId, storage)) return false;
+  const tracked = trackFacebookEvent('Purchase', payload, { ...options, eventId });
   if (tracked) {
-    trackedPurchaseEventIds.add(normalizedEventId);
+    trackedPurchaseEventIds.add(eventId);
     storageSet(storage, storageKey, 'tracked');
   }
-  logFacebookPurchaseDevelopment(order, normalizedEventId, items, tracked, tracked ? 'sent' : 'not_sent');
   return tracked;
 }
 

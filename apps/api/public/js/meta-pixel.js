@@ -5,6 +5,9 @@
   const monetaryEvents = new Set(['ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase']);
 
   window.trackMetaPixelEvent = function trackMetaPixelEvent(eventName, payload = {}, eventId = '') {
+    // Purchase is intentionally owned by the React confirmation flow and its
+    // server-backed claim. This retired storefront must never dispatch it.
+    if (eventName === 'Purchase') return false;
     if (monetaryEvents.has(eventName) && !hasValidMonetaryPayload(payload)) return false;
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({
@@ -66,38 +69,6 @@
     });
   };
 
-  window.trackMetaPixelPurchase = function trackMetaPixelPurchase(order, items = []) {
-    const orderItems = Array.isArray(items) && items.length ? items : order?.items || order?.cartSnapshot || [];
-    const totalCents = Number(order?.totalCents);
-    const value = purchaseValue(totalCents);
-    if (!order?.orderNumber || value === null || !orderItems.length) return false;
-    const orderNumber = order?.orderNumber || '';
-    const eventId = String(order?.trackingEventId || `purchase_${orderNumber}`).trim();
-    const contents = orderItems.map((item) => contentItem(item, item, Number(item.quantity)));
-    if (!eventId || contents.some((item) => !item)) return false;
-
-    if (orderNumber) {
-      const purchaseKey = `maria-clara-meta-purchase-${orderNumber}`;
-      try {
-        if (localStorage.getItem(purchaseKey)) return false;
-      } catch (_error) { /* private browsing can disable storage */ }
-    }
-
-    const sent = window.trackMetaPixelEvent('Purchase', {
-      content_ids: contents.map((item) => item.id),
-      content_type: 'product',
-      contents,
-      currency,
-      num_items: contents.reduce((sum, item) => sum + item.quantity, 0),
-      order_id: orderNumber,
-      value
-    }, eventId);
-    if (sent && orderNumber) {
-      try { localStorage.setItem(`maria-clara-meta-purchase-${orderNumber}`, 'tracked'); } catch (_error) { /* no-op */ }
-    }
-    return sent;
-  };
-
   if (!pixelId) return;
 
   !function (f, b, e, v, n, t, s) {
@@ -146,10 +117,6 @@
   }
 
   function moneyValue(cents) {
-    return centavosToMetaPesos(cents);
-  }
-
-  function purchaseValue(cents) {
     return centavosToMetaPesos(cents);
   }
 

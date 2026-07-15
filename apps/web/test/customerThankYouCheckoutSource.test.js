@@ -21,7 +21,9 @@ test('thank you page renders real order items and Messenger support from setting
   assert.match(thankYou, /item\.quantity/);
   assert.match(thankYou, /formatMoney\(Number\(item\.unitPriceCents/);
   assert.match(thankYou, /\['cancelled', 'failed', 'expired'\]/);
-  assert.match(thankYou, /paymentStatus !== 'paid' \|\| unsuccessfulOrder/);
+  assert.match(thankYou, /order\?\.paymentMethod === 'cash_on_delivery'/);
+  assert.match(thankYou, /order\?\.paymentMethod === 'paymongo' && order\.paymentStatus === 'paid'/);
+  assert.match(thankYou, /claimMetaPurchase\(order\.orderNumber, confirmation\.confirmationToken\)/);
   assert.match(thankYou, /Thank you for your order! Your order is now complete and will be prepared for packing and shipping\./);
 });
 
@@ -68,7 +70,7 @@ test('checkout and review are separate routes with exact customer action labels'
   ]);
 
   assert.match(app, /path="\/checkout\/review"/);
-  assert.match(checkout, /Continue to Checkout/);
+  assert.match(checkout, /Review order/);
   assert.doesNotMatch(checkout, /name="payment-method"/);
   assert.match(review, /Place Order - Cash on Delivery/);
   assert.match(review, /Proceed to Online Payment/);
@@ -96,7 +98,7 @@ test('homepage banner height is responsive without excessive mobile black space'
   ]);
 
   assert.match(home, /activeBanner/);
-  assert.match(home, /className="block h-auto w-full select-none opacity-0/);
+  assert.match(home, /className="aspect-\[2200\/825\] w-full" aria-hidden="true"/);
   assert.match(home, /min-h-\[min\(58svh,430px\)\]/);
   assert.match(home, /sm:min-h-\[min\(68svh,560px\)\]/);
   assert.match(home, /lg:min-h-\[min\(78vh,720px\)\]/);
@@ -107,7 +109,7 @@ test('homepage banner height is responsive without excessive mobile black space'
   assert.match(home, /heroCopy\.title[\s\S]*heroCopy\.highlight/);
   assert.match(settings, /Regular Fit Tees with premium quality shirt\./);
   assert.match(settings, /eyebrow:\s*''/);
-  assert.match(home, /reveal reveal-3 mt-4 hidden max-w-xs[\s\S]*lg:block/);
+  assert.match(home, /reveal reveal-3 mt-3 max-w-xs/);
   assert.match(home, /reveal reveal-4 mt-3 flex flex-wrap justify-start/);
   assert.doesNotMatch(home, /Worldwide/);
   assert.doesNotMatch(home, /100%[\s\S]*Pure/);

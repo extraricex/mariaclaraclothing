@@ -17,12 +17,21 @@ export default function Cart() {
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState('');
   const [cartNotice, setCartNotice] = useState('');
+  const [upsellVariantIds, setUpsellVariantIds] = useState({});
   const quantity = cartQuantity(items);
   const subtotal = subtotalCents(items);
   const displaySubtotal = quote?.subtotalCents ?? subtotal;
   const displayDiscount = quote?.discountTotalCents ?? 0;
   const displayShipping = quote?.shippingFeeCents;
   const displayTotal = quote?.totalCents ?? Math.max(0, subtotal - displayDiscount);
+  const freeShippingRemaining = quote?.freeShippingEnabled
+    ? Math.max(0, Number(quote.freeShippingMinimumItems || 0) - quantity)
+    : null;
+  const freeShippingMessage = freeShippingRemaining === 0
+    ? 'FREE shipping unlocked!'
+    : freeShippingRemaining === null
+      ? 'Shipping and promos refresh before checkout'
+      : `Add ${freeShippingRemaining} more item${freeShippingRemaining === 1 ? '' : 's'} to unlock FREE shipping.`;
   const cartUpsells = useMemo(() => products
     .filter((product) => firstAvailableVariant(product))
     .filter((product) => !items.some((item) => item.slug === product.slug || item.productId === product.id))
@@ -58,8 +67,11 @@ export default function Cart() {
   }, [items]);
 
   function addUpsell(product) {
-    const variant = firstAvailableVariant(product);
-    if (!variant) return;
+    const variant = (product.variants || []).find((candidate) => candidate.id === upsellVariantIds[product.id] && Number(candidate.stockQuantity || 0) > 0);
+    if (!variant) {
+      setCartNotice(`Choose a size for ${product.name} before adding it.`);
+      return;
+    }
     const cartItem = {
       productId: product.id,
       slug: product.slug,
@@ -80,6 +92,7 @@ export default function Cart() {
       return;
     }
     setCartNotice('');
+    setUpsellVariantIds((current) => ({ ...current, [product.id]: '' }));
     trackFacebookAddToCart(cartItem);
   }
 
@@ -113,7 +126,7 @@ export default function Cart() {
       <p className="eyebrow">Cart / {quantity} item{quantity === 1 ? '' : 's'}</p>
       <h1 className="display mt-2 text-3xl sm:text-5xl">Your cart</h1>
       <p className="mt-4 inline-block bg-cream px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft">
-        {quote?.freeShippingUnlocked ? 'Free shipping unlocked' : 'Shipping and promos refresh before checkout'}
+        {quote?.freeShippingUnlocked ? 'FREE shipping unlocked!' : freeShippingMessage}
       </p>
       {quoteError && <p className="mt-3 text-sm text-accent-deep" role="alert">{quoteError}</p>}
       {cartNotice && <p className="mt-3 text-sm text-accent-deep" role="alert">{cartNotice}</p>}
@@ -166,11 +179,12 @@ export default function Cart() {
               <p className="eyebrow">Recommended</p>
               <h2 className="display mt-2 text-2xl sm:text-3xl">You may also love this</h2>
             </div>
-            <p className="max-w-xs text-sm text-ink-soft">Add another piece before checkout and keep everything in one COD delivery.</p>
+            <p className="max-w-xs text-sm text-ink-soft">Add another piece before checkout and keep everything in one delivery.</p>
           </div>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             {cartUpsells.map((product) => {
-              const variant = firstAvailableVariant(product);
+              const availableVariants = (product.variants || []).filter((variant) => Number(variant.stockQuantity || 0) > 0);
+              const variant = availableVariants.find((candidate) => candidate.id === upsellVariantIds[product.id]) || null;
               const image = product.images?.[0];
               return (
                 <article key={product.id} className="text-center">
@@ -179,9 +193,15 @@ export default function Cart() {
                   </Link>
                   <div className="mt-2 flex flex-col items-center">
                     <h3 className="text-sm font-semibold leading-snug">{product.name}</h3>
-                    <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">Size {variant.size}</p>
                     <p className="mt-1 text-sm font-semibold">{formatMoney(product.priceCents)}</p>
-                    <button type="button" className="btn-ghost customer-compact-button mt-3 w-full" onClick={() => addUpsell(product)}>
+                    <label className="mt-3 block w-full text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-clay">
+                      Size
+                      <select className="field mt-1 w-full" value={upsellVariantIds[product.id] || ''} onChange={(event) => setUpsellVariantIds((current) => ({ ...current, [product.id]: event.target.value }))}>
+                        <option value="">Choose size</option>
+                        {availableVariants.map((candidate) => <option key={candidate.id} value={candidate.id}>{String(candidate.size).toUpperCase()}</option>)}
+                      </select>
+                    </label>
+                    <button type="button" className="btn-ghost customer-compact-button mt-3 w-full" disabled={!variant} onClick={() => addUpsell(product)}>
                       Add to cart
                     </button>
                   </div>

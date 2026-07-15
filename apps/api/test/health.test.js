@@ -49,6 +49,32 @@ test('GET /api/health returns ok status', async () => {
   }
 });
 
+test('GET /sitemap.xml lists real public product and collection URLs only', async () => {
+  const app = createApp();
+  const server = await new Promise((resolve, reject) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+    listener.on('error', reject);
+  });
+  const { port } = server.address();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/sitemap.xml`);
+    const xml = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /application\/xml/);
+    assert.match(response.headers.get('cache-control') || '', /max-age=3600/);
+    assert.match(xml, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+    assert.match(xml, /\/shop<\/loc>/);
+    assert.doesNotMatch(xml, /\/collections\/all<\/loc>/);
+    assert.match(xml, /\/collections\/freedom-of-mind<\/loc>/);
+    assert.match(xml, /\/product\/wanna-gray-regular-fit-240-gsm-shirt<\/loc>/);
+    assert.doesNotMatch(xml, /\/cart<\/loc>|\/checkout<\/loc>|\/admin<\/loc>/);
+  } finally {
+    server.close();
+  }
+});
+
 test('GET /collections/all serves the storefront collection page', async () => {
   const app = createApp();
   const server = await new Promise((resolve, reject) => {

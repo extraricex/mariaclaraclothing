@@ -15,7 +15,7 @@ test('customer homepage and product grids use compact mobile luxury spacing', as
 
   assert.match(home, /h-full w-full object-cover/);
   assert.match(home, /min-h-\[min\(58svh,430px\)\]/);
-  assert.match(home, /className="block h-auto w-full select-none opacity-0/);
+  assert.match(home, /className="aspect-\[2200\/825\] w-full" aria-hidden="true"/);
   assert.doesNotMatch(home, /min-h-\[clamp\(360px,64svh,560px\)\]/);
   assert.doesNotMatch(home, /max-h-\[560px\]/);
   assert.match(css, /\.customer-hero \.customer-compact-button/);
@@ -24,10 +24,10 @@ test('customer homepage and product grids use compact mobile luxury spacing', as
   assert.match(css, /\.customer-compact-button/);
 });
 
-test('customer shell exposes a svg mobile menu and immediately visible mobile offers', async () => {
+test('customer shell exposes a svg mobile menu and non-obstructive mobile offers', async () => {
   const shell = await source('components/Shell.jsx');
 
-  assert.match(shell, /const \[mobileOffersOpen, setMobileOffersOpen\] = useState\(true\)/);
+  assert.match(shell, /const \[mobileOffersOpen, setMobileOffersOpen\] = useState\(false\)/);
   assert.doesNotMatch(shell, /setMobileOffersOpen\(false\);\n  }, \[location\.pathname\]\)/);
   assert.match(shell, /<svg[^>]*viewBox="0 0 24 24"[^>]*aria-hidden="true"[\s\S]*M4 7h16[\s\S]*M4 12h16[\s\S]*M4 17h16/);
   assert.doesNotMatch(shell, /function SearchIcon/);
@@ -65,5 +65,19 @@ test('checkout validates missing fields with scroll focus and red field styling'
   assert.match(checkout, /scrollIntoView\(\{ behavior: 'smooth', block: 'center' \}\)/);
   assert.match(checkout, /role=\{status\.tone === 'error' \? 'alert' : 'status'\}/);
   assert.match(checkout, /noValidate/);
+  assert.match(checkout, /Mobile Number/);
+  assert.match(checkout, /House \/ Street \/ Building \/ Unit/);
+  assert.match(checkout, /aria-describedby=\{missingFields\.phone/);
+  assert.match(checkout, /aria-describedby=\{missingFields\.province/);
   assert.match(css, /\.checkout-field-error/);
+});
+
+test('product recommendations exclude unavailable inventory and the size chart traps focus', async () => {
+  const product = await source('pages/Product.jsx');
+
+  assert.match(product, /merchandisingStatus \|\| ''\)\.toLowerCase\(\) !== 'sold_out'/);
+  assert.match(product, /candidateVariant\.stockQuantity\) > 0/);
+  assert.match(product, /useModalFocus/);
+  assert.match(product, /sizeChartDialogRef/);
+  assert.match(product, /sizeChartCloseButtonRef/);
 });

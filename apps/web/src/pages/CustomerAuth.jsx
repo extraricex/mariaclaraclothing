@@ -50,27 +50,28 @@ export function CustomerLogin() {
 
   return (
     <AuthShell title="Log in" subtitle="Order history, saved address, faster checkout.">
-      <div className="mt-8 space-y-3">
-          {socialProviders.google ? (
+      {(socialProviders.google || socialProviders.facebook) && (
+        <div className="mt-8 space-y-3">
+          {socialProviders.google && (
             <a className="flex min-h-12 w-full items-center justify-center border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-mist" href={socialUrl('google')}>
               Continue with Google
             </a>
-          ) : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Google</button>}
-          {socialProviders.facebook ? (
+          )}
+          {socialProviders.facebook && (
             <a className="flex min-h-12 w-full items-center justify-center border border-[#1877f2] bg-[#1877f2] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#166fe5]" href={socialUrl('facebook')}>
               Continue with Facebook
             </a>
-          ) : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Facebook</button>}
-          {!socialProviders.google && !socialProviders.facebook && <p className="text-center text-xs text-clay">Social login is temporarily unavailable while provider credentials are being configured.</p>}
+          )}
           <div className="flex items-center gap-3 py-2" aria-hidden="true">
             <span className="h-px flex-1 bg-line" />
             <span className="text-xs uppercase text-clay">or use email</span>
             <span className="h-px flex-1 bg-line" />
           </div>
         </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input className="field" type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-        <input className="field" type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+      )}
+      <form onSubmit={handleSubmit} className={`${socialProviders.google || socialProviders.facebook ? '' : 'mt-8'} space-y-4`}>
+        <label className="block text-sm font-semibold">Email<input className="field mt-1" type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
+        <label className="block text-sm font-semibold">Password<input className="field mt-1" type="password" required placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
         {error && <p className="text-sm text-accent-deep" role="alert">{error}</p>}
         <button type="submit" className="btn-ink w-full" disabled={pending}>{pending ? 'Logging in…' : 'Log in'}</button>
       </form>
@@ -117,17 +118,18 @@ export function CustomerRegister() {
 
   return (
     <AuthShell title="Create account" subtitle="Save your address once for a faster checkout next time.">
-      <div className="mt-8 space-y-3">
-        {socialProviders.google ? <a className="flex min-h-12 w-full items-center justify-center border border-line bg-white px-5 py-3 text-sm font-semibold text-ink" href={socialUrl('google')}>Continue with Google</a> : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Google</button>}
-        {socialProviders.facebook ? <a className="flex min-h-12 w-full items-center justify-center border border-[#1877f2] bg-[#1877f2] px-5 py-3 text-sm font-semibold text-white" href={socialUrl('facebook')}>Continue with Facebook</a> : <button type="button" className="flex min-h-12 w-full items-center justify-center border border-line bg-mist px-5 py-3 text-sm font-semibold text-clay" disabled>Continue with Facebook</button>}
-        {!socialProviders.google && !socialProviders.facebook && <p className="text-center text-xs text-clay">Social registration is temporarily unavailable while provider credentials are being configured.</p>}
-        <div className="flex items-center gap-3 py-2" aria-hidden="true"><span className="h-px flex-1 bg-line" /><span className="text-xs uppercase text-clay">or use email</span><span className="h-px flex-1 bg-line" /></div>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input className="field" required placeholder="Full name" value={form.fullName} onChange={(e) => update('fullName', e.target.value)} autoComplete="name" />
-        <input className="field" type="email" required placeholder="Email" value={form.email} onChange={(e) => update('email', e.target.value)} autoComplete="email" />
-        <input className="field" type="tel" required placeholder="Mobile number (09XXXXXXXXX)" value={form.phone} onChange={(e) => update('phone', e.target.value)} autoComplete="tel" />
-        <input className="field" type="password" required minLength="8" placeholder="Password (8+ characters)" value={form.password} onChange={(e) => update('password', e.target.value)} autoComplete="new-password" />
+      {(socialProviders.google || socialProviders.facebook) && (
+        <div className="mt-8 space-y-3">
+          {socialProviders.google && <a className="flex min-h-12 w-full items-center justify-center border border-line bg-white px-5 py-3 text-sm font-semibold text-ink" href={socialUrl('google')}>Continue with Google</a>}
+          {socialProviders.facebook && <a className="flex min-h-12 w-full items-center justify-center border border-[#1877f2] bg-[#1877f2] px-5 py-3 text-sm font-semibold text-white" href={socialUrl('facebook')}>Continue with Facebook</a>}
+          <div className="flex items-center gap-3 py-2" aria-hidden="true"><span className="h-px flex-1 bg-line" /><span className="text-xs uppercase text-clay">or use email</span><span className="h-px flex-1 bg-line" /></div>
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className={`${socialProviders.google || socialProviders.facebook ? '' : 'mt-8'} space-y-4`}>
+        <label className="block text-sm font-semibold">Full Name<input className="field mt-1" required placeholder="Your full name" value={form.fullName} onChange={(e) => update('fullName', e.target.value)} autoComplete="name" /></label>
+        <label className="block text-sm font-semibold">Email<input className="field mt-1" type="email" required placeholder="you@example.com" value={form.email} onChange={(e) => update('email', e.target.value)} autoComplete="email" /></label>
+        <label className="block text-sm font-semibold">Mobile Number<input className="field mt-1" type="tel" required placeholder="09XXXXXXXXX" value={form.phone} onChange={(e) => update('phone', e.target.value)} autoComplete="tel" /></label>
+        <label className="block text-sm font-semibold">Password<input className="field mt-1" type="password" required minLength="8" placeholder="8 or more characters" value={form.password} onChange={(e) => update('password', e.target.value)} autoComplete="new-password" /></label>
         {error && <p className="text-sm text-accent-deep" role="alert">{error}</p>}
         <button type="submit" className="btn-ink w-full" disabled={pending}>{pending ? 'Creating…' : 'Create account'}</button>
       </form>

@@ -38,6 +38,7 @@ test('storefront loads one dismissible New Arrivals recommendation into a respon
   assert.match(source, /aria-expanded=\{mobileOffersOpen\}/);
   assert.match(source, /aria-controls="storefront-offer-cards"/);
   assert.match(source, /Offers · \{offerCount\}/);
+  assert.match(source, /useState\(false\)/);
   assert.match(source, /pointer-events-none/);
   assert.match(source, /sm:hidden/);
   assert.match(source, /sm:grid/);
@@ -46,7 +47,6 @@ test('storefront loads one dismissible New Arrivals recommendation into a respon
 test('Messenger support uses a visible responsive Chat Support label', async () => {
   const source = await readFile(shellPath, 'utf8');
   assert.match(source, />Chat Support</);
-  assert.match(source, />Chat</);
-  assert.match(source, /sm:hidden/);
-  assert.match(source, /hidden sm:inline/);
+  assert.match(source, /h-11 w-11/);
+  assert.match(source, /hidden text-\[10px\].*sm:inline/);
 });

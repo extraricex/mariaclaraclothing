@@ -146,8 +146,8 @@ export default function Account() {
             </Link>
           </div>
           <div className="mt-4 border border-line bg-cream p-5 text-sm text-ink-soft">
-            <p className="font-semibold text-ink">COD reminder</p>
-            <p className="mt-1">We text {customer.phone} to confirm every order before it ships. Pay cash when it arrives.</p>
+            <p className="font-semibold text-ink">Order reminder</p>
+            <p className="mt-1">We may text {customer.phone} to confirm delivery details before your order ships. Payment and delivery status stay available here.</p>
           </div>
         </aside>
 

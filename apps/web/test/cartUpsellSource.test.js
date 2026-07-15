@@ -13,6 +13,9 @@ test('cart page renders product upsells backed by storefront products', async ()
   assert.match(source, /addToCart/);
   assert.match(source, /stockQuantity/);
   assert.match(source, /items\.some/);
+  assert.match(source, /Choose size/);
+  assert.match(source, /upsellVariantIds/);
+  assert.match(source, /disabled=\{!variant\}/);
 });
 
 test('cart item product photos fit inside their thumbnail frame', async () => {

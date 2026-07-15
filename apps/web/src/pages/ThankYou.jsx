@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { fetchOrderConfirmation } from '../lib/api.js';
+import { claimMetaPurchase, completeMetaPurchase, fetchOrderConfirmation } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { clearCart, clearCheckoutIdempotencyKey, resetCartSessionId } from '../lib/cart.js';
 import { clearCheckoutReviewDraft } from '../lib/checkoutDraft.js';
-import { trackFacebookPurchase } from '../lib/metaPixel.js';
+import { trackFacebookPurchasePayload, wasFacebookPurchaseTracked } from '../lib/metaPixel.js';
 
 function storedConfirmation() {
   try {
@@ -21,6 +21,8 @@ export default function ThankYou() {
   const [order, setOrder] = useState(null);
   const [confirmation] = useState(storedConfirmation);
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
+  const [purchaseRetry, setPurchaseRetry] = useState(0);
+  const purchaseAttempts = useRef(new Set());
 
   useEffect(() => {
     let timer;
@@ -41,10 +43,39 @@ export default function ThankYou() {
 
   useEffect(() => {
     const unsuccessfulOrder = ['cancelled', 'failed', 'expired'].includes(String(order?.status || '').toLowerCase());
-    if (order?.paymentMethod !== 'paymongo' || order.paymentStatus !== 'paid' || unsuccessfulOrder) return;
-    trackFacebookPurchase(order, order.items || [], order.trackingEventId);
+    const eligible = order?.paymentMethod === 'cash_on_delivery'
+      ? !unsuccessfulOrder && order.status === 'confirmed'
+      : order?.paymentMethod === 'paymongo' && order.paymentStatus === 'paid' && !unsuccessfulOrder;
+    if (!eligible || !confirmation?.confirmationToken || confirmation.orderNumber !== order.orderNumber) return;
+
+    const attemptKey = `${order.orderNumber}:${order.paymentStatus}:${purchaseRetry}`;
+    if (purchaseAttempts.current.has(attemptKey)) return;
+    purchaseAttempts.current.add(attemptKey);
+
+    void claimMetaPurchase(order.orderNumber, confirmation.confirmationToken)
+      .then(async (claim) => {
+        if (!claim.shouldSend) {
+          if (claim.reason === 'claim_active') {
+            window.setTimeout(() => setPurchaseRetry((value) => value + 1), 125_000);
+          }
+          return;
+        }
+        const alreadyTracked = wasFacebookPurchaseTracked(claim.purchase?.eventId);
+        const sent = alreadyTracked || trackFacebookPurchasePayload(claim.purchase);
+        await completeMetaPurchase(
+          order.orderNumber,
+          confirmation.confirmationToken,
+          claim.claimId,
+          sent
+        );
+      })
+      .catch(() => {
+        purchaseAttempts.current.delete(attemptKey);
+        window.setTimeout(() => setPurchaseRetry((value) => value + 1), 2500);
+      });
+
     clearCheckoutReviewDraft(); clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
-  }, [order]);
+  }, [confirmation, order, purchaseRetry]);
 
   useEffect(() => {
     loadStorefrontSettings().then(setSettings);

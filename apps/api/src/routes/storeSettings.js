@@ -4,6 +4,12 @@ const { env } = require('../config/env');
 
 const router = express.Router();
 
+function storefrontMetaPixel(metaPixel, metaConfig) {
+  return metaConfig?.enabled
+    ? { ...(metaPixel || {}), pixelId: metaConfig.pixelId }
+    : metaPixel;
+}
+
 router.use((_req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
@@ -12,6 +18,7 @@ router.use((_req, res, next) => {
 router.get('/', async (_req, res, next) => {
   try {
     const settings = await getStoreSettings();
+    const metaPixel = storefrontMetaPixel(settings.marketing.metaPixel, env.meta);
     return res.json({
       settings: {
         storeName: settings.general.storeName,
@@ -20,7 +27,7 @@ router.get('/', async (_req, res, next) => {
         storeAddress: settings.general.storeAddress,
         messengerUrl: settings.general.messengerUrl,
         socialLinks: settings.general.socialLinks,
-        metaPixel: settings.marketing.metaPixel,
+        metaPixel,
         reviews: settings.reviews,
         shipping: settings.shipping,
         ticker: settings.website.ticker,
@@ -49,4 +56,4 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
-module.exports = { storeSettingsRouter: router };
+module.exports = { storefrontMetaPixel, storeSettingsRouter: router };

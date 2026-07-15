@@ -30,6 +30,8 @@ function publicQuote(record) {
     subtotalCents: snapshot.subtotalCents || 0,
     discountTotalCents: snapshot.discountTotalCents || 0,
     totalCents: snapshot.totalCents || 0,
+    freeShippingEnabled: Boolean(snapshot.freeShippingEnabled),
+    freeShippingMinimumItems: Math.max(0, Number(snapshot.freeShippingMinimumItems || 0)),
     freeShippingUnlocked: Boolean(snapshot.freeShippingUnlocked),
     finalizable: Boolean(snapshot.finalizable)
   };

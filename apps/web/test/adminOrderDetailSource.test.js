@@ -140,3 +140,14 @@ test('admin order detail exposes a protected failed-email resend state', async (
   assert.match(source, /Resend Order Email/);
   assert.match(source, /Admin order email sent successfully/);
 });
+
+test('admin order detail shows private Meta Purchase deduplication state', async () => {
+  const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'OrderDetail.jsx'), 'utf8');
+  assert.match(source, /Meta Purchase tracking/);
+  assert.match(source, /metaPurchaseEventId/);
+  assert.match(source, /metaBrowserPurchaseSentAt/);
+  assert.match(source, /metaCapiPurchaseSentAt/);
+  assert.match(source, /Deduplication/);
+  assert.match(source, /Last Meta error/);
+  assert.match(source, /Admin only/);
+});

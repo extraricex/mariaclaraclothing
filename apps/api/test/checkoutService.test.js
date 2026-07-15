@@ -31,8 +31,7 @@ test('Postgres checkout serializes the idempotency key and uses one client for e
     appendMovements: async (_items, options) => calls.push(['movements', options.client]),
     convertCart: async (_cart, _order, options) => calls.push(['cart', options.client]),
     incrementDiscount: async (_code, options) => calls.push(['discount', options.client]),
-    buildMetaEvent: () => ({ event_id: 'purchase_MCC-1', custom_data: { order_id: 'MCC-1' } }),
-    insertOutbox: async (usedClient) => calls.push(['outbox', usedClient]),
+    queueMetaPurchase: async ({ client: usedClient }) => calls.push(['outbox', usedClient]),
     enqueueOrderExport: async (_order, options) => calls.push(['pancakeExport', options.client]),
     enqueueAdminEmail: async (_order, options) => calls.push(['adminEmail', options.client]),
     metaEnabled: true
@@ -57,8 +56,7 @@ test('Postgres checkout returns the existing idempotent order without writes', a
     appendMovements: async () => { writes += 1; },
     convertCart: async () => { writes += 1; },
     incrementDiscount: async () => { writes += 1; },
-    buildMetaEvent: () => ({}),
-    insertOutbox: async () => { writes += 1; },
+    queueMetaPurchase: async () => { writes += 1; },
     enqueueOrderExport: async () => { writes += 1; },
     enqueueAdminEmail: async () => { writes += 1; },
     metaEnabled: true

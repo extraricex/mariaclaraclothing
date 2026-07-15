@@ -64,6 +64,9 @@ export default function Home() {
   const collectionSections = buildStorefrontCollectionSections(products, collections);
   const activeBanner = banners[activeHeroIndex] || banners[0] || null;
   const heroCopy = storefrontSettings.hero || DEFAULT_STOREFRONT_SETTINGS.hero;
+  const onlinePaymentEnabled = storefrontSettings.paymentMethods?.some((method) => method.id === 'paymongo');
+  const freeShippingEnabled = Boolean(storefrontSettings.shipping?.freeShippingEnabled);
+  const freeShippingMinimumItems = Math.max(1, Number(storefrontSettings.shipping?.freeShippingMinimumItems || 2));
 
   useEffect(() => {
     if (!location.hash || !collectionSections.length) return undefined;
@@ -90,6 +93,16 @@ export default function Home() {
     }, 5500);
     return () => window.clearInterval(timer);
   }, [banners.length]);
+
+  useEffect(() => {
+    if (banners.length < 2) return undefined;
+    const nextBanner = banners[(activeHeroIndex + 1) % banners.length];
+    const timer = window.setTimeout(() => {
+      const preload = new Image();
+      preload.src = nextBanner.url;
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [activeHeroIndex, banners]);
 
   function showPreviousHero() {
     if (banners.length < 2) return;
@@ -122,27 +135,18 @@ export default function Home() {
         onTouchStart={handleHeroTouchStart}
         onTouchEnd={handleHeroTouchEnd}
       >
-        {activeBanner ? (
-          <img
-            src={activeBanner.url}
-            alt=""
-            aria-hidden="true"
-            className="block h-auto w-full select-none opacity-0"
-          />
-        ) : (
-          <div className="aspect-[2200/825] w-full" aria-hidden="true" />
-        )}
+        <div className="aspect-[2200/825] w-full" aria-hidden="true" />
         <div className="absolute inset-0 overflow-hidden">
-          {banners.map((banner, index) => (
+          {activeBanner && (
             <img
-              key={`${banner.url}-${index}`}
-              src={banner.url}
-              alt={index === activeHeroIndex ? banner.altText || 'Maria Clara Clothing' : ''}
-              aria-hidden={index !== activeHeroIndex}
-              className="hero-slide absolute inset-0 h-full w-full object-cover object-center opacity-100 contrast-[1.05] saturate-[1.04] transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{ transform: `translateX(${(index - activeHeroIndex) * 100}%)` }}
+              key={activeBanner.url}
+              src={activeBanner.url}
+              alt={activeBanner.altText || 'Maria Clara Clothing'}
+              fetchPriority="high"
+              loading="eager"
+              className="hero-slide absolute inset-0 h-full w-full object-cover object-center opacity-100 contrast-[1.05] saturate-[1.04]"
             />
-          ))}
+          )}
         </div>
         <div className="absolute inset-0 bg-ink/35 sm:bg-ink/40" />
         <div className="absolute inset-0 z-10 flex items-end justify-start px-5 pb-12 pt-28 text-left sm:px-8 sm:pb-16 lg:px-12 lg:pb-20">
@@ -150,7 +154,7 @@ export default function Home() {
             <h1 className="display reveal reveal-2 text-[clamp(1.65rem,8vw,2.35rem)] leading-[0.9] sm:text-6xl lg:text-7xl">
               {heroCopy.title}<br /><span className="text-[var(--customer-accent-soft)]">{heroCopy.highlight}</span>
             </h1>
-            <p className="reveal reveal-3 mt-4 hidden max-w-xs text-[13px] leading-relaxed text-paper/85 lg:mt-6 lg:block lg:max-w-sm lg:text-sm">
+            <p className="reveal reveal-3 mt-3 max-w-xs text-xs leading-relaxed text-paper/85 sm:text-[13px] lg:mt-6 lg:max-w-sm lg:text-sm">
               {heroCopy.subtitle}
             </p>
             <div className="reveal reveal-4 mt-3 flex flex-wrap justify-start gap-1.5 sm:mt-8 sm:gap-3">
@@ -193,10 +197,14 @@ export default function Home() {
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ['COD', 'Cash on delivery nationwide. Pay the rider when your order arrives.'],
+            onlinePaymentEnabled
+              ? ['COD + Online', 'Choose Cash on Delivery or continue to secure online checkout through PayMongo.']
+              : ['COD', 'Cash on delivery nationwide. Pay the rider when your order arrives.'],
             ['240 GSM', 'Dense, structured cotton that holds its shape wash after wash.'],
             ['Ready to ship', 'Orders are prepared carefully for secure packing and nationwide delivery.'],
-            ['2 = Free', 'Add any two pieces and shipping is on us, anywhere in the Philippines.']
+            freeShippingEnabled
+              ? [`${freeShippingMinimumItems} = Free`, `Add any ${freeShippingMinimumItems} piece${freeShippingMinimumItems === 1 ? '' : 's'} and shipping is on us, anywhere in the Philippines.`]
+              : ['Nationwide', 'Your delivery fee is calculated from the address and items in your order.']
           ].map(([title, body]) => (
             <CustomerCard key={title} className="p-6">
               <p className="display text-3xl text-accent">{title}</p>
@@ -210,9 +218,9 @@ export default function Home() {
         <div className="border-t border-[var(--customer-border)] pt-6">
           <p className="eyebrow">Don't overthink it</p>
           <p className="display mt-2 max-w-3xl text-3xl leading-tight sm:text-5xl">
-            Pick a shirt. We deliver. <span className="text-accent">You pay at the door.</span>
+            Pick a shirt. We deliver. <span className="text-accent">Choose how you pay.</span>
           </p>
-          <CustomerButton as={Link} to="/faq" variant="secondary" className="mt-8">How COD works</CustomerButton>
+          <CustomerButton as={Link} to="/faq" variant="secondary" className="mt-8">How payment works</CustomerButton>
         </div>
       </section>
     </div>

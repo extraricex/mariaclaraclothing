@@ -16,6 +16,9 @@ test('customer shell renders report issue widget with debug capture', async () =
   assert.match(widget, /window\.addEventListener\('error'/);
   assert.match(widget, /cartSnapshot/);
   assert.match(widget, /screenshot/);
+  assert.match(widget, /useModalFocus/);
+  assert.match(widget, /inline = false/);
+  assert.match(shell, /ReportIssueWidget settings=\{storeInfo\} cartItems=\{items\} inline/);
   assert.match(settings, /reportIssue/);
 });
 

@@ -2,7 +2,13 @@ const express = require('express');
 const crypto = require('node:crypto');
 const { findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { deductVariantStock } = require('../products/catalogRepository');
-const { findOrderByIdempotencyKey, findOrderByNumber, saveOrder } = require('../orders/orderRepository');
+const {
+  claimOrderMetaBrowserPurchase,
+  completeOrderMetaBrowserPurchase,
+  findOrderByIdempotencyKey,
+  findOrderByNumber,
+  saveOrder
+} = require('../orders/orderRepository');
 const { appendInventoryMovements } = require('../inventory/inventoryMovementRepository');
 const { markCartSessionConverted } = require('../cartSessions/cartSessionRepository');
 const { incrementDiscountUsage } = require('../discounts/discountRepository');
@@ -15,8 +21,13 @@ const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/s
 const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const { env } = require('../config/env');
 const { persistPostgresCheckout } = require('../orders/checkoutService');
-const { buildMetaPurchaseEvent, logMetaPurchaseDevelopment, metaPurchaseEventId, parseMetaCookies } = require('../marketing/metaEvent');
-const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
+const { metaPurchaseEventId, parseMetaCookies } = require('../marketing/metaEvent');
+const {
+  claimBrowserMetaPurchase,
+  completeBrowserMetaPurchase,
+  defaultBrowserPurchaseDependencies,
+  queueMetaPurchase
+} = require('../marketing/metaPurchaseService');
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const pancakeInventoryOutboxRepository = require('../integrations/pancake/pancakeInventoryOutboxRepository');
 const { processInventorySyncJobs } = require('../integrations/pancake/pancakeInventoryOutboxService');
@@ -63,6 +74,15 @@ legacyRouter.post('/', async (req, res, next) => {
     const persistedOrder = {
       ...order,
       orderNumber,
+      metaPurchaseEventId: metaPurchaseEventId({ orderNumber }),
+      metaPurchaseTrackingVersion: 2,
+      metaBrowserPurchaseClaimId: '',
+      metaBrowserPurchaseClaimedAt: '',
+      metaBrowserPurchaseSentAt: '',
+      metaCapiPurchaseQueuedAt: '',
+      metaCapiPurchaseSentAt: '',
+      metaPurchaseStatus: 'eligible',
+      metaPurchaseLastError: '',
       channel: 'Online Store',
       codConfirmationStatus: 'pending',
       deliveryStatus: 'pending',
@@ -116,9 +136,7 @@ legacyRouter.post('/', async (req, res, next) => {
         incrementDiscount: incrementDiscountUsage,
         enqueueOrderExport,
         enqueueAdminEmail: enqueueAdminNewOrderEmail,
-        buildMetaEvent: buildMetaPurchaseEvent,
-        insertOutbox: insertMetaPurchaseOutbox,
-        logMetaDevelopment: (details) => logMetaPurchaseDevelopment(console, details),
+        queueMetaPurchase: (input) => queueMetaPurchase(input, { logger: console }),
         metaEnabled: env.meta.enabled
       });
     } else {
@@ -189,7 +207,7 @@ function createOrderNumber() {
 function orderConfirmationPayload(order) {
   return {
     orderNumber: order.orderNumber,
-    trackingEventId: metaPurchaseEventId(order),
+    trackingEventId: order.metaPurchaseEventId || metaPurchaseEventId(order),
     customerName: customerFullName(order.customer),
     paymentMethod: 'Cash on Delivery',
     addressLine: order.address.addressLine,
@@ -399,7 +417,7 @@ function privateOrderPayload(order) {
     : String(order.paymentMethod || '').replaceAll('_', ' ');
   return {
     orderNumber: order.orderNumber,
-    trackingEventId: metaPurchaseEventId(order),
+    trackingEventId: order.metaPurchaseEventId || metaPurchaseEventId(order),
     customerName: customerName.fullName,
     customerFirstName: customerName.firstName,
     customerLastName: customerName.lastName,
@@ -445,16 +463,10 @@ function defaultAuthoritativeDependencies(req) {
     convertCart: markCartSessionConverted,
     claimPromo: claimDiscountUsage,
     insertMeta: async (client, order, requestContext) => {
-      if (!env.meta.enabled) return null;
-      const event = buildMetaPurchaseEvent({ order, requestContext });
-      const outbox = event ? await insertMetaPurchaseOutbox(client, event) : null;
-      logMetaPurchaseDevelopment(console, {
-        order,
-        event,
-        conversionsApiSent: false,
-        reason: !event ? 'invalid_purchase_data' : outbox ? 'queued' : 'duplicate'
-      });
-      return outbox;
+      const result = await queueMetaPurchase({
+        client, order, requestContext, enabled: env.meta.enabled
+      }, { logger: console });
+      return result.outbox;
     },
     enqueueOrderExport,
     enqueueAdminEmail: enqueueAdminNewOrderEmail,
@@ -500,6 +512,14 @@ const DEFAULT_ROUTE_DEPENDENCIES = {
   findOrderByNumber,
   getStoreSettings,
   logger: console,
+  claimBrowserMetaPurchase: (input) => claimBrowserMetaPurchase(input, defaultBrowserPurchaseDependencies({
+    claimOrder: claimOrderMetaBrowserPurchase,
+    completeClaim: completeOrderMetaBrowserPurchase
+  })),
+  completeBrowserMetaPurchase: (input) => completeBrowserMetaPurchase(input, defaultBrowserPurchaseDependencies({
+    claimOrder: claimOrderMetaBrowserPurchase,
+    completeClaim: completeOrderMetaBrowserPurchase
+  })),
   placeAuthoritativeCheckout,
   resolveCustomerAccountId,
   verifyConfirmationToken,
@@ -509,6 +529,34 @@ const DEFAULT_ROUTE_DEPENDENCIES = {
 function createOrderRouter(overrides = {}) {
   const dependencies = { ...DEFAULT_ROUTE_DEPENDENCIES, ...overrides };
   const router = express.Router();
+
+  router.post('/:orderNumber/meta-purchase/claim', async (req, res, next) => {
+    try {
+      const result = await dependencies.claimBrowserMetaPurchase({
+        orderNumber: String(req.params.orderNumber || '').trim(),
+        confirmationToken: String(req.get('X-Order-Confirmation') || '')
+      });
+      if (!result) return notFoundConfirmation(res);
+      return res.json(result);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  router.post('/:orderNumber/meta-purchase/complete', async (req, res, next) => {
+    try {
+      const result = await dependencies.completeBrowserMetaPurchase({
+        orderNumber: String(req.params.orderNumber || '').trim(),
+        confirmationToken: String(req.get('X-Order-Confirmation') || ''),
+        claimId: String(req.body?.claimId || '').trim(),
+        sent: req.body?.sent === true
+      });
+      if (!result) return notFoundConfirmation(res);
+      return res.json(result);
+    } catch (error) {
+      return next(error);
+    }
+  });
 
   router.get('/:orderNumber/confirmation', async (req, res, next) => {
     try {

@@ -35,6 +35,30 @@ export default function Collection() {
   const visible = collection?.visible && (collection.showOnShop || collection.showOnHomepage);
   const members = visible ? collectionMembers(products, collection) : [];
 
+  useEffect(() => {
+    if (!visible) return undefined;
+    const previousTitle = document.title;
+    const descriptionMeta = document.head.querySelector('meta[name="description"]');
+    const previousDescription = descriptionMeta?.getAttribute('content') || '';
+    let canonical = document.head.querySelector('link[rel="canonical"]');
+    const createdCanonical = !canonical;
+    const previousCanonical = canonical?.getAttribute('href') || '';
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      document.head.appendChild(canonical);
+    }
+    document.title = `${collection.name} | Maria Clara Clothing`;
+    canonical.href = `${window.location.origin}/collections/${encodeURIComponent(collection.slug)}`;
+    if (descriptionMeta) descriptionMeta.setAttribute('content', collection.description || `Shop ${collection.name} from Maria Clara Clothing.`);
+    return () => {
+      document.title = previousTitle;
+      if (descriptionMeta) descriptionMeta.setAttribute('content', previousDescription);
+      if (createdCanonical) canonical.remove();
+      else canonical.setAttribute('href', previousCanonical);
+    };
+  }, [collection, visible]);
+
   if (loading) return <div className="mx-auto min-h-[45vh] max-w-7xl px-5 py-16 text-sm text-clay lg:px-8" aria-busy="true">Loading collection...</div>;
 
   if (error) {
@@ -80,8 +104,8 @@ export default function Collection() {
           </div>
         ) : (
           <div className="border-b border-line py-16 text-center">
-            <h2 className="display text-3xl">No products linked yet</h2>
-            <p className="mx-auto mt-3 max-w-md text-sm text-ink-soft">This collection is active, but its products have not been added yet. Please check back soon.</p>
+            <h2 className="display text-3xl">No pieces available right now</h2>
+            <p className="mx-auto mt-3 max-w-md text-sm text-ink-soft">Browse the rest of the shop or check back for the next available piece.</p>
             <CustomerButton as={Link} to="/" variant="secondary" className="mt-7">Browse all products</CustomerButton>
           </div>
         )}

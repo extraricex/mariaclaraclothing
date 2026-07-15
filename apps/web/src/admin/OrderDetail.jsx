@@ -508,6 +508,12 @@ export default function OrderDetail() {
     : adminEmailNotification?.status || order.adminEmailStatus || 'not_queued';
   const adminEmailError = order.adminEmailError || adminEmailNotification?.lastError || '';
   const canResendAdminEmail = adminEmailStatus === 'failed' && !order.adminEmailSentAt;
+  const metaTrackingStatus = order.metaPurchaseStatus || 'legacy';
+  const metaDeduplicationStatus = order.metaBrowserPurchaseSentAt && order.metaCapiPurchaseSentAt
+    ? 'Browser and server share one event ID'
+    : order.metaPurchaseTrackingVersion >= 2
+      ? 'Waiting for both eligible sources'
+      : 'Legacy order browser replay locked';
   const searchNeedle = orderProductFilter.trim().toLowerCase();
   const visibleItems = searchNeedle
     ? form.items.filter((item) => [item.productName, item.sku, item.size, item.slug].join(' ').toLowerCase().includes(searchNeedle))
@@ -1033,6 +1039,25 @@ export default function OrderDetail() {
                   </button>
                 )}
               </div>
+            </DetailCard>
+
+            <DetailCard title="Meta Purchase tracking" className="xl:col-span-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className={orderStatusBadge(
+                  metaTrackingStatus,
+                  metaTrackingStatus === 'complete' ? 'success' : metaTrackingStatus.includes('failed') ? 'danger' : 'warning'
+                )}>{titleCase(metaTrackingStatus)}</span>
+                <span className="text-xs text-[var(--admin-muted)]">Admin only</span>
+              </div>
+              <dl className="mt-3">
+                <InfoRow label="Purchase event ID" value={fallback(order.metaPurchaseEventId, 'Not created')} />
+                <InfoRow label="Browser Purchase sent" value={order.metaBrowserPurchaseSentAt ? 'Yes' : 'No'} />
+                <InfoRow label="Server Purchase sent" value={order.metaCapiPurchaseSentAt ? 'Yes' : 'No'} />
+                <InfoRow label="Browser sent time" value={order.metaBrowserPurchaseSentAt ? new Date(order.metaBrowserPurchaseSentAt).toLocaleString('en-PH') : 'Not sent'} />
+                <InfoRow label="Server sent time" value={order.metaCapiPurchaseSentAt ? new Date(order.metaCapiPurchaseSentAt).toLocaleString('en-PH') : 'Not sent'} />
+                <InfoRow label="Deduplication" value={metaDeduplicationStatus} />
+              </dl>
+              {order.metaPurchaseLastError && <p className="mt-3 break-words text-xs text-[#ff8b98]">Last Meta error: {order.metaPurchaseLastError}</p>}
             </DetailCard>
 
             <DetailCard title="Tracking notifications" className="xl:col-span-6">

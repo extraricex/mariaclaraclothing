@@ -74,14 +74,6 @@ async function renderThankYouPage() {
   document.querySelector('[data-order-shipping-summary]').textContent = formatMoney(order.shippingFeeCents);
   document.querySelector('[data-order-total-summary]').textContent = formatMoney(order.totalCents);
   renderThankYouItems(order.items || order.cartSnapshot || []);
-  trackThankYouPurchase(order);
-}
-
-function trackThankYouPurchase(order) {
-  if (order?.paymentStatus && !['paid', 'cod_pending'].includes(order.paymentStatus)) return false;
-  if (['failed', 'cancelled', 'expired'].includes(String(order?.status || ''))) return false;
-  window.trackMetaPixelPurchase?.(order);
-  return true;
 }
 
 function renderThankYouItems(items) {

@@ -28,6 +28,8 @@ test('COD and PayMongo browser Purchase events only run after their valid comple
     source('pages/ThankYou.jsx')
   ]);
 
-  assert.match(review, /if \(paymentMethod === 'paymongo'\) \{[\s\S]*window\.location\.assign\(result\.checkoutUrl\);[\s\S]*return;[\s\S]*\}[\s\S]*trackFacebookPurchase\(result, result\.items, result\.trackingEventId\)/);
-  assert.match(thankYou, /order\?\.paymentMethod !== 'paymongo' \|\| order\.paymentStatus !== 'paid' \|\| unsuccessfulOrder\) return;[\s\S]*trackFacebookPurchase\(order, order\.items \|\| \[\], order\.trackingEventId\)/);
+  assert.doesNotMatch(review, /trackFacebookPurchase/);
+  assert.match(review, /if \(paymentMethod === 'paymongo'\) \{[\s\S]*window\.location\.assign\(result\.checkoutUrl\);[\s\S]*return;/);
+  assert.match(thankYou, /order\?\.paymentMethod === 'cash_on_delivery'[\s\S]*order\?\.paymentMethod === 'paymongo' && order\.paymentStatus === 'paid'/);
+  assert.match(thankYou, /claimMetaPurchase\(order\.orderNumber, confirmation\.confirmationToken\)[\s\S]*trackFacebookPurchasePayload\(claim\.purchase\)[\s\S]*completeMetaPurchase/);
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart, getCart, openCartDrawer } from '../lib/cart.js';
@@ -12,6 +12,7 @@ import CollectionCountdown from '../components/CollectionCountdown.jsx';
 import ProductReviews, { Stars } from '../components/ProductReviews.jsx';
 import NotFound from './NotFound.jsx';
 import { productPath } from '../lib/productUrl.js';
+import useModalFocus from '../hooks/useModalFocus.js';
 
 export default function Product() {
   const { slug } = useParams();
@@ -31,6 +32,16 @@ export default function Product() {
   const [mainImageFailed, setMainImageFailed] = useState(false);
   const imageTouchStartX = useRef(null);
   const thumbnailRefs = useRef([]);
+  const sizeChartDialogRef = useRef(null);
+  const sizeChartCloseButtonRef = useRef(null);
+  const closeSizeChart = useCallback(() => setSizeChartOpen(false), []);
+
+  useModalFocus({
+    open: sizeChartOpen,
+    containerRef: sizeChartDialogRef,
+    initialFocusRef: sizeChartCloseButtonRef,
+    onClose: closeSizeChart
+  });
 
   useEffect(() => {
     setProduct(null);
@@ -58,6 +69,19 @@ export default function Product() {
   useEffect(() => {
     if (!product) return undefined;
     const previousTitle = document.title;
+    const metaChanges = [];
+    const setMeta = (attribute, key, value) => {
+      let element = document.head.querySelector(`meta[${attribute}="${key}"]`);
+      const created = !element;
+      const previous = element?.getAttribute('content') || '';
+      if (!element) {
+        element = document.createElement('meta');
+        element.setAttribute(attribute, key);
+        document.head.appendChild(element);
+      }
+      element.setAttribute('content', String(value || ''));
+      metaChanges.push({ element, created, previous });
+    };
     let canonical = document.querySelector('link[rel="canonical"]');
     const createdCanonical = !canonical;
     const previousCanonical = canonical?.getAttribute('href') || '';
@@ -66,14 +90,65 @@ export default function Product() {
       canonical.setAttribute('rel', 'canonical');
       document.head.appendChild(canonical);
     }
+    const canonicalUrl = `${window.location.origin}${productPath(product)}`;
+    const descriptionDocument = new DOMParser().parseFromString(
+      String(product.seo?.description || product.description || ''),
+      'text/html'
+    );
+    const description = String(descriptionDocument.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    const imageUrl = product.images?.[0]?.url || '';
     document.title = `${product.name} | Maria Clara Clothing`;
-    canonical.setAttribute('href', `${window.location.origin}${productPath(product)}`);
+    canonical.setAttribute('href', canonicalUrl);
+    setMeta('name', 'description', description);
+    setMeta('property', 'og:type', 'product');
+    setMeta('property', 'og:title', product.name);
+    setMeta('property', 'og:description', description);
+    setMeta('property', 'og:url', canonicalUrl);
+    if (imageUrl) setMeta('property', 'og:image', imageUrl);
+    setMeta('property', 'product:price:amount', (Number(product.priceCents || 0) / 100).toFixed(2));
+    setMeta('property', 'product:price:currency', 'PHP');
+
+    const productSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.name,
+      description,
+      image: (product.images || []).map((item) => item.url).filter(Boolean),
+      sku: product.variants?.[0]?.sku || undefined,
+      brand: { '@type': 'Brand', name: 'Maria Clara Clothing' },
+      offers: {
+        '@type': 'Offer',
+        url: canonicalUrl,
+        priceCurrency: 'PHP',
+        price: (Number(product.priceCents || 0) / 100).toFixed(2),
+        availability: product.variants?.some((variant) => Number(variant.stockQuantity || 0) > 0)
+          ? 'https://schema.org/InStock'
+          : 'https://schema.org/OutOfStock'
+      },
+      ...(Number(product.reviewSummary?.totalReviews || 0) > 0 ? {
+        aggregateRating: {
+          '@type': 'AggregateRating',
+          ratingValue: Number(product.reviewSummary.averageRating).toFixed(1),
+          reviewCount: Number(product.reviewSummary.totalReviews)
+        }
+      } : {})
+    };
+    const schema = document.createElement('script');
+    schema.type = 'application/ld+json';
+    schema.dataset.mariaClaraProductSchema = 'true';
+    schema.textContent = JSON.stringify(productSchema);
+    document.head.appendChild(schema);
     return () => {
       document.title = previousTitle;
       if (createdCanonical) canonical.remove();
       else canonical.setAttribute('href', previousCanonical);
+      for (const change of metaChanges) {
+        if (change.created) change.element.remove();
+        else change.element.setAttribute('content', change.previous);
+      }
+      schema.remove();
     };
-  }, [product?.id, product?.name, product?.publicHandle]);
+  }, [product]);
 
   useEffect(() => {
     if (!product) return;
@@ -170,8 +245,17 @@ export default function Product() {
     }
   ].filter(Boolean);
   const activeTab = detailTabs[activeDetailTab] || detailTabs[0];
+  const productCollections = new Set((product.collections || []).map((name) => String(name).trim().toLowerCase()));
   const recommendedProducts = recommendations
-    .filter((candidate) => candidate.slug !== product.slug)
+    .filter((candidate) => candidate.id !== product.id)
+    .filter((candidate) => String(candidate.merchandisingStatus || '').toLowerCase() !== 'sold_out')
+    .filter((candidate) => candidate.variants?.some((candidateVariant) => Number(candidateVariant.stockQuantity) > 0))
+    .map((candidate, index) => ({
+      candidate,
+      index,
+      related: (candidate.collections || []).some((name) => productCollections.has(String(name).trim().toLowerCase()))
+    }))
+    .sort((left, right) => Number(right.related) - Number(left.related) || left.index - right.index)
     .slice(0, 4);
 
   function displaySectionTitle(title) {
@@ -313,7 +397,7 @@ export default function Product() {
                 src={image.url}
                 alt={image.altText || `${product.name}, image ${activeImage + 1}`}
                 className={`product-photo-blend h-full w-full object-contain transition-opacity duration-300 ${mainImageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                fetchPriority={activeImage === 0 ? 'high' : 'auto'}
+                fetchpriority={activeImage === 0 ? 'high' : 'auto'}
                 decoding="async"
                 onLoad={() => setMainImageLoaded(true)}
                 onError={() => setMainImageFailed(true)}
@@ -540,7 +624,7 @@ export default function Product() {
             </p>
           </div>
           <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
-            {recommendedProducts.map((recommended, index) => (
+            {recommendedProducts.map(({ candidate: recommended }, index) => (
               <ProductCard key={recommended.id} product={recommended} index={index} />
             ))}
           </div>
@@ -548,13 +632,13 @@ export default function Product() {
       )}
       {sizeChartOpen && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/55 p-3 sm:items-center sm:p-6" role="presentation">
-          <div className="max-h-[88svh] w-full max-w-3xl overflow-y-auto border border-line bg-paper shadow-2xl" role="dialog" aria-modal="true" aria-label="Size chart">
+          <div ref={sizeChartDialogRef} tabIndex={-1} className="max-h-[88svh] w-full max-w-3xl overflow-y-auto border border-line bg-paper shadow-2xl" role="dialog" aria-modal="true" aria-label="Size chart">
             <div className="sticky top-0 flex items-center justify-between border-b border-line bg-paper px-4 py-3 sm:px-5">
               <div>
                 <p className="eyebrow">Fit guide</p>
                 <h2 className="display text-2xl">Size Chart</h2>
               </div>
-              <button type="button" className="touch-target text-2xl leading-none text-ink" aria-label="Close size chart" onClick={() => setSizeChartOpen(false)}>×</button>
+              <button ref={sizeChartCloseButtonRef} type="button" className="touch-target text-2xl leading-none text-ink" aria-label="Close size chart" onClick={closeSizeChart}>×</button>
             </div>
             <div className="p-4 sm:p-5">
               {sizeChartRows.length > 0 ? (
@@ -585,7 +669,7 @@ export default function Product() {
               ) : sizeChartImageUrl ? (
                 <img src={sizeChartImageUrl} alt={sizeChartAltText} className="w-full bg-white object-contain" loading="lazy" />
               ) : (
-                <p className="text-sm text-ink-soft">Size chart is not configured yet.</p>
+                <p className="text-sm text-ink-soft">Please message us for the current product measurements before ordering.</p>
               )}
             </div>
           </div>

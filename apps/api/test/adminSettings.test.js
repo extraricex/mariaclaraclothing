@@ -5,6 +5,18 @@ const os = require('node:os');
 const path = require('node:path');
 
 const ADMIN_TOKEN = 'local-admin-token';
+const { storefrontMetaPixel } = require('../src/routes/storeSettings');
+
+test('storefront Pixel is locked to the CAPI dataset without changing consent mode', () => {
+  assert.deepEqual(storefrontMetaPixel(
+    { enabled: true, pixelId: 'browser-old', requireConsent: false },
+    { enabled: true, pixelId: 'server-dataset' }
+  ), { enabled: true, pixelId: 'server-dataset', requireConsent: false });
+  assert.deepEqual(storefrontMetaPixel(
+    { enabled: true, pixelId: 'browser-only', requireConsent: true },
+    { enabled: false }
+  ), { enabled: true, pixelId: 'browser-only', requireConsent: true });
+});
 
 function restoreEnv(name, value) {
   if (value === undefined) {

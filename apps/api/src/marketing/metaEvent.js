@@ -45,6 +45,8 @@ function purchaseValue(totalCents) {
 }
 
 function metaPurchaseEventId(order = {}) {
+  const storedEventId = String(order.metaPurchaseEventId || order.meta_purchase_event_id || '').trim();
+  if (storedEventId) return storedEventId;
   const orderId = String(order.orderNumber || order.id || '').trim();
   return orderId ? `purchase_${orderId}` : '';
 }

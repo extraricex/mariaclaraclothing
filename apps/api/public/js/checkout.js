@@ -645,7 +645,6 @@ function renderCheckoutPage() {
         shippingRegion: totals.shippingRegion,
         totalCents: totals.totalCents
       });
-      window.trackMetaPixelPurchase?.(result, result.items || currentItems);
       clearCart();
       form.reset();
       addressState.selectedProvince = null;

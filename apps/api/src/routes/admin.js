@@ -566,8 +566,10 @@ router.post('/site-content/footer-logo/image', logoUpload.single('image'), async
 
 router.get('/settings', async (_req, res, next) => {
   try {
+    const settings = await getStoreSettings();
+    if (env.meta.enabled) settings.marketing.metaPixel.pixelId = env.meta.pixelId;
     return res.json({
-      settings: await getStoreSettings(),
+      settings,
       paymentProviders: {
         paymongo: {
           configured: env.paymongo.configured,
@@ -575,6 +577,11 @@ router.get('/settings', async (_req, res, next) => {
           mode: env.paymongo.livemode ? 'live' : 'test',
           publicKey: env.paymongo.publicKey || ''
         }
+      },
+      metaProvider: {
+        conversionsApiEnabled: env.meta.enabled,
+        pixelIdLocked: env.meta.enabled,
+        pixelId: env.meta.enabled ? env.meta.pixelId : ''
       }
     });
   } catch (error) {
@@ -626,6 +633,14 @@ router.put('/settings/collection-countdowns/:collectionName', async (req, res, n
 
 router.put('/settings/:section', async (req, res, next) => {
   try {
+    if (req.params.section === 'marketing' && env.meta.enabled) {
+      const requestedPixelId = String(req.body?.metaPixel?.pixelId || '').trim();
+      if (requestedPixelId !== env.meta.pixelId) {
+        const error = new Error('Meta Pixel ID must match the server Conversions API dataset.');
+        error.status = 400;
+        throw error;
+      }
+    }
     const settings = await updateSettingsSection(req.params.section, req.body || {});
     return res.json({ settings });
   } catch (error) {

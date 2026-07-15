@@ -38,8 +38,18 @@ function manualDiscountCode(snapshot) {
 function buildOrder(input, quote, orderNumber, tokenHash, now) {
   const snapshot = quote.snapshot;
   const customer = normalizedRequest(input).customer;
+  const paymentMethod = String(input.paymentMethod || 'cash_on_delivery');
   return {
     orderNumber,
+    metaPurchaseEventId: metaPurchaseEventId({ orderNumber }),
+    metaPurchaseTrackingVersion: 2,
+    metaBrowserPurchaseClaimId: '',
+    metaBrowserPurchaseClaimedAt: '',
+    metaBrowserPurchaseSentAt: '',
+    metaCapiPurchaseQueuedAt: '',
+    metaCapiPurchaseSentAt: '',
+    metaPurchaseStatus: paymentMethod === 'paymongo' ? 'pending_payment' : 'eligible',
+    metaPurchaseLastError: '',
     customer,
     address: snapshot.address,
     items: snapshot.items,
@@ -56,7 +66,7 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
     parcelWeightOverrideGrams: null,
     cartSnapshot: snapshot.items,
     checkoutChannel: 'storefront_checkout',
-    paymentMethod: String(input.paymentMethod || 'cash_on_delivery'),
+    paymentMethod,
     paymentProvider: input.paymentMethod === 'paymongo' ? 'paymongo' : '',
     channel: 'Online Store',
     status: input.paymentMethod === 'paymongo' ? 'pending_payment' : 'confirmed',
@@ -84,7 +94,7 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
 function checkoutResponse(order) {
   return {
     orderNumber: order.orderNumber,
-    trackingEventId: metaPurchaseEventId(order),
+    trackingEventId: order.metaPurchaseEventId || metaPurchaseEventId(order),
     currency: 'PHP',
     totalCents: order.totalCents,
     items: order.items.map((item) => ({
