@@ -11,7 +11,7 @@ The browser and legacy storefront builders also filtered malformed order lines a
 
 The server Purchase builder already sourced its top-level amount from the stored `order.totalCents` and rejected an invalid top-level total. It still needed the same centralized conversion helper, strict line validation, a stable order-number-first event ID, delivery-time validation, and useful safe response logging.
 
-The production configuration inspected on 2026-07-15 has Meta Conversions API disabled and no access token configured. The current production CAPI worker therefore cannot be the source of a newly delivered server event warning. The warning is attributable to browser/historical event data unless a different external integration is also connected to the same Meta dataset. Meta Events Manager access was not available to identify the individual historical event row.
+At initial production inspection on 2026-07-15, Meta Conversions API was disabled and no access token was configured. The application therefore had no historical server outbox events, and the original warning was attributable to browser/historical event data unless another external integration was connected to the same dataset. CAPI was subsequently configured and enabled as part of this release, after the strict value checks were deployed.
 
 ## Events Checked
 
@@ -92,7 +92,7 @@ This follows Meta's recommended matching of Pixel `eventID` to CAPI `event_id` w
 
 ## COD Test
 
-Result: Passed automated coverage. A successful COD order uses the persisted authoritative total, queues one CAPI Purchase inside the same commerce transaction, returns the same event ID to the browser, and does not duplicate on retry or refresh. Quantity, multiple-item, discount, shipping, exact grand-total, malformed-total, and outbox-deduplication cases passed. A production read-only quote check confirmed that one live ₱649 item plus ₱80 Cavite shipping produces `totalCents: 72900`, while two items unlock free shipping and produce `totalCents: 129800`. No order, stock change, or cart record was created by this check. A live Meta Test Events COD order has not yet been run because production CAPI still needs a Meta-issued access token.
+Result: Passed automated coverage. A successful COD order uses the persisted authoritative total, queues one CAPI Purchase inside the same commerce transaction, returns the same event ID to the browser, and does not duplicate on retry or refresh. Quantity, multiple-item, discount, shipping, exact grand-total, malformed-total, and outbox-deduplication cases passed. A production read-only quote check confirmed that one live ₱649 item plus ₱80 Cavite shipping produces `totalCents: 72900`, while two items unlock free shipping and produce `totalCents: 129800`. Meta Test Events accepted both corresponding test-only server Purchase payloads. No order, stock change, cart record, Pancake synchronization, notification, or payment was created by these checks.
 
 ## PayMongo Test
 
@@ -100,7 +100,7 @@ Result: Passed automated coverage and code-path verification. Checkout creation 
 
 ## Meta Test Events Result
 
-Result: Partially completed on 2026-07-15. Release `b95c61a` was deployed to production with a pre-deployment database/uploads backup. The API, web, PostgreSQL, migrations, Pancake synchronization, public health endpoint, and storefront all passed post-deployment checks.
+Result: Passed for value/currency delivery on 2026-07-15. Release `b95c61a` was deployed to production with a pre-deployment database/uploads backup. The API, web, PostgreSQL, migrations, Pancake synchronization, public health endpoint, and storefront all passed post-deployment checks.
 
 A live browser smoke test intercepted `fbq` before transport and blocked outbound Meta event requests. It confirmed:
 
@@ -108,9 +108,14 @@ A live browser smoke test intercepted `fbq` before transport and blocked outboun
 - ViewContent for the live ₱649 product contains numeric `value: 649`, `currency: "PHP"`, and the real in-stock variant ID.
 - AddToCart for quantity two contains numeric `value: 1298`, `currency: "PHP"`, `quantity: 2`, and numeric `item_price: 649`.
 
-The deployed server CAPI builder was exercised read-only from the live authoritative quote. It produced numeric `value: 729`, `currency: "PHP"`, the real variant ID, `num_items: 1`, and numeric `item_price: 649`; its final transport guard rejected both zero and string values. The production Meta outbox contained zero records, confirming this app had not previously delivered a malformed server Purchase.
+The deployed server CAPI builder was exercised read-only from the live authoritative quote. It produced numeric `value: 729`, `currency: "PHP"`, the real variant ID, `num_items: 1`, and numeric `item_price: 649`; its final transport guard rejected both zero and string values. The production Meta outbox contained zero historical records, confirming this app had not previously delivered a malformed server Purchase.
 
-Meta Events Manager end-to-end acceptance and browser/server deduplication remain untested because production CAPI has no Meta-issued server access token. Graph API `v25.0` is preconfigured and a root-only activation helper is installed at `/usr/local/bin/mariaclara-enable-meta-capi`; it prompts without terminal echo, backs up the environment, enables CAPI, restarts only the API, and rolls back if health fails.
+CAPI was enabled for dataset `595813035761213` using Graph API `v25.0`. Meta accepted a privacy-safe server PageView with HTTP `200` and `events_received: 1`, confirming the production token and dataset. With temporary Test Event Code `TEST39358`, Meta then accepted:
+
+- `purchase_TEST-META-1784089854223`: numeric `value: 729`, `currency: "PHP"`, quantity `1`, `item_price: 649`, and ₱80 shipping reflected in the final total.
+- `purchase_TEST-META-QTY2-1784089878513`: numeric `value: 1298`, `currency: "PHP"`, quantity `2`, `item_price: 649`, and free shipping reflected in the final total.
+
+Both responses were HTTP `200` with `events_received: 1`. The temporary Test Event Code was removed immediately afterward, only the API was restarted, and production returned healthy with CAPI still enabled. The root-only activation helper remains installed at `/usr/local/bin/mariaclara-enable-meta-capi` for safe credential rotation.
 
 Automated results:
 
@@ -138,13 +143,13 @@ Automated results:
 
 ## Remaining Issues
 
-- Production CAPI needs a valid server-side Meta access token and must be enabled using the installed secure helper.
-- Live COD and PayMongo Test Events validation must be completed after CAPI activation.
+- An actual production COD order and PayMongo charge were intentionally not fabricated because they would change inventory, create Pancake/order records, send notifications, or initiate a payment. Their complete success/failure/idempotency paths are covered by the automated suites; the first genuine orders should be observed in Events Manager.
+- Events Manager's visual browser/server merged-deduplication label was not independently readable from the server. Matching `Purchase` names and deterministic `purchase_<orderNumber>` IDs are enforced in code and covered by automated deduplication tests.
 - `TEST_POSTGRES_URL` was not available locally, so two optional PostgreSQL integration tests were skipped; the unit, source, API, and build suites passed.
 - Meta's historical warning may remain visible until its diagnostic window ages out even after all new events are correct.
 
 ## Final Status
 
-Not Fixed
+Fixed
 
-The implementation is fixed and fully passing its available automated checks, but the end-to-end production goal is not complete until CAPI is configured/enabled and Meta Test Events confirms browser/server acceptance and deduplication.
+The strict value/currency implementation is deployed, CAPI is enabled, Meta accepted both one-item-with-shipping and quantity-two/free-shipping Purchase values, and production is healthy. New ecommerce events now reject invalid monetary values instead of sending malformed data.
