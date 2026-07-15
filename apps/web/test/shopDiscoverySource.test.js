@@ -4,13 +4,15 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 test('shop search and filters use live catalog fields without demo products', async () => {
-  const [app, shop, shell] = await Promise.all([
+  const [app, shop, shell, nginx] = await Promise.all([
     readFile(path.join(import.meta.dirname, '..', 'src', 'App.jsx'), 'utf8'),
     readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'Shop.jsx'), 'utf8'),
-    readFile(path.join(import.meta.dirname, '..', 'src', 'components', 'Shell.jsx'), 'utf8')
+    readFile(path.join(import.meta.dirname, '..', 'src', 'components', 'Shell.jsx'), 'utf8'),
+    readFile(path.join(import.meta.dirname, '..', 'nginx.conf'), 'utf8')
   ]);
   assert.match(app, /path="\/shop"/);
   assert.match(shell, /to: '\/shop', label: 'Shop'/);
+  assert.match(nginx, /\(\?:shop\|collections/);
   assert.match(shop, /fetchProducts\(\)/);
   assert.match(shop, /Name, SKU, fit, or color/);
   assert.match(shop, /All collections/);
