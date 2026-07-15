@@ -7,6 +7,7 @@ const pancakeInventoryOutboxRepository = require('../integrations/pancake/pancak
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
 const { buildMetaPurchaseEvent, logMetaPurchaseDevelopment } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
+const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
 
 function withOrderParam(base, orderNumber, extra = {}) {
   const url = new URL(base);
@@ -80,64 +81,20 @@ function restockItems(order) {
   })).filter((item) => item.slug && item.sku && item.quantity > 0);
 }
 
-async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
+async function processPaidWebhook(payload, {
+  metaEnabled = false,
+  enqueueAdminEmail = enqueueAdminNewOrderEmail
+} = {}) {
   const event = parsePaidEvent(payload);
   if (event.eventType !== 'checkout_session.payment.paid') return { status: 'ignored', eventType: event.eventType };
   if (!event.orderNumber || !event.checkoutSessionId || !event.paymentId) {
     const error = new Error('PayMongo paid webhook is incomplete.'); error.status = 400; error.code = 'paymongo_webhook_invalid'; throw error;
   }
-  const result = await transaction(async (client) => {
-    const inserted = await client.query(
-      `INSERT INTO paymongo_webhook_events (event_id,event_type,order_number,payload_digest)
-       VALUES ($1,$2,$3,$4) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
-      [event.eventId,event.eventType,event.orderNumber,event.digest]
-    );
-    if (!inserted.rowCount) return { status: 'duplicate', orderNumber: event.orderNumber };
-    const order = await findOrderByNumber(event.orderNumber, { client, forUpdate: true, includeRelated: false });
-    if (!order || order.paymentProvider !== 'paymongo' || order.providerCheckoutSessionId !== event.checkoutSessionId) {
-      const error = new Error('PayMongo order reference does not match.'); error.status = 409; error.code = 'paymongo_order_mismatch'; throw error;
-    }
-    if (event.currency !== 'PHP' || !Number.isInteger(event.amountCents) || event.amountCents !== Number(order.totalCents)) {
-      const error = new Error('PayMongo paid amount does not match the order total.'); error.status = 409; error.code = 'paymongo_amount_mismatch'; throw error;
-    }
-    if (order.paymentStatus === 'paid') {
-      const paymentMetadata = event.paymentMethodType && order.paymentMetadata?.paymentMethodType !== event.paymentMethodType
-        ? { ...(order.paymentMetadata || {}), paymentMethodType: event.paymentMethodType, providerLivemode: event.livemode }
-        : order.paymentMetadata;
-      const duplicateOrder = paymentMetadata !== order.paymentMetadata
-        ? await updateOrder(order.orderNumber, { paymentMetadata }, { client, existingOrder: order })
-        : order;
-      return { status: 'duplicate', orderNumber: order.orderNumber, order: duplicateOrder };
-    }
-    const paidAfterCancellation = order.status === 'cancelled'
-      || order.paymentStatus === 'cancelled'
-      || order.inventoryReservationStatus === 'released';
-    const updated = await updateOrder(order.orderNumber, {
-      status: paidAfterCancellation ? 'cancelled' : 'confirmed',
-      paymentMethod: 'paymongo', paymentStatus: 'paid', providerPaymentId: event.paymentId,
-      paidAmountCents: event.amountCents, paidAt: event.paidAt,
-      inventoryReservationStatus: paidAfterCancellation ? 'released' : 'committed',
-      paymentMetadata: {
-        ...(order.paymentMetadata || {}),
-        paymentMethodType: event.paymentMethodType,
-        providerLivemode: event.livemode,
-        ...(paidAfterCancellation ? { paymentAfterCancellation: true } : {})
-      }
-    }, { client, existingOrder: order });
-    if (metaEnabled && !paidAfterCancellation) {
-      const metaEvent = buildMetaPurchaseEvent({
-        order: updated, requestContext: order.paymentMetadata?.metaRequestContext || {}
-      });
-      const outbox = metaEvent ? await insertMetaPurchaseOutbox(client, metaEvent) : null;
-      logMetaPurchaseDevelopment(console, {
-        order: updated,
-        event: metaEvent,
-        conversionsApiSent: false,
-        reason: !metaEvent ? 'invalid_purchase_data' : outbox ? 'queued' : 'duplicate'
-      });
-    }
-    return { status: 'paid', orderNumber: updated.orderNumber, order: updated };
-  });
+  const result = await transaction((client) => applyPaidWebhookEvent(event, {
+    client,
+    metaEnabled,
+    enqueueAdminEmail
+  }));
   if (result.status === 'paid' || result.status === 'duplicate') {
     await pancakeOrderSyncRepository.backfillSentOrderExportLinks?.({ limit: 100 });
     const link = await pancakeOrderSyncRepository.getOrderSyncDetail(result.orderNumber);
@@ -170,6 +127,71 @@ async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
     }
   }
   return result;
+}
+
+async function applyPaidWebhookEvent(event, {
+  client,
+  metaEnabled = false,
+  enqueueAdminEmail = enqueueAdminNewOrderEmail,
+  findOrder = findOrderByNumber,
+  updateOrderRecord = updateOrder,
+  buildMetaEvent = buildMetaPurchaseEvent,
+  insertMetaEvent = insertMetaPurchaseOutbox,
+  metaLogger = console
+} = {}) {
+  const inserted = await client.query(
+    `INSERT INTO paymongo_webhook_events (event_id,event_type,order_number,payload_digest)
+     VALUES ($1,$2,$3,$4) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
+    [event.eventId,event.eventType,event.orderNumber,event.digest]
+  );
+  if (!inserted.rowCount) return { status: 'duplicate', orderNumber: event.orderNumber };
+  const order = await findOrder(event.orderNumber, { client, forUpdate: true, includeRelated: false });
+  if (!order || order.paymentProvider !== 'paymongo' || order.providerCheckoutSessionId !== event.checkoutSessionId) {
+    const error = new Error('PayMongo order reference does not match.'); error.status = 409; error.code = 'paymongo_order_mismatch'; throw error;
+  }
+  if (event.currency !== 'PHP' || !Number.isInteger(event.amountCents) || event.amountCents !== Number(order.totalCents)) {
+    const error = new Error('PayMongo paid amount does not match the order total.'); error.status = 409; error.code = 'paymongo_amount_mismatch'; throw error;
+  }
+  if (order.paymentStatus === 'paid') {
+    const paymentMetadata = event.paymentMethodType && order.paymentMetadata?.paymentMethodType !== event.paymentMethodType
+      ? { ...(order.paymentMetadata || {}), paymentMethodType: event.paymentMethodType, providerLivemode: event.livemode }
+      : order.paymentMetadata;
+    const duplicateOrder = paymentMetadata !== order.paymentMetadata
+      ? await updateOrderRecord(order.orderNumber, { paymentMetadata }, { client, existingOrder: order })
+      : order;
+    return { status: 'duplicate', orderNumber: order.orderNumber, order: duplicateOrder };
+  }
+  const paidAfterCancellation = order.status === 'cancelled'
+    || order.paymentStatus === 'cancelled'
+    || order.inventoryReservationStatus === 'released';
+  const updated = await updateOrderRecord(order.orderNumber, {
+    status: paidAfterCancellation ? 'cancelled' : 'confirmed',
+    paymentMethod: 'paymongo', paymentStatus: 'paid', providerPaymentId: event.paymentId,
+    paidAmountCents: event.amountCents, paidAt: event.paidAt,
+    inventoryReservationStatus: paidAfterCancellation ? 'released' : 'committed',
+    paymentMetadata: {
+      ...(order.paymentMetadata || {}),
+      paymentMethodType: event.paymentMethodType,
+      providerLivemode: event.livemode,
+      ...(paidAfterCancellation ? { paymentAfterCancellation: true } : {})
+    }
+  }, { client, existingOrder: order });
+  if (metaEnabled && !paidAfterCancellation) {
+    const metaEvent = buildMetaEvent({
+      order: updated, requestContext: order.paymentMetadata?.metaRequestContext || {}
+    });
+    const outbox = metaEvent ? await insertMetaEvent(client, metaEvent) : null;
+    logMetaPurchaseDevelopment(metaLogger, {
+      order: updated,
+      event: metaEvent,
+      conversionsApiSent: false,
+      reason: !metaEvent ? 'invalid_purchase_data' : outbox ? 'queued' : 'duplicate'
+    });
+  }
+  if (!paidAfterCancellation) {
+    await enqueueAdminEmail(updated, { client });
+  }
+  return { status: 'paid', orderNumber: updated.orderNumber, order: updated };
 }
 
 function paidSessionPayload(session) {
@@ -315,6 +337,6 @@ async function releaseExpiredReservations({ now = new Date(), limit = 50, client
 }
 
 module.exports = {
-  attachCheckoutSession, checkoutSessionPayload, closeCheckoutSessionForExpiry, parsePaidEvent, processPaidWebhook,
+  applyPaidWebhookEvent, attachCheckoutSession, checkoutSessionPayload, closeCheckoutSessionForExpiry, parsePaidEvent, processPaidWebhook,
   paidSessionPayload, reconcilePendingPayments, releaseExpiredReservations, restockItems, withOrderParam
 };

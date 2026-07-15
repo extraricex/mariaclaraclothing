@@ -34,6 +34,7 @@ test('Postgres checkout serializes the idempotency key and uses one client for e
     buildMetaEvent: () => ({ event_id: 'purchase_MCC-1', custom_data: { order_id: 'MCC-1' } }),
     insertOutbox: async (usedClient) => calls.push(['outbox', usedClient]),
     enqueueOrderExport: async (_order, options) => calls.push(['pancakeExport', options.client]),
+    enqueueAdminEmail: async (_order, options) => calls.push(['adminEmail', options.client]),
     metaEnabled: true
   };
 
@@ -41,7 +42,7 @@ test('Postgres checkout serializes the idempotency key and uses one client for e
   assert.equal(result.orderNumber, 'MCC-1');
   assert.match(sqlCalls[0].sql, /pg_advisory_xact_lock/);
   assert.deepEqual(sqlCalls[0].values, ['cart-1']);
-  assert.deepEqual(calls.map(([name]) => name), ['stock', 'order', 'movements', 'cart', 'discount', 'outbox', 'pancakeExport']);
+  assert.deepEqual(calls.map(([name]) => name), ['stock', 'order', 'movements', 'cart', 'discount', 'outbox', 'pancakeExport', 'adminEmail']);
   assert.equal(calls.every(([, usedClient]) => usedClient === client), true);
 });
 
@@ -59,6 +60,7 @@ test('Postgres checkout returns the existing idempotent order without writes', a
     buildMetaEvent: () => ({}),
     insertOutbox: async () => { writes += 1; },
     enqueueOrderExport: async () => { writes += 1; },
+    enqueueAdminEmail: async () => { writes += 1; },
     metaEnabled: true
   };
   const result = await persistPostgresCheckout(fixture(), deps);

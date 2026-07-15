@@ -7,11 +7,12 @@ const { resolveRuntimeDataFile } = require('../db/runtimeDataFile');
 const defaultFile = path.join(__dirname, '..', '..', 'data', 'order-notifications.json');
 const filePath = () => resolveRuntimeDataFile('ORDER_NOTIFICATIONS_DATA_FILE', defaultFile);
 
-async function enqueueMany(orderNumber, eventName, notifications) {
+async function enqueueMany(orderNumber, eventName, notifications, options = {}) {
   if (hasDatabaseUrl()) {
+    const db = options.client || { query };
     const rows = [];
     for (const item of notifications) {
-      const result = await query(
+      const result = await db.query(
         `INSERT INTO order_notification_outbox (id, order_number, event_name, channel, recipient, payload, status)
          VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)
          ON CONFLICT (order_number,event_name,channel) DO NOTHING RETURNING *`,
@@ -31,6 +32,32 @@ async function enqueueMany(orderNumber, eventName, notifications) {
   }
   await writeStore(store);
   return created;
+}
+
+async function claimFailedForManualResend(client, { orderNumber, eventName, channel = 'email' }) {
+  if (hasDatabaseUrl()) {
+    const db = client || { query };
+    const result = await db.query(
+      `UPDATE order_notification_outbox
+          SET status='sending', locked_at=now(), attempt_count=attempt_count+1,
+              last_error='', updated_at=now()
+        WHERE order_number=$1 AND event_name=$2 AND channel=$3 AND status='failed'
+        RETURNING *`,
+      [orderNumber, eventName, channel]
+    );
+    return result.rows[0] ? fromRow(result.rows[0]) : null;
+  }
+  const store = await readStore();
+  const row = store.find((item) => item.orderNumber === orderNumber
+    && item.eventName === eventName && item.channel === channel && item.status === 'failed');
+  if (!row) return null;
+  row.status = 'sending';
+  row.lockedAt = new Date().toISOString();
+  row.attemptCount += 1;
+  row.lastError = '';
+  row.updatedAt = new Date().toISOString();
+  await writeStore(store);
+  return row;
 }
 
 async function listForOrder(orderNumber) {
@@ -78,4 +105,13 @@ async function readStore() { try { const parsed = JSON.parse(await fs.readFile(f
 async function writeStore(notifications) { await fs.mkdir(path.dirname(filePath()), { recursive: true }); await fs.writeFile(filePath(), `${JSON.stringify({ notifications }, null, 2)}\n`); }
 function fromRow(row) { return { id: row.id, orderNumber: row.order_number, eventName: row.event_name, channel: row.channel, recipient: row.recipient, payload: row.payload, status: row.status, attemptCount: row.attempt_count, nextAttemptAt: row.next_attempt_at, lockedAt: row.locked_at, sentAt: row.sent_at, providerMessageId: row.provider_message_id, lastError: row.last_error, createdAt: row.created_at, updatedAt: row.updated_at }; }
 
-module.exports = { claimDue, enqueueMany, listForOrder, markFailed, markSent, recoverStaleClaims, scheduleRetry };
+module.exports = {
+  claimDue,
+  claimFailedForManualResend,
+  enqueueMany,
+  listForOrder,
+  markFailed,
+  markSent,
+  recoverStaleClaims,
+  scheduleRetry
+};

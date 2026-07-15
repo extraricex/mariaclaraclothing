@@ -37,6 +37,32 @@ test('server leaves Meta worker stopped when CAPI is disabled', async () => {
   await runtime.shutdown();
 });
 
+test('server runs the notification worker when SMTP admin order email is configured', async () => {
+  const calls = [];
+  const notificationWorker = {
+    start: () => calls.push('notification.start'),
+    stop: () => calls.push('notification.stop')
+  };
+  const runtime = startServer({
+    app: { listen: () => ({ close: (callback) => { calls.push('server.close'); callback(); } }) },
+    config: {
+      port: 3000,
+      meta: { enabled: false },
+      notifications: { enabled: false, workerEnabled: true, adminOrderEmail: { configured: true } },
+      pancake: { mode: 'disabled', apiKeyConfigured: false, autoSyncEnabled: false },
+      paymongo: { configured: false }
+    },
+    createNotificationWorker: () => notificationWorker,
+    closeDatabase: async () => calls.push('db.close'),
+    registerSignals: false,
+    logger: { log() {} }
+  });
+  assert.equal(runtime.notificationWorker, notificationWorker);
+  assert.deepEqual(calls, ['notification.start']);
+  await runtime.shutdown();
+  assert.deepEqual(calls, ['notification.start', 'notification.stop', 'server.close', 'db.close']);
+});
+
 test('server starts Pancake auto sync worker when enabled and stops it on shutdown', async () => {
   const calls = [];
   const server = { close: (callback) => { calls.push('server.close'); callback(); } };

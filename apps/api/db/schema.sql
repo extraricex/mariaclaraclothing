@@ -121,6 +121,9 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_expires_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS inventory_reservation_status text NOT NULL DEFAULT 'committed';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_sent_at timestamptz;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_status text NOT NULL DEFAULT 'not_queued';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_error text NOT NULL DEFAULT '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_provider_checkout_session_idx
   ON orders(provider_checkout_session_id) WHERE provider_checkout_session_id<>'';

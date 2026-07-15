@@ -184,6 +184,7 @@ export default function OrderDetail() {
   const [jntPreview, setJntPreview] = useState(null);
   const [refundForm, setRefundForm] = useState({ amount: '', reason: 'others', notes: '' });
   const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [adminEmailSending, setAdminEmailSending] = useState(false);
 
   useEffect(() => {
     adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}`)
@@ -382,6 +383,32 @@ export default function OrderDetail() {
     }
   }
 
+  async function resendAdminEmail() {
+    if (adminEmailSending) return;
+    setAdminEmailSending(true);
+    setMessage('Sending the admin order email...');
+    try {
+      const body = await adminSend(
+        'POST',
+        `/api/admin/orders/${encodeURIComponent(orderNumber)}/admin-email/resend`,
+        {}
+      );
+      setOrder(body.order);
+      setMessage('Admin order email sent successfully.');
+    } catch (error) {
+      if (error.body?.details?.adminEmailStatus) {
+        setOrder((previous) => ({
+          ...previous,
+          adminEmailStatus: error.body.details.adminEmailStatus,
+          adminEmailError: error.body.details.adminEmailError || ''
+        }));
+      }
+      setMessage(error.message || 'The admin order email could not be sent.');
+    } finally {
+      setAdminEmailSending(false);
+    }
+  }
+
   async function previewJnt() {
     setMessage('');
     try {
@@ -473,7 +500,14 @@ export default function OrderDetail() {
   const lastPurchaseDate = history?.lastPurchaseAt || history?.lastOrderAt || order.placedAt;
   const statusEvents = Array.isArray(order.statusEvents) ? order.statusEvents : [];
   const trackingNotifications = Array.isArray(order.trackingNotifications) ? order.trackingNotifications : [];
-  const deliveryNotifications = Array.isArray(order.notifications) ? order.notifications : [];
+  const orderNotifications = Array.isArray(order.notifications) ? order.notifications : [];
+  const adminEmailNotification = orderNotifications.find((notification) => notification.eventName === 'admin_new_order');
+  const deliveryNotifications = orderNotifications.filter((notification) => notification.eventName !== 'admin_new_order');
+  const adminEmailStatus = order.adminEmailSentAt
+    ? 'sent'
+    : adminEmailNotification?.status || order.adminEmailStatus || 'not_queued';
+  const adminEmailError = order.adminEmailError || adminEmailNotification?.lastError || '';
+  const canResendAdminEmail = adminEmailStatus === 'failed' && !order.adminEmailSentAt;
   const searchNeedle = orderProductFilter.trim().toLowerCase();
   const visibleItems = searchNeedle
     ? form.items.filter((item) => [item.productName, item.sku, item.size, item.slug].join(' ').toLowerCase().includes(searchNeedle))
@@ -969,6 +1003,36 @@ export default function OrderDetail() {
                   {notification.lastError && <p className="mt-2 text-xs text-[#ff8b98]">{notification.lastError}</p>}
                 </article>
               )) : <p className="text-sm text-[var(--admin-muted)]">Created automatically when the order is first marked delivered.</p>}
+            </DetailCard>
+
+            <DetailCard title="Admin order email" className="xl:col-span-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <span className={orderStatusBadge(
+                    adminEmailStatus,
+                    adminEmailStatus === 'sent' ? 'success' : adminEmailStatus === 'failed' ? 'danger' : 'warning'
+                  )}>{titleCase(adminEmailStatus)}</span>
+                  {order.adminEmailSentAt && (
+                    <p className="mt-2 text-xs text-[var(--admin-muted)]">
+                      Sent {new Date(order.adminEmailSentAt).toLocaleString('en-PH')}
+                    </p>
+                  )}
+                  {adminEmailError && <p className="mt-2 text-xs text-[#ff8b98]">{adminEmailError}</p>}
+                  {adminEmailStatus === 'pending' && <p className="mt-2 text-xs text-[var(--admin-muted)]">Queued for automatic delivery.</p>}
+                  {adminEmailStatus === 'sending' && <p className="mt-2 text-xs text-[var(--admin-muted)]">Email delivery is in progress.</p>}
+                  {adminEmailStatus === 'not_queued' && <p className="mt-2 text-xs text-[var(--admin-muted)]">No admin order email was queued for this order.</p>}
+                </div>
+                {canResendAdminEmail && (
+                  <button
+                    type="button"
+                    className="btn-ink !py-2 !text-xs"
+                    disabled={adminEmailSending}
+                    onClick={resendAdminEmail}
+                  >
+                    {adminEmailSending ? 'Sending...' : 'Resend Order Email'}
+                  </button>
+                )}
+              </div>
             </DetailCard>
 
             <DetailCard title="Tracking notifications" className="xl:col-span-6">

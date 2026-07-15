@@ -54,9 +54,40 @@ function notificationConfig(source = process.env) {
     apiKey: String(source.RESEND_API_KEY || ''),
     from: String(source.ORDER_NOTIFICATION_FROM_EMAIL || '').trim()
   };
+  const smtpPort = Number(source.SMTP_PORT || 587);
+  const smtpSecureRaw = String(source.SMTP_SECURE || 'false').trim().toLowerCase();
+  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+    throw new Error('SMTP_PORT must be an integer from 1 to 65535');
+  }
+  if (!['true', 'false'].includes(smtpSecureRaw)) {
+    throw new Error('SMTP_SECURE must be true or false');
+  }
+  const adminOrderEmail = {
+    recipient: String(source.ORDER_NOTIFICATION_EMAIL || '').trim(),
+    host: String(source.SMTP_HOST || '').trim(),
+    port: smtpPort,
+    secure: smtpSecureRaw === 'true',
+    user: String(source.SMTP_USER || '').trim(),
+    pass: String(source.SMTP_PASS || ''),
+    from: String(source.SMTP_FROM || '').trim(),
+    siteUrl: String(source.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/$/, '')
+  };
   sms.configured = enabled && Boolean(sms.apiKey);
   email.configured = enabled && Boolean(email.apiKey && email.from);
-  return { enabled, sms, email };
+  adminOrderEmail.configured = Boolean(
+    adminOrderEmail.recipient
+      && adminOrderEmail.host
+      && adminOrderEmail.user
+      && adminOrderEmail.pass
+      && adminOrderEmail.from
+  );
+  return {
+    enabled,
+    workerEnabled: enabled || adminOrderEmail.configured,
+    sms,
+    email,
+    adminOrderEmail
+  };
 }
 
 function paymongoConfig(source = process.env) {

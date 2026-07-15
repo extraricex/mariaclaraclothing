@@ -15,6 +15,7 @@ const { validateJntOrders, writeJntExportBuffer } = require('../jnt/jntExport');
 const { previewJntParcel } = require('../jnt/jntParcelService');
 const { enqueueDeliveredOrderNotifications } = require('../notifications/orderNotificationService');
 const { listForOrder: listOrderNotifications } = require('../notifications/orderNotificationOutboxRepository');
+const { resendAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
 const { normalizeCustomerName } = require('../customers/customerName');
 const { cartSessionSummary, deleteCartSession, listCartSessions } = require('../cartSessions/cartSessionRepository');
@@ -1219,6 +1220,29 @@ router.get('/orders/:orderNumber', async (req, res, next) => {
         refunds: await listOrderRefunds(order.orderNumber),
         refundProvider: paymongoRefundProvider(order)
       }
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/orders/:orderNumber/admin-email/resend', async (req, res, next) => {
+  try {
+    const orderNumber = String(req.params.orderNumber || '').trim();
+    const result = await resendAdminNewOrderEmail(orderNumber, {
+      config: env.notifications.adminOrderEmail,
+      logger: console
+    });
+    const order = result.order;
+    return res.json({
+      order: {
+        ...order,
+        notifications: await listOrderNotifications(orderNumber),
+        pancakeSyncDetail: await pancakeOrderSyncRepository.getOrderSyncDetail(orderNumber),
+        refunds: await listOrderRefunds(orderNumber),
+        refundProvider: paymongoRefundProvider(order)
+      },
+      notification: result.notification
     });
   } catch (error) {
     return next(error);

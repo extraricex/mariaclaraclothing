@@ -184,6 +184,9 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     await deps.consumeQuote(client, quote.id, orderNumber);
     const response = checkoutResponse(order);
     await deps.completeIdempotency(client, { keyHash, orderNumber, response });
+    if (order.paymentMethod !== 'paymongo' && deps.enqueueAdminEmail) {
+      await deps.enqueueAdminEmail(order, { client });
+    }
     return { ...response, confirmationToken };
   });
 }

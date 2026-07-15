@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  checkoutSessionPayload, closeCheckoutSessionForExpiry, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
+  applyPaidWebhookEvent, checkoutSessionPayload, closeCheckoutSessionForExpiry, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
 } = require('../src/payments/paymongoPaymentService');
 
 test('PayMongo checkout payload uses the authoritative total and approved hosted channels', () => {
@@ -131,6 +131,7 @@ test('reservation expiry preserves a payment that completed before expiration', 
 });
 
 test('failed, pending, cancelled, and unrelated PayMongo events cannot create a Purchase', async () => {
+  let emailCalls = 0;
   for (const eventType of [
     'checkout_session.payment.failed',
     'checkout_session.payment.pending',
@@ -139,7 +140,48 @@ test('failed, pending, cancelled, and unrelated PayMongo events cannot create a 
   ]) {
     const result = await require('../src/payments/paymongoPaymentService').processPaidWebhook({
       data: { id: `evt-${eventType}`, type: 'event', attributes: { type: eventType, data: {} } }
-    }, { metaEnabled: true });
+    }, { metaEnabled: true, enqueueAdminEmail: async () => { emailCalls += 1; } });
     assert.deepEqual(result, { status: 'ignored', eventType });
   }
+  assert.equal(emailCalls, 0);
+});
+
+test('verified PayMongo payment queues one admin email after the paid order update', async () => {
+  const client = { id: 'payment-transaction', query: async () => ({ rowCount: 1, rows: [{ event_id: 'evt-paid' }] }) };
+  const pendingOrder = {
+    orderNumber: 'MCC-PAID-EMAIL', totalCents: 72900,
+    paymentMethod: 'paymongo', paymentProvider: 'paymongo', providerCheckoutSessionId: 'cs-paid',
+    paymentStatus: 'pending_payment', status: 'pending_payment', inventoryReservationStatus: 'reserved',
+    paymentMetadata: {}, items: []
+  };
+  const emailCalls = [];
+  const result = await applyPaidWebhookEvent({
+    eventId: 'evt-paid', eventType: 'checkout_session.payment.paid', digest: 'digest',
+    orderNumber: pendingOrder.orderNumber, checkoutSessionId: 'cs-paid', paymentId: 'pay-paid',
+    amountCents: 72900, currency: 'PHP', paymentMethodType: 'gcash', livemode: false,
+    paidAt: '2026-07-15T05:00:00.000Z'
+  }, {
+    client,
+    findOrder: async () => pendingOrder,
+    updateOrderRecord: async (_orderNumber, changes) => ({ ...pendingOrder, ...changes }),
+    enqueueAdminEmail: async (order, options) => emailCalls.push({ order, client: options.client })
+  });
+  assert.equal(result.status, 'paid');
+  assert.equal(result.order.paymentStatus, 'paid');
+  assert.equal(result.order.paidAmountCents, 72900);
+  assert.equal(emailCalls.length, 1);
+  assert.equal(emailCalls[0].order.totalCents, 72900);
+  assert.equal(emailCalls[0].client, client);
+
+  const duplicateCalls = [];
+  const duplicate = await applyPaidWebhookEvent({
+    eventId: 'evt-paid', eventType: 'checkout_session.payment.paid', digest: 'digest',
+    orderNumber: pendingOrder.orderNumber, checkoutSessionId: 'cs-paid', paymentId: 'pay-paid',
+    amountCents: 72900, currency: 'PHP'
+  }, {
+    client: { query: async () => ({ rowCount: 0, rows: [] }) },
+    enqueueAdminEmail: async () => duplicateCalls.push('email')
+  });
+  assert.equal(duplicate.status, 'duplicate');
+  assert.equal(duplicateCalls.length, 0);
 });

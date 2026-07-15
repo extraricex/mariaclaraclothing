@@ -35,6 +35,9 @@ async function persistPostgresCheckout(input, deps) {
     if (deps.enqueueOrderExport) {
       await deps.enqueueOrderExport(order, { client });
     }
+    if (deps.enqueueAdminEmail) {
+      await deps.enqueueAdminEmail(order, { client });
+    }
     return order;
   });
 }

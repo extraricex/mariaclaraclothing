@@ -34,7 +34,7 @@ function startServer({
     ? createWorker({ client: pool || getPool(), config: config.meta, logger })
     : null;
   worker?.start();
-  const notificationWorker = config.notifications?.enabled
+  const notificationWorker = (config.notifications?.workerEnabled ?? config.notifications?.enabled)
     ? createNotificationWorker({ client: process.env.DATABASE_URL ? (pool || getPool()) : undefined, config: config.notifications, logger })
     : null;
   notificationWorker?.start();

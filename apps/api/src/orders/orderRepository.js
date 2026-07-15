@@ -144,6 +144,42 @@ async function updateOrder(orderNumber, changes, options = {}) {
   return updatedOrder;
 }
 
+async function updateOrderAdminEmailState(orderNumber, changes = {}, options = {}) {
+  const status = String(changes.status || 'not_queued').trim().slice(0, 40);
+  const errorMessage = String(changes.error || '').trim().slice(0, 1000);
+  const sentAt = changes.sentAt || null;
+
+  if (usePostgresOrders()) {
+    const executor = options.client || { query };
+    const result = await executor.query(
+      `UPDATE orders
+          SET admin_email_sent_at = COALESCE($2, admin_email_sent_at),
+              admin_email_status = $3,
+              admin_email_error = $4,
+              updated_at = now()
+        WHERE order_number = $1
+        RETURNING *`,
+      [orderNumber, sentAt, status, errorMessage]
+    );
+    return result.rows[0] ? fromPostgresOrder(result.rows[0]) : null;
+  }
+
+  const store = await readOrderStore();
+  const existingIndex = store.orders.findIndex((order) => order.orderNumber === orderNumber);
+  if (existingIndex < 0) return null;
+  const existing = store.orders[existingIndex];
+  const updated = {
+    ...existing,
+    adminEmailSentAt: sentAt || existing.adminEmailSentAt || '',
+    adminEmailStatus: status,
+    adminEmailError: errorMessage,
+    updatedAt: new Date().toISOString()
+  };
+  store.orders[existingIndex] = updated;
+  await writeOrderStore(store);
+  return updated;
+}
+
 async function resetOrderRepositoryForTests() {
   if (usePostgresOrders()) {
     await query('DELETE FROM order_status_events');
@@ -402,6 +438,9 @@ function fromPostgresOrder(row) {
     paymentExpiresAt: row.payment_expires_at ? new Date(row.payment_expires_at).toISOString() : '',
     inventoryReservationStatus: row.inventory_reservation_status || 'committed',
     paymentMetadata: row.payment_metadata || {},
+    adminEmailSentAt: row.admin_email_sent_at ? new Date(row.admin_email_sent_at).toISOString() : '',
+    adminEmailStatus: row.admin_email_status || 'not_queued',
+    adminEmailError: row.admin_email_error || '',
     codConfirmationStatus: row.cod_confirmation_status,
     deliveryStatus: row.delivery_status,
     deliveryMethod: row.delivery_method,
@@ -478,5 +517,6 @@ module.exports = {
   listOrders,
   resetOrderRepositoryForTests,
   saveOrder,
-  updateOrder
+  updateOrder,
+  updateOrderAdminEmailState
 };

@@ -88,6 +88,7 @@ function createDependencies({ idempotency, quoteOverrides, refreshOverrides } = 
     claimPromo: async () => calls.push('claimPromo'),
     insertMeta: async () => calls.push('insertMeta'),
     enqueueOrderExport: async () => calls.push('enqueueOrderExport'),
+    enqueueAdminEmail: async () => calls.push('enqueueAdminEmail'),
     consumeQuote: async () => calls.push('consumeQuote'),
     completeIdempotency: async () => calls.push('completeIdempotency'),
     deriveToken: () => 'derived-confirmation-token',
@@ -105,6 +106,7 @@ test('completed matching retry returns before quote and stock validation', async
   assert.equal(result.confirmationToken, 'derived-confirmation-token');
   assert.equal(deps.calls.includes('loadQuote'), false);
   assert.equal(deps.calls.includes('deductStock'), false);
+  assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
 });
 
 test('same key with a different normalized request is rejected', async () => {
@@ -116,12 +118,21 @@ test('same key with a different normalized request is rejected', async () => {
 });
 
 test('checkout requires both customer name parts', async () => {
+  const deps = createDependencies();
   await assert.rejects(
     placeAuthoritativeCheckout(requestFixture({
       customer: { firstName: 'Maria', lastName: '', fullName: 'Maria', phone: '09171234567' }
-    }), createDependencies()),
+    }), deps),
     (error) => error.code === 'checkout_invalid' && /last name/i.test(error.message)
   );
+  assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+});
+
+test('failed order persistence never queues an admin email', async () => {
+  const deps = createDependencies();
+  deps.saveOrder = async () => { deps.calls.push('saveOrder'); throw new Error('database write failed'); };
+  await assert.rejects(placeAuthoritativeCheckout(requestFixture(), deps), /database write failed/);
+  assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
 });
 
 test('checkout rejects expired, consumed, mismatched, and changed quotes', async () => {
@@ -155,11 +166,20 @@ test('successful checkout performs every commerce write in one transaction', asy
   assert.deepEqual(deps.calls, [
     'transaction', 'claimIdempotency', 'loadQuote', 'refreshQuote', 'deductStock',
     'saveOrder', 'appendMovements', 'convertCart', 'claimPromo', 'insertMeta',
-    'enqueueOrderExport', 'consumeQuote', 'completeIdempotency'
+    'enqueueOrderExport', 'consumeQuote', 'completeIdempotency', 'enqueueAdminEmail'
   ]);
   assert.equal(result.confirmationToken, 'derived-confirmation-token');
   assert.equal(result.totalCents, 72900);
   assert.equal(result.status, 'confirmed');
+});
+
+test('PayMongo checkout does not queue an admin email until payment is verified', async () => {
+  const deps = createDependencies();
+  const result = await placeAuthoritativeCheckout(requestFixture({ paymentMethod: 'paymongo' }), deps);
+  assert.equal(result.status, 'pending_payment');
+  assert.equal(result.paymentStatus, 'pending_payment');
+  assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+  assert.equal(deps.calls.includes('insertMeta'), false);
 });
 
 test('automatic promo checkout refreshes without replaying it as a discount code', async () => {

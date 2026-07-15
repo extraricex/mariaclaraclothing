@@ -30,6 +30,7 @@ const { deriveConfirmationToken, hashConfirmationToken, verifyConfirmationToken 
 const { sha256Object } = require('../checkout/requestHash');
 const { CommerceError } = require('../checkout/commerceError');
 const { customerFullName, normalizeCustomerName } = require('../customers/customerName');
+const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
 
 const { enqueueOrderExport } = pancakeOrderExportRepository;
 
@@ -114,6 +115,7 @@ legacyRouter.post('/', async (req, res, next) => {
         convertCart: markCartSessionConverted,
         incrementDiscount: incrementDiscountUsage,
         enqueueOrderExport,
+        enqueueAdminEmail: enqueueAdminNewOrderEmail,
         buildMetaEvent: buildMetaPurchaseEvent,
         insertOutbox: insertMetaPurchaseOutbox,
         logMetaDevelopment: (details) => logMetaPurchaseDevelopment(console, details),
@@ -128,6 +130,15 @@ legacyRouter.post('/', async (req, res, next) => {
         await incrementDiscountUsage(persistedOrder.discountCode);
       }
       await enqueueOrderExport(persistedOrder);
+      try {
+        await enqueueAdminNewOrderEmail(persistedOrder);
+      } catch (_error) {
+        console.error('Admin order email could not be queued.', {
+          orderNumber: persistedOrder.orderNumber,
+          eventName: 'admin_new_order',
+          status: 'queue_failed'
+        });
+      }
     }
 
     try {
@@ -353,6 +364,9 @@ async function normalizeCheckoutItem(item) {
     variantId: variant.id,
     productName: product.name,
     size: variant.size,
+    imageUrl: typeof product.images?.[0] === 'string'
+      ? product.images[0]
+      : String(product.images?.[0]?.url || ''),
     sku: variant.sku,
     externalPosVariantId: variant.externalPosVariantId || '',
     quantity,
@@ -443,6 +457,7 @@ function defaultAuthoritativeDependencies(req) {
       return outbox;
     },
     enqueueOrderExport,
+    enqueueAdminEmail: enqueueAdminNewOrderEmail,
     enqueueInventorySync: (slugs, source, options) => pancakeInventoryOutboxRepository.enqueueInventorySync(slugs, source, {
       ...options,
       maxAttempts: env.pancake.syncMaxAttempts

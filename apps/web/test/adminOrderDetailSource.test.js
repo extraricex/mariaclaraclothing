@@ -127,3 +127,16 @@ test('admin order detail renders Pancake sync diagnostics', async () => {
   assert.match(source, /Product mapping status/);
   assert.match(source, /Inventory sync status/);
 });
+
+test('admin order detail exposes a protected failed-email resend state', async () => {
+  const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'admin', 'OrderDetail.jsx'), 'utf8');
+
+  assert.match(source, /Admin order email/);
+  assert.match(source, /admin_new_order/);
+  assert.match(source, /admin-email\/resend/);
+  assert.match(source, /adminEmailStatus === 'failed'/);
+  assert.match(source, /disabled=\{adminEmailSending\}/);
+  assert.match(source, /Sending\.\.\./);
+  assert.match(source, /Resend Order Email/);
+  assert.match(source, /Admin order email sent successfully/);
+});
