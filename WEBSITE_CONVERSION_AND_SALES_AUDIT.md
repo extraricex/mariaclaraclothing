@@ -22,7 +22,7 @@ The other approved safe implementation work is now in the workspace:
 - the sitemap, HSTS/cache, checkout accessibility, modal, upsell, recommendation, and mobile obstruction fixes described below;
 - an admin-only Meta delivery/deduplication panel.
 
-Verification completed locally: full API suite passed, all 207 storefront source/unit tests passed, the production Vite build passed, both new migrations passed a transaction/rollback dry-run against the live PostgreSQL schema, and the production dependency audit found zero vulnerabilities. Deployment and the mandatory live COD/PayMongo acceptance flows remain release gates, so the overall status correctly remains **Not Ready** at this point.
+Verification completed locally and in production: full API and storefront suites passed, the production Vite build passed, the dependency audit found zero vulnerabilities, both new migrations were dry-run and then applied, and all production containers are healthy. A controlled live COD order passed the one-browser/one-server Purchase test plus refresh and reopen deduplication, then was cancelled with stock restored. A successful post-fix PayMongo payment and Meta Test Events UI confirmation remain release gates, so the overall status correctly remains **Not Ready** at this point.
 
 The core commerce implementation is unusually strong for a custom storefront: totals are authoritative, stock writes are transactional, duplicate checkout is guarded, PayMongo waits for a verified payment, Pancake uses durable synchronization, Meta Purchase is deduplicated, customer accounts support stock-checked reordering, and the review system is database-backed and moderated.
 

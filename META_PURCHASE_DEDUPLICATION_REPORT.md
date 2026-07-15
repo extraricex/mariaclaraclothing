@@ -11,6 +11,8 @@ The full audit also found two obsolete Purchase triggers in the API's legacy sta
 
 Production evidence narrows the reported incident: PostgreSQL contains exactly one CAPI outbox Purchase for the recent test order, `purchase_MCC-1784093865609-BC02`, and it was sent once with numeric `value: 729` and `currency: PHP`. The duplicate result was therefore not caused by two CAPI outbox rows or a repeated PayMongo webhook. Meta Events Manager access is still required to determine whether the second incoming event was an undeduplicated browser event or an externally configured automatic Purchase event.
 
+The first controlled production COD run also exposed and fixed a separate timing race: Pancake can normalize a newly committed order from `confirmed` to `received` before the Thank You page fetch finishes. The former browser guard accepted only `confirmed`, so browser delivery could depend on which response arrived first. Both the centralized server eligibility check and the browser gate now accept only successful committed lifecycle states (`received`, `confirmed`, `packed`, `shipped`, or `delivered`) and continue to reject cancelled, failed, expired, unreachable, pending, uncommitted, and amount-mismatched orders.
+
 ## Purchase Trigger Locations Found
 
 Before consolidation:
@@ -79,12 +81,13 @@ Outbox insertion is unique and atomic. A sent outbox event is never recreated by
 
 ## COD Flow Test
 
-- Order number: Pending post-deployment controlled order
-- Browser event: Automated claim/complete/refresh concurrency test passed; live Pixel event pending
-- Server event: Automated unique outbox test passed; live CAPI event pending
-- Event ID match: Automated exact-match assertion passed
-- Meta deduplication: Pending verification in Meta Test Events
-- Final Purchase count: Pending
+- Order number: `MCC-1784104905864-8BE3` (controlled order, cancelled and stock restored after the test)
+- Browser event: exactly one `fbq("track", "Purchase", ...)` call captured and atomically marked sent
+- Server event: exactly one CAPI outbox row, status `sent`, `attempt_count = 1`
+- Event ID match: yes — both used `purchase_MCC-1784104905864-8BE3`
+- Value/currency: numeric `729`, `PHP`, from the stored `72900`-cent grand total
+- Meta deduplication: matching source payloads proven; Meta Test Events UI confirmation still requires account access
+- Final Purchase count: one application Purchase dispatch identity; Ads reporting confirmation pending in Meta
 
 ## PayMongo Flow Test
 
@@ -99,6 +102,8 @@ Outbox insertion is unique and atomic. A sent outbox event is never recreated by
 ## Thank You Refresh Test
 
 Automated result: passed. The first browser claim can complete once; concurrent claims return `claim_active`; subsequent refresh/reopen claims return `already_sent`. Historical confirmations return `legacy_order_locked`.
+
+Live COD result: passed. The initial page made one browser call and one completion request. A full refresh and a leave/reopen cycle both returned `already_sent`, made no additional completion request, and did not create another outbox row.
 
 Live Meta Test Events result: pending post-deployment verification.
 
@@ -191,18 +196,20 @@ This excluded audit recommendation is different from section 3 of the current de
 - Production Vite build: passed.
 - Modified backend JavaScript syntax checks: passed.
 - Production dependency audit at high severity: 0 vulnerabilities.
-- Both migrations executed against the live PostgreSQL schema inside a transaction and rolled back: passed.
-- Production evidence audit: one CAPI outbox row, sent once, numeric `729`, `PHP`.
-- Local Docker/nginx runtime: unavailable because the local Docker daemon is stopped; production container validation is pending deployment.
+- Both migrations executed against the live PostgreSQL schema inside a transaction and rolled back before deployment: passed.
+- Both migrations then applied successfully in production; API, web, and PostgreSQL containers are healthy.
+- Isolated production-PostgreSQL release suite: 3 passed (migration state, concurrent checkout idempotency, unique Meta outbox transitions).
+- Live COD: one browser call, one server outbox row, one permanent matching event ID, numeric `729`/`PHP`; refresh and reopen both skipped as `already_sent`.
+- Controlled COD orders were cancelled after verification, their stock was restored once, and their Pancake cancellation updates were queued.
+- Production `/api/health`, `/shop`, and `/sitemap.xml`: HTTP 200; nginx configuration validation passed.
 
 ## Remaining Issues
 
-1. Deploy the code and additive migrations with a production backup and rollback point.
-2. Complete one controlled COD order and one real PayMongo payment after deployment.
-3. Verify both sources under the same event in Meta Test Events and confirm the final count is one after refresh/reopen/webhook retry.
-4. Meta account access is required to inspect and disable any automatic Purchase configured through Event Setup Tool, GTM, a partner integration, or another dataset source if a third event remains.
-5. Recommendation number 3 remains intentionally unresolved and unchanged.
+1. Complete one real post-fix PayMongo payment; this requires the owner to authorize and complete the live PayMongo payment step.
+2. Verify both incoming sources under the same event in Meta Test Events and confirm Ads reporting counts one after refresh/reopen/webhook retry.
+3. Meta account access is required to inspect and disable any automatic Purchase configured through Event Setup Tool, GTM, a partner integration, or another dataset source if a third event remains.
+4. Recommendation number 3 remains intentionally unresolved and unchanged.
 
 ## Final Status
 
-**Not Fixed** — the code, database migration, automated deduplication tests, and production data diagnosis are complete, but the required live COD and live PayMongo Meta Test Events acceptance tests have not yet both passed. This status must not be changed to Fixed until those two tests are complete.
+**Not Fixed** — the production code, migrations, database/outbox proof, and live COD refresh/reopen test pass. The required successful post-fix PayMongo payment and Meta Test Events/Ads reporting confirmation still need owner-controlled access, so the report intentionally remains Not Fixed.
