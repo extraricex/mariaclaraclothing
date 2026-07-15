@@ -135,6 +135,16 @@ function importedOrder(normalized, now) {
   };
 }
 
+function mergeNonBlankFields(existing = {}, incoming = {}) {
+  const merged = { ...(existing || {}) };
+  for (const [key, value] of Object.entries(incoming || {})) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' && !value.trim()) continue;
+    merged[key] = value;
+  }
+  return merged;
+}
+
 function inboundOrderPatch(normalized, existing = {}) {
   const patch = {
     status: normalized.status,
@@ -160,8 +170,11 @@ function inboundOrderPatch(normalized, existing = {}) {
       : normalized.paymentStatus;
   } else {
     Object.assign(patch, {
-      customer: normalized.customer,
-      address: normalized.address,
+      // Pancake list/status responses are sometimes partial. Preserve the
+      // last complete native-POS customer/address fields instead of replacing
+      // them with blanks from a status-only response.
+      customer: mergeNonBlankFields(existing.customer, normalized.customer),
+      address: mergeNonBlankFields(existing.address, normalized.address),
       items: normalized.items,
       subtotalCents: normalized.subtotalCents,
       discountTotalCents: normalized.discountTotalCents,

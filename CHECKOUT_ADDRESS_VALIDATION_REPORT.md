@@ -28,7 +28,7 @@ The fix introduces one backend delivery-details module that normalizes and valid
 - Validation schema: `apps/api/src/checkout/deliveryDetails.js` is the central server-side normalization, validation, completeness-audit, and address-formatting module. Invalid final delivery data returns HTTP 422 with `success: false`, code `INCOMPLETE_DELIVERY_ADDRESS`, a safe message, and a field-error object. Address-guide errors retain the existing safe `address_invalid` contract and also include field errors.
 - Database result: Every new order stores separate name fields, normalized phone, structured address fields, optional ZIP Code, aliases needed by current consumers, and one backend-generated `formattedFullAddress`/`addressLine`.
 - Bypass result: A quote request with blank street/barangay/city/province was rejected before an order existed; a direct fake-order request created no order; stock remained unchanged; no Pancake, email, or Meta side effect ran.
-- Test result: Full backend suite passed 467 tests with 0 failures and 2 opt-in PostgreSQL tests skipped by the standard command. The checkout PostgreSQL concurrency test was then run separately with `TEST_POSTGRES_URL` and passed 2/2.
+- Test result: Full backend suite passed 468 tests with 0 failures and 2 opt-in PostgreSQL tests skipped by the standard command. The checkout PostgreSQL concurrency test was then run separately with `TEST_POSTGRES_URL` and passed 2/2.
 
 ## Delivery Notes Removal
 
@@ -59,10 +59,10 @@ The fix introduces one backend delivery-details module that normalizes and valid
 
 ## Existing Incomplete Orders
 
-- Number found: 18 of 22 production orders were missing structured barangay/city/province values at audit time. All 18 were already Cancelled; zero active orders were found with incomplete delivery information.
+- Number found: 60 of 64 production orders were missing one or more structured delivery fields after the post-deploy Pancake history synchronization. The status breakdown was 34 Cancelled, 23 Delivered, and 3 Returned. None was in Received, Confirmed, Packing, or Shipped status.
 - Admin warning/filter added: Yes. Orders now expose a “Missing Delivery Information” count/filter and badge. Order Details lists the exact missing fields and displays “Incomplete delivery address — contact the customer before processing this order.”
 - Status protection: Confirmed, Packing, Shipped, and Delivered transitions are rejected until the address is complete. Cancellation remains available.
-- Manual action required: Do not invent data. The 18 cancelled historical orders need no fulfillment action. If any is ever reviewed or replaced, an authorized admin must contact the customer and enter real information.
+- Manual action required: Do not invent data. These are historical/terminal orders and need no new fulfillment action. If any must be reprocessed or used for a replacement shipment, an authorized admin must contact the customer and enter real structured information first.
 - Audit artifact: `apps/api/scripts/audit-incomplete-delivery.sql` is read-only and returns order number, status, and missing-field names without customer PII.
 
 ## Mobile Testing
@@ -72,6 +72,7 @@ Result: Passed at 320px, 360px, 390px, 430px, and 768px. The form and error mess
 ## Remaining Issues
 
 - No real PayMongo charge or production Pancake mutation was created for this validation test. Provider calls were deliberately mocked or blocked before dispatch; their live credentials and normal integrations were not changed.
+- Historical Pancake records often contain only a provider-formatted address, not separate barangay/city/province fields. They remain visible with admin warnings and are not silently backfilled. Partial Pancake status responses now preserve any complete structured delivery fields already stored.
 - The project has no configured `lint` or `typecheck` package scripts. JavaScript syntax checks, the production Vite build, backend tests, PostgreSQL integration tests, and targeted Playwright tests were used instead.
 - The broader pre-existing Playwright suite contains unrelated development-server/product-fixture assertions; the checkout-address suite itself passed 3/3.
 

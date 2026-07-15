@@ -112,6 +112,50 @@ test('Pancake status updates preserve authoritative website totals and PayMongo 
   assert.equal(updated.customer.phone, '09171234567');
 });
 
+test('partial Pancake status updates preserve complete native POS delivery fields', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'PNK-COMPLETE',
+    checkoutChannel: 'pancake_pos',
+    status: 'confirmed',
+    fulfillmentStatus: 'unfulfilled',
+    deliveryStatus: 'pending',
+    paymentStatus: 'cod_pending',
+    ...completeDelivery(),
+    items: [],
+    tags: ['pancake-pos']
+  });
+  await syncRepo.upsertOrderLink({
+    orderNumber: 'PNK-COMPLETE',
+    pancakeOrderId: 'PK-COMPLETE',
+    syncStatus: 'synced'
+  });
+
+  const result = await service.processInboundPancakeOrder({
+    pancakeOrder: {
+      id: 'PK-COMPLETE',
+      custom_id: 'PNK-COMPLETE',
+      status: 'Delivered',
+      tracking_number: 'TRACK-COMPLETE',
+      updated_at: '2026-07-15T00:00:00.000Z'
+    },
+    orderRepository: orders,
+    syncRepository: syncRepo
+  });
+
+  const updated = orders.orders.get('PNK-COMPLETE');
+  assert.equal(result.status, 'updated');
+  assert.equal(updated.status, 'delivered');
+  assert.equal(updated.customer.phone, '09171234567');
+  assert.equal(updated.address.houseAddress, '12 Test Street');
+  assert.equal(updated.address.barangay, 'BUCANDALA IV');
+  assert.equal(updated.trackingNumber, 'TRACK-COMPLETE');
+  assert.equal(updated.tags.includes('missing_delivery_information'), false);
+});
+
 test('processInboundPancakeOrder imports native Pancake orders with a deterministic number', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');
