@@ -18,19 +18,34 @@ function contentId(item = {}) {
   return String(item.externalPosVariantId || item.variantId || item.sku || item.id || item.productId || '').trim();
 }
 
+function normalizeMetaValue(amount) {
+  const normalized = typeof amount === 'number'
+    ? amount
+    : Number(String(amount ?? '').replace(/[₱,\s]/g, ''));
+  if (!Number.isFinite(normalized) || normalized <= 0) return null;
+  return Number(normalized.toFixed(2));
+}
+
+function centavosToMetaPesos(amountInCentavos) {
+  const raw = typeof amountInCentavos === 'number'
+    ? amountInCentavos
+    : String(amountInCentavos ?? '').trim();
+  if (typeof raw === 'string' && !/^\d+$/.test(raw)) return null;
+  const cents = Number(raw);
+  if (!Number.isInteger(cents) || cents <= 0) return null;
+  return normalizeMetaValue(cents / 100);
+}
+
 function moneyValue(cents) {
-  return Number((Number(cents || 0) / 100).toFixed(2));
+  return centavosToMetaPesos(cents);
 }
 
 function purchaseValue(totalCents) {
-  const cents = Number(totalCents);
-  if (!Number.isInteger(cents) || cents <= 0) return null;
-  const value = Number((cents / 100).toFixed(2));
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return centavosToMetaPesos(totalCents);
 }
 
 function metaPurchaseEventId(order = {}) {
-  const orderId = String(order.id || order.orderNumber || '').trim();
+  const orderId = String(order.orderNumber || order.id || '').trim();
   return orderId ? `purchase_${orderId}` : '';
 }
 
@@ -61,19 +76,22 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
   const eventId = metaPurchaseEventId(order);
   if (value === null || !eventId) return null;
 
-  const items = (Array.isArray(order?.items) ? order.items : [])
+  const sourceItems = Array.isArray(order?.items) ? order.items : [];
+  const items = sourceItems
     .map((item) => {
       const quantity = Number(item.quantity);
       const unitPriceCents = Number(item.unitPriceCents);
+      const id = contentId(item);
+      const itemPrice = Number.isInteger(unitPriceCents) ? moneyValue(unitPriceCents) : null;
+      if (!id || !Number.isInteger(quantity) || quantity <= 0 || itemPrice === null) return null;
       return {
-        id: contentId(item),
-        quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 0,
-        item_price: Number.isInteger(unitPriceCents) && unitPriceCents >= 0
-          ? moneyValue(unitPriceCents)
-          : null
+        id,
+        quantity,
+        item_price: itemPrice
       };
     })
-    .filter((item) => item.id && item.quantity > 0 && Number.isFinite(item.item_price));
+    .filter(Boolean);
+  if (!sourceItems.length || items.length !== sourceItems.length) return null;
   const email = normalizeEmailForMeta(order?.customer?.email);
   const phone = normalizePhoneForMeta(order?.customer?.phone);
   const userData = {};
@@ -113,8 +131,7 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
 }
 
 function logMetaPurchaseDevelopment(logger, { order, event, browserPixelSent = 'reported_by_browser', conversionsApiSent = false, reason = '' }) {
-  if (process.env.NODE_ENV !== 'development') return;
-  logger?.info?.('Meta Purchase development status.', {
+  const details = {
     orderId: String(order?.id || order?.orderNumber || ''),
     eventId: event?.event_id || metaPurchaseEventId(order),
     purchaseValue: event?.custom_data?.value ?? purchaseValue(order?.totalCents),
@@ -126,13 +143,22 @@ function logMetaPurchaseDevelopment(logger, { order, event, browserPixelSent = '
     browserPixelSent,
     conversionsApiSent,
     reason
-  });
+  };
+  if (!event) {
+    logger?.warn?.('Meta Purchase not queued because its order data is invalid.', details);
+    return;
+  }
+  if (process.env.NODE_ENV === 'development') {
+    logger?.info?.('Meta Purchase development status.', details);
+  }
 }
 
 module.exports = {
   buildMetaPurchaseEvent,
+  centavosToMetaPesos,
   logMetaPurchaseDevelopment,
   metaPurchaseEventId,
+  normalizeMetaValue,
   normalizeEmailForMeta,
   normalizePhoneForMeta,
   parseMetaCookies,

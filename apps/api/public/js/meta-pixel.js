@@ -2,8 +2,10 @@
   const configuredId = String(window.MARIA_CLARA_META_PIXEL_ID || document.documentElement.dataset.metaPixelId || '').trim();
   const pixelId = configuredId && !configuredId.includes('YOUR_PIXEL_ID') ? configuredId : '';
   const currency = 'PHP';
+  const monetaryEvents = new Set(['ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase']);
 
   window.trackMetaPixelEvent = function trackMetaPixelEvent(eventName, payload = {}, eventId = '') {
+    if (monetaryEvents.has(eventName) && !hasValidMonetaryPayload(payload)) return false;
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({
       event: `meta_${String(eventName).replace(/[A-Z]/g, (letter, index) => `${index ? '_' : ''}${letter.toLowerCase()}`)}`,
@@ -12,44 +14,55 @@
       ...payload
     });
 
-    if (!pixelId || typeof window.fbq !== 'function') return;
+    if (!pixelId || typeof window.fbq !== 'function') return Boolean(window.dataLayer);
     if (eventId) window.fbq('track', eventName, payload, { eventID: eventId });
     else window.fbq('track', eventName, payload);
+    return true;
   };
 
-  window.trackMetaPixelViewContent = function trackMetaPixelViewContent(product) {
-    if (!product) return;
-    window.trackMetaPixelEvent('ViewContent', {
-      content_ids: [String(product.externalPosProductId || product.id || product.slug || '')],
+  window.trackMetaPixelViewContent = function trackMetaPixelViewContent(product, variant) {
+    if (!product) return false;
+    const item = contentItem(product, variant || product, 1);
+    if (!item) return false;
+    return window.trackMetaPixelEvent('ViewContent', {
+      content_ids: [item.id],
       content_name: product.name || '',
       content_type: 'product',
+      contents: [item],
       currency,
-      value: moneyValue(product.priceCents)
+      value: item.item_price
     });
   };
 
   window.trackMetaPixelAddToCart = function trackMetaPixelAddToCart(product, variant, quantity = 1) {
-    if (!product || !variant) return;
-    const itemQuantity = Math.max(1, Number(quantity || 1));
-    window.trackMetaPixelEvent('AddToCart', {
-      content_ids: [String(variant.externalPosVariantId || variant.id || product.id || '')],
+    const itemQuantity = Number(quantity);
+    const item = contentItem(product, variant, itemQuantity);
+    if (!product || !variant || !item) return false;
+    const value = normalizeMetaValue(item.item_price * itemQuantity);
+    if (value === null) return false;
+    return window.trackMetaPixelEvent('AddToCart', {
+      content_ids: [item.id],
       content_name: product.name || '',
       content_type: 'product',
-      contents: [contentItem(product, variant, itemQuantity)],
+      contents: [item],
       currency,
-      value: moneyValue(Number(product.priceCents || 0) * itemQuantity)
+      num_items: itemQuantity,
+      value
     });
   };
 
   window.trackMetaPixelInitiateCheckout = function trackMetaPixelInitiateCheckout(items = [], totals = {}) {
-    if (!Array.isArray(items) || !items.length) return;
-    window.trackMetaPixelEvent('InitiateCheckout', {
-      content_ids: items.map((item) => String(item.externalPosVariantId || item.variantId || item.productId || '')).filter(Boolean),
+    if (!Array.isArray(items) || !items.length) return false;
+    const contents = items.map((item) => contentItem(item, item, Number(item.quantity)));
+    const value = centavosToMetaPesos(totals.totalCents);
+    if (contents.some((item) => !item) || value === null) return false;
+    return window.trackMetaPixelEvent('InitiateCheckout', {
+      content_ids: contents.map((item) => item.id),
       content_type: 'product',
-      contents: items.map((item) => contentItem(item, item, Number(item.quantity || 1))),
+      contents,
       currency,
-      num_items: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-      value: moneyValue(totals.totalCents ?? totals.subtotalCents)
+      num_items: contents.reduce((sum, item) => sum + item.quantity, 0),
+      value
     });
   };
 
@@ -57,9 +70,11 @@
     const orderItems = Array.isArray(items) && items.length ? items : order?.items || order?.cartSnapshot || [];
     const totalCents = Number(order?.totalCents);
     const value = purchaseValue(totalCents);
-    if (!order?.orderNumber || value === null) return false;
+    if (!order?.orderNumber || value === null || !orderItems.length) return false;
     const orderNumber = order?.orderNumber || '';
     const eventId = String(order?.trackingEventId || `purchase_${orderNumber}`).trim();
+    const contents = orderItems.map((item) => contentItem(item, item, Number(item.quantity)));
+    if (!eventId || contents.some((item) => !item)) return false;
 
     if (orderNumber) {
       const purchaseKey = `maria-clara-meta-purchase-${orderNumber}`;
@@ -68,19 +83,19 @@
       } catch (_error) { /* private browsing can disable storage */ }
     }
 
-    window.trackMetaPixelEvent('Purchase', {
-      content_ids: orderItems.map((item) => String(item.externalPosVariantId || item.variantId || item.productId || '')).filter(Boolean),
+    const sent = window.trackMetaPixelEvent('Purchase', {
+      content_ids: contents.map((item) => item.id),
       content_type: 'product',
-      contents: orderItems.map((item) => contentItem(item, item, Number(item.quantity || 1))),
+      contents,
       currency,
-      num_items: orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+      num_items: contents.reduce((sum, item) => sum + item.quantity, 0),
       order_id: orderNumber,
       value
     }, eventId);
-    if (orderNumber) {
+    if (sent && orderNumber) {
       try { localStorage.setItem(`maria-clara-meta-purchase-${orderNumber}`, 'tracked'); } catch (_error) { /* no-op */ }
     }
-    return true;
+    return sent;
   };
 
   if (!pixelId) return;
@@ -114,21 +129,46 @@
   noscript.appendChild(img);
   document.head.appendChild(noscript);
 
+  function normalizeMetaValue(amount) {
+    const normalized = typeof amount === 'number'
+      ? amount
+      : Number(String(amount ?? '').replace(/[₱,\s]/g, ''));
+    if (!Number.isFinite(normalized) || normalized <= 0) return null;
+    return Number(normalized.toFixed(2));
+  }
+
+  function centavosToMetaPesos(cents) {
+    const raw = typeof cents === 'number' ? cents : String(cents ?? '').trim();
+    if (typeof raw === 'string' && !/^\d+$/.test(raw)) return null;
+    const numericCents = Number(raw);
+    if (!Number.isInteger(numericCents) || numericCents <= 0) return null;
+    return normalizeMetaValue(numericCents / 100);
+  }
+
   function moneyValue(cents) {
-    return Number((Number(cents || 0) / 100).toFixed(2));
+    return centavosToMetaPesos(cents);
   }
 
   function purchaseValue(cents) {
-    if (!Number.isInteger(cents) || cents <= 0) return null;
-    const value = Number((cents / 100).toFixed(2));
-    return Number.isFinite(value) && value > 0 ? value : null;
+    return centavosToMetaPesos(cents);
   }
 
   function contentItem(product, variant, quantity) {
+    const id = String(variant?.externalPosVariantId || variant?.variantId || variant?.id || product?.externalPosProductId || product?.productId || product?.id || '').trim();
+    const itemPrice = moneyValue(variant?.unitPriceCents ?? variant?.priceCents ?? product?.unitPriceCents ?? product?.priceCents);
+    const itemQuantity = Number(quantity);
+    if (!id || itemPrice === null || !Number.isInteger(itemQuantity) || itemQuantity <= 0) return null;
     return {
-      id: String(variant?.externalPosVariantId || variant?.variantId || variant?.id || product?.externalPosProductId || product?.productId || product?.id || ''),
-      item_price: moneyValue(product?.unitPriceCents ?? product?.priceCents),
-      quantity: Math.max(1, Number(quantity || 1))
+      id,
+      item_price: itemPrice,
+      quantity: itemQuantity
     };
+  }
+
+  function hasValidMonetaryPayload(payload) {
+    return payload?.currency === currency &&
+      typeof payload?.value === 'number' &&
+      Number.isFinite(payload.value) &&
+      payload.value > 0;
   }
 })();

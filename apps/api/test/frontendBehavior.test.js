@@ -47,10 +47,11 @@ test('Meta Pixel wrapper initializes only when configured and exposes standard e
   assert.match(pixel, /trackMetaPixelEvent\('InitiateCheckout'/);
   assert.match(pixel, /trackMetaPixelEvent\('Purchase'/);
 
-  assert.match(storefront, /trackMetaPixelViewContent\?\.\(product\)/);
+  assert.match(storefront, /trackMetaPixelViewContent\?\.\(product, selectedVariant\)/);
   assert.match(storefront, /trackMetaPixelAddToCart\?\.\(product, selectedVariant/);
-  assert.match(cart, /trackMetaPixelInitiateCheckout\?\.\(getCart\(\), cartTotals\(getCart\(\)\)/);
-  assert.match(checkout, /trackMetaPixelInitiateCheckout\?\.\(items, checkoutTotals\(items/);
+  assert.doesNotMatch(cart, /trackMetaPixelInitiateCheckout/);
+  assert.doesNotMatch(checkout, /trackMetaPixelInitiateCheckout\?\.\(items, checkoutTotals\(items/);
+  assert.match(checkout, /const totals = checkoutTotals\(currentItems, selectedShippingRegion\(\)\);\s*window\.trackMetaPixelInitiateCheckout\?\.\(currentItems, totals\)/);
   assert.match(checkout, /trackMetaPixelPurchase\?\.\(result, result\.items \|\| currentItems\)/);
   assert.match(thankYou, /trackMetaPixelPurchase\?\.\(order\)/);
   assert.match(thankYou, /!\['paid', 'cod_pending'\]\.includes\(order\.paymentStatus\)/);

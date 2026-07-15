@@ -36,21 +36,33 @@ function createMetaConversionsWorker({
       try {
         const response = await sendEvent(event.payload, { config });
         await repository.markMetaEventSent(client, event.id, { traceId: response.traceId });
-        if (process.env.NODE_ENV === 'development') {
-          logger.info?.('Meta Purchase development status.', {
-            orderId: event.aggregate_id,
-            eventId: event.event_id,
-            purchaseValue: event.payload?.custom_data?.value,
-            currency: event.payload?.custom_data?.currency,
-            paymentMethod: event.payload?.custom_data?.payment_method || '',
-            numberOfItems: event.payload?.custom_data?.num_items || 0,
-            browserPixelSent: 'reported_by_browser',
-            conversionsApiSent: true
-          });
-        }
+        logger.info?.('Meta Conversions API event accepted.', {
+          eventName: event.payload?.event_name || event.event_name,
+          eventId: event.event_id,
+          value: event.payload?.custom_data?.value,
+          currency: event.payload?.custom_data?.currency,
+          orderNumber: event.aggregate_id,
+          paymentMethod: event.payload?.custom_data?.payment_method || '',
+          numberOfItems: event.payload?.custom_data?.num_items || 0,
+          browserPixelSent: 'reported_by_browser',
+          conversionsApiSent: true,
+          metaApiStatus: response.status,
+          eventsReceived: response.eventsReceived
+        });
         result.sent += 1;
       } catch (error) {
         const message = String(error?.message || 'Meta event delivery failed').slice(0, 1000);
+        logger.warn?.('Meta Conversions API event rejected.', {
+          eventName: event.payload?.event_name || event.event_name,
+          eventId: event.event_id,
+          value: event.payload?.custom_data?.value,
+          currency: event.payload?.custom_data?.currency,
+          orderNumber: event.aggregate_id,
+          numberOfItems: event.payload?.custom_data?.num_items || 0,
+          metaApiStatus: error?.status,
+          retryable: Boolean(error?.retryable),
+          error: message
+        });
         if (error?.retryable && event.attempt_count < MAX_ATTEMPTS) {
           const nextAttemptAt = new Date(currentTime.getTime() + retryDelayMs(event.attempt_count, random));
           await repository.scheduleMetaEventRetry(client, event.id, { nextAttemptAt, error: message });

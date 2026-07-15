@@ -21,6 +21,16 @@ async function readResponseBody(response) {
   }
 }
 
+function hasValidMetaMonetaryValue(event) {
+  if (!['ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase'].includes(event?.event_name)) {
+    return true;
+  }
+  return event?.custom_data?.currency === 'PHP' &&
+    typeof event?.custom_data?.value === 'number' &&
+    Number.isFinite(event.custom_data.value) &&
+    event.custom_data.value > 0;
+}
+
 async function sendMetaConversionsEvent(event, {
   config,
   fetchImpl = globalThis.fetch,
@@ -28,6 +38,11 @@ async function sendMetaConversionsEvent(event, {
 } = {}) {
   if (!config?.pixelId || !config?.accessToken || !config?.graphApiVersion) {
     throw new MetaConversionsApiError('Meta Conversions API configuration is incomplete', {
+      retryable: false
+    });
+  }
+  if (!hasValidMetaMonetaryValue(event)) {
+    throw new MetaConversionsApiError('Meta monetary event has an invalid value or currency', {
       retryable: false
     });
   }
@@ -61,7 +76,8 @@ async function sendMetaConversionsEvent(event, {
     return {
       eventsReceived: responseBody.events_received,
       traceId: responseBody.fbtrace_id,
-      messages: responseBody.messages || []
+      messages: responseBody.messages || [],
+      status: response.status
     };
   } catch (error) {
     if (error instanceof MetaConversionsApiError) throw error;
@@ -75,4 +91,4 @@ async function sendMetaConversionsEvent(event, {
   }
 }
 
-module.exports = { MetaConversionsApiError, sendMetaConversionsEvent };
+module.exports = { MetaConversionsApiError, hasValidMetaMonetaryValue, sendMetaConversionsEvent };

@@ -1,6 +1,7 @@
 const CURRENCY = 'PHP';
 const META_SCRIPT_URL = 'https://connect.facebook.net/en_US/fbevents.js';
 const META_CONSENT_KEY = 'maria-clara-meta-tracking-consent';
+const MONETARY_EVENTS = new Set(['ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase']);
 export const META_CONSENT_EVENT = 'maria-clara-meta-consent-changed';
 let lastTrackedPagePath = '';
 let lastCheckoutEventId = '';
@@ -132,15 +133,30 @@ export function initializeFacebookMetaPixel(options = {}) {
   return consentGranted;
 }
 
+export function normalizeMetaValue(amount) {
+  const normalized = typeof amount === 'number'
+    ? amount
+    : Number(String(amount ?? '').replace(/[₱,\s]/g, ''));
+  if (!Number.isFinite(normalized) || normalized <= 0) return null;
+  return Number(normalized.toFixed(2));
+}
+
+export function centavosToMetaPesos(amountInCentavos) {
+  const raw = typeof amountInCentavos === 'number'
+    ? amountInCentavos
+    : String(amountInCentavos ?? '').trim();
+  if (typeof raw === 'string' && !/^\d+$/.test(raw)) return null;
+  const cents = Number(raw);
+  if (!Number.isInteger(cents) || cents <= 0) return null;
+  return normalizeMetaValue(cents / 100);
+}
+
 export function facebookMoneyValue(cents) {
-  return Number((Number(cents || 0) / 100).toFixed(2));
+  return centavosToMetaPesos(cents);
 }
 
 export function facebookPurchaseValue(totalCents) {
-  const cents = Number(totalCents);
-  if (!Number.isInteger(cents) || cents <= 0) return null;
-  const value = Number((cents / 100).toFixed(2));
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return centavosToMetaPesos(totalCents);
 }
 
 export function facebookContentId(item = {}) {
@@ -161,15 +177,12 @@ export function facebookContents(items = []) {
     .map((item) => {
       const quantity = Number(item.quantity);
       const unitPriceCents = Number(item.unitPriceCents ?? item.priceCents);
-      return {
-        id: facebookContentId(item),
-        quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 0,
-        item_price: Number.isInteger(unitPriceCents) && unitPriceCents >= 0
-          ? facebookMoneyValue(unitPriceCents)
-          : null
-      };
+      const id = facebookContentId(item);
+      const itemPrice = Number.isInteger(unitPriceCents) ? centavosToMetaPesos(unitPriceCents) : null;
+      if (!id || !Number.isInteger(quantity) || quantity <= 0 || itemPrice === null) return null;
+      return { id, quantity, item_price: itemPrice };
     })
-    .filter((item) => item.id && item.quantity > 0 && Number.isFinite(item.item_price));
+    .filter(Boolean);
 }
 
 export function purchaseEventId(orderNumber) {
@@ -179,9 +192,11 @@ export function purchaseEventId(orderNumber) {
 
 export function buildFacebookPurchase(order = {}, items = [], suppliedEventId = '') {
   const value = facebookPurchaseValue(order.totalCents);
-  const eventId = String(suppliedEventId || order.trackingEventId || purchaseEventId(order.id || order.orderNumber)).trim();
+  const eventId = String(suppliedEventId || order.trackingEventId || purchaseEventId(order.orderNumber || order.id)).trim();
   if (value === null || !eventId || !order.orderNumber) return null;
-  const contents = facebookContents(items);
+  const sourceItems = Array.isArray(items) ? items : [];
+  const contents = facebookContents(sourceItems);
+  if (!sourceItems.length || contents.length !== sourceItems.length) return null;
   return {
     eventId,
     payload: {
@@ -198,20 +213,29 @@ export function buildFacebookPurchase(order = {}, items = [], suppliedEventId = 
 
 export function buildFacebookViewContent(product = {}) {
   const contentId = facebookContentId(product);
+  const value = centavosToMetaPesos(product.priceCents);
+  if (!contentId || value === null) return null;
   return {
-    content_ids: contentId ? [contentId] : [],
-    content_name: String(product.name || ''),
+    content_ids: [contentId],
+    content_name: String(product.name || '').trim(),
     content_type: 'product',
     content_category: String(product.collection || ''),
     content_variant: String(product.size || ''),
-    contents: contentId ? [{ id: contentId, quantity: 1, item_price: facebookMoneyValue(product.priceCents) }] : [],
+    contents: [{ id: contentId, quantity: 1, item_price: value }],
     currency: CURRENCY,
-    value: facebookMoneyValue(product.priceCents)
+    value
   };
 }
 
 export function buildFacebookAddToCart(item = {}) {
   const contents = facebookContents([item]);
+  if (contents.length !== 1) return null;
+  const quantity = contents[0].quantity;
+  const unitPriceCents = Number(item.unitPriceCents ?? item.priceCents);
+  const value = Number.isInteger(unitPriceCents)
+    ? centavosToMetaPesos(unitPriceCents * quantity)
+    : null;
+  if (value === null) return null;
   return {
     content_ids: contents.map((content) => content.id),
     content_name: String(item.productName || item.name || ''),
@@ -220,33 +244,57 @@ export function buildFacebookAddToCart(item = {}) {
     contents,
     currency: CURRENCY,
     num_items: contents.reduce((sum, content) => sum + content.quantity, 0),
-    value: facebookMoneyValue(Number(item.unitPriceCents || item.priceCents || 0) * Number(item.quantity || 1))
+    value
   };
 }
 
 export function buildFacebookInitiateCheckout(items = [], totals = {}) {
-  const contents = facebookContents(items);
+  const sourceItems = Array.isArray(items) ? items : [];
+  const contents = facebookContents(sourceItems);
+  const value = centavosToMetaPesos(totals.totalCents);
+  if (!sourceItems.length || contents.length !== sourceItems.length || value === null) return null;
   return {
     content_ids: contents.map((content) => content.id),
     content_type: 'product',
     contents,
     currency: CURRENCY,
     num_items: contents.reduce((sum, content) => sum + content.quantity, 0),
-    value: facebookMoneyValue(totals.totalCents ?? totals.subtotalCents)
+    value
   };
 }
 
 export function buildFacebookAddPaymentInfo(items = [], totals = {}, paymentMethod = '') {
+  const checkout = buildFacebookInitiateCheckout(items, totals);
+  if (!checkout) return null;
   return {
-    ...buildFacebookInitiateCheckout(items, totals),
+    ...checkout,
     payment_type: String(paymentMethod || '')
   };
+}
+
+function hasValidMonetaryPayload(eventName, payload) {
+  if (!MONETARY_EVENTS.has(eventName)) return true;
+  return payload?.currency === CURRENCY &&
+    typeof payload?.value === 'number' &&
+    Number.isFinite(payload.value) &&
+    payload.value > 0;
 }
 
 export function trackFacebookEvent(eventName, payload = {}, options = {}) {
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
   const path = options.path ?? windowRef?.location?.pathname ?? '';
   if (runtimePixelConfig?.enabled === false || isFacebookAdminPath(path)) return false;
+  if (!hasValidMonetaryPayload(eventName, payload)) {
+    if (import.meta.env?.DEV && typeof console !== 'undefined') {
+      console.warn('Meta monetary event not sent because value or currency is invalid.', {
+        eventName,
+        eventId: String(options.eventId || ''),
+        value: payload?.value,
+        currency: payload?.currency
+      });
+    }
+    return false;
+  }
   if (!windowRef?.fbq) {
     if (runtimePixelConfig === null && pendingPixelEvents.length < 50) {
       const key = `${eventName}:${options.eventId || ''}:${JSON.stringify(payload)}`;
@@ -300,7 +348,7 @@ export function trackFacebookPageView(path, options = {}) {
 
 export function trackFacebookViewContent(product, options = {}) {
   const payload = buildFacebookViewContent(product);
-  if (!payload.content_ids.length) return false;
+  if (!payload?.content_ids.length) return false;
   const key = `${options.path || ''}:${payload.content_ids.join(',')}`;
   if (key === lastViewContentKey) return false;
   const tracked = trackFacebookEvent('ViewContent', payload, options);
@@ -310,14 +358,14 @@ export function trackFacebookViewContent(product, options = {}) {
 
 export function trackFacebookAddToCart(item, options = {}) {
   const payload = buildFacebookAddToCart(item);
-  if (!payload.content_ids.length) return false;
+  if (!payload?.content_ids.length) return false;
   return trackFacebookEvent('AddToCart', payload, options);
 }
 
 export function trackFacebookInitiateCheckout(items, totals, eventId, options = {}) {
   if (!eventId || lastCheckoutEventId === eventId) return false;
   const payload = buildFacebookInitiateCheckout(items, totals);
-  if (!payload.content_ids.length) return false;
+  if (!payload?.content_ids.length) return false;
   const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId });
   if (tracked) lastCheckoutEventId = eventId;
   return tracked;
@@ -327,7 +375,7 @@ export function trackFacebookAddPaymentInfo(items, totals, paymentMethod, eventI
   const normalizedEventId = String(eventId || '').trim();
   if (!normalizedEventId) return false;
   const payload = buildFacebookAddPaymentInfo(items, totals, paymentMethod);
-  if (!payload.content_ids.length) return false;
+  if (!payload?.content_ids.length) return false;
   const storage = options.storage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
   const storageKey = `maria-clara-facebook-${normalizedEventId}`;
   if (storage?.getItem(storageKey)) return false;
@@ -365,6 +413,7 @@ function logFacebookPurchaseDevelopment(order, eventId, items, sent, reason) {
   if (!import.meta.env?.DEV || typeof console === 'undefined') return;
   const value = facebookPurchaseValue(order?.totalCents);
   console.info('Meta Purchase development status.', {
+    eventName: 'Purchase',
     orderId: String(order?.id || order?.orderNumber || ''),
     eventId,
     purchaseValue: value,
@@ -373,6 +422,7 @@ function logFacebookPurchaseDevelopment(order, eventId, items, sent, reason) {
     numberOfItems: (Array.isArray(items) ? items : []).reduce((total, item) => total + Math.max(0, Number(item.quantity || 0)), 0),
     browserPixelSent: sent,
     conversionsApiSent: 'reported_by_server',
+    metaApiStatus: 'browser_pixel',
     reason
   });
 }

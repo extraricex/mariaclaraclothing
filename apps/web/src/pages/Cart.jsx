@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { createCheckoutQuote, fetchProducts } from '../lib/api.js';
 import { addToCart, cartQuantity, getCartSessionId, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
-import { trackFacebookAddToCart, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
+import { trackFacebookAddToCart } from '../lib/metaPixel.js';
 import { productPath } from '../lib/productUrl.js';
 
 function firstAvailableVariant(product) {
@@ -97,14 +97,6 @@ export default function Cart() {
     updateQuantity(item.variantId, Number(item.quantity) - 1);
   }
 
-  function trackCheckout() {
-    trackFacebookInitiateCheckout(
-      items,
-      quote || { subtotalCents: subtotal, totalCents: displayTotal },
-      `checkout:${getCartSessionId()}`
-    );
-  }
-
   if (!items.length) {
     return (
       <div className="customer-page mx-auto max-w-3xl px-5 py-20 text-center sm:py-24">
@@ -164,7 +156,7 @@ export default function Cart() {
         <p className="text-sm text-ink-soft">Shipping <span className="ml-4 text-base font-semibold text-ink">{quote?.freeShippingUnlocked ? 'Free' : 'Calculated at checkout'}</span></p>
         <p className="text-base font-semibold">Total <span className="ml-4 text-lg">{formatMoney(displayTotal)}</span></p>
         <p className="text-xs text-clay">Final delivery fee is confirmed after your address.</p>
-        <Link to="/checkout" className="btn-ink customer-compact-button mt-3 w-full sm:w-auto" onClick={trackCheckout}>Continue to checkout</Link>
+        <Link to="/checkout" className="btn-ink customer-compact-button mt-3 w-full sm:w-auto">Continue to checkout</Link>
       </div>
 
       {cartUpsells.length > 0 && (

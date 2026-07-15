@@ -224,7 +224,6 @@ function renderCheckoutPage() {
     trackStorefrontEvent('cart_checkout_click', {
       itemCount: getCart().reduce((sum, item) => sum + Number(item.quantity || 0), 0)
     });
-    window.trackMetaPixelInitiateCheckout?.(getCart(), cartTotals(getCart()));
   });
 
   render();

@@ -67,11 +67,6 @@ export default function Checkout() {
       navigate('/cart', { replace: true, state: { message: 'Your cart is empty. Please add an item before checking out.' } });
       return;
     }
-    trackFacebookInitiateCheckout(
-      items,
-      { subtotalCents: subtotalCents(items), totalCents: subtotalCents(items) },
-      `checkout:${getCartSessionId()}`
-    );
   }, [items, navigate]);
 
   useEffect(() => {
@@ -225,6 +220,11 @@ export default function Checkout() {
       });
       const quote = body.quote;
       if (!quote?.finalizable) throw new Error('Your checkout information is not ready for review.');
+      trackFacebookInitiateCheckout(
+        quote.items || items,
+        quote,
+        `checkout:${cartSessionId}`
+      );
       saveCheckoutReviewDraft({
         cartSessionId,
         cartFingerprint: checkoutCartFingerprint(items),

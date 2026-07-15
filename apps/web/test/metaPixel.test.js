@@ -6,6 +6,7 @@ import {
   buildFacebookInitiateCheckout,
   buildFacebookPurchase,
   buildFacebookViewContent,
+  centavosToMetaPesos,
   configureFacebookMetaPixel,
   facebookContentId,
   facebookMoneyValue,
@@ -13,11 +14,13 @@ import {
   initializeFacebookMetaPixel,
   getMetaTrackingConsent,
   metaPixelConfig,
+  normalizeMetaValue,
   purchaseEventId,
   setMetaTrackingConsent,
   shouldTrackFacebookPath,
   trackFacebookAddToCart,
   trackFacebookAddPaymentInfo,
+  trackFacebookEvent,
   trackFacebookInitiateCheckout,
   trackFacebookPageView,
   trackFacebookPurchase
@@ -26,6 +29,16 @@ import {
 test('Facebook money values convert cents to decimal PHP', () => {
   assert.equal(facebookMoneyValue(79900), 799);
   assert.equal(facebookMoneyValue(171850), 1718.5);
+  assert.equal(centavosToMetaPesos(64900), 649);
+  assert.equal(centavosToMetaPesos('129800'), 1298);
+  for (const invalid of [undefined, null, '', 0, -1, 12.5, '₱64,900', 'PHP 64900']) {
+    assert.equal(centavosToMetaPesos(invalid), null);
+  }
+  assert.equal(normalizeMetaValue('₱1,298.00'), 1298);
+  assert.equal(normalizeMetaValue(' 649 '), 649);
+  for (const invalid of [undefined, null, '', 0, -1, NaN, 'PHP 649']) {
+    assert.equal(normalizeMetaValue(invalid), null);
+  }
 });
 
 test('Facebook content IDs prefer external variant IDs', () => {
@@ -205,10 +218,45 @@ test('AddToCart and InitiateCheckout normalize variant contents', () => {
   assert.equal(add.content_variant, 'Large');
   assert.equal(add.contents[0].quantity, 2);
 
-  const checkout = buildFacebookInitiateCheckout([item, { productId: '', quantity: 1 }], { totalCents: 159800 });
-  assert.deepEqual(checkout.content_ids, ['POS-1']);
-  assert.equal(checkout.num_items, 2);
-  assert.equal(checkout.value, 1598);
+  assert.equal(buildFacebookInitiateCheckout([item, { productId: '', quantity: 1 }], { totalCents: 159800 }), null);
+  assert.equal(buildFacebookInitiateCheckout([item], { subtotalCents: 159800 }), null);
+
+  const secondItem = { sku: 'SKU-2', quantity: 1, unitPriceCents: 32400 };
+  const checkout = buildFacebookInitiateCheckout([item, secondItem], { totalCents: 192200 });
+  assert.deepEqual(checkout.content_ids, ['POS-1', 'SKU-2']);
+  assert.equal(checkout.num_items, 3);
+  assert.equal(checkout.value, 1922);
+});
+
+test('₱649 product and cart quantities send numeric peso values', () => {
+  const product = buildFacebookViewContent({ id: 'P-649', name: 'Shirt', priceCents: 64900 });
+  const quantityOne = buildFacebookAddToCart({ variantId: 'V-649', quantity: 1, unitPriceCents: 64900 });
+  const quantityTwo = buildFacebookAddToCart({ variantId: 'V-649', quantity: 2, unitPriceCents: 64900 });
+  assert.equal(product.value, 649);
+  assert.equal(quantityOne.value, 649);
+  assert.equal(quantityTwo.value, 1298);
+  for (const payload of [product, quantityOne, quantityTwo]) {
+    assert.equal(typeof payload.value, 'number');
+    assert.equal(payload.currency, 'PHP');
+  }
+});
+
+test('monetary events never dispatch a missing, string, zero, or non-PHP value', () => {
+  configureFacebookMetaPixel({ enabled: true, pixelId: '595813035761213', requireConsent: false });
+  const calls = [];
+  const windowRef = { fbq: (...args) => calls.push(args) };
+  for (const payload of [
+    { currency: 'PHP' },
+    { currency: 'PHP', value: 0 },
+    { currency: 'PHP', value: '649' },
+    { currency: 'PHP 649', value: 649 },
+    { currency: 'PHP', value: Number.NaN }
+  ]) {
+    assert.equal(trackFacebookEvent('ViewContent', payload, { windowRef, path: '/product/test' }), false);
+  }
+  assert.equal(calls.length, 0);
+  assert.equal(trackFacebookEvent('ViewContent', { currency: 'PHP', value: 649 }, { windowRef, path: '/product/test' }), true);
+  assert.equal(calls.length, 1);
 });
 
 test('AddPaymentInfo includes the selected method and dispatches once per event ID', () => {
@@ -269,9 +317,19 @@ test('Purchase remains safe when browser storage is unavailable and rejects inva
   assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-STORAGE', {
     windowRef, storage, path: '/thank-you', consent: true
   }), false);
+  assert.equal(calls.length, 0);
+
+  const validOrder = { orderNumber: 'MCC-STORAGE-VALID', totalCents: 129800 };
+  const validItems = [{ sku: 'SKU-VALID', quantity: 2, unitPriceCents: 64900 }];
+  assert.equal(trackFacebookPurchase(validOrder, validItems, 'purchase_MCC-STORAGE-VALID', {
+    windowRef, storage, path: '/thank-you', consent: true
+  }), true);
+  assert.equal(trackFacebookPurchase(validOrder, validItems, 'purchase_MCC-STORAGE-VALID', {
+    windowRef, storage, path: '/thank-you', consent: true
+  }), false);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][2].content_ids, ['SKU-VALID']);
   assert.equal(calls[0][2].num_items, 2);
-  assert.equal(calls[0][2].value, 1278);
+  assert.equal(calls[0][2].value, 1298);
   assert.equal(calls[0][2].currency, 'PHP');
 });

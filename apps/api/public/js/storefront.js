@@ -1,5 +1,5 @@
 import { getProducts, getProduct } from './api.js';
-import { addToCart, updateCartCount } from './cart.js';
+import { addToCart, getCart, updateCartCount } from './cart.js';
 import { trackStorefrontEvent } from './shell.js';
 
 const LOW_STOCK_THRESHOLD = 12;
@@ -83,7 +83,7 @@ async function renderProductPage(root) {
       productId: product.id,
       slug: product.slug
     });
-    window.trackMetaPixelViewContent?.(product);
+    window.trackMetaPixelViewContent?.(product, selectedVariant);
 
     root.querySelectorAll('[data-variant-select]').forEach((select) => {
       select.addEventListener('change', () => {
@@ -160,7 +160,21 @@ function addProductToCart(root, product, selectedVariant) {
     return false;
   }
 
-  const quantity = Math.max(1, Number(quantityInput?.value || 1));
+  const quantity = Number(quantityInput?.value);
+  const availableStock = Number(selectedVariant.stockQuantity || 0);
+  const existingQuantity = getCart()
+    .filter((item) => item.variantId === selectedVariant.id)
+    .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    status.textContent = 'Enter a valid quantity.';
+    return false;
+  }
+  if (availableStock <= 0 || existingQuantity + quantity > availableStock) {
+    status.textContent = availableStock > 0
+      ? `Only ${availableStock} available in this size.`
+      : 'This size is out of stock.';
+    return false;
+  }
 
   addToCart({
     productId: product.id,
@@ -169,7 +183,7 @@ function addProductToCart(root, product, selectedVariant) {
     productName: product.name,
     size: selectedVariant.size,
     quantity,
-    unitPriceCents: product.priceCents,
+    unitPriceCents: selectedVariant.priceCents ?? product.priceCents,
     imageUrl: product.images[0]?.url || '',
     externalPosProductId: product.externalPosProductId || '',
     externalPosVariantId: selectedVariant.externalPosVariantId || ''

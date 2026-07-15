@@ -52,6 +52,7 @@ test('Meta outbox refuses Purchase events with invalid value or currency', async
   const client = recordingClient();
   for (const customData of [
     { currency: 'PHP', value: 0 },
+    { currency: 'PHP', value: '1278' },
     { currency: 'PHP', value: Number.NaN },
     { currency: 'PHP 1278', value: 1278 },
     { value: 1278 }

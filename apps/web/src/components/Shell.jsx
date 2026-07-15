@@ -5,7 +5,7 @@ import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { createCheckoutQuote, fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { productPath } from '../lib/productUrl.js';
-import { setMetaTrackingConsent, trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
+import { setMetaTrackingConsent } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
 import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storefrontSupport.js';
@@ -182,11 +182,6 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
   const displayTotal = quote?.totalCents ?? Math.max(0, displaySubtotal - displayDiscount);
 
   function checkout() {
-    trackFacebookInitiateCheckout(
-      items,
-      quote || { subtotalCents: displaySubtotal, totalCents: displayTotal },
-      `checkout:${getCartSessionId()}`
-    );
     onClose();
   }
 

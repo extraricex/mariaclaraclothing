@@ -1,7 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { metaConfig } = require('../src/config/env');
-const { buildMetaPurchaseEvent, metaPurchaseEventId, parseMetaCookies, purchaseValue, sha256 } = require('../src/marketing/metaEvent');
+const {
+  buildMetaPurchaseEvent,
+  centavosToMetaPesos,
+  metaPurchaseEventId,
+  normalizeMetaValue,
+  parseMetaCookies,
+  purchaseValue,
+  sha256
+} = require('../src/marketing/metaEvent');
 
 test('Meta CAPI is disabled by default', () => {
   assert.deepEqual(metaConfig({}), { enabled: false });
@@ -70,12 +78,41 @@ test('Meta Purchase uses persisted totals and hashed matching data', () => {
 });
 
 test('Meta Purchase rejects invalid stored totals without constructing an event', () => {
-  const base = { orderNumber: 'MCC-invalid', placedAt: '2026-06-20T12:00:00.000Z', customer: {}, items: [] };
+  const base = {
+    orderNumber: 'MCC-invalid', placedAt: '2026-06-20T12:00:00.000Z', customer: {},
+    items: [{ sku: 'SKU-1', quantity: 1, unitPriceCents: 64900 }]
+  };
   for (const totalCents of [undefined, null, 0, -1, NaN, 'PHP 1278', '₱1,278', 12.5]) {
     assert.equal(buildMetaPurchaseEvent({ order: { ...base, totalCents } }), null);
   }
   assert.equal(purchaseValue(127800), 1278);
   assert.equal(metaPurchaseEventId({ orderNumber: 'MCC-1' }), 'purchase_MCC-1');
+  assert.equal(metaPurchaseEventId({ id: 'db-id', orderNumber: 'MCC-1' }), 'purchase_MCC-1');
+});
+
+test('Meta value normalization distinguishes peso values from stored centavos', () => {
+  assert.equal(normalizeMetaValue('₱1,298.00'), 1298);
+  assert.equal(normalizeMetaValue(649), 649);
+  assert.equal(centavosToMetaPesos(64900), 649);
+  assert.equal(centavosToMetaPesos('129800'), 1298);
+  for (const invalid of [undefined, null, '', 0, -1, 12.5, '₱64,900', 'PHP 64900']) {
+    assert.equal(centavosToMetaPesos(invalid), null);
+  }
+});
+
+test('Meta Purchase rejects missing IDs, invalid quantities, and invalid item prices', () => {
+  const base = {
+    orderNumber: 'MCC-LINES', placedAt: '2026-06-20T12:00:00.000Z', totalCents: 64900, customer: {}
+  };
+  for (const item of [
+    { quantity: 1, unitPriceCents: 64900 },
+    { sku: 'SKU-1', quantity: 0, unitPriceCents: 64900 },
+    { sku: 'SKU-1', quantity: 'one', unitPriceCents: 64900 },
+    { sku: 'SKU-1', quantity: 1, unitPriceCents: 0 },
+    { sku: 'SKU-1', quantity: 1, unitPriceCents: 'PHP 649' }
+  ]) {
+    assert.equal(buildMetaPurchaseEvent({ order: { ...base, items: [item] } }), null);
+  }
 });
 
 test('Meta Purchase omits empty optional matching values', () => {

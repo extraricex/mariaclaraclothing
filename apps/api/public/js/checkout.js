@@ -575,7 +575,6 @@ function renderCheckoutPage() {
   renderCheckoutSummary(items);
   renderRelatedProducts(items);
   updateCartCount();
-  window.trackMetaPixelInitiateCheckout?.(items, checkoutTotals(items, isCheckoutAddressReady() ? selectedShippingRegion() : 'pending_address'));
 
   summaryToggle?.addEventListener('click', () => {
     summaryPanel.hidden = !summaryPanel.hidden;
@@ -604,6 +603,7 @@ function renderCheckoutPage() {
     setCheckoutStatus(status, 'Placing your order...', 'neutral');
     setCheckoutPending(form, true);
     const totals = checkoutTotals(currentItems, selectedShippingRegion());
+    window.trackMetaPixelInitiateCheckout?.(currentItems, totals);
     const formData = new FormData(form);
     const fullName = String(formData.get('fullName') || `${formData.get('firstName') || ''} ${formData.get('lastName') || ''}`).trim();
     const contact = String(formData.get('contact') || '').trim();

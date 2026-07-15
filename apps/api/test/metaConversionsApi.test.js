@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { sendMetaConversionsEvent } = require('../src/marketing/metaConversionsApi');
 
-const event = { event_name: 'Purchase', event_id: 'purchase_MCC-1' };
+const event = {
+  event_name: 'Purchase', event_id: 'purchase_MCC-1',
+  custom_data: { value: 649, currency: 'PHP' }
+};
 const config = {
   pixelId: '595813035761213',
   accessToken: 'secret-token',
@@ -29,7 +32,7 @@ test('Meta CAPI client posts the event and maps acceptance metadata', async () =
   assert.deepEqual(body.data, [event]);
   assert.equal(body.access_token, 'secret-token');
   assert.equal(body.test_event_code, 'TEST123');
-  assert.deepEqual(result, { eventsReceived: 1, traceId: 'trace-1', messages: [] });
+  assert.deepEqual(result, { eventsReceived: 1, traceId: 'trace-1', messages: [], status: 200 });
 });
 
 test('Meta CAPI client classifies retryable and permanent errors without leaking tokens', async () => {
@@ -48,4 +51,22 @@ test('Meta CAPI client classifies retryable and permanent errors without leaking
     }),
     (error) => error.retryable === false && /invalid event/.test(error.message)
   );
+});
+
+test('Meta CAPI client never sends malformed monetary values', async () => {
+  let requests = 0;
+  const fetchImpl = async () => { requests += 1; };
+  for (const customData of [
+    { currency: 'PHP' },
+    { currency: 'PHP', value: 0 },
+    { currency: 'PHP', value: '649' },
+    { currency: 'PHP 649', value: 649 },
+    { currency: 'PHP', value: Number.NaN }
+  ]) {
+    await assert.rejects(
+      sendMetaConversionsEvent({ ...event, custom_data: customData }, { config, fetchImpl }),
+      (error) => error.retryable === false && /invalid value or currency/.test(error.message)
+    );
+  }
+  assert.equal(requests, 0);
 });
