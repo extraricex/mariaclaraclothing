@@ -3,6 +3,7 @@ const { buildMetaPurchaseEvent, logMetaPurchaseDevelopment } = require('./metaEv
 const { insertMetaPurchaseOutbox } = require('./marketingEventOutboxRepository');
 
 const BROWSER_CLAIM_LEASE_MS = 2 * 60_000;
+const PURCHASE_SUCCESSFUL_STATUSES = new Set(['received', 'confirmed', 'packed', 'shipped', 'delivered']);
 
 function metaPurchaseEligibility(order, { allowLegacyServer = false } = {}) {
   if (!order?.orderNumber) return { eligible: false, reason: 'order_missing' };
@@ -18,7 +19,7 @@ function metaPurchaseEligibility(order, { allowLegacyServer = false } = {}) {
   const paymongo = order.paymentProvider === 'paymongo' || order.paymentMethod === 'paymongo';
   if (paymongo) {
     if (paymentStatus !== 'paid') return { eligible: false, reason: 'payment_not_paid' };
-    if (status !== 'confirmed' || order.inventoryReservationStatus !== 'committed') {
+    if (!PURCHASE_SUCCESSFUL_STATUSES.has(status) || order.inventoryReservationStatus !== 'committed') {
       return { eligible: false, reason: 'order_not_committed' };
     }
     if (!Number.isInteger(Number(order.paidAmountCents)) || Number(order.paidAmountCents) !== Number(order.totalCents)) {
@@ -26,7 +27,7 @@ function metaPurchaseEligibility(order, { allowLegacyServer = false } = {}) {
     }
   } else if (order.paymentMethod !== 'cash_on_delivery') {
     return { eligible: false, reason: 'payment_method_ineligible' };
-  } else if (status !== 'confirmed' || (order.inventoryReservationStatus && order.inventoryReservationStatus !== 'committed')) {
+  } else if (!PURCHASE_SUCCESSFUL_STATUSES.has(status) || (order.inventoryReservationStatus && order.inventoryReservationStatus !== 'committed')) {
     return { eligible: false, reason: 'order_not_committed' };
   }
 

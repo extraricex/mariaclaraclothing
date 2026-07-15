@@ -97,6 +97,18 @@ test('COD browser Purchase is claimed once, completed once, and blocked on refre
   assert.equal(state.logs.filter((entry) => entry.message === 'Meta browser Purchase claimed.').length, 1);
 });
 
+test('Pancake received status remains eligible after a committed COD order is synchronized', async () => {
+  const synchronized = order({ status: 'received' });
+  assert.equal(metaPurchaseEligibility(synchronized).reason, 'eligible');
+  const state = browserDependencies(synchronized);
+  const claim = await claimBrowserMetaPurchase({
+    orderNumber: synchronized.orderNumber,
+    confirmationToken: 'confirmation-token'
+  }, state.dependencies);
+  assert.equal(claim.shouldSend, true);
+  assert.equal(claim.purchase.eventId, synchronized.metaPurchaseEventId);
+});
+
 test('PayMongo browser Purchase waits for verified paid amount and then reuses the stored event ID', async () => {
   const pending = order({
     orderNumber: 'MCC-PAYMONGO-1',
@@ -126,6 +138,9 @@ test('PayMongo browser Purchase waits for verified paid amount and then reuses t
   assert.equal(claim.shouldSend, true);
   assert.equal(claim.purchase.eventId, paid.metaPurchaseEventId);
   assert.equal(claim.purchase.payload.value, 1278);
+
+  const synchronizedPaid = { ...paid, status: 'received' };
+  assert.equal(metaPurchaseEligibility(synchronizedPaid).reason, 'eligible');
 });
 
 test('failed, legacy, uncommitted, and invalid-total orders cannot claim browser Purchase', () => {

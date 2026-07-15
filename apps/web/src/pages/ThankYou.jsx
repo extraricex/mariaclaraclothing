@@ -42,10 +42,12 @@ export default function ThankYou() {
   }, [orderNumber, confirmation]);
 
   useEffect(() => {
-    const unsuccessfulOrder = ['cancelled', 'failed', 'expired'].includes(String(order?.status || '').toLowerCase());
+    const orderStatus = String(order?.status || '').toLowerCase();
+    const unsuccessfulOrder = ['cancelled', 'failed', 'expired', 'unreachable'].includes(orderStatus);
+    const successfulOrder = ['received', 'confirmed', 'packed', 'shipped', 'delivered'].includes(orderStatus);
     const eligible = order?.paymentMethod === 'cash_on_delivery'
-      ? !unsuccessfulOrder && order.status === 'confirmed'
-      : order?.paymentMethod === 'paymongo' && order.paymentStatus === 'paid' && !unsuccessfulOrder;
+      ? !unsuccessfulOrder && successfulOrder
+      : order?.paymentMethod === 'paymongo' && order.paymentStatus === 'paid' && !unsuccessfulOrder && successfulOrder;
     if (!eligible || !confirmation?.confirmationToken || confirmation.orderNumber !== order.orderNumber) return;
 
     const attemptKey = `${order.orderNumber}:${order.paymentStatus}:${purchaseRetry}`;
