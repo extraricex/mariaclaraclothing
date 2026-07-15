@@ -880,6 +880,12 @@ async function loadOrderDetail(orderNumber) {
 }
 
 function renderOrderDetail(order) {
+  const customerFullName = String(order.customer?.fullName || '').trim();
+  const customerNameParts = customerFullName.split(/\s+/).filter(Boolean);
+  const customerFirstName = String(order.customer?.firstName || customerNameParts[0] || '').trim();
+  const customerLastName = String(
+    order.customer?.lastName || (customerNameParts.length > 1 ? customerNameParts.slice(1).join(' ') : '')
+  ).trim();
   detailRoot.innerHTML = `<article class="admin-card admin-detail-card">
     <header class="admin-card-header admin-order-detail-header">
       <button class="btn btn-outline-secondary btn-sm" type="button" data-admin-order-back>Back to orders</button>
@@ -894,8 +900,12 @@ function renderOrderDetail(order) {
         <div class="admin-card-header"><h3>Customer</h3></div>
         <div class="admin-order-edit-fields" data-admin-order-customer-fields>
           <label class="checkout-field">
-            <span>Customer name</span>
-            <input name="customerFullName" value="${escapeAttribute(order.customer?.fullName || '')}" required>
+            <span>First name</span>
+            <input name="customerFirstName" value="${escapeAttribute(customerFirstName)}" required>
+          </label>
+          <label class="checkout-field">
+            <span>Last name</span>
+            <input name="customerLastName" value="${escapeAttribute(customerLastName)}" required>
           </label>
           <label class="checkout-field">
             <span>Contact number</span>
@@ -911,10 +921,6 @@ function renderOrderDetail(order) {
       <section class="card admin-editor-section">
         <div class="admin-card-header"><h3>Delivery address</h3></div>
         <div class="admin-order-edit-fields" data-admin-order-address-fields>
-          <label class="checkout-field admin-notes-field">
-            <span>Full address shown to courier</span>
-            <textarea name="addressLine" rows="3">${escapeHtml(order.address?.addressLine || '')}</textarea>
-          </label>
           <label class="checkout-field">
             <span>Detailed address / house / street / landmark</span>
             <input name="addressHouseAddress" value="${escapeAttribute(order.address?.houseAddress || '')}" required>
@@ -937,6 +943,10 @@ function renderOrderDetail(order) {
               <select name="addressBarangay" data-admin-address-barangay data-selected-value="${escapeAttribute(order.address?.barangay || '')}" required disabled>
                 <option value="${escapeAttribute(order.address?.barangay || '')}">${escapeHtml(order.address?.barangay || 'Select city / municipality first')}</option>
               </select>
+            </label>
+            <label class="checkout-field">
+              <span>ZIP Code (optional)</span>
+              <input name="addressPostalCode" inputmode="numeric" maxlength="4" value="${escapeAttribute(order.address?.postalCode || order.address?.zipCode || '')}">
             </label>
           </div>
         </div>
@@ -1143,25 +1153,10 @@ async function hydrateAdminOrderAddressDropdowns(order) {
 }
 
 function syncAdminOrderAddressLine(form) {
-  const addressLineInput = form?.querySelector('[name="addressLine"]');
-  if (!addressLineInput) return;
-
-  addressLineInput.value = formatAdminOrderAddress({
-    houseAddress: form.querySelector('[name="addressHouseAddress"]')?.value,
-    barangay: form.querySelector('[name="addressBarangay"]')?.value,
-    city: form.querySelector('[name="addressCity"]')?.value,
-    province: form.querySelector('[name="addressProvince"]')?.value
-  });
-}
-
-function formatAdminOrderAddress(address) {
-  return [
-    address.houseAddress,
-    address.barangay,
-    address.city,
-    address.province,
-    'Philippines'
-  ].map((part) => String(part || '').trim()).filter(Boolean).join(', ');
+  // The API owns the canonical formatted address. This function remains as a
+  // change hook for the legacy admin selectors without maintaining a second
+  // editable full-address field.
+  if (!form) return;
 }
 
 async function updateSelectedOrder(event) {
@@ -1175,16 +1170,17 @@ async function updateSelectedOrder(event) {
       houseAddress: String(formData.get('addressHouseAddress') || '').trim(),
       barangay: String(formData.get('addressBarangay') || '').trim(),
       city: String(formData.get('addressCity') || '').trim(),
-      province: String(formData.get('addressProvince') || '').trim()
+      province: String(formData.get('addressProvince') || '').trim(),
+      postalCode: String(formData.get('addressPostalCode') || '').trim()
     };
-    address.addressLine = String(formData.get('addressLine') || '').trim() || formatAdminOrderAddress(address);
 
     const { order } = await adminFetch(`/api/admin/orders/${encodeURIComponent(selectedOrderNumber)}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         customer: {
-          fullName: formData.get('customerFullName'),
+          firstName: formData.get('customerFirstName'),
+          lastName: formData.get('customerLastName'),
           phone: formData.get('customerPhone'),
           email: formData.get('customerEmail')
         },

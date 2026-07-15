@@ -16,6 +16,13 @@ function memoryOrderRepo() {
   };
 }
 
+function completeDelivery() {
+  return {
+    customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567', email: '' },
+    address: { houseAddress: '12 Test Street', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE' }
+  };
+}
+
 test('processInboundPancakeOrder imports a new Pancake order once', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');
@@ -66,7 +73,8 @@ test('processInboundPancakeOrder updates linked existing order without duplicati
   });
 
   assert.equal(result.status, 'updated');
-  assert.equal(orders.orders.get('MCC-1').status, 'delivered');
+  assert.equal(orders.orders.get('MCC-1').status, 'confirmed');
+  assert.ok(orders.orders.get('MCC-1').tags.includes('missing_delivery_information'));
   assert.equal(orders.orders.size, 1);
 });
 
@@ -80,7 +88,7 @@ test('Pancake status updates preserve authoritative website totals and PayMongo 
     paymentMethod: 'paymongo', paymentStatus: 'pending_payment', status: 'pending_payment',
     subtotalCents: 64900, shippingFeeCents: 18000, discountTotalCents: 0, totalCents: 82900,
     items: [{ sku: 'SKU-S', quantity: 1 }], cartSnapshot: [{ sku: 'SKU-S', quantity: 1 }],
-    customer: {}, address: {}, fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending'
+    ...completeDelivery(), fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending'
   });
   await syncRepo.upsertOrderLink({ orderNumber: 'MCC-PAY', pancakeOrderId: 'PK-PAY', syncStatus: 'synced' });
 
@@ -100,6 +108,8 @@ test('Pancake status updates preserve authoritative website totals and PayMongo 
   assert.equal(updated.paymentMethod, 'paymongo');
   assert.equal(updated.paymentStatus, 'pending_payment');
   assert.equal(updated.status, 'confirmed');
+  assert.equal(updated.address.houseAddress, '12 Test Street');
+  assert.equal(updated.customer.phone, '09171234567');
 });
 
 test('processInboundPancakeOrder imports native Pancake orders with a deterministic number', async () => {
@@ -229,7 +239,8 @@ test('processInboundPancakeOrder syncs nested Pancake shipment tracking fields',
   assert.equal(result.status, 'updated');
   assert.equal(updated.deliveryMethod, 'J&T Express');
   assert.equal(updated.trackingNumber, 'JT-123');
-  assert.equal(updated.deliveryStatus, 'out_for_delivery');
+  assert.equal(updated.deliveryStatus, 'pending');
+  assert.ok(updated.tags.includes('missing_delivery_information'));
 });
 
 test('processInboundPancakeOrder ignores older Pancake updates for linked orders', async () => {
@@ -271,7 +282,7 @@ test('processInboundPancakeOrder matches linked orders by Pancake order ID when 
   });
 
   assert.equal(result.status, 'updated');
-  assert.equal(orders.orders.get('MCC-4').status, 'shipped');
+  assert.equal(orders.orders.get('MCC-4').status, 'confirmed');
   assert.equal(orders.orders.get('MCC-4').trackingNumber, 'TRACK-4');
 });
 
@@ -313,7 +324,7 @@ test('processOutboundOrderEvents sends due admin changes to Pancake', async () =
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');
   syncRepo.resetMemoryForTests();
   const orders = memoryOrderRepo();
-  await orders.saveOrder({ orderNumber: 'MCC-1', status: 'shipped', trackingNumber: 'TRACK-1', customer: {}, address: {}, notes: '' });
+  await orders.saveOrder({ orderNumber: 'MCC-1', status: 'shipped', trackingNumber: 'TRACK-1', ...completeDelivery(), notes: '' });
   await syncRepo.upsertOrderLink({ orderNumber: 'MCC-1', pancakeOrderId: 'PK-1', shopId: 'shop-1', syncStatus: 'pending_sync' });
   await syncRepo.enqueueSyncEvent({
     direction: 'outbound',
@@ -347,7 +358,7 @@ test('processOutboundOrderEvents maps failed orders to Pancake waiting-for-confi
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');
   syncRepo.resetMemoryForTests();
   const orders = memoryOrderRepo();
-  await orders.saveOrder({ orderNumber: 'MCC-UNSUPPORTED', status: 'failed', customer: {}, address: {}, notes: '' });
+  await orders.saveOrder({ orderNumber: 'MCC-UNSUPPORTED', status: 'failed', ...completeDelivery(), notes: '' });
   await syncRepo.enqueueSyncEvent({
     direction: 'outbound', entityType: 'order', entityId: 'MCC-UNSUPPORTED',
     orderNumber: 'MCC-UNSUPPORTED', pancakeOrderId: 'PK-UNSUPPORTED', eventKey: 'unsupported',
@@ -374,7 +385,7 @@ test('processOutboundOrderEvents retains failed updates for retry and exposes sy
   const orders = memoryOrderRepo();
   await orders.saveOrder({
     orderNumber: 'MCC-FAIL-1', status: 'cancelled', paymentMethod: 'paymongo', paymentStatus: 'paid',
-    totalCents: 72900, paidAmountCents: 72900, customer: {}, address: {}, notes: ''
+    totalCents: 72900, paidAmountCents: 72900, ...completeDelivery(), notes: ''
   });
   await syncRepo.upsertOrderLink({
     orderNumber: 'MCC-FAIL-1', pancakeOrderId: 'PK-FAIL-1', shopId: 'shop-1', syncStatus: 'pending_sync'
@@ -410,7 +421,7 @@ test('processOutboundOrderEvents reconciles an unpaid cancellation already remov
   const orders = memoryOrderRepo();
   await orders.saveOrder({
     orderNumber: 'MCC-REMOVED-1', status: 'cancelled', paymentMethod: 'paymongo',
-    paymentStatus: 'expired', customer: {}, address: {}, notes: ''
+    paymentStatus: 'expired', ...completeDelivery(), notes: ''
   });
   await syncRepo.upsertOrderLink({
     orderNumber: 'MCC-REMOVED-1', pancakeOrderId: 'PK-REMOVED-1', shopId: 'shop-1', syncStatus: 'sync_failed'

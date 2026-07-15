@@ -5,6 +5,7 @@ async function request(path, options = {}) {
     const error = new Error(body.error || 'Something went wrong.');
     error.code = body.code || '';
     error.details = body.details;
+    error.fields = body.fields || body.details?.fields || {};
     throw error;
   }
   return body;
@@ -86,8 +87,7 @@ export function buildOrderRequest(input, quoteId, idempotencyKey) {
       quoteId,
       cartSessionId: input.cartSessionId,
       customer: input.customer,
-      paymentMethod: input.paymentMethod,
-      notes: String(input.notes || '')
+      paymentMethod: input.paymentMethod
     }
   };
 }

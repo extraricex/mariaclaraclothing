@@ -1,5 +1,5 @@
 const CHECKOUT_DRAFT_KEY = 'maria-clara-checkout-review-draft';
-const CHECKOUT_DRAFT_VERSION = 2;
+const CHECKOUT_DRAFT_VERSION = 3;
 const CHECKOUT_DRAFT_TTL_MS = 2 * 60 * 60 * 1000;
 
 function browserStorage(storage) {
@@ -20,8 +20,9 @@ export function checkoutCartFingerprint(items = []) {
 export function saveCheckoutReviewDraft(value, storage) {
   const target = browserStorage(storage);
   if (!target) return null;
+  const { notes: _removedDeliveryNotes, ...safeValue } = value || {};
   const draft = {
-    ...value,
+    ...safeValue,
     version: CHECKOUT_DRAFT_VERSION,
     savedAt: Date.now()
   };

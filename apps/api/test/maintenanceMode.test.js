@@ -90,7 +90,8 @@ test('maintenance mode blocks checkout and is reversible', async () => {
     assert.equal((await putWebsite({ maintenanceMode: false })).status, 200);
 
     const after = await postOrder();
-    assert.equal(after.status, 400);
+    assert.equal(after.status, 422);
+    assert.equal((await after.json()).code, 'INCOMPLETE_DELIVERY_ADDRESS');
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);

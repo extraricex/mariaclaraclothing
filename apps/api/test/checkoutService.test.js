@@ -8,7 +8,10 @@ function fixture() {
       orderNumber: 'MCC-1',
       placedAt: '2026-06-20T12:00:00.000Z',
       totalCents: 79900,
-      customer: {},
+      customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+      address: {
+        houseAddress: '12 Test Street', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE'
+      },
       items: []
     },
     cartSessionId: 'cart-1',
@@ -71,4 +74,17 @@ test('Postgres checkout rejects an empty idempotency key', async () => {
     persistPostgresCheckout({ ...fixture(), cartSessionId: '' }, {}),
     (error) => error.status === 400 && /Cart session id/.test(error.message)
   );
+});
+
+test('Postgres checkout rejects incomplete delivery data before opening its write transaction', async () => {
+  let transactionCalls = 0;
+  const input = fixture();
+  input.persistedOrder.address.houseAddress = '   ';
+  await assert.rejects(
+    persistPostgresCheckout(input, {
+      transaction: async () => { transactionCalls += 1; }
+    }),
+    (error) => error.code === 'INCOMPLETE_DELIVERY_ADDRESS' && Boolean(error.details.fields.street)
+  );
+  assert.equal(transactionCalls, 0);
 });

@@ -7,6 +7,7 @@ import { adminProductDisplayParts, truncateAdminProductCode } from './adminProdu
 import { customerFullName, customerNameParts } from '../lib/customerName.js';
 import AdminActionMenu from './AdminActionMenu.jsx';
 import AdminConfirmDialog from './AdminConfirmDialog.jsx';
+import { checkoutDetailsErrors, formatCheckoutAddress } from '../lib/checkoutValidation.js';
 
 const ENUMS = {
   status: ['received', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled', 'returned', 'failed', 'unreachable'],
@@ -35,8 +36,6 @@ const ORDER_ACTION_STATUSES = [
   ['failed', 'Failed'],
   ['unreachable', 'Unreachable']
 ];
-
-const NOTE_TABS = ['All', 'Internal', 'Printing', 'Conversation'];
 
 function orderForm(order) {
   const customerName = customerNameParts(order.customer);
@@ -174,13 +173,12 @@ export default function OrderDetail() {
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
   const [barangays, setBarangays] = useState([]);
-  const [addressDraft, setAddressDraft] = useState({ house: '', provinceCode: '', cityCode: '', barangayCode: '' });
+  const [addressDraft, setAddressDraft] = useState({ house: '', provinceCode: '', cityCode: '', barangayCode: '', postalCode: '' });
   const [history, setHistory] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [orderProductFilter, setOrderProductFilter] = useState('');
-  const [noteTab, setNoteTab] = useState('All');
   const [jntPreview, setJntPreview] = useState(null);
   const [refundForm, setRefundForm] = useState({ amount: '', reason: 'others', notes: '' });
   const [refundSubmitting, setRefundSubmitting] = useState(false);
@@ -257,7 +255,8 @@ export default function OrderDetail() {
       house: order.address?.houseAddress || '',
       provinceCode: province?.code || '',
       cityCode: city?.code || '',
-      barangayCode: barangay?.code || ''
+      barangayCode: barangay?.code || '',
+      postalCode: order.address?.postalCode || order.address?.zipCode || ''
     });
     setEditAddress(true);
   }
@@ -278,14 +277,20 @@ export default function OrderDetail() {
         setMessage('Complete all address fields before saving.');
         return;
       }
+      if (addressDraft.postalCode.trim() && !/^\d{4}$/.test(addressDraft.postalCode.trim())) {
+        setMessage('ZIP code must contain 4 digits or be left blank.');
+        return;
+      }
       changes.address = {
-        addressLine: `${addressDraft.house.trim()}, ${barangay.name}, ${city.name}, ${province.name}, Philippines`,
         houseAddress: addressDraft.house.trim(),
+        provinceCode: province.code,
         barangay: barangay.name,
+        barangayCode: barangay.code,
         city: city.name,
+        cityCode: city.code,
         province: province.name,
         country: 'Philippines',
-        postalCode: order.address?.postalCode || ''
+        postalCode: addressDraft.postalCode.trim()
       };
     }
     setSaving(true);
@@ -305,6 +310,10 @@ export default function OrderDetail() {
   }
 
   function markAsFulfilled() {
+    if (missingDeliveryInformation) {
+      setMessage('Complete the customer’s delivery information before processing this order.');
+      return;
+    }
     setIsEditing(true);
     setForm((previous) => ({
       ...previous,
@@ -324,6 +333,10 @@ export default function OrderDetail() {
   }
 
   function setOrderStatusFromAction(nextStatus) {
+    if (missingDeliveryInformation && ['confirmed', 'packed', 'shipped', 'delivered'].includes(nextStatus)) {
+      setMessage('Complete the customer’s delivery information before processing this order.');
+      return;
+    }
     setIsEditing(true);
     setForm((previous) => {
       let fulfillmentStatus = previous.fulfillmentStatus;
@@ -522,19 +535,15 @@ export default function OrderDetail() {
     || form.status === 'shipped'
     || form.fulfillmentStatus === 'shipped'
     || form.deliveryStatus === 'out_for_delivery';
-  const addressLines = [
-    form.customer.fullName,
-    order.address?.houseAddress,
-    order.address?.barangay,
-    order.address?.city,
-    order.address?.province,
-    order.address?.country || 'Philippines',
-    form.customer.phone
-  ].filter(Boolean);
-  const fullAddress = order.address?.addressLine || addressLines.join(', ');
+  const deliveryErrors = checkoutDetailsErrors(form.customer, order.address || {});
+  const missingDeliveryInformation = Object.keys(deliveryErrors).length > 0;
+  const fullAddress = formatCheckoutAddress(order.address || {});
   const pancakeSyncDetail = order.pancakeSyncDetail || {};
   const pancakeSyncStatus = pancakeSyncDetail.syncStatus || order.pancakeSyncStatus || order.pancakeOrderSyncStatus || order.pancakeExportStatus || order.syncStatus || '';
-  const pancakeSyncLabel = pancakeSyncStatus ? titleCase(pancakeSyncStatus) : 'Not synced to Pancake POS';
+  const pancakeSyncErrorCode = pancakeSyncDetail.safeErrorCode || order.pancakeSafeErrorCode || '';
+  const pancakeSyncLabel = pancakeSyncErrorCode === 'pancake_order_delivery_incomplete'
+    ? 'Blocked — incomplete delivery address'
+    : pancakeSyncStatus ? titleCase(pancakeSyncStatus) : 'Not synced to Pancake POS';
   const pancakeProductMappingStatus = pancakeSyncDetail.productMappingStatus || (pancakeSyncDetail.pancakeOrderId ? 'Mapped by saved order link' : 'Not linked to Pancake POS');
   const pancakeInventorySyncStatus = pancakeSyncDetail.inventorySyncStatus || (pancakeSyncStatus === 'synced' ? 'Synced with order' : pancakeSyncLabel);
   const pancakePaymentSyncLabel = titleCase(pancakeSyncDetail.paymentSyncStatus || 'not_synced');
@@ -582,6 +591,15 @@ export default function OrderDetail() {
         </div>
 
         {message && <p className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-yellow)]/40 bg-[var(--admin-yellow)]/10 px-3 py-2 text-sm text-[#ffd166]" role="status">{message}</p>}
+        {missingDeliveryInformation && (
+          <section className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-red)]/55 bg-[var(--admin-red)]/12 px-4 py-3 text-sm text-[#ffb0b8]" role="alert">
+            <strong className="block">Incomplete delivery address — contact the customer before processing this order.</strong>
+            <p className="mt-1 text-xs">Complete the missing information before confirming, packing, shipping, delivering, or syncing this order to Pancake POS.</p>
+            <ul className="mt-2 list-disc pl-5 text-xs">
+              {Object.values(deliveryErrors).map((error) => <li key={error}>{error}</li>)}
+            </ul>
+          </section>
+        )}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           {orderMetricCards.map(([label, value, tone]) => (
@@ -666,7 +684,7 @@ export default function OrderDetail() {
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <span />
-                <button type="button" className="btn-ink !py-2 !text-xs" onClick={markAsFulfilled}>Mark as fulfilled</button>
+                <button type="button" className="btn-ink !py-2 !text-xs" disabled={missingDeliveryInformation} onClick={markAsFulfilled}>Mark as fulfilled</button>
               </div>
             </DetailCard>
 
@@ -714,24 +732,12 @@ export default function OrderDetail() {
               </div>
             </DetailCard>
 
-            <DetailCard title="Notes" eyebrow="Extra notes" className="xl:col-span-3">
-              <div className="flex gap-1 overflow-x-auto rounded-[var(--radius-admin)] bg-[var(--admin-panel-soft)] p-1">
-                {NOTE_TABS.map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    className={`rounded-[var(--radius-admin)] px-3 py-1.5 text-xs font-semibold ${noteTab === tab ? 'bg-[var(--admin-blue)]/18 text-[#9ecbff] shadow-sm' : 'text-[var(--admin-muted)]'}`}
-                    onClick={() => setNoteTab(tab)}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
+            <DetailCard title="Internal admin notes" eyebrow="Admin only" className="xl:col-span-3">
               <label className="mt-3 block">
-                <span className="eyebrow !text-[var(--admin-muted)]">{noteTab === 'All' ? 'Message / Checkout note' : `${noteTab} note`}</span>
-                <textarea className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" rows="5" placeholder="No note" value={form.notes} disabled={!isEditing} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, notes: e.target.value })); }} />
+                <span className="eyebrow !text-[var(--admin-muted)]">Internal note</span>
+                <textarea className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" rows="5" placeholder="Add an internal admin note" value={form.notes} disabled={!isEditing} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, notes: e.target.value })); }} />
               </label>
-              <p className="mt-2 text-xs text-[var(--admin-muted)]">Timeline comments and internal notes are saved to the order record.</p>
+              <p className="mt-2 text-xs text-[var(--admin-muted)]">Visible only to admins. This is not a customer delivery-notes field and is not sent to Pancake POS.</p>
             </DetailCard>
 
             {order.paymentMethod === 'paymongo' && (
@@ -809,11 +815,7 @@ export default function OrderDetail() {
             )}
 
             <DetailCard title="Status history" className="xl:col-span-5">
-              <label className="block">
-                <span className="eyebrow !text-[var(--admin-muted)]">Leave a comment</span>
-                <textarea className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" rows="3" placeholder="Leave a comment..." value={form.notes} disabled={!isEditing} onChange={(e) => { setIsEditing(true); setForm((previous) => ({ ...previous, notes: e.target.value })); }} />
-              </label>
-              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">Timeline</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">Timeline</p>
               <div className="mt-3 space-y-2">
                 {statusEvents.slice(0, 4).map((event) => (
                   <article key={event.id || `${event.source}-${event.createdAt}`} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-xs">
@@ -926,7 +928,6 @@ export default function OrderDetail() {
                   <InfoRow label="Province" value={fallback(order.address?.province, 'No province')} />
                   <InfoRow label="ZIP code" value={fallback(order.address?.postalCode || order.address?.zipCode, 'No ZIP code')} />
                   <InfoRow label="Estimated delivery" value={order.estimatedDeliveryAt ? new Date(order.estimatedDeliveryAt).toLocaleDateString('en-PH') : 'Not scheduled'} />
-                  <InfoRow label="Delivery notes" value={fallback(order.deliveryNotes || order.notes, 'No note')} />
                 </dl>
               ) : (
                 <div className="mt-3 space-y-3">
@@ -946,6 +947,10 @@ export default function OrderDetail() {
                     <option value="">Barangay</option>
                     {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                   </select>
+                  <label className="block">
+                    <span className="eyebrow !text-[var(--admin-muted)]">ZIP code (optional)</span>
+                    <input className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" inputMode="numeric" maxLength="4" placeholder="Optional 4-digit ZIP code" value={addressDraft.postalCode} disabled={!isEditing} onChange={(e) => setAddressDraft((d) => ({ ...d, postalCode: e.target.value.replace(/\D/g, '').slice(0, 4) }))} />
+                  </label>
                 </div>
               )}
               <div className="mt-3 border-t border-[var(--admin-line)] pt-3">
@@ -1111,7 +1116,7 @@ export default function OrderDetail() {
           <div className="flex flex-wrap gap-2">
             <Link to="/admin/orders" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]">Back to Orders</Link>
             <select className="field !w-auto !min-w-36 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" value={form.status || 'received'} onChange={(e) => setOrderStatusFromAction(e.target.value)}>
-              {ORDER_ACTION_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {ORDER_ACTION_STATUSES.map(([value, label]) => <option key={value} value={value} disabled={missingDeliveryInformation && ['confirmed', 'packed', 'shipped', 'delivered'].includes(value)}>{label}</option>)}
             </select>
             <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={markAsReturned}>Returned</button>
             <button type="button" className="btn-secondary !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !py-2 !text-xs !text-[var(--admin-text)]" onClick={() => window.print()}>Print</button>

@@ -6,6 +6,7 @@ const {
   buildPancakeOrderUpdatePayload,
   normalizePancakeOrder
 } = require('./pancakeOrderMapper');
+const { hasCompleteDeliveryInformation } = require('../../checkout/deliveryDetails');
 
 function hashObject(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
@@ -96,6 +97,7 @@ function outboundLogMessage(event, order, outcome) {
 
 function importedOrder(normalized, now) {
   const placedAt = normalized.pancakeUpdatedAt || now().toISOString();
+  const completeDelivery = hasCompleteDeliveryInformation(normalized);
   return {
     orderNumber: normalized.orderNumber,
     customer: normalized.customer,
@@ -115,16 +117,16 @@ function importedOrder(normalized, now) {
     checkoutChannel: 'pancake_pos',
     paymentMethod: normalized.paymentMethod,
     channel: 'Pancake POS',
-    status: normalized.status,
-    fulfillmentStatus: normalized.fulfillmentStatus,
+    status: completeDelivery ? normalized.status : 'received',
+    fulfillmentStatus: completeDelivery ? normalized.fulfillmentStatus : 'unfulfilled',
     paymentStatus: normalized.paymentStatus,
-    codConfirmationStatus: normalized.codConfirmationStatus,
-    deliveryStatus: normalized.deliveryStatus,
+    codConfirmationStatus: completeDelivery ? normalized.codConfirmationStatus : 'pending',
+    deliveryStatus: completeDelivery ? normalized.deliveryStatus : 'pending',
     deliveryMethod: normalized.deliveryMethod,
     trackingNumber: normalized.trackingNumber,
     estimatedDeliveryAt: normalized.estimatedDeliveryAt,
     deliveryNotes: normalized.deliveryNotes,
-    tags: ['pancake-pos'],
+    tags: completeDelivery ? ['pancake-pos'] : ['pancake-pos', 'missing_delivery_information'],
     notes: normalized.notes,
     exportedToJnt: false,
     adminEditableTotals: {},
@@ -135,8 +137,6 @@ function importedOrder(normalized, now) {
 
 function inboundOrderPatch(normalized, existing = {}) {
   const patch = {
-    customer: normalized.customer,
-    address: normalized.address,
     status: normalized.status,
     fulfillmentStatus: normalized.fulfillmentStatus,
     codConfirmationStatus: normalized.codConfirmationStatus,
@@ -147,12 +147,21 @@ function inboundOrderPatch(normalized, existing = {}) {
     deliveryNotes: normalized.deliveryNotes || existing.deliveryNotes || '',
     notes: normalized.notes || existing.notes || ''
   };
-  if (existing.checkoutChannel === 'storefront_checkout') {
+  if (['storefront_checkout', 'storefront_cart'].includes(existing.checkoutChannel)) {
+    // The website/admin database owns customer delivery details. Pancake may
+    // return partial shipping objects on status-only updates; never let those
+    // responses erase a validated storefront address or replace admin notes.
+    patch.customer = existing.customer;
+    patch.address = existing.address;
+    patch.deliveryNotes = existing.deliveryNotes || '';
+    patch.notes = existing.notes || '';
     patch.paymentStatus = existing.paymentProvider === 'paymongo'
       ? existing.paymentStatus
       : normalized.paymentStatus;
   } else {
     Object.assign(patch, {
+      customer: normalized.customer,
+      address: normalized.address,
       items: normalized.items,
       subtotalCents: normalized.subtotalCents,
       discountTotalCents: normalized.discountTotalCents,
@@ -164,6 +173,15 @@ function inboundOrderPatch(normalized, existing = {}) {
       paymentMethod: normalized.paymentMethod,
       paymentStatus: normalized.paymentStatus
     });
+  }
+  const candidate = { ...existing, ...patch };
+  if (!hasCompleteDeliveryInformation(candidate)
+    && ['confirmed', 'packed', 'shipped', 'delivered'].includes(normalized.status)) {
+    patch.status = existing.status || 'received';
+    patch.fulfillmentStatus = existing.fulfillmentStatus || 'unfulfilled';
+    patch.codConfirmationStatus = existing.codConfirmationStatus || 'pending';
+    patch.deliveryStatus = existing.deliveryStatus || 'pending';
+    patch.tags = [...new Set([...(existing.tags || []), 'missing_delivery_information'])];
   }
   return patch;
 }

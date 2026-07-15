@@ -112,6 +112,13 @@ const {
   updateIssueReport
 } = require('../issueReports/issueReportRepository');
 const { createAdminReviewsRouter } = require('./adminReviews');
+const { CommerceError } = require('../checkout/commerceError');
+const {
+  deliveryInformationIssues,
+  hasCompleteDeliveryInformation,
+  normalizeCheckoutCustomer,
+  normalizeDeliveryAddress
+} = require('../checkout/deliveryDetails');
 
 const router = express.Router();
 
@@ -1386,6 +1393,20 @@ router.patch('/orders/:orderNumber', async (req, res, next) => {
       });
       await restoreCancelledOrderStock(existingOrder, order, client ? { client } : {});
       await appendStatusEventIfChanged(existingOrder, order, 'admin', '', client ? { client } : {});
+      if ((req.body?.customer !== undefined || req.body?.address !== undefined)
+        && (JSON.stringify(existingOrder.customer || {}) !== JSON.stringify(order.customer || {})
+          || JSON.stringify(existingOrder.address || {}) !== JSON.stringify(order.address || {}))) {
+        await appendOrderStatusEvent(order.orderNumber, {
+          source: 'admin',
+          changes: {
+            deliveryInformation: {
+              from: hasCompleteDeliveryInformation(existingOrder) ? 'complete' : 'incomplete',
+              to: hasCompleteDeliveryInformation(order) ? 'complete' : 'incomplete'
+            }
+          },
+          note: 'Customer and delivery information updated by admin.'
+        }, client ? { client } : {});
+      }
       return { existingOrder, order };
     };
     const result = hasDatabaseUrl()
@@ -2130,6 +2151,8 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
     changes.tags = normalizeTags(body.tags);
   }
   if (body.notes !== undefined) {
+    // This field is admin-only. Storefront delivery notes are no longer
+    // collected and this value is never sent to Pancake POS.
     changes.notes = String(body.notes || '').trim();
   }
   if (body.parcelWeightOverrideGrams !== undefined) {
@@ -2169,6 +2192,28 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
     if (['pending_payment', 'cod_pending'].includes(String(existingOrder.paymentStatus || ''))) {
       changes.paymentStatus = 'cancelled';
     }
+  }
+
+  const candidate = { ...existingOrder, ...changes };
+  const requestedProcessing = (
+    (body.status !== undefined && ['confirmed', 'packed', 'shipped', 'delivered'].includes(candidate.status))
+    || (body.fulfillmentStatus !== undefined && ['packed', 'shipped', 'delivered'].includes(candidate.fulfillmentStatus))
+    || (body.deliveryStatus !== undefined && ['ready', 'out_for_delivery', 'delivered'].includes(candidate.deliveryStatus))
+    || (body.codConfirmationStatus !== undefined && candidate.codConfirmationStatus === 'confirmed')
+  );
+  const missingDeliveryFields = deliveryInformationIssues(candidate);
+  if (requestedProcessing && Object.keys(missingDeliveryFields).length) {
+    throw new CommerceError('Complete the customer’s delivery information before processing this order.', {
+      code: 'INCOMPLETE_DELIVERY_ADDRESS',
+      status: 409,
+      details: { fields: missingDeliveryFields }
+    });
+  }
+  if (body.customer !== undefined || body.address !== undefined) {
+    const tags = new Set(Array.isArray(changes.tags) ? changes.tags : (existingOrder.tags || []));
+    if (Object.keys(missingDeliveryFields).length) tags.add('missing_delivery_information');
+    else tags.delete('missing_delivery_information');
+    changes.tags = [...tags];
   }
 
   return changes;
@@ -2214,8 +2259,7 @@ function changedPancakeFields(previousOrder, nextOrder) {
     'paymentMethod',
     'codConfirmationStatus',
     'deliveryMethod',
-    'trackingNumber',
-    'notes'
+    'trackingNumber'
   ]) {
     if (String(previousOrder?.[field] ?? '') !== String(nextOrder?.[field] ?? '')) fields.push(field);
   }
@@ -2297,51 +2341,11 @@ async function enqueuePancakeOrderUpdateIfLinked(previousOrder, nextOrder, { syn
 }
 
 function normalizeOrderCustomerUpdate(customer) {
-  const name = normalizeCustomerName(customer);
-  const phone = String(customer?.phone || '').trim();
-
-  if (!name.firstName || !name.lastName || !phone) {
-    const error = new Error('Customer first name, last name, and contact number are required');
-    error.status = 400;
-    throw error;
-  }
-
-  return {
-    ...name,
-    phone,
-    email: customer?.email ? String(customer.email).trim() : ''
-  };
+  return normalizeCheckoutCustomer(customer);
 }
 
 function normalizeOrderAddressUpdate(address) {
-  const houseAddress = String(address?.houseAddress || '').trim();
-  const barangay = String(address?.barangay || '').trim();
-  const city = String(address?.city || '').trim();
-  const province = String(address?.province || '').trim();
-
-  if (!houseAddress || !barangay || !city || !province) {
-    const error = new Error('Detailed address, province, city, and barangay are required');
-    error.status = 400;
-    throw error;
-  }
-
-  const addressLine = String(address?.addressLine || '').trim() || [
-    houseAddress,
-    barangay,
-    city,
-    province,
-    'Philippines'
-  ].join(', ');
-
-  return {
-    addressLine,
-    houseAddress,
-    barangay,
-    city,
-    province,
-    country: String(address?.country || 'Philippines').trim(),
-    postalCode: address?.postalCode ? String(address.postalCode).trim() : ''
-  };
+  return normalizeDeliveryAddress(address);
 }
 
 function normalizeOrderItemsUpdate(items) {
@@ -2426,6 +2430,8 @@ function orderSummary(order) {
     jntExportedAt: jntExport.jntExportedAt,
     jntExportStatus: jntExport.status,
     jntMissingFields: jntExport.missingFields,
+    missingDeliveryInformation: !hasCompleteDeliveryInformation(order),
+    missingDeliveryFields: Object.keys(deliveryInformationIssues(order)),
     tags: Array.isArray(order.tags) ? order.tags : [],
     placedAt: order.placedAt
   };
@@ -2438,10 +2444,12 @@ function filterAndSortOrders(orders, input = {}) {
   const search = String(input.q || '').trim().toLowerCase();
   const dateFilter = orderDateFilter(input);
   const sort = String(input.sort || 'placed_desc').trim();
+  const missingDelivery = String(input.missingDelivery || input.missingDeliveryInformation || '').trim() === 'true';
   return orders
     .filter((order) => !status || order.status === status)
     .filter((order) => !fulfillmentStatus || order.fulfillmentStatus === fulfillmentStatus)
     .filter((order) => !paymentStatus || order.paymentStatus === paymentStatus)
+    .filter((order) => !missingDelivery || !hasCompleteDeliveryInformation(order))
     .filter((order) => !search || orderSearchText(order).includes(search))
     .filter((order) => matchesOrderDateFilter(order, dateFilter))
     .sort((a, b) => {
@@ -2460,7 +2468,8 @@ function orderListSummary(orders) {
     jntReady: orders.filter((order) => jntExportSummary(order).status === 'ready').length,
     totalSalesCents: orders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0),
     totalItems: orders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0),
-    delivered: orders.filter((order) => order.status === 'delivered' || order.fulfillmentStatus === 'delivered' || order.deliveryStatus === 'delivered').length
+    delivered: orders.filter((order) => order.status === 'delivered' || order.fulfillmentStatus === 'delivered' || order.deliveryStatus === 'delivered').length,
+    missingDeliveryInformation: orders.filter((order) => !hasCompleteDeliveryInformation(order)).length
   };
 }
 
@@ -2472,7 +2481,7 @@ function ordersCsv(orders, syncDetails = new Map()) {
     'Unit Price PHP', 'Line Total PHP', 'Subtotal PHP', 'Discount PHP', 'Shipping PHP',
     'Total PHP', 'Payment Method', 'Payment Status', 'COD Status', 'PayMongo Checkout Session ID',
     'PayMongo Payment ID', 'Paid Amount PHP', 'Paid At', 'Courier', 'Tracking Number',
-    'Notes', 'Pancake Order ID', 'Pancake Sync Status', 'Pancake Last Synced At', 'Pancake Last Error'
+    'Pancake Order ID', 'Pancake Sync Status', 'Pancake Last Synced At', 'Pancake Last Error'
   ];
   const rows = [];
   for (const order of orders) {
@@ -2490,7 +2499,7 @@ function ordersCsv(orders, syncDetails = new Map()) {
         moneyCsv(order.discountTotalCents), moneyCsv(order.shippingFeeCents), moneyCsv(order.totalCents),
         order.paymentMethod, order.paymentStatus, order.codConfirmationStatus, order.providerCheckoutSessionId || '',
         order.providerPaymentId || '', moneyCsv(order.paidAmountCents), order.paidAt || '',
-        order.deliveryMethod || '', order.trackingNumber || '', order.notes || '', sync.pancakeOrderId || '',
+        order.deliveryMethod || '', order.trackingNumber || '', sync.pancakeOrderId || '',
         sync.syncStatus || 'not_linked', sync.lastSyncedAt || '', sync.safeErrorCode || ''
       ]);
     }
@@ -2711,4 +2720,10 @@ router.delete('/discounts/:code', async (req, res, next) => {
   }
 });
 
-module.exports = { adminRouter: router, normalizeOrderUpdate, enqueuePancakeOrderUpdateIfLinked };
+module.exports = {
+  adminRouter: router,
+  enqueuePancakeOrderUpdateIfLinked,
+  filterAndSortOrders,
+  normalizeOrderUpdate,
+  orderSummary
+};

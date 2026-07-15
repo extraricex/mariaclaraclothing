@@ -1,5 +1,6 @@
 const guide = require('../../public/data/jnt-address-guide.json');
 const { CommerceError } = require('./commerceError');
+const { formatDeliveryAddress } = require('./deliveryDetails');
 
 const VISAYAS_MINDANAO = new Set([
   'AGUSAN-DEL-NORTE',
@@ -62,10 +63,17 @@ function normalizeCode(value) {
 }
 
 function invalidAddress(level, message) {
+  const fields = {
+    houseAddress: { street: 'House number and street are required.' },
+    postalCode: { postalCode: 'ZIP code must contain 4 digits when supplied.' },
+    province: { province: message },
+    city: { city: message },
+    barangay: { barangay: message }
+  }[level] || { [level]: message };
   throw new CommerceError(message, {
     code: 'address_invalid',
     status: 400,
-    details: { level }
+    details: { level, fields }
   });
 }
 
@@ -101,20 +109,25 @@ function resolveCheckoutAddress(input = {}) {
   const barangayName = String(barangay.name || '').trim();
   const doorToDoorValue = barangay.doorToDoor || guide.doorToDoor?.[barangayCode];
 
-  return {
+  const resolved = {
     houseAddress,
+    addressLine1: houseAddress,
     provinceCode,
     province: provinceName,
     cityCode,
     city: cityName,
+    municipality: cityName,
     barangayCode,
     barangay: barangayName,
     postalCode,
-    addressLine: `${houseAddress}, ${barangayName}, ${cityName}, ${provinceName}${postalCode ? ` ${postalCode}` : ''}, Philippines`,
+    zipCode: postalCode,
+    country: 'Philippines',
     doorToDoor: normalizeCode(doorToDoorValue) === 'YES',
     shippingRegion: shippingRegionForProvince(provinceCode),
     datasetVersion: String(guide.metadata?.generatedAt || '')
   };
+  const formattedFullAddress = formatDeliveryAddress(resolved);
+  return { ...resolved, addressLine: formattedFullAddress, formattedFullAddress };
 }
 
 module.exports = { resolveCheckoutAddress, shippingRegionForProvince };

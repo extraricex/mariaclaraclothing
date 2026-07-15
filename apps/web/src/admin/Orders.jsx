@@ -70,6 +70,7 @@ export default function Orders() {
   const [updatingStatus, setUpdatingStatus] = useState({});
   const [paymentStatus, setPaymentStatus] = useState('');
   const [fulfillmentStatus, setFulfillmentStatus] = useState('');
+  const [missingDelivery, setMissingDelivery] = useState(false);
   const [sort, setSort] = useState('placed_desc');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, hasPrevious: false, hasNext: false });
@@ -86,6 +87,7 @@ export default function Orders() {
     if (query) params.set('q', query);
     if (paymentStatus) params.set('paymentStatus', paymentStatus);
     if (fulfillmentStatus) params.set('fulfillmentStatus', fulfillmentStatus);
+    if (missingDelivery) params.set('missingDelivery', 'true');
     params.set('sort', sort);
     params.set('page', String(page));
     params.set('pageSize', '25');
@@ -99,7 +101,7 @@ export default function Orders() {
         setSelected((previous) => new Set([...previous].filter((orderNumber) => visible.has(orderNumber))));
       })
       .catch((err) => setMessage(err.message));
-  }, [status, dateRange, dateFrom, dateTo, query, paymentStatus, fulfillmentStatus, sort, page]);
+  }, [status, dateRange, dateFrom, dateTo, query, paymentStatus, fulfillmentStatus, missingDelivery, sort, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -122,7 +124,8 @@ export default function Orders() {
     ['Ready for J&T', listSummary?.jntReady ?? jntReady.length],
     ['Total sales', formatMoney(listSummary?.totalSalesCents ?? 0)],
     ['Items sold', listSummary?.totalItems ?? 0],
-    ['Delivered', listSummary?.delivered ?? 0]
+    ['Delivered', listSummary?.delivered ?? 0],
+    ['Missing delivery info', listSummary?.missingDeliveryInformation ?? 0]
   ];
 
   function toggle(orderNumber) {
@@ -167,7 +170,7 @@ export default function Orders() {
     try {
       await adminDownload('/api/admin/orders/export', {
         orderNumbers: selectedOrderNumbers,
-        status, dateRange, dateFrom, dateTo, q: query, paymentStatus, fulfillmentStatus, sort
+        status, dateRange, dateFrom, dateTo, q: query, paymentStatus, fulfillmentStatus, missingDelivery, sort
       }, `maria-clara-orders-${new Date().toISOString().slice(0, 10)}.csv`);
       setMessage(`${selectedOrderNumbers.length ? `${selectedOrderNumbers.length} selected` : 'Filtered'} orders exported.`);
     } catch (error) {
@@ -272,6 +275,10 @@ export default function Orders() {
         <select className="field max-w-48" value={fulfillmentStatus} onChange={(event) => { setFulfillmentStatus(event.target.value); setPage(1); }} aria-label="Fulfillment status filter">
           {FULFILLMENT_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option ? `Fulfillment: ${humanize(option)}` : 'All fulfillment statuses'}</option>)}
         </select>
+        <label className="flex min-h-11 items-center gap-2 rounded-[var(--radius-admin)] border border-[var(--admin-line)] px-3 text-xs font-semibold text-[var(--admin-muted)]">
+          <input type="checkbox" checked={missingDelivery} onChange={(event) => { setMissingDelivery(event.target.checked); setPage(1); }} />
+          Missing Delivery Information
+        </label>
         <select className="field max-w-44" value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} aria-label="Sort orders">
           {ORDER_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
@@ -319,6 +326,7 @@ export default function Orders() {
                   <Link to={`/admin/orders/${encodeURIComponent(order.orderNumber)}`} className="font-semibold text-[var(--admin-orange)] underline">
                     {order.orderNumber}
                   </Link>
+                  {order.missingDeliveryInformation && <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.08em] text-[#ff8b98]">Missing delivery info</span>}
                 </td>
                 <td className="p-3">{order.customerName}<br /><span className="text-xs text-[var(--admin-muted)]">{order.phone}</span></td>
                 <td className="p-3">{formatMoney(order.totalCents)}</td>
@@ -342,7 +350,7 @@ export default function Orders() {
                     aria-label={`Update status for ${order.orderNumber}`}
                   >
                     {STATUS_OPTIONS.filter(Boolean).map((option) => (
-                      <option key={option} value={option}>{humanize(option)}</option>
+                      <option key={option} value={option} disabled={order.missingDeliveryInformation && ['confirmed', 'packed', 'shipped', 'delivered'].includes(option)}>{humanize(option)}</option>
                     ))}
                   </select>
                 </td>

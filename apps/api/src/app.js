@@ -108,6 +108,11 @@ function errorHandler(error, req, res, _next) {
   const body = { error: error.status ? error.message : 'Something went wrong' };
   if (error.code) body.code = error.code;
   if (error.details !== undefined) body.details = error.details;
+  if (error.details?.fields && error.status) {
+    body.success = false;
+    body.message = error.message;
+    body.fields = error.details.fields;
+  }
   res.status(status).json(body);
 }
 

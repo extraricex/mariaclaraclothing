@@ -163,9 +163,12 @@ test('admin dashboard page has login order management and status controls', asyn
   assert.match(adminJs, /data-admin-copy-order-phone/);
   assert.match(adminJs, /data-admin-copy-order-address/);
   assert.match(adminJs, /data-admin-order-customer-fields/);
-  assert.match(adminJs, /name="customerFullName"/);
+  assert.match(adminJs, /name="customerFirstName"/);
+  assert.match(adminJs, /name="customerLastName"/);
   assert.match(adminJs, /name="customerPhone"/);
   assert.match(adminJs, /name="addressHouseAddress"/);
+  assert.match(adminJs, /name="addressPostalCode"/);
+  assert.doesNotMatch(adminJs, /name="addressLine"/);
   assert.match(adminJs, /data-admin-address-province/);
   assert.match(adminJs, /data-admin-address-city/);
   assert.match(adminJs, /data-admin-address-barangay/);
@@ -173,8 +176,6 @@ test('admin dashboard page has login order management and status controls', asyn
   assert.match(adminJs, /\/data\/jnt-address-guide\.json/);
   assert.match(adminJs, /hydrateAdminOrderAddressDropdowns/);
   assert.match(adminJs, /syncAdminOrderAddressLine/);
-  assert.match(adminJs, /name="addressLine"/);
-  assert.match(adminJs, /formatAdminOrderAddress/);
   assert.match(adminJs, /selectedOrderNumbers/);
   assert.match(adminJs, /exportJntOrders/);
   assert.match(adminJs, /\/api\/admin\/orders\/export\/jnt/);
@@ -371,6 +372,8 @@ test('admin order APIs require login and support list detail and status updates'
         tags: ['confirmed', 'priority'],
         notes: 'Customer confirmed by text.',
         customer: {
+          firstName: 'Edited',
+          lastName: 'Admin Customer',
           fullName: 'Edited Admin Customer',
           phone: '+639171111111',
           email: 'edited@example.com'
@@ -396,7 +399,7 @@ test('admin order APIs require login and support list detail and status updates'
     assert.deepEqual(updateBody.order.tags, ['confirmed', 'priority']);
     assert.equal(updateBody.order.notes, 'Customer confirmed by text.');
     assert.equal(updateBody.order.customer.fullName, 'Edited Admin Customer');
-    assert.equal(updateBody.order.customer.phone, '+639171111111');
+    assert.equal(updateBody.order.customer.phone, '09171111111');
     assert.equal(updateBody.order.customer.email, 'edited@example.com');
     assert.equal(updateBody.order.address.houseAddress, '99 Edited Street');
     assert.equal(updateBody.order.address.barangay, 'BUCANDALA IV');
@@ -407,17 +410,21 @@ test('admin order APIs require login and support list detail and status updates'
     assert.deepEqual(updateBody.order.items, detailBody.order.items);
     assert.equal(updateBody.order.subtotalCents, detailBody.order.subtotalCents);
     assert.equal(updateBody.order.totalCents, detailBody.order.totalCents);
-    assert.equal(updateBody.order.statusEvents.length, 1);
-    assert.equal(updateBody.order.statusEvents[0].orderNumber, orderNumber);
-    assert.equal(updateBody.order.statusEvents[0].source, 'admin');
-    assert.equal(updateBody.order.statusEvents[0].changes.status, undefined);
-    assert.equal(updateBody.order.statusEvents[0].changes.fulfillmentStatus.from, 'unfulfilled');
-    assert.equal(updateBody.order.statusEvents[0].changes.fulfillmentStatus.to, 'packed');
-    assert.equal(updateBody.order.statusEvents[0].changes.codConfirmationStatus.from, 'pending');
-    assert.equal(updateBody.order.statusEvents[0].changes.codConfirmationStatus.to, 'confirmed');
-    assert.equal(updateBody.order.statusEvents[0].changes.deliveryStatus.from, 'pending');
-    assert.equal(updateBody.order.statusEvents[0].changes.deliveryStatus.to, 'ready');
-    assert.match(updateBody.order.statusEvents[0].createdAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(updateBody.order.statusEvents.length, 2);
+    const statusEvent = updateBody.order.statusEvents.find((event) => event.changes.fulfillmentStatus);
+    const deliveryAuditEvent = updateBody.order.statusEvents.find((event) => event.changes.deliveryInformation);
+    assert.equal(statusEvent.orderNumber, orderNumber);
+    assert.equal(statusEvent.source, 'admin');
+    assert.equal(statusEvent.changes.status, undefined);
+    assert.equal(statusEvent.changes.fulfillmentStatus.from, 'unfulfilled');
+    assert.equal(statusEvent.changes.fulfillmentStatus.to, 'packed');
+    assert.equal(statusEvent.changes.codConfirmationStatus.from, 'pending');
+    assert.equal(statusEvent.changes.codConfirmationStatus.to, 'confirmed');
+    assert.equal(statusEvent.changes.deliveryStatus.from, 'pending');
+    assert.equal(statusEvent.changes.deliveryStatus.to, 'ready');
+    assert.equal(deliveryAuditEvent.changes.deliveryInformation.from, 'complete');
+    assert.equal(deliveryAuditEvent.changes.deliveryInformation.to, 'complete');
+    assert.match(statusEvent.createdAt, /^\d{4}-\d{2}-\d{2}T/);
 
     const filteredResponse = await fetch(`http://127.0.0.1:${port}/api/admin/orders?status=confirmed`, adminRequest(loginBody.token));
     const filteredBody = await filteredResponse.json();
@@ -777,6 +784,54 @@ test('historical order line snapshots survive product rename, repricing, and arc
   }
 });
 
+test('admin cannot advance an incomplete order but can correct it or cancel it', () => {
+  const { normalizeOrderUpdate } = require('../src/routes/admin');
+  const incomplete = {
+    status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending',
+    codConfirmationStatus: 'pending', paymentMethod: 'cash_on_delivery', tags: [],
+    customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+    address: { houseAddress: '', barangay: '', city: 'IMUS', province: 'CAVITE' }
+  };
+  assert.throws(
+    () => normalizeOrderUpdate({ status: 'confirmed' }, incomplete),
+    (error) => error.code === 'INCOMPLETE_DELIVERY_ADDRESS'
+      && /before processing/i.test(error.message)
+  );
+
+  const cancelled = normalizeOrderUpdate({ status: 'cancelled' }, incomplete);
+  assert.equal(cancelled.status, 'cancelled');
+
+  const corrected = normalizeOrderUpdate({
+    customer: { firstName: 'Maria', lastName: 'Buyer', phone: '+63 917-123-4567' },
+    address: { houseAddress: '12 Test Street', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE' },
+    status: 'confirmed'
+  }, incomplete);
+  assert.equal(corrected.customer.phone, '09171234567');
+  assert.equal(corrected.address.addressLine, '12 Test Street, BUCANDALA IV, IMUS, CAVITE, Philippines');
+  assert.equal(corrected.tags.includes('missing_delivery_information'), false);
+});
+
+test('admin order summary and filter identify missing delivery information', () => {
+  const { filterAndSortOrders, orderSummary } = require('../src/routes/admin');
+  const complete = {
+    orderNumber: 'MCC-COMPLETE', placedAt: '2026-07-15T00:00:00.000Z',
+    customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+    address: { houseAddress: '12 Test', barangay: 'Bucandala IV', city: 'Imus', province: 'Cavite' },
+    items: [], tags: []
+  };
+  const incomplete = {
+    ...complete, orderNumber: 'MCC-INCOMPLETE',
+    address: { houseAddress: '', barangay: '', city: 'Imus', province: 'Cavite' }
+  };
+  assert.equal(orderSummary(complete).missingDeliveryInformation, false);
+  assert.equal(orderSummary(incomplete).missingDeliveryInformation, true);
+  assert.deepEqual(orderSummary(incomplete).missingDeliveryFields.sort(), ['barangay', 'street']);
+  assert.deepEqual(
+    filterAndSortOrders([complete, incomplete], { missingDelivery: 'true' }).map((order) => order.orderNumber),
+    ['MCC-INCOMPLETE']
+  );
+});
+
 function adminRequest(token) {
   return {
     headers: {
@@ -786,11 +841,18 @@ function adminRequest(token) {
 }
 
 async function createOrder(port, customer) {
+  const [firstName, ...lastNameParts] = customer.fullName.trim().split(/\s+/);
   const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      customer: { fullName: customer.fullName, phone: customer.phone, email: '' },
+      customer: {
+        firstName,
+        lastName: lastNameParts.join(' '),
+        fullName: customer.fullName,
+        phone: customer.phone,
+        email: ''
+      },
       address: {
         addressLine: `${customer.houseAddress}, ${customer.barangay}, ${customer.city}, ${customer.province}, Philippines`,
         houseAddress: customer.houseAddress,

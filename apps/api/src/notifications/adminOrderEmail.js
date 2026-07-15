@@ -75,7 +75,6 @@ function buildAdminNewOrderEmail(order, config = {}) {
   const email = String(order.customer?.email || '').trim() || 'Not provided';
   const phone = String(order.customer?.phone || '').trim() || 'Not provided';
   const address = completeAddress(order.address) || 'Not provided';
-  const notes = String(order.notes || '').trim() || 'None';
   const placedAt = formatDate(order.placedAt);
   const paymentMethod = readablePaymentMethod(order.paymentMethod);
   const paymentStatus = String(order.paymentStatus || 'pending').replaceAll('_', ' ');
@@ -144,7 +143,6 @@ function buildAdminNewOrderEmail(order, config = {}) {
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;line-height:1.55">
           <tr><td style="width:125px;padding:3px 0;color:#76665e">Payment method</td><td style="padding:3px 0">${escapeHtml(paymentMethod)}</td></tr>
           <tr><td style="padding:3px 0;color:#76665e">Payment status</td><td style="padding:3px 0;text-transform:capitalize">${escapeHtml(paymentStatus)}</td></tr>
-          <tr><td style="padding:3px 0;color:#76665e;vertical-align:top">Customer notes</td><td style="padding:3px 0;white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(notes)}</td></tr>
         </table>
 
         <p style="margin:24px 0 0"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#ad5f43;color:#ffffff;text-decoration:none;font-weight:bold">View order details</a></p>
@@ -172,7 +170,6 @@ function buildAdminNewOrderEmail(order, config = {}) {
     `Total: ₱${formatMoney(totalCents)}`,
     `Payment method: ${paymentMethod}`,
     `Payment status: ${paymentStatus}`,
-    `Customer notes: ${notes}`,
     `Admin order details: ${adminUrl}`
   ].join('\n');
 

@@ -1,3 +1,5 @@
+const { requireCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
+
 async function persistPostgresCheckout(input, deps) {
   const idempotencyKey = String(input.cartSessionId || '').trim();
   if (!idempotencyKey) {
@@ -6,6 +8,11 @@ async function persistPostgresCheckout(input, deps) {
     throw error;
   }
 
+  const delivery = requireCompleteDeliveryInformation({
+    customer: input.persistedOrder?.customer,
+    address: input.persistedOrder?.address
+  });
+
   return deps.transaction(async (client) => {
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [idempotencyKey]);
     const existing = await deps.findByIdempotencyKey(idempotencyKey, { client });
@@ -13,6 +20,9 @@ async function persistPostgresCheckout(input, deps) {
 
     const order = {
       ...input.persistedOrder,
+      customer: delivery.customer,
+      address: delivery.address,
+      notes: '',
       checkoutIdempotencyKey: idempotencyKey
     };
     await deps.deductStock(input.stockItems, { client });

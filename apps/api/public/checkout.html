@@ -39,9 +39,23 @@
               <h2>Contact</h2>
               <span class="checkout-disabled-action">Log in</span>
             </div>
+            <div class="checkout-field-grid">
+              <label class="checkout-field">
+                <span>First Name</span>
+                <input name="firstName" autocomplete="given-name" required>
+              </label>
+              <label class="checkout-field">
+                <span>Last Name</span>
+                <input name="lastName" autocomplete="family-name" required>
+              </label>
+            </div>
             <label class="checkout-field">
               <span>Mobile number for COD confirmation</span>
-              <input name="contact" autocomplete="tel" inputmode="tel" required>
+              <input name="phone" autocomplete="tel" inputmode="tel" placeholder="09XXXXXXXXX" required>
+            </label>
+            <label class="checkout-field">
+              <span>Email (optional)</span>
+              <input name="email" autocomplete="email" inputmode="email" type="email">
             </label>
           </section>
 
@@ -52,10 +66,6 @@
               <select name="country" autocomplete="country-name">
                 <option>Philippines</option>
               </select>
-            </label>
-            <label class="checkout-field">
-              <span>Full Name</span>
-              <input name="fullName" autocomplete="name" required>
             </label>
             <label class="checkout-field">
               <span>House Number / Street / Building / Unit</span>
@@ -81,11 +91,11 @@
                 <option value="">Select city / municipality first</option>
               </select>
             </label>
-            <p class="checkout-door-warning" data-door-to-door-warning hidden aria-live="polite"></p>
             <label class="checkout-field">
-              <span>Order Notes optional</span>
-              <textarea name="orderNotes" rows="3" placeholder="Landmark, color/size note, or delivery instruction"></textarea>
+              <span>ZIP Code (optional)</span>
+              <input name="postalCode" autocomplete="postal-code" inputmode="numeric" maxlength="4">
             </label>
+            <p class="checkout-door-warning" data-door-to-door-warning hidden aria-live="polite"></p>
           </section>
 
           <section class="checkout-card">

@@ -1,4 +1,8 @@
 const { customerFullName, normalizeCustomerName } = require('../../customers/customerName');
+const {
+  formatDeliveryAddress,
+  hasCompleteDeliveryInformation
+} = require('../../checkout/deliveryDetails');
 
 const STATUS_MAP = new Map([
   ['new', { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
@@ -60,18 +64,6 @@ const LOCAL_TO_PANCAKE_STATUS = {
   unreachable: 17
 };
 
-const SYNC_NOTE_PREFIXES = [
-  'Website order ',
-  'checkout_channel=',
-  'payment_method=',
-  'payment_status=',
-  'paid_amount=',
-  'cod_amount=',
-  'paymongo_payment_id=',
-  'paymongo_checkout_session_id=',
-  'website_status='
-];
-
 function normalizedKey(value) {
   return String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
 }
@@ -99,13 +91,6 @@ function pesosFromCents(value) {
 function noteMarker(notes, name) {
   const match = String(notes || '').match(new RegExp(`(?:^|\\n)${name}=([^\\n]*)`, 'i'));
   return String(match?.[1] || '').trim();
-}
-
-function customerNoteLines(value) {
-  return String(value || '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !SYNC_NOTE_PREFIXES.some((prefix) => line.startsWith(prefix)));
 }
 
 function isPayMongo(order = {}) {
@@ -137,7 +122,6 @@ function buildPancakePaymentPayload(order = {}) {
 function buildPancakeOrderNote(order = {}) {
   const payment = buildPancakePaymentPayload(order);
   const lines = [
-    ...customerNoteLines(order.notes),
     order.orderNumber ? `Website order ${order.orderNumber}` : '',
     `checkout_channel=${order.checkoutChannel || 'storefront_checkout'}`,
     `payment_method=${order.paymentMethod || 'cash_on_delivery'}`,
@@ -353,6 +337,11 @@ function normalizePancakeOrder(payload = {}) {
 }
 
 function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {}) {
+  if (!hasCompleteDeliveryInformation(order)) {
+    const error = new Error('Order cannot sync because the delivery address is incomplete.');
+    error.code = 'pancake_order_delivery_incomplete';
+    throw error;
+  }
   const fields = new Set(changedFields);
   const payload = {};
   if (fields.has('status') || fields.has('fulfillmentStatus') || fields.has('deliveryStatus')) {
@@ -372,12 +361,12 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
   }
   if (fields.has('address')) {
     payload.shipping_address = {
-      address: String(order.address?.houseAddress || order.address?.addressLine || '').trim(),
-      full_address: String(order.address?.addressLine || '').trim(),
+      address: String(order.address?.houseAddress || '').trim(),
+      full_address: formatDeliveryAddress(order.address),
       post_code: String(order.address?.postalCode || '').trim()
     };
   }
-  if (fields.has('notes') || fields.has('paymentStatus') || fields.has('paymentMethod') || fields.has('status')) {
+  if (fields.has('paymentStatus') || fields.has('paymentMethod') || fields.has('status')) {
     payload.note_print = buildPancakeOrderNote(order);
   }
   if (fields.has('paymentStatus') || fields.has('paymentMethod')) {

@@ -61,3 +61,25 @@ test('error handler preserves the legacy message and adds commerce fields', () =
     details: { quoteId: 'q-1' }
   });
 });
+
+test('delivery validation errors expose a structured field contract', () => {
+  const response = {
+    statusCode: 0,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; }
+  };
+  errorHandler(new CommerceError('Please complete your delivery information.', {
+    code: 'INCOMPLETE_DELIVERY_ADDRESS',
+    status: 422,
+    details: { fields: { street: 'House number and street are required.' } }
+  }), null, response, null);
+  assert.deepEqual(response.body, {
+    success: false,
+    error: 'Please complete your delivery information.',
+    message: 'Please complete your delivery information.',
+    code: 'INCOMPLETE_DELIVERY_ADDRESS',
+    fields: { street: 'House number and street are required.' },
+    details: { fields: { street: 'House number and street are required.' } }
+  });
+});

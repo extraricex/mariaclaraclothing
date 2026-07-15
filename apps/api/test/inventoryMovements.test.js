@@ -146,7 +146,7 @@ function freshInventoryRepository() {
 
 function checkoutPayload(items) {
   return {
-    customer: { fullName: 'Inventory Customer', phone: '09176660000', email: 'inventory@example.com' },
+    customer: { firstName: 'Inventory', lastName: 'Customer', fullName: 'Inventory Customer', phone: '09176660000', email: 'inventory@example.com' },
     address: {
       addressLine: '9 Inventory Street, BUCANDALA IV, IMUS, CAVITE, Philippines',
       houseAddress: '9 Inventory Street',

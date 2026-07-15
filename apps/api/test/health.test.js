@@ -111,7 +111,7 @@ test('storefront APIs run from in-project catalog only', async () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        customer: { fullName: 'Test Customer', phone: '09171234567', email: '' },
+        customer: { firstName: 'Test', lastName: 'Customer', fullName: 'Test Customer', phone: '09171234567', email: '' },
         address: {
           addressLine: '313 Pagasa Subdivision, Bucandala IV, Imus City, Cavite, Philippines',
           houseAddress: '313 Pagasa Subdivision',
@@ -181,7 +181,7 @@ test('orders reject sold out product variants from the shared catalog', async ()
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        customer: { fullName: 'Test Customer', phone: '09171234567', email: '' },
+        customer: { firstName: 'Test', lastName: 'Customer', fullName: 'Test Customer', phone: '09171234567', email: '' },
         address: {
           addressLine: '313 Pagasa Subdivision, Bucandala IV, Imus City, Cavite, Philippines',
           houseAddress: '313 Pagasa Subdivision',
@@ -225,7 +225,7 @@ test('orders reject incomplete structured shipping addresses', async () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        customer: { fullName: 'Test Customer', phone: '09171234567', email: '' },
+        customer: { firstName: 'Test', lastName: 'Customer', fullName: 'Test Customer', phone: '09171234567', email: '' },
         address: {
           addressLine: '313 Pagasa Subdivision, Imus City, Cavite, Philippines',
           houseAddress: '313 Pagasa Subdivision',
@@ -248,8 +248,11 @@ test('orders reject incomplete structured shipping addresses', async () => {
     });
     const body = await response.json();
 
-    assert.equal(response.status, 400);
-    assert.equal(body.error, 'House address, barangay, city/municipality, and province are required');
+    assert.equal(response.status, 422);
+    assert.equal(body.success, false);
+    assert.equal(body.code, 'INCOMPLETE_DELIVERY_ADDRESS');
+    assert.equal(body.message, 'Please complete your delivery information.');
+    assert.equal(body.fields.barangay, 'Barangay is required.');
   } finally {
     server.close();
   }
@@ -272,7 +275,7 @@ test('orders persist after app restart and remain fetchable by order number', as
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        customer: { fullName: 'Persistent Customer', phone: '09170000000', email: '' },
+        customer: { firstName: 'Persistent', lastName: 'Customer', fullName: 'Persistent Customer', phone: '09170000000', email: '' },
         address: {
           addressLine: '44 Sample Street, Bucandala IV, Imus City, Cavite, Philippines',
           houseAddress: '44 Sample Street',

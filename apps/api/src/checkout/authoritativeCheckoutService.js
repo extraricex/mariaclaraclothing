@@ -1,23 +1,20 @@
 const { CommerceError } = require('./commerceError');
-const { normalizeCustomerName } = require('../customers/customerName');
 const { metaPurchaseEventId } = require('../marketing/metaEvent');
+const {
+  normalizeCheckoutCustomer,
+  requireCompleteDeliveryInformation
+} = require('./deliveryDetails');
 
 function fail(message, code, status = 409, details) {
   throw new CommerceError(message, { code, status, details });
 }
 
 function normalizedRequest(input) {
-  const customerName = normalizeCustomerName(input.customer);
   return {
     quoteId: String(input.quoteId || '').trim(),
     cartSessionId: String(input.cartSessionId || '').trim(),
-    customer: {
-      ...customerName,
-      phone: String(input.customer?.phone || '').trim(),
-      email: String(input.customer?.email || '').trim().toLowerCase()
-    },
-    paymentMethod: String(input.paymentMethod || 'cash_on_delivery').trim(),
-    notes: String(input.notes || '').trim()
+    customer: normalizeCheckoutCustomer(input.customer),
+    paymentMethod: String(input.paymentMethod || 'cash_on_delivery').trim()
   };
 }
 
@@ -35,9 +32,8 @@ function manualDiscountCode(snapshot) {
   return method === 'code' ? snapshot.discountCode || '' : '';
 }
 
-function buildOrder(input, quote, orderNumber, tokenHash, now) {
+function buildOrder(input, request, quote, orderNumber, tokenHash, now) {
   const snapshot = quote.snapshot;
-  const customer = normalizedRequest(input).customer;
   const paymentMethod = String(input.paymentMethod || 'cash_on_delivery');
   return {
     orderNumber,
@@ -50,7 +46,7 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
     metaCapiPurchaseSentAt: '',
     metaPurchaseStatus: paymentMethod === 'paymongo' ? 'pending_payment' : 'eligible',
     metaPurchaseLastError: '',
-    customer,
+    customer: request.customer,
     address: snapshot.address,
     items: snapshot.items,
     subtotalCents: snapshot.subtotalCents,
@@ -82,7 +78,9 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
     deliveryMethod: 'Standard shipping',
     trackingNumber: '',
     tags: [],
-    notes: String(input.notes || '').trim(),
+    // Historical orders may retain notes in storage, but checkout no longer
+    // collects or persists customer delivery notes for new orders.
+    notes: '',
     customerAccountId: String(input.customerAccountId || ''),
     confirmationTokenHash: tokenHash,
     confirmationTokenCreatedAt: now.toISOString(),
@@ -120,8 +118,8 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     fail('Idempotency-Key must be between 16 and 200 characters.', 'idempotency_key_invalid', 400);
   }
   const request = normalizedRequest(input);
-  if (!request.quoteId || !request.cartSessionId || !request.customer.firstName || !request.customer.lastName || !request.customer.phone) {
-    fail('Quote, cart session, first name, last name, and mobile number are required.', 'checkout_invalid', 400);
+  if (!request.quoteId || !request.cartSessionId) {
+    fail('Quote and cart session are required.', 'checkout_invalid', 400);
   }
   const now = deps.now();
   const requestHash = deps.hashRequest(request);
@@ -150,10 +148,15 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     if (new Date(quote.expiresAt).getTime() <= now.getTime()) fail('Checkout quote has expired.', 'quote_expired');
     if (quote.consumedOrderNumber) fail('Checkout quote was already used.', 'quote_consumed');
 
+    const validatedDelivery = requireCompleteDeliveryInformation({
+      customer: request.customer,
+      address: quote.snapshot.address
+    });
+
     const refreshed = await deps.refreshQuote({
       cartSessionId: request.cartSessionId,
       items: quote.snapshot.items.map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
-      address: quote.snapshot.address,
+      address: validatedDelivery.address,
       discountCode: manualDiscountCode(quote.snapshot)
     }, { client });
     if (refreshed.pricingFingerprint !== quote.snapshot.pricingFingerprint) {
@@ -162,7 +165,13 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
 
     const orderNumber = deps.createOrderNumber();
     const confirmationToken = deps.deriveToken(orderNumber, idempotencyKey, deps.confirmationSecret);
-    const order = buildOrder(input, quote, orderNumber, deps.hashToken(confirmationToken), now);
+    const order = buildOrder(input, {
+      ...request,
+      customer: validatedDelivery.customer
+    }, {
+      ...quote,
+      snapshot: { ...quote.snapshot, address: validatedDelivery.address }
+    }, orderNumber, deps.hashToken(confirmationToken), now);
     const stockItems = order.items.map((item) => ({
       slug: String(item.productId).replace(/^catalog-/, ''),
       sku: item.sku,

@@ -2,6 +2,10 @@ const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
 const inventoryOutboxRepositoryDefault = require('./pancakeInventoryOutboxRepository');
 const { buildPancakeOrderNote, buildPancakePaymentPayload } = require('./pancakeOrderMapper');
 const { customerFullName } = require('../../customers/customerName');
+const {
+  formatDeliveryAddress,
+  hasCompleteDeliveryInformation
+} = require('../../checkout/deliveryDetails');
 
 class PancakeOrderExportError extends Error {
   constructor(code) {
@@ -58,23 +62,17 @@ function assertReady(readiness) {
 function shippingAddress(order) {
   const address = order.address || {};
   const customer = order.customer || {};
-  const parts = [
-    address.houseAddress || address.addressLine || '',
-    address.barangay || '',
-    address.city || '',
-    address.province || '',
-    address.country || 'Philippines'
-  ].map((part) => String(part || '').trim()).filter(Boolean);
   return {
     full_name: customerFullName(customer),
     phone_number: String(customer.phone || '').trim(),
-    address: String(address.houseAddress || address.addressLine || '').trim(),
-    full_address: String(address.addressLine || parts.join(', ')).trim(),
+    address: String(address.houseAddress || '').trim(),
+    full_address: formatDeliveryAddress(address),
     post_code: String(address.postalCode || '').trim() || null
   };
 }
 
 function buildPancakeOrderPayload(order, readiness) {
+  if (!hasCompleteDeliveryInformation(order)) block('pancake_order_delivery_incomplete');
   assertReady(readiness);
   const bySku = mappingBySku(readiness);
   const items = (order.items || []).map((item) => {

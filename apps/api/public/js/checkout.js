@@ -370,26 +370,61 @@ async function renderRelatedProducts(items) {
 }
 
 function validateCheckoutAddress(form) {
-  const missing = [];
+  form.querySelectorAll('[data-checkout-field-error]').forEach((node) => node.remove());
+  form.querySelectorAll('[aria-invalid="true"]').forEach((node) => node.removeAttribute('aria-invalid'));
+  const errors = [];
+  const firstName = String(form.elements.firstName?.value || '').trim();
+  const lastName = String(form.elements.lastName?.value || '').trim();
+  const phone = normalizeCheckoutPhone(form.elements.phone?.value);
+  const email = String(form.elements.email?.value || '').trim().toLowerCase();
   const house = String(form.querySelector('[data-house-address]')?.value || '').trim();
   const barangay = selectedOptionText(form.querySelector('[data-barangay-select]'));
   const province = selectedOptionText(form.querySelector('[data-province-select]'));
   const city = selectedOptionText(form.querySelector('[data-city-select]'));
+  const postalCode = String(form.elements.postalCode?.value || '').trim();
 
-  if (!house) missing.push('House Number / Street / Building / Unit');
-  if (!barangay) missing.push('Barangay');
-  if (!province) missing.push('Province');
-  if (!city) missing.push('City / Municipality');
+  if (!firstName) errors.push(['firstName', 'Please enter your first name.']);
+  if (!lastName) errors.push(['lastName', 'Please enter your last name.']);
+  if (!phone) errors.push(['phone', 'Please enter a valid mobile number.']);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push(['email', 'Please enter a valid email address or leave this field blank.']);
+  if (!house) errors.push(['addressLine', 'Please enter your house number and street address.']);
+  if (!barangay) errors.push(['barangay', 'Please select or enter your barangay.']);
+  if (!city) errors.push(['city', 'Please select or enter your city or municipality.']);
+  if (!province) errors.push(['province', 'Please select or enter your province.']);
+  if (postalCode && !/^\d{4}$/.test(postalCode)) errors.push(['postalCode', 'ZIP Code must contain 4 digits when provided.']);
+  errors.forEach(([name, message]) => setCheckoutFieldError(form, name, message));
 
   return {
-    valid: missing.length === 0,
-    message: missing.length ? `Complete your shipping address: ${missing.join(', ')}.` : '',
-    address: { house, barangay, province, city }
+    valid: errors.length === 0,
+    message: errors.length ? 'Please correct the highlighted delivery information before continuing.' : '',
+    customer: { firstName, lastName, fullName: `${firstName} ${lastName}`.trim(), phone, email },
+    address: { house, barangay, province, city, postalCode }
   };
 }
 
+function normalizeCheckoutPhone(value) {
+  const compact = String(value || '').trim().replace(/[\s()\-]/g, '');
+  let phone = '';
+  if (/^09\d{9}$/.test(compact)) phone = compact;
+  if (/^\+639\d{9}$/.test(compact)) phone = `0${compact.slice(3)}`;
+  if (/^639\d{9}$/.test(compact)) phone = `0${compact.slice(2)}`;
+  return phone && new Set(phone.slice(2)).size > 1 ? phone : '';
+}
+
+function setCheckoutFieldError(form, name, message) {
+  const field = form.elements[name];
+  if (!field) return;
+  field.setAttribute('aria-invalid', 'true');
+  const error = document.createElement('span');
+  error.dataset.checkoutFieldError = name;
+  error.className = 'checkout-field-error-message';
+  error.setAttribute('role', 'alert');
+  error.textContent = message;
+  field.closest('label')?.append(error);
+}
+
 function formatCheckoutAddress(address) {
-  return `${address.house}, ${address.barangay}, ${address.city}, ${address.province}, Philippines`;
+  return `${address.house}, ${address.barangay}, ${address.city}, ${address.province}${address.postalCode ? ` ${address.postalCode}` : ''}, Philippines`;
 }
 
 function refreshCheckoutCartViews(items = getCart()) {
@@ -424,7 +459,8 @@ function setCheckoutPending(form, pending) {
 
 function focusFirstInvalidCheckoutField(form) {
   const invalidField = form.querySelector(':invalid, [aria-invalid="true"]');
-  invalidField?.focus();
+  invalidField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  invalidField?.focus({ preventScroll: true });
 }
 
 function renderCheckoutSuccess(order) {
@@ -604,20 +640,10 @@ function renderCheckoutPage() {
     setCheckoutPending(form, true);
     const totals = checkoutTotals(currentItems, selectedShippingRegion());
     window.trackMetaPixelInitiateCheckout?.(currentItems, totals);
-    const formData = new FormData(form);
-    const fullName = String(formData.get('fullName') || `${formData.get('firstName') || ''} ${formData.get('lastName') || ''}`).trim();
-    const contact = String(formData.get('contact') || '').trim();
-    const phone = String(formData.get('phone') || contact).trim();
-    const email = contact.includes('@') ? contact : '';
-    const notes = String(formData.get('orderNotes') || '').trim();
     const formattedAddress = formatCheckoutAddress(addressValidation.address);
 
     const payload = {
-      customer: {
-        fullName,
-        phone,
-        email
-      },
+      customer: addressValidation.customer,
       address: {
         addressLine: formattedAddress,
         houseAddress: addressValidation.address.house,
@@ -625,14 +651,13 @@ function renderCheckoutPage() {
         city: addressValidation.address.city,
         province: addressValidation.address.province,
         country: 'Philippines',
-        postalCode: ''
+        postalCode: addressValidation.address.postalCode
       },
       shippingRegion: totals.shippingRegion,
       shippingRegionLabel: totals.shippingRegionLabel,
       freeShippingUnlocked: totals.freeShippingUnlocked,
       shippingFeeCents: totals.shippingFeeCents,
       discountTotalCents: totals.discountTotalCents,
-      notes,
       items: currentItems,
       ...checkoutAdminFields(currentItems, totals)
     };

@@ -5,10 +5,17 @@ const {
   applyPaidWebhookEvent, checkoutSessionPayload, closeCheckoutSessionForExpiry, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
 } = require('../src/payments/paymongoPaymentService');
 
+function completeDelivery() {
+  return {
+    customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567', email: 'buyer@example.com' },
+    address: { houseAddress: '12 Test Street', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE' }
+  };
+}
+
 test('PayMongo checkout payload uses the authoritative total and approved hosted channels', () => {
   const order = {
     orderNumber: 'MCC-1001', totalCents: 145800,
-    customer: { email: 'buyer@example.com' },
+    ...completeDelivery(),
     items: [{ productName: 'Oversized Shirt', size: 'M', quantity: 2 }]
   };
   const payload = checkoutSessionPayload(order, {
@@ -23,6 +30,24 @@ test('PayMongo checkout payload uses the authoritative total and approved hosted
   assert.deepEqual(attributes.payment_method_types, ['card', 'gcash', 'paymaya', 'qrph']);
   assert.equal(new URL(attributes.success_url).searchParams.get('order'), 'MCC-1001');
   assert.equal(attributes.reference_number, 'MCC-1001');
+});
+
+test('PayMongo session creation rejects incomplete delivery data before contacting the provider', () => {
+  assert.throws(
+    () => checkoutSessionPayload({
+      orderNumber: 'MCC-INCOMPLETE', totalCents: 72900,
+      customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+      address: { houseAddress: ' ', barangay: '', city: 'IMUS', province: 'CAVITE' },
+      items: [{ productName: 'Shirt', size: 'M', quantity: 1 }]
+    }, {
+      paymentMethodTypes: ['gcash'],
+      successUrl: 'https://mariaclaraclothing.com/thank-you',
+      cancelUrl: 'https://mariaclaraclothing.com/checkout'
+    }),
+    (error) => error.code === 'INCOMPLETE_DELIVERY_ADDRESS'
+      && Boolean(error.details.fields.street)
+      && Boolean(error.details.fields.barangay)
+  );
 });
 
 test('PayMongo paid event parser extracts session, payment, amount, and reference', () => {
@@ -150,6 +175,7 @@ test('verified PayMongo payment queues one admin email after the paid order upda
   const client = { id: 'payment-transaction', query: async () => ({ rowCount: 1, rows: [{ event_id: 'evt-paid' }] }) };
   const pendingOrder = {
     orderNumber: 'MCC-PAID-EMAIL', totalCents: 72900,
+    ...completeDelivery(),
     paymentMethod: 'paymongo', paymentProvider: 'paymongo', providerCheckoutSessionId: 'cs-paid',
     paymentStatus: 'pending_payment', status: 'pending_payment', inventoryReservationStatus: 'reserved',
     paymentMetadata: {}, items: []
@@ -184,4 +210,32 @@ test('verified PayMongo payment queues one admin email after the paid order upda
   });
   assert.equal(duplicate.status, 'duplicate');
   assert.equal(duplicateCalls.length, 0);
+});
+
+test('a historical incomplete PayMongo order records payment but is not confirmed or dispatched', async () => {
+  const client = { query: async () => ({ rowCount: 1, rows: [{ event_id: 'evt-incomplete' }] }) };
+  const order = {
+    orderNumber: 'MCC-INCOMPLETE-PAID', totalCents: 72900,
+    paymentMethod: 'paymongo', paymentProvider: 'paymongo', providerCheckoutSessionId: 'cs-incomplete',
+    paymentStatus: 'pending_payment', status: 'pending_payment', inventoryReservationStatus: 'reserved',
+    customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+    address: {}, paymentMetadata: {}, tags: [], items: []
+  };
+  let emailCalls = 0;
+  const result = await applyPaidWebhookEvent({
+    eventId: 'evt-incomplete', eventType: 'checkout_session.payment.paid', digest: 'digest',
+    orderNumber: order.orderNumber, checkoutSessionId: 'cs-incomplete', paymentId: 'pay-incomplete',
+    amountCents: 72900, currency: 'PHP', paymentMethodType: 'gcash', livemode: false,
+    paidAt: '2026-07-15T05:00:00.000Z'
+  }, {
+    client,
+    findOrder: async () => order,
+    updateOrderRecord: async (_orderNumber, changes) => ({ ...order, ...changes }),
+    enqueueAdminEmail: async () => { emailCalls += 1; }
+  });
+  assert.equal(result.order.paymentStatus, 'paid');
+  assert.equal(result.order.status, 'received');
+  assert.equal(result.order.paymentMetadata.deliveryInformationIncomplete, true);
+  assert.ok(result.order.tags.includes('missing_delivery_information'));
+  assert.equal(emailCalls, 0);
 });

@@ -107,7 +107,7 @@ test('PostgreSQL serializes matching checkout retries into one complete commerce
     };
     const request = {
       quoteId, cartSessionId, idempotencyKey,
-      customer: { fullName: 'Integration Customer', phone: '09171234567', email: '' },
+      customer: { firstName: 'Integration', lastName: 'Customer', fullName: 'Integration Customer', phone: '09171234567', email: '' },
       paymentMethod: 'cash_on_delivery', notes: '', requestContext: {}
     };
     const [first, retry] = await Promise.all([

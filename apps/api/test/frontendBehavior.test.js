@@ -154,7 +154,8 @@ test('checkout page recreates Shopify-style checkout and admin-ready order paylo
   assert.match(checkoutHtml, /Contact/);
   assert.match(checkoutHtml, /Delivery/);
   assert.match(checkoutHtml, /Shipping method/);
-  assert.match(checkoutHtml, /Full Name/);
+  assert.match(checkoutHtml, /First Name/);
+  assert.match(checkoutHtml, /Last Name/);
   assert.match(checkoutHtml, /House Number \/ Street \/ Building \/ Unit/);
   assert.match(checkoutHtml, /Barangay/);
   assert.match(checkoutHtml, /Province/);
@@ -166,7 +167,7 @@ test('checkout page recreates Shopify-style checkout and admin-ready order paylo
   assert.match(checkoutHtml, /data-province-select/);
   assert.match(checkoutHtml, /data-city-select/);
   assert.match(checkoutHtml, /data-door-to-door-warning/);
-  assert.match(checkoutHtml, /Order Notes optional/);
+  assert.doesNotMatch(checkoutHtml, /Delivery Notes|Order Notes/);
   assert.doesNotMatch(checkoutHtml, /data-barangay-input/);
   assert.doesNotMatch(checkoutHtml, /data-barangay-list/);
   assert.match(checkoutHtml, /data-shipping-method-price/);
@@ -223,7 +224,7 @@ test('checkout page recreates Shopify-style checkout and admin-ready order paylo
   assert.match(checkoutJs, /shippingFeeForRegion\(region\)/);
   assert.match(checkoutJs, /renderRelatedProducts/);
   assert.match(checkoutJs, /paymentMethod:\s*'cash_on_delivery'/);
-  assert.match(checkoutJs, /orderNotes/);
+  assert.doesNotMatch(checkoutJs, /orderNotes/);
   assert.match(checkoutJs, /cartSnapshot/);
   assert.match(checkoutJs, /adminEditableTotals/);
   assert.match(checkoutJs, /renderCheckoutSummary/);
@@ -567,4 +568,25 @@ test('checkout removes inactive discount UI and adds COD delivery support guidan
   assert.match(checkoutJs, /trackStorefrontEvent\('order_placed'/);
   assert.match(checkoutJs, /window\.location\.href = `\/thank-you\.html\?order=\$\{encodeURIComponent\(result\.orderNumber\)\}`/);
   assert.match(styles, /\.checkout-support-note\s*{/);
+});
+
+test('all checkout frontends require structured delivery data and omit Delivery Notes', () => {
+  const legacyHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'checkout.html'), 'utf8');
+  const legacyJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'checkout.js'), 'utf8');
+  const reactCheckout = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'pages', 'Checkout.jsx'), 'utf8');
+  const reactReview = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'pages', 'CheckoutReview.jsx'), 'utf8');
+  const api = fs.readFileSync(path.join(__dirname, '..', '..', 'web', 'src', 'lib', 'api.js'), 'utf8');
+
+  for (const source of [legacyHtml, reactCheckout, reactReview]) {
+    assert.doesNotMatch(source, /Delivery Notes|Delivery notes|orderNotes/);
+  }
+  assert.match(legacyHtml, /name="firstName"/);
+  assert.match(legacyHtml, /name="lastName"/);
+  assert.match(legacyHtml, /name="phone"/);
+  assert.match(legacyJs, /Please enter your house number and street address/);
+  assert.match(legacyJs, /scrollIntoView\(\{ behavior: 'smooth'/);
+  assert.match(reactCheckout, /normalizedCheckoutDetails/);
+  assert.match(reactCheckout, /focusMissingField/);
+  assert.match(reactReview, /Please complete your delivery information before placing your order/);
+  assert.doesNotMatch(api, /notes:\s*String\(input\.notes/);
 });

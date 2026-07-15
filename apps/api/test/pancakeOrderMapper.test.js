@@ -131,7 +131,10 @@ test('builds outbound Pancake order update payload from local order changes', ()
       deliveryMethod: 'J&T Express',
       trackingNumber: 'JNT123',
       customer: { fullName: 'Maria Customer', phone: '09171234567', email: 'buyer@example.com' },
-      address: { addressLine: '123 Street, Barangay, Makati', postalCode: '1200' },
+      address: {
+        houseAddress: '123 Street', barangay: 'Barangay One', city: 'Makati',
+        province: 'Metro Manila', addressLine: '123 Street, Barangay One, Makati, Metro Manila, Philippines', postalCode: '1200'
+      },
       notes: 'Pack carefully'
     },
     changedFields: ['status', 'trackingNumber', 'deliveryMethod', 'customer', 'address', 'notes']
@@ -140,7 +143,7 @@ test('builds outbound Pancake order update payload from local order changes', ()
   assert.equal(payload.partner.extend_code, 'JNT123');
   assert.equal(payload.shipping_partner, 'J&T Express');
   assert.equal(payload.bill_full_name, 'Maria Customer');
-  assert.match(payload.note_print, /Pack carefully/);
+  assert.doesNotMatch(payload.note_print, /Pack carefully/);
   assert.match(payload.note_print, /website_status=shipped/);
 });
 
@@ -150,7 +153,9 @@ test('builds a verified PayMongo payment update with zero COD and prepaid transf
     order: {
       orderNumber: 'MCC-PAY-1', status: 'confirmed', checkoutChannel: 'storefront_checkout',
       paymentMethod: 'paymongo', paymentStatus: 'paid', totalCents: 72900, paidAmountCents: 72900,
-      providerCheckoutSessionId: 'cs_1', providerPaymentId: 'pay_1', notes: 'Pack carefully'
+      providerCheckoutSessionId: 'cs_1', providerPaymentId: 'pay_1', notes: 'Pack carefully',
+      customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+      address: { houseAddress: '12 Test', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE' }
     },
     changedFields: ['paymentMethod', 'paymentStatus', 'status']
   });

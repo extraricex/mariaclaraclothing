@@ -5518,6 +5518,17 @@ img { display: block; width: 100%; height: auto; object-fit: cover; }
   border-color: rgb(18, 18, 18);
 }
 
+.checkout-field [aria-invalid="true"] {
+  border-color: #b42318;
+  box-shadow: 0 0 0 1px rgba(180, 35, 24, .16);
+}
+
+.checkout-field .checkout-field-error-message {
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .checkout-field textarea {
   resize: vertical;
 }

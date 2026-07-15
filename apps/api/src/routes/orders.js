@@ -42,6 +42,7 @@ const { sha256Object } = require('../checkout/requestHash');
 const { CommerceError } = require('../checkout/commerceError');
 const { customerFullName, normalizeCustomerName } = require('../customers/customerName');
 const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
+const { requireCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
 
 const { enqueueOrderExport } = pancakeOrderExportRepository;
 
@@ -89,7 +90,7 @@ legacyRouter.post('/', async (req, res, next) => {
       deliveryMethod: 'Standard shipping',
       trackingNumber: '',
       tags: [],
-      notes: order.notes || '',
+      notes: '',
       customerAccountId,
       placedAt: new Date().toISOString()
     };
@@ -218,7 +219,6 @@ function orderConfirmationPayload(order) {
     fulfillmentStatus: order.fulfillmentStatus,
     paymentStatus: order.paymentStatus,
     codConfirmationStatus: order.codConfirmationStatus || 'pending',
-    notes: order.notes || '',
     placedAt: order.placedAt,
     customer: order.customer,
     address: order.address,
@@ -236,24 +236,13 @@ function orderConfirmationPayload(order) {
 }
 
 async function normalizeCheckout(body) {
-  const customerName = normalizeCustomerName(body.customer);
-  if (!customerName.firstName || !customerName.lastName || !body.customer?.phone) {
-    const error = new Error('First name, last name, and mobile number are required');
-    error.status = 400;
-    throw error;
-  }
-
-  if (
-    !body.address?.addressLine ||
-    !body.address?.houseAddress ||
-    !body.address?.barangay ||
-    !body.address?.city ||
-    !body.address?.province
-  ) {
-    const error = new Error('House address, barangay, city/municipality, and province are required');
-    error.status = 400;
-    throw error;
-  }
+  // Validate normalized values before cart pricing, inventory deduction, order
+  // persistence, Meta dispatch, email queuing, or Pancake export. In
+  // particular, whitespace-only strings cannot pass this boundary.
+  const delivery = requireCompleteDeliveryInformation({
+    customer: body.customer,
+    address: body.address
+  });
 
   if (!Array.isArray(body.items) || body.items.length === 0) {
     const error = new Error('Cart is empty');
@@ -280,23 +269,10 @@ async function normalizeCheckout(body) {
   const shippingRegion = body.shippingRegion ? String(body.shippingRegion).trim() : '';
   const shippingRegionLabel = body.shippingRegionLabel ? String(body.shippingRegionLabel).trim() : '';
   const freeShippingUnlocked = quote.freeShippingUnlocked || Boolean(body.freeShippingUnlocked);
-  const notes = body.notes ? String(body.notes).trim() : '';
 
   return {
-    customer: {
-      ...customerName,
-      phone: String(body.customer.phone).trim(),
-      email: body.customer.email ? String(body.customer.email).trim() : ''
-    },
-    address: {
-      addressLine: String(body.address.addressLine || '').trim(),
-      houseAddress: String(body.address.houseAddress || '').trim(),
-      barangay: String(body.address.barangay || '').trim(),
-      city: String(body.address.city || '').trim(),
-      province: String(body.address.province || '').trim(),
-      country: String(body.address.country || 'Philippines').trim(),
-      postalCode: String(body.address.postalCode || '').trim()
-    },
+    customer: delivery.customer,
+    address: delivery.address,
     items,
     subtotalCents: quote.subtotalCents,
     discountCode: quote.discountCode,
@@ -319,7 +295,7 @@ async function normalizeCheckout(body) {
       freeShippingUnlocked,
       totalCents: quote.totalCents
     },
-    notes,
+    notes: '',
     status: 'confirmed',
     fulfillmentStatus: 'unfulfilled',
     paymentStatus: 'cod_pending'
@@ -647,6 +623,7 @@ module.exports = {
   defaultAuthoritativeDependencies,
   exportPancakeOrderNow,
   orderRouter,
+  normalizeCheckout,
   privateOrderPayload,
   publicOrderPayload,
   resolveCustomerAccountId,

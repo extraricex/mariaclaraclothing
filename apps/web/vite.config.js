@@ -12,7 +12,6 @@ export default defineConfig({
       '/api': apiTarget,
       '/uploads': apiTarget,
       '/brand': apiTarget,
-      '/product': apiTarget,
       '/data': apiTarget,
       '/MANDALA WHITE': apiTarget
     }

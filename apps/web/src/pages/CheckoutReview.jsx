@@ -28,6 +28,7 @@ import { customerNameParts } from '../lib/customerName.js';
 import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
 import CheckoutHeader from '../components/CheckoutHeader.jsx';
 import CheckoutUpsell from '../components/CheckoutUpsell.jsx';
+import { formatCheckoutAddress, normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
 
 const REVIEWED_TOTAL_FIELDS = ['subtotalCents', 'discountTotalCents', 'shippingFeeCents', 'totalCents'];
 
@@ -65,6 +66,10 @@ export default function CheckoutReview() {
   const updatingCartRef = useRef(false);
   const cartSessionId = getCartSessionId();
   const draftMatchesCart = checkoutDraftMatchesCart(draft, items, cartSessionId);
+  const deliveryValidation = useMemo(() => draft
+    ? normalizedCheckoutDetails(draft.customer, draft.address, { requireAddressCodes: true })
+    : { valid: false, errors: {}, customer: {}, address: {} }, [draft]);
+  const deliveryReady = deliveryValidation.valid;
 
   function quotePayload(discountCode = draft?.discountCode || '', quoteItems = items) {
     return {
@@ -102,13 +107,20 @@ export default function CheckoutReview() {
       }
       return;
     }
+    if ((!draft || !deliveryReady) && !placingOrderRef.current && !updatingCartRef.current) {
+      navigate('/checkout', {
+        replace: true,
+        state: { message: 'Please complete your delivery information before placing your order.' }
+      });
+      return;
+    }
     if (!draftMatchesCart && !placingOrderRef.current && !updatingCartRef.current) {
       navigate('/checkout', {
         replace: true,
         state: { message: 'Your cart changed or your checkout session expired. Please confirm your delivery information again.' }
       });
     }
-  }, [items.length, draftMatchesCart, navigate]);
+  }, [items.length, draft, draftMatchesCart, deliveryReady, navigate]);
 
   useEffect(() => {
     loadStorefrontSettings()
@@ -141,7 +153,7 @@ export default function CheckoutReview() {
   }, [settings, paymentMethod]);
 
   useEffect(() => {
-    if (!draftMatchesCart || !items.length) return;
+    if (!draftMatchesCart || !deliveryReady || !items.length) return;
     let cancelled = false;
     setLoadingQuote(true);
     createCheckoutQuote(quotePayload(draft.discountCode || ''))
@@ -152,6 +164,13 @@ export default function CheckoutReview() {
       })
       .catch((error) => {
         if (cancelled) return;
+        if (['address_invalid', 'INCOMPLETE_DELIVERY_ADDRESS', 'CHECKOUT_CUSTOMER_INVALID'].includes(error.code)) {
+          navigate('/checkout', {
+            replace: true,
+            state: { message: 'Please complete your delivery information before placing your order.' }
+          });
+          return;
+        }
         setStatus({ tone: 'error', message: error.message });
       })
       .finally(() => {
@@ -270,6 +289,13 @@ export default function CheckoutReview() {
 
   async function placeOrder(event) {
     event.preventDefault();
+    if (!deliveryReady) {
+      navigate('/checkout', {
+        replace: true,
+        state: { message: 'Please complete your delivery information before placing your order.' }
+      });
+      return;
+    }
     if (pending || placingOrderRef.current || !draftMatchesCart || !quote) return;
     placingOrderRef.current = true;
     setPending(true);
@@ -285,9 +311,8 @@ export default function CheckoutReview() {
 
       const payload = {
         cartSessionId,
-        customer: draft.customer,
-        paymentMethod,
-        notes: draft.notes || ''
+        customer: deliveryValidation.customer,
+        paymentMethod
       };
       const idempotencyKey = getCheckoutIdempotencyKey(latestQuote.id);
       const result = paymentMethod === 'paymongo'
@@ -312,17 +337,24 @@ export default function CheckoutReview() {
       navigate(`/thank-you?order=${encodeURIComponent(result.orderNumber)}`);
     } catch (error) {
       placingOrderRef.current = false;
+      if (['address_invalid', 'INCOMPLETE_DELIVERY_ADDRESS', 'CHECKOUT_CUSTOMER_INVALID'].includes(error.code)) {
+        navigate('/checkout', {
+          replace: true,
+          state: { message: 'Please complete your delivery information before placing your order.' }
+        });
+        return;
+      }
       setStatus({ tone: 'error', message: error.message });
     } finally {
       setPending(false);
     }
   }
 
-  if (!draftMatchesCart || !draft) return null;
+  if (!draftMatchesCart || !draft || !deliveryReady) return null;
 
   const displayItems = quote?.items?.length ? quote.items : items;
   const selectedPayment = settings.paymentMethods.find((method) => method.id === paymentMethod);
-  const address = draft.address;
+  const address = deliveryValidation.address;
   const customerName = customerNameParts(draft.customer);
 
   return (
@@ -344,11 +376,12 @@ export default function CheckoutReview() {
               <div className="min-w-0"><dt className="text-clay">Last Name</dt><dd className="break-words font-semibold">{customerName.lastName}</dd></div>
               <div className="min-w-0"><dt className="text-clay">Mobile</dt><dd className="break-words">{draft.customer.phone}</dd></div>
               {draft.customer.email && <div className="min-w-0 sm:col-span-2"><dt className="text-clay">Email</dt><dd className="break-all">{draft.customer.email}</dd></div>}
-              <div className="min-w-0 sm:col-span-2">
-                <dt className="text-clay">Delivery address</dt>
-                <dd className="break-words">{address.houseAddress}, {address.barangay}, {address.city}, {address.province}{address.postalCode ? ` ${address.postalCode}` : ''}, Philippines</dd>
-              </div>
-              {draft.notes && <div className="min-w-0 sm:col-span-2"><dt className="text-clay">Delivery notes</dt><dd className="break-words">{draft.notes}</dd></div>}
+              <div className="min-w-0 sm:col-span-2"><dt className="text-clay">House / Street</dt><dd className="break-words">{address.houseAddress}</dd></div>
+              <div className="min-w-0"><dt className="text-clay">Barangay</dt><dd className="break-words">{address.barangay}</dd></div>
+              <div className="min-w-0"><dt className="text-clay">City / Municipality</dt><dd className="break-words">{address.city}</dd></div>
+              <div className="min-w-0"><dt className="text-clay">Province</dt><dd className="break-words">{address.province}</dd></div>
+              {address.postalCode && <div className="min-w-0"><dt className="text-clay">ZIP Code</dt><dd className="break-words">{address.postalCode}</dd></div>}
+              <div className="min-w-0 sm:col-span-2"><dt className="text-clay">Complete address</dt><dd className="break-words">{formatCheckoutAddress(address)}</dd></div>
             </dl>
           </section>
 
@@ -386,7 +419,7 @@ export default function CheckoutReview() {
               {status.message}
             </p>
           )}
-          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending || pendingUpsellId || loadingQuote || !settingsLoaded || !selectedPayment}>
+          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={!deliveryReady || pending || pendingUpsellId || loadingQuote || !settingsLoaded || !selectedPayment}>
             {pending
               ? (paymentMethod === 'paymongo' ? 'Preparing payment...' : 'Placing order...')
               : paymentMethod === 'paymongo'

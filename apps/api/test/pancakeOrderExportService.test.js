@@ -81,7 +81,7 @@ test('builds a Pancake shadow order payload from a mapped COD order', () => {
   assert.equal(payload.transfer_money, 0);
   assert.match(payload.note, /MCC-1001/);
   assert.match(payload.note, /storefront_checkout/);
-  assert.match(payload.note_print, /Leave at guard/);
+  assert.doesNotMatch(payload.note_print, /Leave at guard/);
   assert.match(payload.note_print, /payment_method=cash_on_delivery/);
   assert.match(payload.note_print, /cod_amount=1380/);
 });
@@ -135,6 +135,10 @@ test('blocks shadow payloads until price unit and mappings are ready', () => {
   assert.throws(
     () => buildPancakeOrderPayload(order(), readiness({ warehouseId: '' })),
     (error) => error.code === 'pancake_references_incomplete'
+  );
+  assert.throws(
+    () => buildPancakeOrderPayload(order({ address: { houseAddress: '', barangay: '', city: '', province: '' } }), readiness()),
+    (error) => error.code === 'pancake_order_delivery_incomplete'
   );
 });
 

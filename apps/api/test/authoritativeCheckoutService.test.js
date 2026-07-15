@@ -123,9 +123,28 @@ test('checkout requires both customer name parts', async () => {
     placeAuthoritativeCheckout(requestFixture({
       customer: { firstName: 'Maria', lastName: '', fullName: 'Maria', phone: '09171234567' }
     }), deps),
-    (error) => error.code === 'checkout_invalid' && /last name/i.test(error.message)
+    (error) => error.code === 'CHECKOUT_CUSTOMER_INVALID' && Boolean(error.details.fields.lastName)
   );
   assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+});
+
+test('missing or whitespace-only delivery fields stop all checkout side effects', async () => {
+  const deps = createDependencies();
+  deps.quote.snapshot.address = {
+    houseAddress: '   ', barangay: 'BUCANDALA IV', city: '', province: 'CAVITE'
+  };
+  await assert.rejects(
+    placeAuthoritativeCheckout(requestFixture(), deps),
+    (error) => error.code === 'INCOMPLETE_DELIVERY_ADDRESS'
+      && Boolean(error.details.fields.street)
+      && Boolean(error.details.fields.city)
+  );
+  for (const operation of [
+    'refreshQuote', 'deductStock', 'saveOrder', 'appendMovements', 'insertMeta',
+    'enqueueOrderExport', 'enqueueAdminEmail', 'convertCart'
+  ]) {
+    assert.equal(deps.calls.includes(operation), false, `${operation} must not run`);
+  }
 });
 
 test('failed order persistence never queues an admin email', async () => {

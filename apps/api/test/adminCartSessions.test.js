@@ -56,7 +56,7 @@ test('admin cart sessions list anonymous drafts and abandoned checkout sessions,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         checkoutStarted: true,
-        customer: { fullName: 'Abandoned Customer', phone: '09171234567', email: 'buyer@example.com' },
+        customer: { firstName: 'Abandoned', lastName: 'Customer', fullName: 'Abandoned Customer', phone: '09171234567', email: 'buyer@example.com' },
         address: { addressLine: '1 Checkout St, Imus, Cavite' },
         items: [ORDER_ITEM]
       })
@@ -96,7 +96,7 @@ test('admin cart sessions list anonymous drafts and abandoned checkout sessions,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         cartSessionId: 'browser-checkout',
-        customer: { fullName: 'Abandoned Customer', phone: '09171234567', email: 'buyer@example.com' },
+        customer: { firstName: 'Abandoned', lastName: 'Customer', fullName: 'Abandoned Customer', phone: '09171234567', email: 'buyer@example.com' },
         address: {
           addressLine: '1 Checkout St, BUCANDALA IV, IMUS, CAVITE, Philippines',
           houseAddress: '1 Checkout St',

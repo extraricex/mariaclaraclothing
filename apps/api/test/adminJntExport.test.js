@@ -11,6 +11,12 @@ process.env.ORDER_NOTIFICATIONS_DATA_FILE = path.join(
 );
 
 const ADMIN_TOKEN = 'local-admin-token';
+process.env.NODE_ENV = 'test';
+process.env.ADMIN_TOKEN = ADMIN_TOKEN;
+process.env.ADMIN_CREDENTIALS_FILE = path.join(
+  require('node:fs').mkdtempSync(path.join(os.tmpdir(), 'mc-jnt-admin-auth-')),
+  'admin-credentials.json'
+);
 const JNT_HEADERS = [
   'Receiver(*)',
   'Receiver Telephone (*)',
@@ -116,7 +122,7 @@ test('admin J&T export writes orders into template row 9 and validates missing f
       '1',
       '1498.00',
       '1498.00',
-      'Small x1; Medium x1 | Please text before delivery'
+      'Small x1; Medium x1'
     ]);
     assert.notDeepEqual(readRow(list, 9, 13), ['xxx', '+631234567890', 'BaoAnQu']);
     assert.equal(exportedOrder.exportedToJnt, true);

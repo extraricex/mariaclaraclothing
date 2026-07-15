@@ -89,7 +89,7 @@ function orderRemarks(order) {
     .map((item) => `${item.size || 'Item'} x${Number(item.quantity || 0)}`)
     .filter(Boolean)
     .join('; ');
-  return [variants, order.notes].filter(Boolean).join(' | ');
+  return variants;
 }
 
 function pesoAmount(cents) {

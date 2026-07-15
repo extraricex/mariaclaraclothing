@@ -9,6 +9,10 @@ const { buildMetaPurchaseEvent } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 const { queueMetaPurchase } = require('../marketing/metaPurchaseService');
 const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
+const {
+  deliveryInformationIssues,
+  requireCompleteDeliveryInformation
+} = require('../checkout/deliveryDetails');
 
 function withOrderParam(base, orderNumber, extra = {}) {
   const url = new URL(base);
@@ -18,6 +22,9 @@ function withOrderParam(base, orderNumber, extra = {}) {
 }
 
 function checkoutSessionPayload(order, config) {
+  // Defensive boundary: never contact PayMongo for an order whose delivery
+  // data is incomplete, even if a caller bypasses the normal checkout route.
+  requireCompleteDeliveryInformation({ customer: order.customer, address: order.address });
   return {
     data: {
       attributes: {
@@ -165,19 +172,28 @@ async function applyPaidWebhookEvent(event, {
   const paidAfterCancellation = order.status === 'cancelled'
     || order.paymentStatus === 'cancelled'
     || order.inventoryReservationStatus === 'released';
+  const missingDeliveryFields = deliveryInformationIssues(order);
+  const deliveryComplete = Object.keys(missingDeliveryFields).length === 0;
   const updated = await updateOrderRecord(order.orderNumber, {
-    status: paidAfterCancellation ? 'cancelled' : 'confirmed',
+    status: paidAfterCancellation ? 'cancelled' : (deliveryComplete ? 'confirmed' : 'received'),
     paymentMethod: 'paymongo', paymentStatus: 'paid', providerPaymentId: event.paymentId,
     paidAmountCents: event.amountCents, paidAt: event.paidAt,
     inventoryReservationStatus: paidAfterCancellation ? 'released' : 'committed',
+    tags: deliveryComplete
+      ? (order.tags || []).filter((tag) => tag !== 'missing_delivery_information')
+      : [...new Set([...(order.tags || []), 'missing_delivery_information'])],
     paymentMetadata: {
       ...(order.paymentMetadata || {}),
       paymentMethodType: event.paymentMethodType,
       providerLivemode: event.livemode,
+      ...(deliveryComplete ? {} : {
+        deliveryInformationIncomplete: true,
+        missingDeliveryFields: Object.keys(missingDeliveryFields)
+      }),
       ...(paidAfterCancellation ? { paymentAfterCancellation: true } : {})
     }
   }, { client, existingOrder: order });
-  if (metaEnabled && !paidAfterCancellation) {
+  if (metaEnabled && !paidAfterCancellation && deliveryComplete) {
     await queueMetaPurchase({
       client,
       order: updated,
@@ -189,7 +205,7 @@ async function applyPaidWebhookEvent(event, {
       logger: metaLogger
     });
   }
-  if (!paidAfterCancellation) {
+  if (!paidAfterCancellation && deliveryComplete) {
     await enqueueAdminEmail(updated, { client });
   }
   return { status: 'paid', orderNumber: updated.orderNumber, order: updated };

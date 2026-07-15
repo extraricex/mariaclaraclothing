@@ -66,7 +66,7 @@ function jsonRequest(port, pathname, options = {}) {
 
 function checkoutPayload(items) {
   return {
-    customer: { fullName: 'Full Flow Customer', phone: '09175550000', email: 'flow@example.com' },
+    customer: { firstName: 'Full', lastName: 'Flow Customer', fullName: 'Full Flow Customer', phone: '09175550000', email: 'flow@example.com' },
     address: {
       addressLine: '7 Flow Street, BUCANDALA IV, IMUS, CAVITE, Philippines',
       houseAddress: '7 Flow Street',

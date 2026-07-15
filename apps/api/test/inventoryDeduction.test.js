@@ -80,7 +80,7 @@ const ORDERS_DIR_BASE = nodePath.join(nodeOs.tmpdir(), 'mc-inv-orders-');
 
 function checkoutBody(item) {
   return {
-    customer: { fullName: 'Juan Dela Cruz', phone: '09171234567', email: '' },
+    customer: { firstName: 'Juan', lastName: 'Dela Cruz', fullName: 'Juan Dela Cruz', phone: '09171234567', email: '' },
     address: {
       addressLine: '12 Sampaguita St, BUCANDALA IV, IMUS, CAVITE, Philippines',
       houseAddress: '12 Sampaguita St',

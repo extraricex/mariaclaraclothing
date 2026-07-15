@@ -9,6 +9,7 @@ import { trackFacebookInitiateCheckout } from '../lib/metaPixel.js';
 import { loadBarangays, loadCities, loadProvinces, regionForProvince } from '../lib/addressGuide.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings, regionEstimate } from '../lib/storeSettings.js';
 import { customerNameParts } from '../lib/customerName.js';
+import { normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
 
 export default function Checkout() {
   const items = useCart();
@@ -34,7 +35,6 @@ export default function Checkout() {
   const [lastName, setLastName] = useState(initialCustomerName.lastName);
   const [phone, setPhone] = useState(initialDraft?.customer?.phone || '');
   const [email, setEmail] = useState(initialDraft?.customer?.email || '');
-  const [notes, setNotes] = useState(initialDraft?.notes || '');
   const [prefillAddress, setPrefillAddress] = useState(initialDraft?.address || null);
   const [saveAddress, setSaveAddress] = useState(initialDraft?.saveAddress ?? true);
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
@@ -180,42 +180,42 @@ export default function Checkout() {
   }
 
   function validateDetails() {
-    const invalid = [];
-    if (!firstName.trim()) invalid.push({ key: 'firstName', label: 'First name' });
-    if (!lastName.trim()) invalid.push({ key: 'lastName', label: 'Last name' });
-    if (!phone.trim()) invalid.push({ key: 'phone', label: 'Mobile number' });
-    else if (!/^(?:\+?63|0)9\d{9}$/.test(phone.replace(/[\s()-]/g, ''))) invalid.push({ key: 'phone', label: 'Valid Philippine mobile number' });
-    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) invalid.push({ key: 'email', label: 'Valid email address' });
-    if (!house.trim()) invalid.push({ key: 'house', label: 'House number / street / building / unit' });
-    if (!province) invalid.push({ key: 'province', label: 'Province' });
-    if (!city) invalid.push({ key: 'city', label: 'City / municipality' });
-    if (!barangay) invalid.push({ key: 'barangay', label: 'Barangay' });
-    if (postalCode.trim() && !/^\d{4}$/.test(postalCode.trim())) invalid.push({ key: 'postalCode', label: 'Valid 4-digit ZIP code' });
-    if (!invalid.length) {
+    const result = normalizedCheckoutDetails({ firstName, lastName, phone, email }, {
+      houseAddress: house,
+      provinceCode,
+      province: province?.name || '',
+      cityCode,
+      city: city?.name || '',
+      barangayCode,
+      barangay: barangay?.name || '',
+      postalCode
+    }, { requireAddressCodes: true });
+    if (result.valid) {
       setMissingFields({});
-      return true;
+      return result;
     }
-    setMissingFields(Object.fromEntries(invalid.map((field) => [field.key, true])));
-    setStatus({ tone: 'error', message: `Please complete the missing checkout information: ${invalid.map((field) => field.label).join(', ')}.` });
-    focusMissingField(invalid[0].key);
-    return false;
+    setMissingFields(result.errors);
+    setStatus({ tone: 'error', message: 'Please correct the highlighted delivery information before continuing.' });
+    focusMissingField(Object.keys(result.errors)[0]);
+    return null;
   }
 
   async function continueToReview(event) {
     event.preventDefault();
-    if (!items.length || !validateDetails()) return;
+    const details = validateDetails();
+    if (!items.length || !details) return;
     setPending(true);
     setStatus({ tone: 'neutral', message: 'Checking stock and preparing your review...' });
     const cartSessionId = getCartSessionId();
     const address = {
-      houseAddress: house.trim(),
+      ...details.address,
       provinceCode,
       province: province.name,
       cityCode,
       city: city.name,
       barangayCode,
       barangay: barangay.name,
-      postalCode: postalCode.trim()
+      postalCode: details.address.postalCode
     };
     try {
       const body = await createCheckoutQuote({
@@ -234,15 +234,8 @@ export default function Checkout() {
       saveCheckoutReviewDraft({
         cartSessionId,
         cartFingerprint: checkoutCartFingerprint(items),
-        customer: {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          fullName: `${firstName.trim()} ${lastName.trim()}`,
-          phone: phone.trim(),
-          email: email.trim()
-        },
+        customer: details.customer,
         address,
-        notes: notes.trim(),
         saveAddress,
         discountCode: initialDraft?.discountCode || '',
         quote
@@ -285,22 +278,22 @@ export default function Checkout() {
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">First Name <span aria-hidden="true">*</span></span>
               <input ref={checkoutFieldRefs.firstName} className={fieldClass('firstName')} required aria-invalid={Boolean(missingFields.firstName)} aria-describedby={missingFields.firstName ? 'checkout-first-name-error' : undefined} placeholder="First name" value={firstName} onChange={(event) => { setFirstName(event.target.value); clearMissingField('firstName'); }} autoComplete="given-name" />
-              {missingFields.firstName && <span id="checkout-first-name-error" className="mt-1 block text-xs text-accent-deep" role="alert">First Name is required.</span>}
+              {missingFields.firstName && <span id="checkout-first-name-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.firstName}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Last Name <span aria-hidden="true">*</span></span>
               <input ref={checkoutFieldRefs.lastName} className={fieldClass('lastName')} required aria-invalid={Boolean(missingFields.lastName)} aria-describedby={missingFields.lastName ? 'checkout-last-name-error' : undefined} placeholder="Last name" value={lastName} onChange={(event) => { setLastName(event.target.value); clearMissingField('lastName'); }} autoComplete="family-name" />
-              {missingFields.lastName && <span id="checkout-last-name-error" className="mt-1 block text-xs text-accent-deep" role="alert">Last Name is required.</span>}
+              {missingFields.lastName && <span id="checkout-last-name-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.lastName}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Mobile Number <span aria-hidden="true">*</span></span>
               <input ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" inputMode="tel" aria-invalid={Boolean(missingFields.phone)} aria-describedby={missingFields.phone ? 'checkout-phone-error' : undefined} placeholder="09XXXXXXXXX" value={phone} onChange={(event) => { setPhone(event.target.value); clearMissingField('phone'); }} autoComplete="tel" />
-              {missingFields.phone && <span id="checkout-phone-error" className="mt-1 block text-xs text-accent-deep" role="alert">Enter a valid Philippine mobile number, such as 09171234567.</span>}
+              {missingFields.phone && <span id="checkout-phone-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.phone}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Email <span className="font-normal text-clay">(optional)</span></span>
               <input ref={checkoutFieldRefs.email} className={fieldClass('email')} type="email" aria-invalid={Boolean(missingFields.email)} aria-describedby={missingFields.email ? 'checkout-email-error' : undefined} placeholder="you@example.com" value={email} onChange={(event) => { setEmail(event.target.value); clearMissingField('email'); }} autoComplete="email" />
-              {missingFields.email && <span id="checkout-email-error" className="mt-1 block text-xs text-accent-deep" role="alert">Enter a valid email address or leave this field blank.</span>}
+              {missingFields.email && <span id="checkout-email-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.email}</span>}
             </label>
           </fieldset>
 
@@ -309,7 +302,7 @@ export default function Checkout() {
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs font-semibold">House / Street / Building / Unit <span aria-hidden="true">*</span></span>
               <input ref={checkoutFieldRefs.house} className={fieldClass('house')} required aria-invalid={Boolean(missingFields.house)} aria-describedby={missingFields.house ? 'checkout-house-error' : undefined} placeholder="House no. / Street / Building / Unit" value={house} onChange={(event) => { setHouse(event.target.value); clearMissingField('house'); }} autoComplete="street-address" />
-              {missingFields.house && <span id="checkout-house-error" className="mt-1 block text-xs text-accent-deep" role="alert">Enter the complete house, street, building, or unit address.</span>}
+              {missingFields.house && <span id="checkout-house-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.house}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Province <span aria-hidden="true">*</span></span>
@@ -317,7 +310,7 @@ export default function Checkout() {
                 <option value="">Select province</option>
                 {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
               </select>
-              {missingFields.province && <span id="checkout-province-error" className="mt-1 block text-xs text-accent-deep" role="alert">Select a province.</span>}
+              {missingFields.province && <span id="checkout-province-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.province}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">City / Municipality <span aria-hidden="true">*</span></span>
@@ -325,7 +318,7 @@ export default function Checkout() {
                 <option value="">{provinceCode ? 'Select city / municipality' : 'Select province first'}</option>
                 {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
               </select>
-              {missingFields.city && <span id="checkout-city-error" className="mt-1 block text-xs text-accent-deep" role="alert">Select a city or municipality.</span>}
+              {missingFields.city && <span id="checkout-city-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.city}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Barangay <span aria-hidden="true">*</span></span>
@@ -333,16 +326,12 @@ export default function Checkout() {
                 <option value="">{cityCode ? 'Select barangay' : 'Select city / municipality first'}</option>
                 {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
               </select>
-              {missingFields.barangay && <span id="checkout-barangay-error" className="mt-1 block text-xs text-accent-deep" role="alert">Select a barangay.</span>}
+              {missingFields.barangay && <span id="checkout-barangay-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.barangay}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">ZIP Code <span className="font-normal text-clay">(optional)</span></span>
               <input ref={checkoutFieldRefs.postalCode} className={fieldClass('postalCode')} aria-invalid={Boolean(missingFields.postalCode)} aria-describedby={missingFields.postalCode ? 'checkout-postal-code-error' : undefined} inputMode="numeric" maxLength="4" placeholder="ZIP code (optional)" value={postalCode} onChange={(event) => { setPostalCode(event.target.value.replace(/\D/g, '').slice(0, 4)); clearMissingField('postalCode'); }} autoComplete="postal-code" />
-              {missingFields.postalCode && <span id="checkout-postal-code-error" className="mt-1 block text-xs text-accent-deep" role="alert">ZIP Code must contain 4 digits when provided.</span>}
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs font-semibold">Delivery Notes <span className="font-normal text-clay">(optional)</span></span>
-              <textarea className="field customer-input" rows="3" placeholder="Landmark or delivery instructions" value={notes} onChange={(event) => setNotes(event.target.value)} />
+              {missingFields.postalCode && <span id="checkout-postal-code-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.postalCode}</span>}
             </label>
             {loggedIn && (
               <label className="flex items-center gap-2 text-sm text-ink-soft sm:col-span-2">

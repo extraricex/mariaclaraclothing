@@ -69,7 +69,7 @@ const ORDER_ITEM = {
 
 function checkoutPayload(overrides = {}) {
   return {
-    customer: { fullName: 'Juan Dela Cruz', phone: '09171234567', email: '' },
+    customer: { firstName: 'Juan', lastName: 'Dela Cruz', fullName: 'Juan Dela Cruz', phone: '09171234567', email: '' },
     address: {
       addressLine: '12 Test St, BUCANDALA IV, IMUS, CAVITE, Philippines',
       houseAddress: '12 Test St',
@@ -285,7 +285,7 @@ test('customers: aggregates orders by phone with COD trust counts', async () => 
     await fetch(`http://127.0.0.1:${port}/api/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(checkoutPayload({ customer: { fullName: 'Juan Dela Cruz', phone: '+639171234567', email: 'juan@example.com' } }))
+      body: JSON.stringify(checkoutPayload({ customer: { firstName: 'Juan', lastName: 'Dela Cruz', fullName: 'Juan Dela Cruz', phone: '+639171234567', email: 'juan@example.com' } }))
     });
 
     await adminRequest(port, `/api/admin/orders/${firstOrder.orderNumber}`, {
