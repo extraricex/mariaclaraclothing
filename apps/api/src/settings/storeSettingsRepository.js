@@ -301,7 +301,7 @@ function defaultStoreSettings() {
         buttonLabel: 'Report Issue',
         mobileButtonLabel: 'Issue?',
         position: 'bottom-right',
-        notificationEmail: 'asparedestrends@gmail.com',
+        notificationEmail: 'mariaclaraclothing@gmail.com',
         webhookUrl: '',
         pushNotificationsEnabled: false
       }

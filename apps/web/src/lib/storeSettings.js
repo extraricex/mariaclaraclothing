@@ -110,7 +110,7 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     buttonLabel: 'Report Issue',
     mobileButtonLabel: 'Issue?',
     position: 'bottom-right',
-    notificationEmail: 'asparedestrends@gmail.com',
+    notificationEmail: 'mariaclaraclothing@gmail.com',
     webhookUrl: '',
     pushNotificationsEnabled: false
   },
