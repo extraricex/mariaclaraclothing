@@ -78,7 +78,10 @@ async function renderThankYouPage() {
 }
 
 function trackThankYouPurchase(order) {
+  if (order?.paymentStatus && !['paid', 'cod_pending'].includes(order.paymentStatus)) return false;
+  if (['failed', 'cancelled', 'expired'].includes(String(order?.status || ''))) return false;
   window.trackMetaPixelPurchase?.(order);
+  return true;
 }
 
 function renderThankYouItems(items) {

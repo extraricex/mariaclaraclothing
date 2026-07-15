@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-se
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
 const SETTINGS_KEY = 'storeSettings';
 const CREDENTIALS_KEY = 'adminCredentials';
-const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication', 'marketing'];
+const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication', 'marketing', 'reviews'];
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'paymongo', 'gcash', 'bank_transfer'];
@@ -236,6 +236,16 @@ function defaultStoreSettings() {
         pixelId: '595813035761213',
         requireConsent: false
       }
+    },
+    reviews: {
+      enabled: true,
+      showOnProductPages: true,
+      showRatingsOnProductCards: true,
+      allowCustomerSubmissions: true,
+      autoPublishVerified: false,
+      requireAdminApproval: true,
+      showStoreReviews: false,
+      allowReviewPhotos: true
     },
     website: {
       ticker: [
@@ -632,6 +642,15 @@ function normalizeMarketing(marketing) {
   };
 }
 
+function normalizeReviews(reviews) {
+  const value = reviews && typeof reviews === 'object' ? reviews : {};
+  const defaults = defaultStoreSettings().reviews;
+  return Object.fromEntries(Object.keys(defaults).map((key) => [
+    key,
+    value[key] === undefined ? defaults[key] : Boolean(value[key])
+  ]));
+}
+
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
   const collectionDefinitions = normalizeCollectionDefinitions(value.collectionDefinitions, value.storefrontCollections);
@@ -644,6 +663,7 @@ function normalizeStoreSettings(settings) {
     inventory: normalizeInventory(value.inventory),
     authentication: normalizeAuthentication(value.authentication),
     marketing: normalizeMarketing(value.marketing),
+    reviews: normalizeReviews(value.reviews),
     storefrontCollections,
     collectionDefinitions,
     collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns, storefrontCollections)
@@ -692,6 +712,7 @@ function normalizeSectionValue(section, value, current) {
   if (section === 'inventory') return normalizeInventory(value);
   if (section === 'authentication') return normalizeAuthentication(value);
   if (section === 'marketing') return normalizeMarketing(value);
+  if (section === 'reviews') return normalizeReviews(value);
   return normalizeWebsite(value, current.website);
 }
 

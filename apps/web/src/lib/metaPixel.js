@@ -7,13 +7,22 @@ let lastCheckoutEventId = '';
 let lastViewContentKey = '';
 let runtimePixelConfig = null;
 const pendingPixelEvents = [];
+const trackedPurchaseEventIds = new Set();
+
+function storageGet(storage, key) {
+  try { return storage?.getItem(key) || null; } catch (_error) { return null; }
+}
+
+function storageSet(storage, key, value) {
+  try { storage?.setItem(key, value); } catch (_error) { /* tracking must never interrupt checkout */ }
+}
 
 function defaultConsentStorage() {
   return typeof localStorage !== 'undefined' ? localStorage : null;
 }
 
 export function getMetaTrackingConsent(storage = defaultConsentStorage()) {
-  const value = storage?.getItem(META_CONSENT_KEY);
+  const value = storageGet(storage, META_CONSENT_KEY);
   return value === 'accepted' || value === 'declined' ? value : 'unset';
 }
 
@@ -127,10 +136,18 @@ export function facebookMoneyValue(cents) {
   return Number((Number(cents || 0) / 100).toFixed(2));
 }
 
+export function facebookPurchaseValue(totalCents) {
+  const cents = Number(totalCents);
+  if (!Number.isInteger(cents) || cents <= 0) return null;
+  const value = Number((cents / 100).toFixed(2));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 export function facebookContentId(item = {}) {
   return String(
     item.externalPosVariantId ||
     item.variantId ||
+    item.sku ||
     item.id ||
     item.externalPosProductId ||
     item.productId ||
@@ -141,22 +158,32 @@ export function facebookContentId(item = {}) {
 
 export function facebookContents(items = []) {
   return (Array.isArray(items) ? items : [])
-    .map((item) => ({
-      id: facebookContentId(item),
-      quantity: Math.max(1, Number(item.quantity || 1)),
-      item_price: facebookMoneyValue(item.unitPriceCents ?? item.priceCents)
-    }))
-    .filter((item) => item.id);
+    .map((item) => {
+      const quantity = Number(item.quantity);
+      const unitPriceCents = Number(item.unitPriceCents ?? item.priceCents);
+      return {
+        id: facebookContentId(item),
+        quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 0,
+        item_price: Number.isInteger(unitPriceCents) && unitPriceCents >= 0
+          ? facebookMoneyValue(unitPriceCents)
+          : null
+      };
+    })
+    .filter((item) => item.id && item.quantity > 0 && Number.isFinite(item.item_price));
 }
 
 export function purchaseEventId(orderNumber) {
-  return `purchase:${String(orderNumber || '').trim()}`;
+  const orderId = String(orderNumber || '').trim();
+  return orderId ? `purchase_${orderId}` : '';
 }
 
-export function buildFacebookPurchase(order = {}, items = []) {
+export function buildFacebookPurchase(order = {}, items = [], suppliedEventId = '') {
+  const value = facebookPurchaseValue(order.totalCents);
+  const eventId = String(suppliedEventId || order.trackingEventId || purchaseEventId(order.id || order.orderNumber)).trim();
+  if (value === null || !eventId || !order.orderNumber) return null;
   const contents = facebookContents(items);
   return {
-    eventId: purchaseEventId(order.orderNumber),
+    eventId,
     payload: {
       content_ids: contents.map((item) => item.id),
       content_type: 'product',
@@ -164,7 +191,7 @@ export function buildFacebookPurchase(order = {}, items = []) {
       currency: CURRENCY,
       num_items: contents.reduce((sum, item) => sum + item.quantity, 0),
       order_id: String(order.orderNumber || ''),
-      value: facebookMoneyValue(order.totalCents)
+      value
     }
   };
 }
@@ -313,15 +340,39 @@ export function trackFacebookPurchase(order, items, eventId, options = {}) {
   const normalizedEventId = String(eventId || '').trim();
   if (!normalizedEventId || !order?.orderNumber) return false;
 
-  const storage = options.storage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+  const storage = options.storage || (typeof localStorage !== 'undefined' ? localStorage : null);
   const storageKey = `maria-clara-facebook-${normalizedEventId}`;
-  if (storage?.getItem(storageKey)) return false;
+  if (trackedPurchaseEventIds.has(normalizedEventId) || storageGet(storage, storageKey)) return false;
 
-  const event = buildFacebookPurchase(order, items);
+  const event = buildFacebookPurchase(order, items, normalizedEventId);
+  if (!event) {
+    logFacebookPurchaseDevelopment(order, normalizedEventId, items, false, 'invalid_purchase_data');
+    return false;
+  }
   const tracked = trackFacebookEvent('Purchase', event.payload, {
     ...options,
     eventId: normalizedEventId
   });
-  if (tracked) storage?.setItem(storageKey, 'tracked');
+  if (tracked) {
+    trackedPurchaseEventIds.add(normalizedEventId);
+    storageSet(storage, storageKey, 'tracked');
+  }
+  logFacebookPurchaseDevelopment(order, normalizedEventId, items, tracked, tracked ? 'sent' : 'not_sent');
   return tracked;
+}
+
+function logFacebookPurchaseDevelopment(order, eventId, items, sent, reason) {
+  if (!import.meta.env?.DEV || typeof console === 'undefined') return;
+  const value = facebookPurchaseValue(order?.totalCents);
+  console.info('Meta Purchase development status.', {
+    orderId: String(order?.id || order?.orderNumber || ''),
+    eventId,
+    purchaseValue: value,
+    currency: CURRENCY,
+    paymentMethod: String(order?.paymentMethod || ''),
+    numberOfItems: (Array.isArray(items) ? items : []).reduce((total, item) => total + Math.max(0, Number(item.quantity || 0)), 0),
+    browserPixelSent: sent,
+    conversionsApiSent: 'reported_by_server',
+    reason
+  });
 }

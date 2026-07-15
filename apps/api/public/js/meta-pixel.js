@@ -3,16 +3,18 @@
   const pixelId = configuredId && !configuredId.includes('YOUR_PIXEL_ID') ? configuredId : '';
   const currency = 'PHP';
 
-  window.trackMetaPixelEvent = function trackMetaPixelEvent(eventName, payload = {}) {
+  window.trackMetaPixelEvent = function trackMetaPixelEvent(eventName, payload = {}, eventId = '') {
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({
       event: `meta_${String(eventName).replace(/[A-Z]/g, (letter, index) => `${index ? '_' : ''}${letter.toLowerCase()}`)}`,
       metaEventName: eventName,
+      ...(eventId ? { metaEventId: eventId } : {}),
       ...payload
     });
 
     if (!pixelId || typeof window.fbq !== 'function') return;
-    window.fbq('track', eventName, payload);
+    if (eventId) window.fbq('track', eventName, payload, { eventID: eventId });
+    else window.fbq('track', eventName, payload);
   };
 
   window.trackMetaPixelViewContent = function trackMetaPixelViewContent(product) {
@@ -51,16 +53,19 @@
     });
   };
 
-  window.trackMetaPixelPurchase = function trackMetaPixelPurchase(order, items = [], totals = {}) {
+  window.trackMetaPixelPurchase = function trackMetaPixelPurchase(order, items = []) {
     const orderItems = Array.isArray(items) && items.length ? items : order?.items || order?.cartSnapshot || [];
-    const totalCents = totals.totalCents ?? order?.totalCents;
-    if (!order?.orderNumber && !totalCents) return;
+    const totalCents = Number(order?.totalCents);
+    const value = purchaseValue(totalCents);
+    if (!order?.orderNumber || value === null) return false;
     const orderNumber = order?.orderNumber || '';
+    const eventId = String(order?.trackingEventId || `purchase_${orderNumber}`).trim();
 
     if (orderNumber) {
       const purchaseKey = `maria-clara-meta-purchase-${orderNumber}`;
-      if (sessionStorage.getItem(purchaseKey)) return;
-      sessionStorage.setItem(purchaseKey, 'tracked');
+      try {
+        if (localStorage.getItem(purchaseKey)) return false;
+      } catch (_error) { /* private browsing can disable storage */ }
     }
 
     window.trackMetaPixelEvent('Purchase', {
@@ -70,8 +75,12 @@
       currency,
       num_items: orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
       order_id: orderNumber,
-      value: moneyValue(totalCents)
-    });
+      value
+    }, eventId);
+    if (orderNumber) {
+      try { localStorage.setItem(`maria-clara-meta-purchase-${orderNumber}`, 'tracked'); } catch (_error) { /* no-op */ }
+    }
+    return true;
   };
 
   if (!pixelId) return;
@@ -107,6 +116,12 @@
 
   function moneyValue(cents) {
     return Number((Number(cents || 0) / 100).toFixed(2));
+  }
+
+  function purchaseValue(cents) {
+    if (!Number.isInteger(cents) || cents <= 0) return null;
+    const value = Number((cents / 100).toFixed(2));
+    return Number.isFinite(value) && value > 0 ? value : null;
   }
 
   function contentItem(product, variant, quantity) {

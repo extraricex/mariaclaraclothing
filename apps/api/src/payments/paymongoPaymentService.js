@@ -5,7 +5,7 @@ const { restockVariantStock } = require('../products/catalogRepository');
 const { appendInventoryMovements } = require('../inventory/inventoryMovementRepository');
 const pancakeInventoryOutboxRepository = require('../integrations/pancake/pancakeInventoryOutboxRepository');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
-const { buildMetaPurchaseEvent } = require('../marketing/metaEvent');
+const { buildMetaPurchaseEvent, logMetaPurchaseDevelopment } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 
 function withOrderParam(base, orderNumber, extra = {}) {
@@ -125,9 +125,16 @@ async function processPaidWebhook(payload, { metaEnabled = false } = {}) {
       }
     }, { client, existingOrder: order });
     if (metaEnabled && !paidAfterCancellation) {
-      await insertMetaPurchaseOutbox(client, buildMetaPurchaseEvent({
+      const metaEvent = buildMetaPurchaseEvent({
         order: updated, requestContext: order.paymentMetadata?.metaRequestContext || {}
-      }));
+      });
+      const outbox = metaEvent ? await insertMetaPurchaseOutbox(client, metaEvent) : null;
+      logMetaPurchaseDevelopment(console, {
+        order: updated,
+        event: metaEvent,
+        conversionsApiSent: false,
+        reason: !metaEvent ? 'invalid_purchase_data' : outbox ? 'queued' : 'duplicate'
+      });
     }
     return { status: 'paid', orderNumber: updated.orderNumber, order: updated };
   });

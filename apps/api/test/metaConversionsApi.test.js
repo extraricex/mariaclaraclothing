@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { sendMetaConversionsEvent } = require('../src/marketing/metaConversionsApi');
 
-const event = { event_name: 'Purchase', event_id: 'purchase:MCC-1' };
+const event = { event_name: 'Purchase', event_id: 'purchase_MCC-1' };
 const config = {
   pixelId: '595813035761213',
   accessToken: 'secret-token',

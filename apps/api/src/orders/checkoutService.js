@@ -24,7 +24,13 @@ async function persistPostgresCheckout(input, deps) {
     }
     if (deps.metaEnabled) {
       const event = deps.buildMetaEvent({ order, requestContext: input.requestContext });
-      await deps.insertOutbox(client, event);
+      const outbox = event ? await deps.insertOutbox(client, event) : null;
+      deps.logMetaDevelopment?.({
+        order,
+        event,
+        conversionsApiSent: false,
+        reason: !event ? 'invalid_purchase_data' : outbox ? 'queued' : 'duplicate'
+      });
     }
     if (deps.enqueueOrderExport) {
       await deps.enqueueOrderExport(order, { client });

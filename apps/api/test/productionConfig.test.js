@@ -111,11 +111,20 @@ test('production configuration rejects JSON persistence overrides', () => {
     'CUSTOMER_ACCOUNTS_DATA_FILE',
     'PRODUCTS_DATA_FILE',
     'INVENTORY_MOVEMENTS_DATA_FILE',
-    'ORDER_NOTIFICATIONS_DATA_FILE'
+    'ORDER_NOTIFICATIONS_DATA_FILE',
+    'REVIEWS_DATA_FILE'
   ]) {
     assert.throws(
       () => config.buildEnv?.({ ...SAFE_PRODUCTION, [name]: `/tmp/${name}.json` }),
       new RegExp(`${name}.*not allowed in production`)
     );
   }
+});
+
+test('production review imports require a strong optional signing secret', () => {
+  assert.throws(
+    () => config.buildEnv({ ...SAFE_PRODUCTION, REVIEW_IMPORT_SECRET: 'too-short' }),
+    /REVIEW_IMPORT_SECRET must be at least 32 characters/
+  );
+  assert.doesNotThrow(() => config.buildEnv({ ...SAFE_PRODUCTION, REVIEW_IMPORT_SECRET: 'r'.repeat(32) }));
 });

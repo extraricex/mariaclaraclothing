@@ -16,12 +16,14 @@ const PRODUCT_SUBNAV = [
   { to: '/admin/inventory', label: 'Inventory' }
 ];
 
+const REVIEW_NAV_ITEM = { to: '/admin/reviews', label: 'Reviews', badge: 'reviews' };
+
 // Items below the two collapsible sections, in display order.
 const SECONDARY_NAV = [
   { to: '/admin/customers', label: 'Customers' },
   { to: '/admin/payments', label: 'Payments' },
   { to: '/admin/discounts', label: 'Discounts' },
-  { to: '/admin/issue-reports', label: 'Issue Reports', badge: true },
+  { to: '/admin/issue-reports', label: 'Issue Reports', badge: 'issues' },
   { to: '/admin/banners', label: 'Website content' },
   { to: '/admin/pancake', label: 'Pancake POS' },
   { to: '/admin/settings', label: 'Settings' }
@@ -30,6 +32,7 @@ const SECONDARY_NAV = [
 // Flat list for the mobile bar — identical order to the desktop sidebar.
 const MOBILE_NAV = [
   { to: '/admin', label: 'Dashboard', end: true },
+  REVIEW_NAV_ITEM,
   { to: '/admin/orders', label: 'Orders' },
   { to: '/admin/products', label: 'Products' },
   ...SECONDARY_NAV
@@ -72,6 +75,7 @@ export default function AdminLayout() {
   const [ordersMenuOpen, setOrdersMenuOpen] = useState(false);
   const [productsMenuOpen, setProductsMenuOpen] = useState(false);
   const [issueCount, setIssueCount] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
 
   const ordersActive = location.pathname.startsWith('/admin/orders');
   const productsActive =
@@ -97,6 +101,20 @@ export default function AdminLayout() {
       .catch(() => {});
   }, [location.pathname]);
 
+  useEffect(() => {
+    let active = true;
+    const refreshReviews = () => adminJson('/api/admin/reviews/counts')
+      .then((body) => { if (active) setReviewCount(Number(body.counts?.pending || 0)); })
+      .catch(() => {});
+    refreshReviews();
+    const timer = window.setInterval(refreshReviews, 60_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [location.pathname]);
+
+  function navBadge(item) {
+    return item.badge === 'issues' ? issueCount : item.badge === 'reviews' ? reviewCount : 0;
+  }
+
   // Auto-expand the section that matches the current route so the active
   // sub-page is always visible without an extra click.
   useEffect(() => {
@@ -116,7 +134,7 @@ export default function AdminLayout() {
 
   return (
     <div className="admin-shell">
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-[var(--admin-sidebar)] px-5 py-8 lg:flex" style={{ borderColor: 'var(--admin-line)' }}>
+      <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r bg-[var(--admin-sidebar)] px-5 py-8 lg:sticky lg:top-0 lg:flex lg:h-screen" style={{ borderColor: 'var(--admin-line)' }}>
         <Link to="/admin" className="flex min-h-14 items-center gap-3">
           <span className="admin-brand-mark">MC</span>
           <span className="min-w-0">{brandMarkup}</span>
@@ -125,6 +143,13 @@ export default function AdminLayout() {
         <nav className="mt-10 flex flex-col gap-1">
           <NavLink to="/admin" end className={({ isActive }) => topLinkClass(isActive)}>
             Dashboard
+          </NavLink>
+
+          <NavLink to={REVIEW_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>
+            <span className="flex items-center justify-between gap-2">
+              <span>{REVIEW_NAV_ITEM.label}</span>
+              {navBadge(REVIEW_NAV_ITEM) > 0 && <span className="rounded-full bg-accent-deep px-2 py-0.5 text-[10px] text-white">{navBadge(REVIEW_NAV_ITEM)}</span>}
+            </span>
           </NavLink>
 
           <div>
@@ -175,7 +200,7 @@ export default function AdminLayout() {
             <NavLink key={item.to} to={item.to} className={({ isActive }) => topLinkClass(isActive)}>
               <span className="flex items-center justify-between gap-2">
                 <span>{item.label}</span>
-                {item.badge && issueCount > 0 && <span className="rounded-full bg-accent-deep px-2 py-0.5 text-[10px] text-white">{issueCount}</span>}
+                {navBadge(item) > 0 && <span className="rounded-full bg-accent-deep px-2 py-0.5 text-[10px] text-white">{navBadge(item)}</span>}
               </span>
             </NavLink>
           ))}
@@ -222,7 +247,7 @@ export default function AdminLayout() {
               end={item.end}
               className={({ isActive }) => `text-action whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.1em] ${isActive ? 'text-[var(--admin-orange)]' : 'text-[var(--admin-muted)]'}`}
             >
-              {item.label}{item.badge && issueCount > 0 ? ` (${issueCount})` : ''}
+              {item.label}{navBadge(item) > 0 ? ` (${navBadge(item)})` : ''}
             </NavLink>
           ))}
         </div>

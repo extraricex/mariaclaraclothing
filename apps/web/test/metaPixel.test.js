@@ -9,6 +9,7 @@ import {
   configureFacebookMetaPixel,
   facebookContentId,
   facebookMoneyValue,
+  facebookPurchaseValue,
   initializeFacebookMetaPixel,
   getMetaTrackingConsent,
   metaPixelConfig,
@@ -38,11 +39,18 @@ test('Purchase uses PHP values and stable IDs', () => {
     { externalPosVariantId: 'POS-1', variantId: 'V-1', quantity: 2, unitPriceCents: 79900 }
   ]);
 
-  assert.equal(purchaseEventId('MCC-1'), 'purchase:MCC-1');
-  assert.equal(event.eventId, 'purchase:MCC-1');
+  assert.equal(purchaseEventId('MCC-1'), 'purchase_MCC-1');
+  assert.equal(event.eventId, 'purchase_MCC-1');
   assert.equal(event.payload.value, 1718);
   assert.deepEqual(event.payload.content_ids, ['POS-1']);
   assert.equal(event.payload.contents[0].item_price, 799);
+});
+
+test('Purchase never builds with an invalid, zero, or formatted total', () => {
+  for (const totalCents of [undefined, null, 0, -1, NaN, 'PHP 1278', '₱1,278', 12.5]) {
+    assert.equal(buildFacebookPurchase({ orderNumber: 'MCC-invalid', totalCents }, []), null);
+  }
+  assert.equal(facebookPurchaseValue(127800), 1278);
 });
 
 test('Pixel configuration requires the enabled flag and a real ID', () => {
@@ -236,8 +244,34 @@ test('Purchase dispatches once with the server event ID', () => {
   const order = { orderNumber: 'MCC-1', totalCents: 79900 };
   const items = [{ variantId: 'V-1', quantity: 1, unitPriceCents: 79900 }];
 
-  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout', consent: true }), true);
-  assert.equal(trackFacebookPurchase(order, items, 'purchase:MCC-1', { windowRef, storage, path: '/checkout', consent: true }), false);
+  assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-1', { windowRef, storage, path: '/checkout', consent: true }), true);
+  assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-1', { windowRef, storage, path: '/checkout', consent: true }), false);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][3], { eventID: 'purchase:MCC-1' });
+  assert.deepEqual(calls[0][3], { eventID: 'purchase_MCC-1' });
+});
+
+test('Purchase remains safe when browser storage is unavailable and rejects invalid line contents', () => {
+  const calls = [];
+  const storage = {
+    getItem: () => { throw new Error('storage disabled'); },
+    setItem: () => { throw new Error('storage disabled'); }
+  };
+  const windowRef = { fbq: (...args) => calls.push(args) };
+  const order = { orderNumber: 'MCC-STORAGE', totalCents: 127800 };
+  const items = [
+    { sku: 'SKU-VALID', quantity: 2, unitPriceCents: 64900 },
+    { sku: 'SKU-BAD-QUANTITY', quantity: 'two', unitPriceCents: 100 },
+    { sku: 'SKU-BAD-PRICE', quantity: 1, unitPriceCents: 'PHP 10' }
+  ];
+  assert.doesNotThrow(() => trackFacebookPurchase(order, items, 'purchase_MCC-STORAGE', {
+    windowRef, storage, path: '/thank-you', consent: true
+  }));
+  assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-STORAGE', {
+    windowRef, storage, path: '/thank-you', consent: true
+  }), false);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][2].content_ids, ['SKU-VALID']);
+  assert.equal(calls[0][2].num_items, 2);
+  assert.equal(calls[0][2].value, 1278);
+  assert.equal(calls[0][2].currency, 'PHP');
 });

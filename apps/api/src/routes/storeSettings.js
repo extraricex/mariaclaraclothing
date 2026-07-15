@@ -21,6 +21,7 @@ router.get('/', async (_req, res, next) => {
         messengerUrl: settings.general.messengerUrl,
         socialLinks: settings.general.socialLinks,
         metaPixel: settings.marketing.metaPixel,
+        reviews: settings.reviews,
         shipping: settings.shipping,
         ticker: settings.website.ticker,
         seo: settings.website.seo,

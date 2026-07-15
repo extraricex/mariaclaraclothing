@@ -18,6 +18,29 @@ export function fetchProduct(slug) {
   return request(`/api/products/${encodeURIComponent(slug)}`);
 }
 
+export function fetchProductReviews(slug, filters = {}) {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== false && value !== undefined && value !== null) query.set(key, String(value));
+  });
+  return request(`/api/reviews/products/${encodeURIComponent(slug)}${query.size ? `?${query}` : ''}`);
+}
+
+export function fetchStoreReviews(filters = {}) {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== '' && value !== false && value !== undefined && value !== null) query.set(key, String(value));
+  });
+  return request(`/api/reviews/store${query.size ? `?${query}` : ''}`);
+}
+
+export function submitProductReview(slug, formData) {
+  return request(`/api/reviews/products/${encodeURIComponent(slug)}`, {
+    method: 'POST',
+    body: formData
+  });
+}
+
 export function fetchSiteContent() {
   return request('/api/site-content');
 }

@@ -12,6 +12,7 @@ const { checkoutRouter } = require('./routes/checkout');
 const { issueReportsRouter } = require('./routes/issueReports');
 const { pancakeWebhookRouter } = require('./routes/pancakeWebhook');
 const { paymongoRouter } = require('./routes/paymongo');
+const { reviewsRouter } = require('./routes/reviews');
 const { methodOnly, postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
@@ -68,6 +69,15 @@ const issueReportRateLimit = postOnly(rateLimit({
   message: 'Too many issue reports. Please try again shortly.'
 }));
 
+const reviewSubmissionRateLimit = postOnly(rateLimit({
+  keyPrefix: 'review-submission',
+  maxEnv: 'REVIEW_SUBMISSION_RATE_LIMIT_MAX',
+  windowEnv: 'REVIEW_SUBMISSION_RATE_LIMIT_WINDOW_MS',
+  defaultMax: 8,
+  defaultWindowMs: 60 * 60 * 1000,
+  message: 'Too many review submissions. Please try again later.'
+}));
+
 const orderLookupRateLimit = methodOnly(['GET'], rateLimit({
   keyPrefix: 'order-lookup', maxEnv: 'ORDER_LOOKUP_RATE_LIMIT_MAX',
   windowEnv: 'ORDER_LOOKUP_RATE_LIMIT_WINDOW_MS', defaultMax: 120, defaultWindowMs: 10 * 60 * 1000,
@@ -81,7 +91,7 @@ const adminSensitiveRateLimit = postOnly(rateLimit({
 }));
 
 function errorHandler(error, req, res, _next) {
-  const status = error.status || 500;
+  const status = error.status || (error.name === 'MulterError' ? 400 : 500);
   if (status >= 500) {
     // Structured server-error log: greppable, without request bodies or customer PII.
     console.error(JSON.stringify({
@@ -151,6 +161,7 @@ function createApp() {
   app.use('/api/checkout/quotes', quoteRateLimit);
   app.use('/api/cart-sessions', cartRateLimit);
   app.use('/api/issue-reports', issueReportRateLimit);
+  app.use('/api/reviews', reviewSubmissionRateLimit);
   app.use('/api/customer/login', customerAuthRateLimit);
   app.use('/api/customer/register', customerAuthRateLimit);
   app.use('/api/customer/oauth', customerOAuthRateLimit);
@@ -158,6 +169,7 @@ function createApp() {
   app.use('/api/admin/integrations/pancake', adminSensitiveRateLimit);
   app.use('/api/admin/products', adminSensitiveRateLimit);
   app.use('/api/admin/site-content', adminSensitiveRateLimit);
+  app.use('/api/admin/reviews', adminSensitiveRateLimit);
 
   app.use('/api/products', productRouter);
   app.use('/api/site-content', siteContentRouter);
@@ -166,6 +178,7 @@ function createApp() {
   app.use('/api/cart-sessions', cartSessionRouter);
   app.use('/api/issue-reports', issueReportsRouter);
   app.use('/api/discounts', discountRouter);
+  app.use('/api/reviews', reviewsRouter);
   app.use('/api/customer', customerRouter);
   app.use('/api/storefront-settings', storeSettingsRouter);
   app.use('/api/integrations/pancake/webhook', pancakeWebhookRouter);

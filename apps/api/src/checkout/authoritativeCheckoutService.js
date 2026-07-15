@@ -1,5 +1,6 @@
 const { CommerceError } = require('./commerceError');
 const { normalizeCustomerName } = require('../customers/customerName');
+const { metaPurchaseEventId } = require('../marketing/metaEvent');
 
 function fail(message, code, status = 409, details) {
   throw new CommerceError(message, { code, status, details });
@@ -83,7 +84,7 @@ function buildOrder(input, quote, orderNumber, tokenHash, now) {
 function checkoutResponse(order) {
   return {
     orderNumber: order.orderNumber,
-    trackingEventId: `purchase:${order.orderNumber}`,
+    trackingEventId: metaPurchaseEventId(order),
     currency: 'PHP',
     totalCents: order.totalCents,
     items: order.items.map((item) => ({

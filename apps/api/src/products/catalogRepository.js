@@ -323,7 +323,11 @@ function normalizeEditableProduct(product) {
     featured: Boolean(product.featured),
     images,
     variants,
-    productPage: normalizeProductPage(product.productPage, name)
+    productPage: normalizeProductPage(product.productPage, name),
+    reviewSettings: normalizeReviewSettings(product.reviewSettings || {
+      reviewsEnabled: product.reviewsEnabled,
+      showRatingSummary: product.showRatingSummary
+    })
   };
 }
 
@@ -447,6 +451,7 @@ function toCatalogProduct(product) {
     images,
     imageRecords,
     productPage: product.productPage || null,
+    reviewSettings: normalizeReviewSettings(product.reviewSettings),
     variants
   };
 }
@@ -524,8 +529,8 @@ async function savePostgresProduct(client, product) {
     `INSERT INTO products (
       slug, product_id, public_handle, name, description, collections, price_cents, compare_at_price_cents,
       merchandising_status, status, featured, category, product_type, vendor, tags, seo,
-      metafields, theme_template, product_page, parcel_weight_grams, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18, $19::jsonb, $20, now())
+      metafields, theme_template, product_page, parcel_weight_grams, reviews_enabled, show_rating_summary, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18, $19::jsonb, $20, $21, $22, now())
     ON CONFLICT (slug) DO UPDATE SET
       public_handle = EXCLUDED.public_handle,
       name = EXCLUDED.name,
@@ -545,6 +550,8 @@ async function savePostgresProduct(client, product) {
       theme_template = EXCLUDED.theme_template,
       product_page = EXCLUDED.product_page,
       parcel_weight_grams = EXCLUDED.parcel_weight_grams,
+      reviews_enabled = EXCLUDED.reviews_enabled,
+      show_rating_summary = EXCLUDED.show_rating_summary,
       updated_at = now()`,
     [
       product.slug,
@@ -566,7 +573,9 @@ async function savePostgresProduct(client, product) {
       JSON.stringify(product.metafields || {}),
       product.themeTemplate,
       JSON.stringify(product.productPage || null),
-      product.parcelWeightGrams
+      product.parcelWeightGrams,
+      product.reviewSettings.reviewsEnabled,
+      product.reviewSettings.showRatingSummary
     ]
   );
 
@@ -696,6 +705,10 @@ function fromPostgresProduct(row) {
     metafields: row.metafields || {},
     themeTemplate: row.theme_template || 'Default product',
     productPage: row.product_page || null,
+    reviewSettings: normalizeReviewSettings({
+      reviewsEnabled: row.reviews_enabled,
+      showRatingSummary: row.show_rating_summary
+    }),
     images: [],
     variants: []
   };
@@ -836,6 +849,14 @@ function normalizeMetafields(metafields) {
     key,
     normalizeOptionalStringList(value)
   ]));
+}
+
+function normalizeReviewSettings(value) {
+  const record = value && typeof value === 'object' ? value : {};
+  return {
+    reviewsEnabled: record.reviewsEnabled === undefined ? true : Boolean(record.reviewsEnabled),
+    showRatingSummary: record.showRatingSummary === undefined ? true : Boolean(record.showRatingSummary)
+  };
 }
 
 function normalizeStatus(value) {
@@ -985,6 +1006,7 @@ module.exports = {
   loadEditableProducts,
   normalizeEditableProduct,
   normalizePublicHandle,
+  normalizeReviewSettings,
   productsPath,
   replaceEditableProducts,
   restoreEditableProduct,

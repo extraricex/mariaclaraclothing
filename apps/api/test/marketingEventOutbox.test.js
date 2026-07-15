@@ -35,14 +35,32 @@ test('Meta outbox schema enforces unique events and queryable pending state', as
 });
 
 test('Meta outbox repository inserts and atomically claims due events', async () => {
-  const client = recordingClient([{ id: 'meta-1', event_id: 'purchase:MCC-1', payload: {} }]);
-  await insertMetaPurchaseOutbox(client, { event_id: 'purchase:MCC-1', custom_data: { order_id: 'MCC-1' } });
+  const client = recordingClient([{ id: 'meta-1', event_id: 'purchase_MCC-1', payload: {} }]);
+  await insertMetaPurchaseOutbox(client, {
+    event_id: 'purchase_MCC-1',
+    custom_data: { order_id: 'MCC-1', currency: 'PHP', value: 1278 }
+  });
   await claimDueMetaEvents(client, { now: new Date('2026-06-20T12:00:00Z'), limit: 10 });
 
   assert.match(client.calls[0].sql, /INSERT INTO marketing_event_outbox/);
   assert.match(client.calls[0].sql, /ON CONFLICT \(event_id\) DO NOTHING/);
   assert.match(client.calls[1].sql, /FOR UPDATE SKIP LOCKED/);
   assert.match(client.calls[1].sql, /status = 'sending'/);
+});
+
+test('Meta outbox refuses Purchase events with invalid value or currency', async () => {
+  const client = recordingClient();
+  for (const customData of [
+    { currency: 'PHP', value: 0 },
+    { currency: 'PHP', value: Number.NaN },
+    { currency: 'PHP 1278', value: 1278 },
+    { value: 1278 }
+  ]) {
+    assert.equal(await insertMetaPurchaseOutbox(client, {
+      event_id: 'purchase_invalid', custom_data: customData
+    }), null);
+  }
+  assert.equal(client.calls.length, 0);
 });
 
 test('Meta outbox repository records sent, retry, failed and stale states', async () => {

@@ -37,4 +37,6 @@ test('admin order detail shows saved promo snapshot and discount-aware totals', 
   assert.match(source, /freeShippingApplied/);
   assert.match(source, /appliedRule/);
   assert.match(source, /subtotalCents - discountTotalCents \+ Number\(order\.shippingFeeCents/);
+  assert.match(source, /storedTotalCents = Number\(order\.totalCents\)/);
+  assert.match(source, /\? storedTotalCents\s*:\s*calculatedTotalCents/);
 });

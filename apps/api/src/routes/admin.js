@@ -110,6 +110,7 @@ const {
   listIssueReports,
   updateIssueReport
 } = require('../issueReports/issueReportRepository');
+const { createAdminReviewsRouter } = require('./adminReviews');
 
 const router = express.Router();
 
@@ -243,6 +244,7 @@ router.use(requireAdmin);
 router.use(requireAdminCsrf);
 
 router.use('/integrations/pancake', createAdminPancakeRouter());
+router.use('/reviews', createAdminReviewsRouter());
 
 router.get('/session', (req, res) => res.json({ authenticated: true }));
 
@@ -1725,7 +1727,11 @@ function normalizeProductRequest(body) {
       ? null
       : normalizePositiveInteger(body.compareAtPriceCents, 'Compare-at price is invalid'),
     images: normalizeProductImages(body.images),
-    variants: normalizeProductVariants(body.variants)
+    variants: normalizeProductVariants(body.variants),
+    reviewSettings: {
+      reviewsEnabled: body.reviewSettings?.reviewsEnabled === undefined ? true : Boolean(body.reviewSettings.reviewsEnabled),
+      showRatingSummary: body.reviewSettings?.showRatingSummary === undefined ? true : Boolean(body.reviewSettings.showRatingSummary)
+    }
   };
 }
 

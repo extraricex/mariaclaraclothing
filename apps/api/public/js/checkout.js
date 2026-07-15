@@ -442,13 +442,16 @@ function renderCheckoutSuccess(order) {
 function saveCheckoutConfirmation(order, payload, totals) {
   sessionStorage.setItem('maria-clara-last-order', JSON.stringify({
     orderNumber: order.orderNumber,
+    trackingEventId: order.trackingEventId,
     customerName: payload.customer.fullName,
-    paymentMethod: 'Cash on Delivery',
+    paymentMethod: order.paymentMethod || 'cash_on_delivery',
+    paymentStatus: order.paymentStatus || 'cod_pending',
     addressLine: payload.address.addressLine,
-    shippingRegionLabel: totals.shippingRegionLabel,
-    shippingFeeCents: totals.shippingFeeCents,
-    totalCents: totals.totalCents,
-    placedAt: new Date().toISOString()
+    shippingRegionLabel: order.shippingRegionLabel || totals.shippingRegionLabel,
+    shippingFeeCents: Number(order.shippingFeeCents ?? totals.shippingFeeCents),
+    totalCents: Number(order.totalCents),
+    items: order.items || [],
+    placedAt: order.placedAt || new Date().toISOString()
   }));
 }
 
@@ -642,7 +645,7 @@ function renderCheckoutPage() {
         shippingRegion: totals.shippingRegion,
         totalCents: totals.totalCents
       });
-      window.trackMetaPixelPurchase?.(result, currentItems, totals);
+      window.trackMetaPixelPurchase?.(result, result.items || currentItems);
       clearCart();
       form.reset();
       addressState.selectedProvince = null;

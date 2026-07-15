@@ -44,3 +44,15 @@ test('Products dropdown links to the dedicated product countdown route', async (
   assert.match(app, /path="products\/countdown" element=\{<ProductCountdown \/>\}/);
   assert.ok(app.indexOf('path="products/countdown"') < app.indexOf('path="products/:slug"'));
 });
+
+test('Reviews is a prominent, always-accessible admin navigation item', async () => {
+  const layout = await readFile(
+    path.join(import.meta.dirname, '..', 'src', 'admin', 'AdminLayout.jsx'),
+    'utf8'
+  );
+
+  assert.match(layout, /REVIEW_NAV_ITEM = \{ to: '\/admin\/reviews', label: 'Reviews', badge: 'reviews' \}/);
+  assert.ok(layout.indexOf('<NavLink to={REVIEW_NAV_ITEM.to}') < layout.indexOf('aria-label={ordersMenuOpen'));
+  assert.match(layout, /overflow-y-auto[^"]*lg:sticky[^"]*lg:h-screen/);
+  assert.match(layout, /MOBILE_NAV = \[[\s\S]*REVIEW_NAV_ITEM/);
+});

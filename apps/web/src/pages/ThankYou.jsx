@@ -40,8 +40,9 @@ export default function ThankYou() {
   }, [orderNumber, confirmation]);
 
   useEffect(() => {
-    if (order?.paymentMethod !== 'paymongo' || order.paymentStatus !== 'paid') return;
-    trackFacebookPurchase({ ...order, trackingEventId: `purchase:${order.orderNumber}` }, order.items || [], `purchase:${order.orderNumber}`);
+    const unsuccessfulOrder = ['cancelled', 'failed', 'expired'].includes(String(order?.status || '').toLowerCase());
+    if (order?.paymentMethod !== 'paymongo' || order.paymentStatus !== 'paid' || unsuccessfulOrder) return;
+    trackFacebookPurchase(order, order.items || [], order.trackingEventId);
     clearCheckoutReviewDraft(); clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
   }, [order]);
 

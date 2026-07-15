@@ -31,7 +31,7 @@ test('Postgres checkout serializes the idempotency key and uses one client for e
     appendMovements: async (_items, options) => calls.push(['movements', options.client]),
     convertCart: async (_cart, _order, options) => calls.push(['cart', options.client]),
     incrementDiscount: async (_code, options) => calls.push(['discount', options.client]),
-    buildMetaEvent: () => ({ event_id: 'purchase:MCC-1', custom_data: { order_id: 'MCC-1' } }),
+    buildMetaEvent: () => ({ event_id: 'purchase_MCC-1', custom_data: { order_id: 'MCC-1' } }),
     insertOutbox: async (usedClient) => calls.push(['outbox', usedClient]),
     enqueueOrderExport: async (_order, options) => calls.push(['pancakeExport', options.client]),
     metaEnabled: true

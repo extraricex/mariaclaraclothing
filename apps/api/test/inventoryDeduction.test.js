@@ -147,7 +147,7 @@ test('creating an order deducts the ordered variant stock', async () => {
     const body = JSON.parse(responseText);
     assert.equal(body.currency, 'PHP');
     assert.equal(body.totalCents, picked.item.unitPriceCents + 8000);
-    assert.equal(body.trackingEventId, `purchase:${body.orderNumber}`);
+    assert.equal(body.trackingEventId, `purchase_${body.orderNumber}`);
     assert.deepEqual(body.items, [{
       variantId: picked.item.variantId,
       externalPosVariantId: picked.item.externalPosVariantId,

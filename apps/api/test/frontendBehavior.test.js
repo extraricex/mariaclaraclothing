@@ -51,8 +51,10 @@ test('Meta Pixel wrapper initializes only when configured and exposes standard e
   assert.match(storefront, /trackMetaPixelAddToCart\?\.\(product, selectedVariant/);
   assert.match(cart, /trackMetaPixelInitiateCheckout\?\.\(getCart\(\), cartTotals\(getCart\(\)\)/);
   assert.match(checkout, /trackMetaPixelInitiateCheckout\?\.\(items, checkoutTotals\(items/);
-  assert.match(checkout, /trackMetaPixelPurchase\?\.\(result, currentItems, totals\)/);
+  assert.match(checkout, /trackMetaPixelPurchase\?\.\(result, result\.items \|\| currentItems\)/);
   assert.match(thankYou, /trackMetaPixelPurchase\?\.\(order\)/);
+  assert.match(thankYou, /!\['paid', 'cod_pending'\]\.includes\(order\.paymentStatus\)/);
+  assert.match(checkout, /totalCents: Number\(order\.totalCents\)/);
 });
 
 test('product and cart scripts preserve product imagery through checkout', () => {

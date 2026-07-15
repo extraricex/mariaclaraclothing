@@ -3,6 +3,7 @@ import { formatMoney } from '../lib/money.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { CustomerBadge } from './ui/Badge.jsx';
 import { productPath } from '../lib/productUrl.js';
+import { Stars } from './ProductReviews.jsx';
 
 export function totalStock(product) {
   return product.variants.reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
@@ -16,6 +17,11 @@ export default function ProductCard({ product, index }) {
   const stock = totalStock(product);
   const limited = !soldOut && stock > 0 && stock <= settings.inventory.lowStockThreshold;
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
+  const showRating = settings.reviews?.enabled !== false &&
+    settings.reviews?.showRatingsOnProductCards !== false &&
+    product.reviewSettings?.reviewsEnabled !== false &&
+    product.reviewSettings?.showRatingSummary !== false &&
+    Number(product.reviewSummary?.totalReviews || 0) > 0;
 
   return (
     <Link
@@ -56,6 +62,12 @@ export default function ProductCard({ product, index }) {
         <div className="mt-2 flex flex-col items-center gap-0.5 px-1 pb-1 pt-0.5">
           <div className="min-w-0">
             <h3 className="line-clamp-2 text-[12px] font-semibold leading-snug sm:text-sm group-hover:text-accent">{product.name}</h3>
+            {showRating && (
+              <div className="mt-1 flex flex-wrap items-center justify-center gap-1 text-[11px] text-ink-soft">
+                <Stars rating={product.reviewSummary.averageRating} />
+                <span>{Number(product.reviewSummary.averageRating).toFixed(1)} ({product.reviewSummary.totalReviews})</span>
+              </div>
+            )}
           </div>
           <div className="text-[12px] sm:text-sm">
             <p className={onSale ? 'font-semibold text-accent' : 'font-semibold'}>{formatMoney(product.priceCents)}</p>

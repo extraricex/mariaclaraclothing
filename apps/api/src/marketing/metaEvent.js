@@ -15,11 +15,23 @@ function normalizePhoneForMeta(phone) {
 }
 
 function contentId(item = {}) {
-  return String(item.externalPosVariantId || item.variantId || item.id || item.productId || '').trim();
+  return String(item.externalPosVariantId || item.variantId || item.sku || item.id || item.productId || '').trim();
 }
 
 function moneyValue(cents) {
   return Number((Number(cents || 0) / 100).toFixed(2));
+}
+
+function purchaseValue(totalCents) {
+  const cents = Number(totalCents);
+  if (!Number.isInteger(cents) || cents <= 0) return null;
+  const value = Number((cents / 100).toFixed(2));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function metaPurchaseEventId(order = {}) {
+  const orderId = String(order.id || order.orderNumber || '').trim();
+  return orderId ? `purchase_${orderId}` : '';
 }
 
 function optionalText(value, maxLength) {
@@ -45,13 +57,23 @@ function parseMetaCookies(header) {
 }
 
 function buildMetaPurchaseEvent({ order, requestContext = {} }) {
+  const value = purchaseValue(order?.totalCents);
+  const eventId = metaPurchaseEventId(order);
+  if (value === null || !eventId) return null;
+
   const items = (Array.isArray(order?.items) ? order.items : [])
-    .map((item) => ({
-      id: contentId(item),
-      quantity: Math.max(1, Number(item.quantity || 1)),
-      item_price: moneyValue(item.unitPriceCents)
-    }))
-    .filter((item) => item.id);
+    .map((item) => {
+      const quantity = Number(item.quantity);
+      const unitPriceCents = Number(item.unitPriceCents);
+      return {
+        id: contentId(item),
+        quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 0,
+        item_price: Number.isInteger(unitPriceCents) && unitPriceCents >= 0
+          ? moneyValue(unitPriceCents)
+          : null
+      };
+    })
+    .filter((item) => item.id && item.quantity > 0 && Number.isFinite(item.item_price));
   const email = normalizeEmailForMeta(order?.customer?.email);
   const phone = normalizePhoneForMeta(order?.customer?.phone);
   const userData = {};
@@ -67,18 +89,21 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
   if (fbp) userData.fbp = fbp;
   if (fbc) userData.fbc = fbc;
 
+  const completedAtMs = new Date(order.paidAt || order.placedAt).getTime();
   const event = {
     event_name: 'Purchase',
-    event_time: Math.floor(new Date(order.placedAt).getTime() / 1000),
-    event_id: `purchase:${order.orderNumber}`,
+    event_time: Math.floor((Number.isFinite(completedAtMs) ? completedAtMs : Date.now()) / 1000),
+    event_id: eventId,
     action_source: 'website',
     user_data: userData,
     custom_data: {
       currency: 'PHP',
-      value: moneyValue(order.totalCents),
+      value,
       order_id: String(order.orderNumber || ''),
+      payment_method: String(order.paymentMethod || ''),
       content_type: 'product',
       content_ids: items.map((item) => item.id),
+      num_items: items.reduce((total, item) => total + item.quantity, 0),
       contents: items
     }
   };
@@ -87,10 +112,30 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
   return event;
 }
 
+function logMetaPurchaseDevelopment(logger, { order, event, browserPixelSent = 'reported_by_browser', conversionsApiSent = false, reason = '' }) {
+  if (process.env.NODE_ENV !== 'development') return;
+  logger?.info?.('Meta Purchase development status.', {
+    orderId: String(order?.id || order?.orderNumber || ''),
+    eventId: event?.event_id || metaPurchaseEventId(order),
+    purchaseValue: event?.custom_data?.value ?? purchaseValue(order?.totalCents),
+    currency: event?.custom_data?.currency || 'PHP',
+    paymentMethod: String(order?.paymentMethod || ''),
+    numberOfItems: event?.custom_data?.num_items ?? (Array.isArray(order?.items)
+      ? order.items.reduce((total, item) => total + Math.max(0, Number(item.quantity || 0)), 0)
+      : 0),
+    browserPixelSent,
+    conversionsApiSent,
+    reason
+  });
+}
+
 module.exports = {
   buildMetaPurchaseEvent,
+  logMetaPurchaseDevelopment,
+  metaPurchaseEventId,
   normalizeEmailForMeta,
   normalizePhoneForMeta,
   parseMetaCookies,
+  purchaseValue,
   sha256
 };

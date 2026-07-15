@@ -448,7 +448,11 @@ export default function OrderDetail() {
   const shippingFeeCents = Number(order.shippingFeeCents || 0);
   const surchargeCents = Number(order.surchargeCents || 0);
   const discountAwareOrderTotalCents = subtotalCents - discountTotalCents + Number(order.shippingFeeCents || 0);
-  const totalCents = Math.max(0, discountAwareOrderTotalCents + surchargeCents);
+  const calculatedTotalCents = Math.max(0, discountAwareOrderTotalCents + surchargeCents);
+  const storedTotalCents = Number(order.totalCents);
+  const totalCents = Number.isInteger(storedTotalCents) && storedTotalCents >= 0
+    ? storedTotalCents
+    : calculatedTotalCents;
   const paymentSettled = ['paid', 'partially_refunded', 'refunded'].includes(form.paymentStatus);
   const paidCents = paymentSettled ? Number(order.paidAmountCents ?? totalCents) : 0;
   const balanceCents = paymentSettled ? 0 : Math.max(totalCents - paidCents, 0);

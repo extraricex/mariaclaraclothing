@@ -3,6 +3,10 @@ require('dotenv').config();
 const { Client } = require('pg');
 
 const APP_TABLES = [
+  'review_audit_events',
+  'review_images',
+  'reviews',
+  'review_import_batches',
   'product_images',
   'product_variants',
   'products',

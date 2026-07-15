@@ -1,6 +1,7 @@
 const express = require('express');
 const { listCatalogProducts, findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { listOrders } = require('../orders/orderRepository');
+const { reviewSummariesByProduct } = require('../reviews/reviewRepository');
 
 const router = express.Router();
 
@@ -47,10 +48,19 @@ function annotateBestSellerCounts(products, orders) {
   }));
 }
 
+function annotateReviewSummaries(products, summaries) {
+  return products.map((product) => ({
+    ...product,
+    reviewSummary: summaries[product.slug] || { averageRating: 0, totalReviews: 0 }
+  }));
+}
+
 router.get('/', async (_req, res, next) => {
   try {
-    const [products, orders] = await Promise.all([listCatalogProducts(), listOrders()]);
-    res.json({ products: annotateBestSellerCounts(products, orders), source: 'catalog' });
+    const [products, orders, reviewSummaries] = await Promise.all([
+      listCatalogProducts(), listOrders(), reviewSummariesByProduct()
+    ]);
+    res.json({ products: annotateReviewSummaries(annotateBestSellerCounts(products, orders), reviewSummaries), source: 'catalog' });
   } catch (error) {
     next(error);
   }
@@ -81,7 +91,10 @@ router.get('/:slug/route', async (req, res, next) => {
 
 router.get('/:slug', async (req, res, next) => {
   try {
-    const product = await findCatalogProductBySlug(req.params.slug);
+    const [product, reviewSummaries] = await Promise.all([
+      findCatalogProductBySlug(req.params.slug),
+      reviewSummariesByProduct()
+    ]);
 
     if (!product) {
       res.status(404).json({ error: 'Product not found' });
@@ -89,10 +102,16 @@ router.get('/:slug', async (req, res, next) => {
     }
 
     res.set('X-Product-Canonical-Handle', product.publicHandle);
-    res.json({ product, source: 'catalog' });
+    res.json({
+      product: {
+        ...product,
+        reviewSummary: reviewSummaries[product.slug] || { averageRating: 0, totalReviews: 0 }
+      },
+      source: 'catalog'
+    });
   } catch (error) {
     next(error);
   }
 });
 
-module.exports = { productRouter: router, annotateBestSellerCounts, successfulOrder };
+module.exports = { productRouter: router, annotateBestSellerCounts, annotateReviewSummaries, successfulOrder };

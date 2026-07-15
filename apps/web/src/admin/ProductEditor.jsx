@@ -47,6 +47,7 @@ const EMPTY_PRODUCT = {
   themeTemplate: 'Default product',
   status: 'active',
   featured: false,
+  reviewSettings: { reviewsEnabled: true, showRatingSummary: true },
   collections: [],
   priceCents: 0,
   parcelWeightGrams: 250,
@@ -796,6 +797,35 @@ export default function ProductEditor() {
                 <input type="checkbox" checked={Boolean(product.featured)} onChange={(e) => update('featured', e.target.checked)} />
               </label>
             </div>
+          </section>
+
+          <section className="border border-line bg-paper p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Product reviews</h2>
+            <div className="mt-4 space-y-3 text-sm">
+              <label className="flex items-center justify-between gap-3">
+                <span>Reviews enabled for this product</span>
+                <input
+                  type="checkbox"
+                  checked={product.reviewSettings?.reviewsEnabled !== false}
+                  onChange={(event) => update('reviewSettings', {
+                    ...(product.reviewSettings || {}),
+                    reviewsEnabled: event.target.checked
+                  })}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span>Show rating summary</span>
+                <input
+                  type="checkbox"
+                  checked={product.reviewSettings?.showRatingSummary !== false}
+                  onChange={(event) => update('reviewSettings', {
+                    ...(product.reviewSettings || {}),
+                    showRatingSummary: event.target.checked
+                  })}
+                />
+              </label>
+            </div>
+            <p className="mt-3 text-xs text-clay">Disabling reviews hides them without deleting any review records.</p>
           </section>
 
           <section className="border border-line bg-paper p-6">

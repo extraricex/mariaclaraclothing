@@ -15,7 +15,7 @@ const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/s
 const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const { env } = require('../config/env');
 const { persistPostgresCheckout } = require('../orders/checkoutService');
-const { buildMetaPurchaseEvent, parseMetaCookies } = require('../marketing/metaEvent');
+const { buildMetaPurchaseEvent, logMetaPurchaseDevelopment, metaPurchaseEventId, parseMetaCookies } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const pancakeInventoryOutboxRepository = require('../integrations/pancake/pancakeInventoryOutboxRepository');
@@ -110,12 +110,13 @@ legacyRouter.post('/', async (req, res, next) => {
         findByIdempotencyKey: findOrderByIdempotencyKey,
         deductStock: deductVariantStock,
         saveOrder,
-      appendMovements: appendInventoryMovements,
-      convertCart: markCartSessionConverted,
-      incrementDiscount: incrementDiscountUsage,
-      enqueueOrderExport,
-      buildMetaEvent: buildMetaPurchaseEvent,
+        appendMovements: appendInventoryMovements,
+        convertCart: markCartSessionConverted,
+        incrementDiscount: incrementDiscountUsage,
+        enqueueOrderExport,
+        buildMetaEvent: buildMetaPurchaseEvent,
         insertOutbox: insertMetaPurchaseOutbox,
+        logMetaDevelopment: (details) => logMetaPurchaseDevelopment(console, details),
         metaEnabled: env.meta.enabled
       });
     } else {
@@ -137,7 +138,7 @@ legacyRouter.post('/', async (req, res, next) => {
 
     res.status(201).json({
       orderNumber: completedOrder.orderNumber,
-      trackingEventId: `purchase:${completedOrder.orderNumber}`,
+      trackingEventId: metaPurchaseEventId(completedOrder),
       currency: 'PHP',
       totalCents: completedOrder.totalCents,
       items: completedOrder.items.map((item) => ({
@@ -177,6 +178,7 @@ function createOrderNumber() {
 function orderConfirmationPayload(order) {
   return {
     orderNumber: order.orderNumber,
+    trackingEventId: metaPurchaseEventId(order),
     customerName: customerFullName(order.customer),
     paymentMethod: 'Cash on Delivery',
     addressLine: order.address.addressLine,
@@ -383,6 +385,7 @@ function privateOrderPayload(order) {
     : String(order.paymentMethod || '').replaceAll('_', ' ');
   return {
     orderNumber: order.orderNumber,
+    trackingEventId: metaPurchaseEventId(order),
     customerName: customerName.fullName,
     customerFirstName: customerName.firstName,
     customerLastName: customerName.lastName,
@@ -429,7 +432,15 @@ function defaultAuthoritativeDependencies(req) {
     claimPromo: claimDiscountUsage,
     insertMeta: async (client, order, requestContext) => {
       if (!env.meta.enabled) return null;
-      return insertMetaPurchaseOutbox(client, buildMetaPurchaseEvent({ order, requestContext }));
+      const event = buildMetaPurchaseEvent({ order, requestContext });
+      const outbox = event ? await insertMetaPurchaseOutbox(client, event) : null;
+      logMetaPurchaseDevelopment(console, {
+        order,
+        event,
+        conversionsApiSent: false,
+        reason: !event ? 'invalid_purchase_data' : outbox ? 'queued' : 'duplicate'
+      });
+      return outbox;
     },
     enqueueOrderExport,
     enqueueInventorySync: (slugs, source, options) => pancakeInventoryOutboxRepository.enqueueInventorySync(slugs, source, {

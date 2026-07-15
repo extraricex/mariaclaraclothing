@@ -129,3 +129,17 @@ test('reservation expiry preserves a payment that completed before expiration', 
   assert.equal(expireCalls, 0);
   assert.equal(parsePaidEvent(outcome.paidPayload).paymentId, 'pay_paid_1');
 });
+
+test('failed, pending, cancelled, and unrelated PayMongo events cannot create a Purchase', async () => {
+  for (const eventType of [
+    'checkout_session.payment.failed',
+    'checkout_session.payment.pending',
+    'checkout_session.cancelled',
+    'checkout_session.created'
+  ]) {
+    const result = await require('../src/payments/paymongoPaymentService').processPaidWebhook({
+      data: { id: `evt-${eventType}`, type: 'event', attributes: { type: eventType, data: {} } }
+    }, { metaEnabled: true });
+    assert.deepEqual(result, { status: 'ignored', eventType });
+  }
+});

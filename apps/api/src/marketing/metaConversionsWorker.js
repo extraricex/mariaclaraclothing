@@ -36,6 +36,18 @@ function createMetaConversionsWorker({
       try {
         const response = await sendEvent(event.payload, { config });
         await repository.markMetaEventSent(client, event.id, { traceId: response.traceId });
+        if (process.env.NODE_ENV === 'development') {
+          logger.info?.('Meta Purchase development status.', {
+            orderId: event.aggregate_id,
+            eventId: event.event_id,
+            purchaseValue: event.payload?.custom_data?.value,
+            currency: event.payload?.custom_data?.currency,
+            paymentMethod: event.payload?.custom_data?.payment_method || '',
+            numberOfItems: event.payload?.custom_data?.num_items || 0,
+            browserPixelSent: 'reported_by_browser',
+            conversionsApiSent: true
+          });
+        }
         result.sent += 1;
       } catch (error) {
         const message = String(error?.message || 'Meta event delivery failed').slice(0, 1000);

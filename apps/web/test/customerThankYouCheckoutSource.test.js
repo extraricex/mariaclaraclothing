@@ -20,6 +20,8 @@ test('thank you page renders real order items and Messenger support from setting
   assert.match(thankYou, /item\.productName/);
   assert.match(thankYou, /item\.quantity/);
   assert.match(thankYou, /formatMoney\(Number\(item\.unitPriceCents/);
+  assert.match(thankYou, /\['cancelled', 'failed', 'expired'\]/);
+  assert.match(thankYou, /paymentStatus !== 'paid' \|\| unsuccessfulOrder/);
   assert.match(thankYou, /Thank you for your order! Your order is now complete and will be prepared for packing and shipping\./);
 });
 

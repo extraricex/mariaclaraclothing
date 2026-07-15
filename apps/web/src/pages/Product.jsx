@@ -9,6 +9,7 @@ import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
 import CollectionCountdown from '../components/CollectionCountdown.jsx';
+import ProductReviews, { Stars } from '../components/ProductReviews.jsx';
 import NotFound from './NotFound.jsx';
 import { productPath } from '../lib/productUrl.js';
 
@@ -377,6 +378,12 @@ export default function Product() {
         <div className="min-w-0">
           <div className="customer-buy-panel lg:sticky lg:top-24">
             <h1 className="display text-2xl leading-tight sm:text-4xl">{product.name}</h1>
+          {settings.reviews?.enabled !== false && settings.reviews?.showOnProductPages !== false && product.reviewSettings?.reviewsEnabled !== false && product.reviewSettings?.showRatingSummary !== false && Number(product.reviewSummary?.totalReviews || 0) > 0 && (
+            <a href="#customer-reviews" className="mt-3 inline-flex flex-wrap items-center gap-2 text-sm text-ink-soft hover:text-accent">
+              <Stars rating={product.reviewSummary.averageRating} />
+              <span>{Number(product.reviewSummary.averageRating).toFixed(1)} ({product.reviewSummary.totalReviews})</span>
+            </a>
+          )}
           <div className="mt-3 flex items-baseline gap-3 sm:mt-4">
             <p className={`text-xl font-semibold sm:text-2xl ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
@@ -518,6 +525,8 @@ export default function Product() {
           </div>
         </div>
       </div>
+
+      <ProductReviews product={product} />
 
       {recommendedProducts.length > 0 && (
         <section className="mt-20 border-t border-line pt-8">

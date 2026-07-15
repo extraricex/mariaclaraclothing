@@ -1,6 +1,9 @@
 const crypto = require('node:crypto');
 
 async function insertMetaPurchaseOutbox(client, event) {
+  if (!event?.event_id || event?.custom_data?.currency !== 'PHP' || !Number.isFinite(event?.custom_data?.value) || event.custom_data.value <= 0) {
+    return null;
+  }
   const id = crypto.randomUUID();
   const result = await client.query(
     `INSERT INTO marketing_event_outbox (

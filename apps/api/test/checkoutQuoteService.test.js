@@ -179,6 +179,20 @@ test('promo results use authoritative lines and can unlock free shipping', async
   assert.equal(quote.totalCents, 60000);
 });
 
+test('authoritative grand total includes discount and shipping exactly once', async () => {
+  const quote = await buildAuthoritativeQuote(quoteInput(), quoteDependencies({
+    getSettings: async () => ({ shipping: { ...SHIPPING, freeShippingEnabled: false } }),
+    quotePromos: async () => ({
+      discountCode: 'SAVE100', discountTotalCents: 10000, discountSnapshot: { code: 'SAVE100' },
+      freeShippingUnlocked: false
+    })
+  }));
+  assert.equal(quote.subtotalCents, 70000);
+  assert.equal(quote.discountTotalCents, 10000);
+  assert.equal(quote.shippingFeeCents, 8000);
+  assert.equal(quote.totalCents, 68000);
+});
+
 test('request hash excludes client-controlled names and prices', async () => {
   const first = await buildAuthoritativeQuote(quoteInput(), quoteDependencies());
   const second = await buildAuthoritativeQuote(quoteInput({

@@ -16,9 +16,9 @@ test('PostgreSQL Meta outbox enforces deduplication and delivery transitions', {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const event = {
     event_name: 'Purchase',
-    event_id: `purchase:integration-${suffix}`,
+    event_id: `purchase_integration-${suffix}`,
     user_data: { em: ['hashed'] },
-    custom_data: { order_id: `integration-${suffix}` }
+    custom_data: { order_id: `integration-${suffix}`, currency: 'PHP', value: 1278 }
   };
 
   try {

@@ -37,6 +37,7 @@ function toStorefrontProduct(product) {
     collections: product.collections,
     merchandisingStatus: product.status,
     featured: product.featured,
+    reviewSettings: product.reviewSettings || { reviewsEnabled: true, showRatingSummary: true },
     productPage: product.productPage,
     images: (product.imageRecords || product.images.map((url, index) => ({ url, altText: product.name, sortOrder: index }))).map((image, index) => ({
       id: `catalog-image-${product.slug}-${index}`,
