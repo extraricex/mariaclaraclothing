@@ -1,618 +1,552 @@
 # Maria Clara Clothing Website Conversion and Sales Audit
 
-Audit date: 2026-07-15
-Audited customer site: `https://mariaclaraclothing.com`
-Audited source: the current workspace and live public configuration
+Audit completed: 2026-07-16
+
+Audited site: https://mariaclaraclothing.com
+
+Deployed application commit: `a1556df`
+
+Pre-deployment backup: `20260716T000457Z`
 
 ## Overall Status
 
 **Not Ready**
 
-## Approved Implementation Follow-up — 2026-07-15
-
-The numbered item 3 in the audit's P0 Priority Roadmap is **“Decide and configure Meta consent with privacy/legal approval.”** It was intentionally skipped at the owner's instruction. The existing `requireConsent` value and all consent behavior remain unchanged.
-
-The other approved safe implementation work is now in the workspace:
-
-- permanent per-order Meta Purchase IDs, database-backed browser claims, unique CAPI dispatch, verified-paid PayMongo gating, historical-order replay lock, and removal of four scattered/obsolete browser Purchase paths;
-- corrected COD/PayMongo policy and payment guidance, verified OFFWHITE color copy, and the two identified trailing `Copy` product names through an additive migration;
-- real Shop search/filter/sort, server-backed free-shipping progress, cancellation recovery, and payment-aware trust copy;
-- active-hero-only loading, delayed next-slide preload, mobile benefit copy, product/collection metadata and real-review-only schema;
-- order sales aggregation that no longer loads full customer orders for the catalog endpoint;
-- the sitemap, HSTS/cache, checkout accessibility, modal, upsell, recommendation, and mobile obstruction fixes described below;
-- an admin-only Meta delivery/deduplication panel.
-
-Verification completed locally and in production: full API and storefront suites passed, the production Vite build passed, the dependency audit found zero vulnerabilities, both new migrations were dry-run and then applied, and all production containers are healthy. A controlled live COD order passed the one-browser/one-server Purchase test plus refresh and reopen deduplication, then was cancelled with stock restored. A successful post-fix PayMongo payment and Meta Test Events UI confirmation remain release gates, so the overall status correctly remains **Not Ready** at this point.
-
-The core commerce implementation is unusually strong for a custom storefront: totals are authoritative, stock writes are transactional, duplicate checkout is guarded, PayMongo waits for a verified payment, Pancake uses durable synchronization, Meta Purchase is deduplicated, customer accounts support stock-checked reordering, and the review system is database-backed and moderated.
-
-The remaining release gates are not speculative design preferences. The live Terms page says all orders are Cash on Delivery while PayMongo is enabled; an OFFWHITE product says its color is black; Meta tracking currently starts without consent; the current fixes are not yet deployed; and this audit intentionally did not create a live order or charge a payment. These items must be resolved or explicitly approved and verified before the site is called ready.
+The customer site is operational, responsive, and materially safer than the pre-audit build. The audited fixes are deployed and production is healthy. It is not yet responsible to call the store ready for unrestricted launch because no successful post-fix PayMongo production payment has been completed, several product pages promise delivery ranges that conflict with the global checkout settings, and one product has an unresolved color contradiction that requires owner confirmation.
 
 ## Executive Summary
 
-The storefront already has a clean, premium visual direction, a clear 240 GSM product proposition, visible pricing, real stock states, a two-item free-shipping offer, a separate review-and-payment step, COD and PayMongo, useful account features, and a real admin system. Across 60 live route/viewport combinations, all tested pages returned HTTP 200, no page-level horizontal overflow appeared, product images had alternative text, and no customer-facing JavaScript exception was observed.
+The application has a strong custom-commerce foundation:
 
-The largest conversion opportunities are:
+- React 18, React Router, Vite, and a shared customer/admin component system.
+- Express 4 with PostgreSQL in production and isolated JSON repositories only for development/tests.
+- Server-authoritative quotes and totals, transactional stock deduction, stable checkout idempotency, and strict structured-address validation.
+- COD orders are created only after validation and transaction commit.
+- PayMongo uses pending-payment reservations, signed webhooks, paid-amount validation, and expiry recovery.
+- Pancake POS uses durable mapping, inventory, order export/import, retry, reconciliation, and audit records.
+- Meta browser and server Purchase events use a permanent per-order ID and database-backed claims/outbox delivery.
+- Reviews are database-backed, moderated, privacy-safe, and support photos and secure XLSX import, although the live store currently has no published reviews and reviews are disabled.
+- Admin order email notifications are post-commit, idempotent, retriable, and do not block checkout.
 
-1. Correct contradictory or inaccurate production content before launch.
-2. Publish and feature only real moderated reviews; the complete review system exists but is globally disabled and the live catalog has no published rating evidence.
-3. Reduce image transfer. The live mobile homepage transferred about 3.62 MB in one isolated run, of which about 3.31 MB was images.
-4. Add product-specific search/share metadata and structured data. The live app is a client-rendered SPA with generic initial metadata and no live sitemap before this patch.
-5. Add search and lightweight collection filtering as the catalog grows.
-6. Add first-party funnel reporting so decisions are based on product-view, cart, checkout, payment-failure, and completion rates rather than only Meta delivery.
+The biggest verified conversion risks are:
 
-Safe fixes implemented during this audit:
+1. **PayMongo has no successful post-fix production acceptance result.** Historical PayMongo records predate the current validation/deduplication release.
+2. **Shipping promises conflict.** Global checkout settings say Metro Manila/Cavite 2–4 days, Luzon 3–6 days, and Visayas/Mindanao 5–8 days. Most product records still say 2–3, 3–5, and 6–8 days.
+3. **One product remains ambiguous.** MARIACLARA ROCKSTAR says “gray” in one paragraph and “Red” in its detail list. This audit did not guess which is correct.
+4. **Real social proof is absent.** Production has zero published reviews and the global review display is off.
+5. **Privacy/analytics governance is unresolved.** Meta tracking is configured with `requireConsent: false`. The owner should document the approved legal/privacy basis or enable consent.
+6. **Performance needs a production lab baseline.** The production bundle is sensibly route-split, but campaign and product images remain the dominant likely transfer cost. Real-user monitoring and Lighthouse traces are not configured.
 
-- Mobile promotional cards no longer cover product content; mobile keeps a compact Messenger icon and moves Report Issue to the footer.
-- Checkout and account forms now expose visible labels and accessible errors.
-- Disabled OAuth controls no longer look like broken sign-in options when providers are not configured.
-- Product recommendations exclude sold-out items and prioritize shared collections.
-- Cart upsells require an explicit in-stock size selection.
-- Size-chart and Report Issue dialogs trap focus, close with Escape, and restore focus.
-- Customer-facing empty collection and missing-size-chart copy no longer exposes configuration language.
-- A real, database/catalog-driven XML sitemap route was added.
-- Hashed frontend assets receive long-lived caching, and production nginx adds HSTS.
-- A React product-image attribute warning was removed.
+Safe fixes deployed in this audit:
 
-## Audit Scope and Actual Architecture
+- Corrected verified CURIOSITY OFFWHITE and MANDALA BLACK product-copy errors.
+- Replaced four unrelated cloned public handles with clean canonical handles while preserving all old URLs as aliases.
+- Made product free-shipping copy use the real admin-configured enable flag and item threshold.
+- Replaced generic Cart recommendations with stable, in-stock, same-collection/type-first recommendations.
+- Added 44px product gallery, size, quantity, and cart quantity tap targets.
+- Added real order item images to the Thank You page.
+- Corrected “Returns address” to the factual “Store location.”
+- Fixed admin action-menu keyboard focus so Home/End navigation is not overwritten.
+- Added a non-mutating customer route audit across 320, 360, 390, 430, 768, 1024, and 1440px.
 
-| Area | Actual implementation found |
+No prices, discounts, inventory, shipping rules, legal policies, reviews, or payment availability were invented or silently changed.
+
+## Actual Project and Production Architecture
+
+| Area | Implementation verified |
 | --- | --- |
-| Frontend | React 18, React Router, Vite, Tailwind/custom customer and admin design systems |
-| Backend | Node.js CommonJS with Express 4 |
-| Database | PostgreSQL in production; isolated JSON repositories only for development/tests |
-| Routing | Customer SPA routes in `apps/web/src/App.jsx`; API routers in `apps/api/src/app.js`; nginx serves known routes and product canonical redirects |
-| Products | Products, variants, images, public handles, collection membership, per-size stock, page content, size charts, review settings, and Pancake mappings |
-| Cart | Browser cart plus server cart-session synchronization and abandoned/draft state |
-| Checkout | Server quote, separate information and review/payment pages, stable idempotency key, transactional order/inventory writes |
-| PayMongo | Hosted Checkout V2, pending-payment reservation, signed webhook verification, amount/currency validation, expiration/recovery worker |
-| Pancake POS | Catalog import/mapping, inventory reconciliation, order export, inbound polling/webhook, outbound retry queues, conflict/audit records |
-| Meta | Browser PageView/ViewContent/AddToCart/InitiateCheckout/AddPaymentInfo/Purchase; server Purchase through a durable CAPI outbox |
-| Reviews | Database reviews, published-only aggregation, images, verified-order matching, moderation/audit, safe XLSX preview/import, global and per-product controls |
-| Authentication | Customer email accounts and optional real OAuth; secure cookie/CSRF admin and customer sessions; Cloudflare Access in front of production admin |
-| Notifications | Durable post-commit admin-order email outbox with retry and protected manual resend |
-| Production | Docker Compose, PostgreSQL, Express API, nginx web container, Cloudflare/Caddy edge, migrations, backups and workers |
+| Frontend | React 18, React Router, Vite, Tailwind/custom CSS, customer and admin SPAs |
+| Backend | Node.js CommonJS and Express 4 |
+| Database | PostgreSQL 16 production; isolated JSON fallback for development/tests |
+| Product model | Products, variants, per-size stock, external POS IDs, images, collections, handles/aliases, editable product-page content, parcel weight, SEO and review controls |
+| Cart | Browser cart plus server cart-session synchronization and draft/abandoned/converted state |
+| Checkout | Server quote, separate information and review pages, confirmation token, stable idempotency key, one database transaction for order/stock/movements |
+| PayMongo | Hosted Checkout, pending reservation, signed webhook, amount/currency verification, expiry/reconciliation worker |
+| Pancake POS | Live mapping, catalog/inventory reconciliation, order shadows/export, webhook/polling, retry and audit |
+| Meta | Browser PageView/ViewContent/AddToCart/InitiateCheckout/AddPaymentInfo/Purchase and server Purchase CAPI outbox |
+| Reviews | Moderation, photos, published-only stats, verified-order matching, visibility settings, secure XLSX preview/import |
+| Authentication | Secure cookie and CSRF sessions; customer email accounts; OAuth buttons hidden unless fully configured |
+| Admin | Orders, products, inventory, discounts, cart sessions, customers, reviews, settings, Pancake, payments, issues |
+| Production | Docker Compose, nginx, PostgreSQL, health checks, migrations, backups, Cloudflare/Caddy edge |
 
 ## Current Customer Journey
 
-1. The homepage opens with Maria Clara Clothing campaign imagery, brand name, collection CTAs, the real two-item free-shipping proposition, COD, and 240 GSM positioning.
-2. Customers browse New Arrivals, Tees, and Freedom of Mind. Freedom of Mind resolves correctly and active collections contain real products.
-3. Shared product cards show image, name, price, sale comparison, real availability, and published ratings only when those records exist.
-4. A product page provides a swipeable gallery, thumbnails, price, size choices, real per-size stock, quantity, size chart, editable product details, shipping copy, reviews when enabled, and recommendations.
-5. Add to Cart runs only after an available variant and valid quantity are accepted. The cart drawer refreshes a server quote.
-6. The cart supports quantity updates, stock caps, removal, subtotal/discount state, free-shipping state, and size-explicit recommendations after this audit.
-7. Checkout collects customer and hierarchical Philippine delivery data, saves a resumable draft/cart session, validates fields, focuses the first error, and requests an authoritative quote.
-8. The separate review page revalidates the quote, shows products, address, subtotal, discount, shipping, total, payment choices, and stable in-stock recommendations with required variant selection.
-9. COD creates the order only on final confirmation. The database transaction consumes the quote, writes snapshots, deducts inventory, claims discount usage, creates notification/sync/Meta outbox work, and completes idempotency.
-10. PayMongo creates a pending-payment order/reservation and redirects to hosted checkout. A signed paid webhook with matching PHP amount is required before paid status, Meta Purchase, and the admin email are released.
-11. The Thank You page retrieves a private confirmation with a token, displays real order snapshots and customer-safe status, and offers Messenger support. Refresh does not create another browser Purchase.
-12. Admin receives the order, notification status, stock movements, payment status, Pancake sync status, and operational actions. Pancake failures are retained for retry and do not erase the local order.
-13. Returning customers can save an address, see order history/tracking, and use Buy Again with current stock validation.
+1. The homepage introduces Maria Clara Clothing, 240 GSM apparel, COD, collections, and the real two-item free-shipping rule.
+2. Customers navigate New Arrivals, Tees, Freedom of Mind, Shop, search, and filters.
+3. Product cards display real images, names, prices, availability, and ratings only when published reviews exist.
+4. Product pages provide gallery navigation, real per-size stock, price, size chart, quantity, details, shipping content, reviews when enabled, and in-stock recommendations.
+5. Add to Cart is blocked for unavailable stock/quantity and opens a quote-backed cart drawer after success.
+6. Cart supports stock-capped quantity changes, removal, authoritative subtotal/promo state, free-shipping progress, and stable in-stock recommendations.
+7. Checkout requires first name, last name, Philippine mobile number, street, barangay, city/municipality, and province. Email and ZIP remain optional. Delivery Notes were intentionally removed in the earlier critical checkout fix.
+8. The Review page revalidates delivery data and the server quote, then shows products, address, subtotal, discount, shipping, final total, payment methods, and recommendations.
+9. COD creates an order only after the customer confirms and the order/stock transaction commits.
+10. PayMongo creates a pending-payment reservation and releases paid-order side effects only after a verified matching webhook.
+11. Thank You retrieves a private server confirmation and displays order snapshots, customer-safe status, complete totals, delivery details, product images, and Messenger support.
+12. Admin receives the order, inventory movements, email state, payment state, Meta state, and Pancake state.
+13. Returning customers can sign in, view order history, save an address, and use stock-validated Buy Again.
 
 ## Critical Issues
 
-| ID | Problem | Customer impact | Recommended solution | Expected impact | Effort | Files/admin area | Fixed | Test/result |
+| ID | Problem | Customer impact | Recommended solution | Expected conversion impact | Effort | Files/components affected | Fixed | Test result |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P0-01 | Live Terms says “All orders are Cash on Delivery” while PayMongo is enabled. | Customers may question online payment legitimacy; policy and checkout contradict each other. | Owner must update Terms and FAQ in Admin > Settings with approved COD and PayMongo wording. Do not invent legal copy. | High trust and payment completion | Low | Admin info pages; `storeSettingsRepository.js` fallback | No—owner content approval required | Confirmed in live `/api/storefront-settings` |
-| P0-02 | `CURIOSITY OFFWHITE` describes a “black color” and lists `Color: Black`. | Wrong product expectations, returns, complaints, and chargeback risk. | Correct the actual product description/details in Admin > Products and verify images/SKU/variant color. | High product trust and lower returns | Low | Admin product editor/catalog record | No—production product content must be owner-verified | Confirmed against live product data and page |
-| P0-03 | Current safe fixes and sitemap exist locally; live `/sitemap.xml` still returns 404 and live responses lack HSTS. | Search discovery remains weaker and security/UI fixes are not active. | Deploy this changeset through the existing backup/migration/health workflow, then verify the sitemap and headers. | Medium conversion; high release hygiene | Low | nginx, API sitemap route, frontend files | Code fixed; deployment pending | Local sitemap HTTP 200; live pre-deploy sitemap 404 |
-| P0-04 | This audit did not place a real production COD order or charge PayMongo. | Final edge/provider behavior cannot be certified solely from unit tests. | After deployment, use controlled staff details and real in-stock test SKUs; observe database total, stock, email, Pancake, Meta, and Thank You exactly once. Cancel/restock only through normal admin policy. | Critical transaction confidence | Medium | Checkout, PayMongo, Pancake, Meta, email/admin | No—deliberately not fabricated | Automated coverage passed; live destructive test not run |
-| P0-05 | Live Meta setting has `requireConsent: false`; tracking starts immediately and the choice dialog is available only from the footer. | Privacy expectations and legal basis may be unclear, lowering trust and creating compliance risk. | Owner/privacy counsel must approve the basis. The conservative option is enabling required consent and adding a visible Privacy Choices entry. | High risk reduction; possible analytics volume tradeoff | Low | Admin > Settings > Meta Pixel; privacy terms | No—requires business/legal decision | Confirmed in live public settings |
+| P0-01 | No successful PayMongo order has completed the current production flow. | A provider, webhook, return URL, or account-channel problem could appear only during a real payment. | Run one controlled paid order, verify charged PHP amount, paid webhook, one email, one Meta Purchase ID, one Pancake export, Thank You, then process the test order under normal policy. | Critical checkout confidence | Medium | PayMongo account/webhook, `checkout.js`, PayMongo services, Payments admin | No | Automated paid/pending/failure/retry tests pass; live successful payment still required |
+| P0-02 | Product shipping text conflicts with global checkout ranges. | Customers may see a faster or different promise before checkout, reducing trust and causing complaints. | Owner must approve one set of ranges, then update affected product Shipping fields or global settings through Admin. | High trust and lower support/returns | Low | Admin Product Editor and Settings > Shipping | No; business promise not silently changed | 13 records use 2–3/3–5/6–8, 2 have similar custom copy, 3 have no product shipping copy |
+| P0-03 | MARIACLARA ROCKSTAR copy says gray in one place and red in another. | Wrong-color expectations can cause cancellation, returns, and distrust. | Confirm the real garment color from SKU/images, then correct the product description and detail list in Admin. | High product confidence | Low | Admin Product Editor | No; fact is ambiguous | Confirmed in production API |
+| P0-04 | Meta consent is disabled without a documented decision in this repository. | Privacy/legal uncertainty can create launch risk and reduce trust. | Obtain owner/privacy approval. Enable required consent if that is the approved approach; otherwise document the lawful basis and keep Privacy Choices visible. | High risk reduction | Low | Admin Settings > Meta Pixel, privacy copy | Intentionally unchanged | Production setting remains `requireConsent: false` |
 
 ## Homepage
 
 ### Issues
 
-- The core proposition is clear, but the mobile hero hides its descriptive subtitle; first-screen understanding relies on imagery, ticker text, and the CTA.
-- Both homepage banner slides are rendered immediately. Images dominate page transfer.
-- Trust content strongly explains COD but does not explain PayMongo even though online payment is enabled.
-- No real published review excerpts or customer photos are available because reviews are off.
-- The final “You pay at the door” section is COD-specific and can make PayMongo feel secondary.
+- There is no real published rating/review proof to support first-time trust.
+- Campaign imagery is the likely main mobile transfer cost; no production RUM exists.
+- Payment confidence focuses heavily on COD while PayMongo needs a successfully verified live acceptance result.
 
 ### Fixes
 
-- Removed the mobile floating offer/report cluster that covered the product journey; the same shared shell also improves homepage obstruction.
-- Kept the real free-shipping message in the ticker and commerce pages without fake urgency.
-- Added immutable caching for hashed Vite assets.
+- The active hero loads first and later slides preload after the critical view.
+- Mobile promotional cards stay out of the product viewport; Messenger remains compact.
+- Hero, ticker, collection order, CTA, logos, and banners remain admin-editable.
+- Public live matrix passed at 320–1440px with no page-level overflow, broken visible image, or page exception.
 
 ### Recommendations
 
-- Test a one-line mobile benefit under the hero title: product type + 240 GSM + delivery confidence.
-- Load the active hero first, preload only the next slide, and generate mobile/desktop responsive derivatives.
-- Add a short, configuration-driven “COD or secure online payment through PayMongo” trust line after owner approval.
-- Publish a real review/photo strip only after moderated records exist.
+- P1: publish a real review/photo strip only after moderated records exist.
+- P1: generate responsive hero derivatives and add production Core Web Vitals/RUM.
+- P2: test one concise product-benefit line and CTA through the experiment plan.
 
 ## Product Discovery
 
 ### Issues
 
-- There is no customer search interface, price/availability/size filter, or collection sort control.
-- This is manageable for roughly 18 live products but will become a discovery problem as the catalog grows.
-- Two customer-facing names contain `Copy`, which looks like unfinished catalog data:
-  - `DARUMA OFFWHITE — Premium Oversized 240 GSM Cotton T-Shirt Copy`
-  - `MARIACLARA ROCKSTAR — Premium Regular Fit 240 GSM Cotton T-Shirt Copy`
-- Collection empty-state copy previously exposed implementation language.
+- Search/filtering is client-side and downloads the public catalog; acceptable for 18 products but not indefinitely scalable.
+- Several products have only two photos, reducing confidence compared with fuller galleries.
+- No back-in-stock subscription or wishlist exists.
 
 ### Fixes
 
-- Freedom of Mind and canonical collection routes were verified.
-- Empty collections now say no pieces are currently available instead of saying products were not linked.
-- Product recommendations now exclude the current product, sold-out products, and zero-stock products; shared collections rank first.
+- Shop search uses real name, description, category/type, collections, tags, SKU, and size data.
+- Collection, size, availability, min/max price, and sort controls work without a full-page reload.
+- Freedom of Mind and other public collections resolve correctly.
+- Canonical product handles are clean, sitemap entries were updated, and all four previous handles still resolve.
+- Cart/review recommendations now prefer shared collection, then shared product type/category, with an in-stock random fallback and stable session assignment.
 
 ### Recommendations
 
-- P1: remove unintended `Copy` suffixes through Admin after verifying they are not deliberate names.
-- P1: add a compact search entry in the mobile/desktop header using name, SKU, collection, tags, color, and fit.
-- P2: add client-side availability, size, and price filtering first; move server-side only when catalog volume warrants it.
-- P2: add sort by Newest, Price, and Availability. Use sales-based Best Sellers only from valid non-cancelled orders.
+- P1: add more real front/back/detail/on-body media where available.
+- P2: move catalog filtering server-side when volume or response size justifies it.
+- P2: add back-in-stock opt-in with consent and duplicate protection.
 
 ## Product Pages
 
 ### Issues
 
-- One OFFWHITE item has wrong color copy (P0-02).
-- Product-specific SEO records are absent and the initial HTML remains generic.
-- Some live products have only two images while others have richer galleries.
-- Fit/fabric copy is present but model height/size is not available as structured real data.
-- The main image and recommendation/gallery images are not delivered with responsive `srcset` variants.
-- The size chart exists, but product-specific measurement completeness must be reviewed in admin.
+- Product-specific shipping content is inconsistent with global settings.
+- ROCKSTAR color is unresolved.
+- Model height/worn size is not stored as dependable structured data.
+- Product metadata and schema are client-rendered; crawlers that do not execute JavaScript initially receive generic SPA metadata.
 
 ### Fixes
 
-- Sold-out recommendations are excluded and same-collection items are preferred.
-- Size-chart modal now traps keyboard focus, supports Escape, locks background scroll, and restores focus.
-- Missing size data now directs the customer to message the store instead of exposing “not configured” text.
-- React no longer emits the product image `fetchPriority` attribute warning.
-- Mobile promotional cards no longer cover the title, price, size, or Add to Cart controls.
+- Corrected CURIOSITY OFFWHITE from Black to Off-white.
+- Corrected MANDALA BLACK’s cloned WHITE name/color copy.
+- Added 44px gallery arrows, size choices, quantity controls, and size-chart action.
+- Free-shipping copy now honors the real enabled flag and configured item threshold.
+- Recommendations exclude sold-out/current products.
+- Gallery swipe, thumbnails, arrows, keyboard navigation, fallback images, size modal focus, and real stock caps are covered.
 
 ### Recommendations
 
-- P1: audit every product in Admin for color, fit, material, 240 GSM applicability, care, image order, and size rows.
-- P1: require at least front/back/detail imagery before publishing when real media exists; do not fabricate assets.
-- P1: add product-specific server-rendered title, description, canonical, Open Graph image, Product/Offer schema, and published-only AggregateRating schema.
-- P2: add admin fields for model height and worn size; show only when supplied.
-- P2: test a sticky mobile Add to Cart bar only after measuring whether the current control falls below typical first-session scroll depth.
+- P1: complete an owner product-content audit for color, material, fit, GSM, measurements, and shipping copy.
+- P1: prerender/server-render product title, description, canonical, Open Graph, Product/Offer, and real published-review schema.
+- P2: add admin fields for real model measurements and worn size.
+- P2: test sticky mobile Add to Cart only after measuring current scroll behavior.
 
 ## Cart
 
 ### Issues
 
-- Cart recommendations previously selected the first available size without a customer decision.
-- Cart product recommendations are catalog-order fallback rather than collection/type relevance.
-- Shipping is correctly “calculated at checkout” until an address exists, but the free-shipping progress line can be more specific.
+- Recommendation relevance previously depended on catalog order.
+- A browser-only cart can be cleared by storage cleanup, although server cart sessions and drafts already support recovery.
 
 ### Fixes
 
-- Upsell customers must now select an in-stock size; Add to Cart remains disabled until they do.
-- Cart stock caps and specific low-stock messages remain intact.
-- The backend remains the source of subtotal, discounts, shipping eligibility, and final quote.
+- Recommendations are stable per cart session and prioritize related collection/type.
+- Sold-out products and products already in cart are excluded.
+- Quantity controls have 44px tap targets and enforce real max stock.
+- Free-shipping progress comes from server quote/admin configuration.
 
 ### Recommendations
 
-- P1: use the exact real message “Add 1 more item to unlock FREE shipping” for one remaining item, sourced from the server quote/config.
-- P2: rank recommendations by shared collection/product type, then in-stock fallback; exclude products already in cart.
-- P2: add a “Save cart” account action before adding marketing recovery.
+- P1: expose the existing cart-session recovery safely to returning customers.
+- P2: add a consent-aware abandoned checkout email only after policy and provider setup.
 
 ## Checkout
 
 ### Issues
 
-- Phone, email, house/street, address selects, and notes previously relied on placeholders without visible labels.
-- Disabled Google/Facebook buttons appeared even though live OAuth status reports both providers off.
-- The former CTA “Continue to Checkout” was ambiguous because the customer was already on checkout.
+- A live successful PayMongo acceptance is missing.
+- There is no address autocomplete; hierarchical selects are accurate but require several taps.
 
 ### Fixes
 
-- Every field now has a persistent visible label, relevant autocomplete/input mode, `aria-invalid`, associated error text, and mobile-friendly layout.
-- Validation still scrolls/focuses the first invalid field and preserves draft data.
-- Disabled social buttons are hidden; real OAuth buttons render only when the backend reports an enabled provider.
-- CTA is now “Review order.”
-- Guest checkout remains available and no account is forced.
+- Required customer/address fields are validated on frontend, Review access, COD, PayMongo session creation, backend order creation, Admin status changes, and Pancake export.
+- Invalid requests create no order, stock movement, Pancake export, email, or Meta Purchase.
+- Phone formats are normalized; ZIP and email remain optional.
+- Delivery Notes are absent from new checkout flows.
+- Server quotes determine products, unit prices, discount, shipping, and final total.
+- Stable idempotency prevents duplicate checkout submissions.
 
 ### Recommendations
 
-- P1: add an explicit short privacy/use line near phone/email submission, linked to approved policy copy.
-- P2: consider making email required only if the business commits to email confirmations; otherwise keep it optional as it is now.
-- P2: add an address summary preview before leaving the page only if customer testing shows address-entry errors.
+- P1: finish the controlled live PayMongo flow.
+- P2: evaluate address search only if a reliable Philippine provider can preserve the current validated hierarchy.
 
 ## Payment
 
 ### Issues
 
-- Live Terms and FAQ are COD-centric and PayMongo method instructions are blank.
-- No payment channel should be named until it is confirmed enabled for the live PayMongo account.
-- The latest safe code was not exercised with a new live paid transaction in this audit.
+- Enabled PayMongo channels must be confirmed against the live merchant account during acceptance.
+- Historical PayMongo orders predate the current tracking/validation flow and cannot prove it.
 
 ### Fixes
 
-- Existing code creates PayMongo as `pending_payment`, validates the signed webhook, requires `PHP`, requires the exact authoritative centavo amount, and blocks failed/pending/cancelled events from Purchase.
-- Duplicate sessions/webhooks are idempotent; reservation expiry closes provider checkout before stock release.
-- COD and PayMongo buttons have loading guards and order creation happens only on final action.
+- Pending orders do not emit Purchase or fulfillment notifications.
+- Signed, timely webhooks and matching paid PHP amounts are required.
+- Duplicate webhooks are idempotent.
+- Payment cancellation/expiry can release reservations without double restocking.
+- COD remains available without forcing account creation.
 
 ### Recommendations
 
-- P0: correct approved Terms/FAQ/payment instructions.
-- P0: run one controlled production PayMongo flow after deployment and verify success, cancellation, pending recovery, and duplicate webhook behavior.
-- P1: show only provider channels returned/approved by the account configuration; do not hardcode marketing claims.
-- P1: add concise recovery copy for cancelled/session-expired payment with a return-to-review action.
+- P0: perform and document one successful production payment.
+- P1: monitor payment method selection, redirect, failure category, cancellation, paid webhook latency, and completion.
 
 ## Thank You Page
 
 ### Issues
 
-- No customer-visible internal Pancake IDs were found.
-- A production completion page was not generated during this audit to avoid a fake order.
+- No live post-fix PayMongo confirmation has been visually accepted.
 
 ### Fixes
 
-- Existing implementation uses private confirmation tokens and real order snapshots.
-- COD and paid PayMongo messages are differentiated.
-- Browser Purchase uses the server event ID and persistent browser guard, so refresh does not re-send.
-- Product names, images, sizes, quantities, subtotal, discount, shipping, total, payment state, customer/address, and Messenger support are present in source/tests.
+- Uses private confirmation tokens rather than public PII URLs.
+- Displays real order snapshots, totals, delivery details, payment status, and now item images.
+- Hides Pancake/debug/internal IDs.
+- Browser Purchase is server-claimed once and blocked on refresh/reopen.
+- COD and PayMongo messages are payment-aware.
 
 ### Recommendations
 
-- P0: visually verify the post-deploy page using the controlled COD and PayMongo orders.
-- P2: add an order-status/account CTA for logged-in customers and a clear “save this order” path for guests without exposing the confirmation token.
+- P1: capture an owner-approved mobile/desktop screenshot during the controlled PayMongo acceptance.
 
 ## Trust and Reviews
 
 ### Issues
 
-- Reviews are globally disabled in production and every public product summary currently reports zero published reviews.
-- Therefore the storefront has no real rating, review count, customer photo, or verified-purchase proof.
-- Terms/payment contradiction and product-copy defects reduce first-time trust.
-- Google and Facebook OAuth are both off; email login works, but password reset is absent.
+- Live reviews are enabled in the data model but globally hidden, with zero published reviews.
+- No fake reviews or counts are shown, which is correct but leaves a social-proof gap.
+- CSP is still Report-Only.
+- Cloudflare’s generated `robots.txt` does not advertise the sitemap.
 
 ### Fixes
 
-- Disabled OAuth controls no longer resemble broken buttons.
-- Official Facebook, Messenger, and `@mariaclaraclothingshop` Instagram links were verified in live settings.
-- Report Issue remains available on mobile from the footer and on desktop as a fixed control; its dialog now has proper modal focus behavior.
-- Review code remains real-record-only, published-only, privacy-safe, moderated, and verified only against delivered matching orders.
+- Official Facebook, Messenger, Instagram `@mariaclaraclothingshop`, email, phone, and store location are configured.
+- “Returns address” was corrected to “Store location” to avoid inventing a return policy.
+- Reviews expose only Published records; private email/order information is never public.
+- Verified Purchase requires a delivered matching order/customer/product.
+- Secure XLSX preview/import, moderation reasons, audit trail, visibility toggles, replies, and images are implemented.
+- Official favicon, HSTS, noindex not-found behavior, and sitemap are live.
 
 ### Recommendations
 
-- P1: moderate/import real reviews, correct product assignments, remove private information, then enable reviews and ratings in Admin.
-- P1: add password-reset email flow with short-lived one-time tokens before promoting accounts heavily.
-- P1: add approved PayMongo explanation and consistent payment copy across FAQ, Terms, checkout, account, and homepage.
-- P2: configure real Google/Facebook OAuth only if the owner will maintain production credentials; otherwise email login is sufficient.
+- P1: collect and moderate real reviews, then enable reviews and ratings deliberately.
+- P1: move CSP from Report-Only to enforced after monitoring and resolving violations.
+- P1: configure Cloudflare `robots.txt` to include `Sitemap: https://mariaclaraclothing.com/sitemap.xml`.
+- P2: implement password reset through a configured transactional email provider.
 
 ## Mobile Experience
 
 ### Issues
 
-- Before the audit fix, Offer, Issue, and Chat controls covered the product title/price around the first 320 px viewport.
-- Some secondary text links and gallery controls are smaller than the ideal 44 px touch target.
-- Product/checkout pages are long; fixed controls must stay minimal.
+- No real-device keyboard/PayMongo-app handoff was available in this automated environment.
 
 ### Fixes
 
-- Tested 320, 360, 390, 430, 768, and 1440 px widths across ten customer routes: no page-level horizontal overflow.
-- Mobile promotion cards are hidden; the free-shipping value remains in real page content.
-- Messenger is a compact accessible icon; Report Issue is a footer link on mobile.
-- Checkout labels, error association, size chart focus, and report dialog focus passed a 320 px post-fix Playwright run.
+- Public and local route matrices passed at 320, 360, 390, 430, 768, 1024, and 1440px.
+- Ten major routes per viewport were checked for HTTP failures, horizontal overflow, broken visible images, page exceptions, and internal-sensitive text.
+- Product and cart purchase controls use 44px targets.
+- Modal focus, Escape behavior, mobile menu, cart drawer, checkout field focus, and responsive admin actions are covered.
 
 ### Recommendations
 
-- P1: raise remaining small icon/gallery touch targets to at least approximately 44×44 CSS pixels where layout permits.
-- P2: run device testing on Safari iOS and Chrome Android, including keyboard-open checkout and PayMongo return behavior; Chromium emulation is not a substitute for both engines.
+- P0 acceptance: test one physical Android and one physical iPhone through keyboard, PayMongo app/browser handoff, return URL, and Thank You.
 
 ## Performance
 
-These are single-run lab measurements from isolated fresh Chromium contexts against production, not field Core Web Vitals:
-
-| Viewport/page | TTFB | DOM loaded | LCP | Transfer | Image transfer |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Mobile 390 homepage | 235 ms | 894 ms | 1,596 ms | 3.62 MB | 3.31 MB |
-| Mobile 390 collection | 246 ms | 926 ms | 1,356 ms | 1.88 MB | 1.58 MB |
-| Mobile 390 product | 177 ms | 871 ms | 1,952 ms | 1.94 MB | 1.62 MB |
-| Desktop homepage | 258 ms | 908 ms | 1,788 ms | 3.79 MB | 3.48 MB |
-| Desktop collection | 184 ms | 887 ms | 1,760 ms | 1.96 MB | 1.65 MB |
-| Desktop product | 216 ms | 865 ms | 1,036 ms | 2.03 MB | 1.71 MB |
-
 ### Issues
 
-- Images account for most transferred bytes.
-- Homepage renders both large hero slides immediately.
-- Product cards and galleries do not provide width-specific `srcset` candidates.
-- `/api/products` is marked `no-store`, returns the complete catalog, and calculates best-seller counts by reading orders on each request; this will scale poorly.
-- Several product images depend on the Shopify CDN rather than the store's managed media pipeline.
+- No production RUM or current Lighthouse history is stored.
+- Product media still includes externally hosted originals and inconsistent gallery depth.
+- The main customer bundle is meaningful and should be monitored as features grow.
 
 ### Fixes
 
-- Hashed `/assets/` files now receive one-year cache headers at nginx.
-- Route chunks are already code-split. The production build main chunk is about 285.85 kB raw / 88.08 kB gzip; route chunks remain separate.
-- Uploaded customer/review/product media already has bounded validation and WebP normalization in the backend.
+- Vite route chunks are split; the production build completed successfully.
+- Latest build: main JS 287.57 kB raw / 88.63 kB gzip; CSS 100.72 kB raw / 17.47 kB gzip.
+- Below-fold media uses lazy loading where appropriate; the active hero is prioritized.
+- Hashed assets have cache controls; HTML remains no-store.
 
 ### Recommendations
 
-- P1: generate responsive WebP/AVIF variants for hero, collection, card, and product-detail breakpoints; set width/height to prevent layout shift.
-- P1: render/preload the active hero and only the next slide rather than fetching every slide immediately.
-- P1: replace order-table scanning in the product list with an indexed aggregate/materialized count updated after valid order transitions.
-- P1: use short safe catalog cache/revalidation plus explicit invalidation after product, stock, review, or collection writes.
-- P2: migrate remaining external product media into the managed upload/CDN pipeline.
+- P1: establish Lighthouse mobile baselines for Home, Shop, a product, Cart, Checkout, and Thank You.
+- P1: add Web Vitals/RUM with privacy-safe aggregation.
+- P1: generate width-aware WebP/AVIF derivatives for hero and product media while retaining adequate visual quality.
 
 ## Search Engine and Share Preview
 
 ### Issues
 
-- Live `/sitemap.xml` returned 404 before this patch.
-- Product routes set title/canonical in the browser, but social crawlers initially receive generic HTML metadata.
-- No Product, Offer, Breadcrumb, or published-only AggregateRating JSON-LD was found.
-- Collection/info pages largely use the generic site title/description.
-- Cloudflare manages `robots.txt`; it does not yet advertise the new sitemap.
+- Product metadata/schema is applied client-side rather than rendered in initial HTML.
+- Cloudflare robots lacks a sitemap declaration.
 
 ### Fixes
 
-- Added a dynamic sitemap based on real public product handles and visible collection definitions; cart, checkout, account, and admin routes are excluded.
-- Existing canonical public handles and 308 legacy redirects prevent duplicate product slugs.
-- The Maria Clara favicon/manifest is present; no default globe favicon was observed.
+- Live sitemap lists real public collections, info pages, and all 18 current canonical product routes.
+- Four bad cloned handles were replaced and their previous URLs retained as aliases.
+- Product schema only includes aggregate ratings when real published reviews exist.
+- Favicon, canonical link handling, Open Graph fields, price currency, price, and availability logic exist.
 
 ### Recommendations
 
-- P1: add server/edge HTML metadata injection or SSR for product and collection routes.
-- P1: add structured data only from public product price/availability and real Published reviews.
-- P1: add `Sitemap: https://mariaclaraclothing.com/sitemap.xml` through the Cloudflare robots configuration after deployment.
-- P1: submit sitemap and inspect canonical/index coverage in Google Search Console.
+- P1: prerender public product/collection metadata and JSON-LD.
+- P1: submit the sitemap in Google Search Console and Bing Webmaster Tools.
+- P2: add an admin-editable default Open Graph image and validate Facebook share previews.
 
 ## Meta Pixel and Analytics
 
 ### Issues
 
-- Consent is not required in the live setting (P0-05).
-- Meta provides advertising funnel delivery, but there is no complete first-party conversion dashboard for route exits, device split, stock failures, or payment failures.
+- Meta Test Events UI and Ads reporting require owner-side confirmation; database delivery alone cannot prove Meta’s displayed deduplication.
+- Consent governance is unresolved.
+- There is no first-party funnel dashboard.
 
-### Fixes/verified behavior
+### Fixes
 
-- PageView: customer routes only, SPA duplicate suppression, no monetary value by design.
-- ViewContent: real selected/default variant ID and numeric PHP price.
-- AddToCart: fires only after accepted cart mutation; value is unit price × quantity.
-- InitiateCheckout: waits for a finalizable backend quote with discount and shipping.
-- AddPaymentInfo: selected real method and final quote.
-- Purchase: COD only after committed order; PayMongo only after verified paid state.
-- Browser and CAPI use `Purchase` plus the same deterministic `purchase_<orderNumber>` ID.
-- Invalid/zero/string monetary values are rejected at browser builder, CAPI builder, outbox, and transport guard.
-- Meta CAPI is enabled in production; prior Test Events accepted numeric PHP values for one item plus shipping and two items with free shipping.
+- PageView initializes once; valid route changes do not reinitialize the Pixel.
+- ViewContent, AddToCart, InitiateCheckout, AddPaymentInfo, and Purchase reject malformed monetary values.
+- Values are numeric PHP peso amounts; final Purchase uses stored `order.totalCents / 100`.
+- COD Purchase follows committed order creation.
+- PayMongo Purchase follows verified paid amount.
+- Browser `eventID` and server `event_id` use the permanent `purchase_<orderNumber>` value.
+- Database browser claims and a unique server outbox prevent refresh, rerender, concurrent, and webhook duplicates.
+- Production contains five unique sent Purchase outbox events; values/currency match stored totals. Three have both browser and server completion timestamps and two are server-only, with no duplicate event IDs.
 
 ### Recommendations
 
-- P0: approve and configure the privacy/consent mode.
-- P1: add privacy-safe first-party funnel aggregates for ViewContent → AddToCart → Checkout → Payment → Purchase, device class, product, method, failure code, and exit route.
-- P1: monitor Meta Diagnostics, Event Match Quality, and deduplication after new real orders; historical warnings can persist after a fix.
+- P0: during PayMongo acceptance, confirm one deduplicated Purchase in Meta Test Events.
+- P1: build first-party aggregate funnel metrics for product view, cart, checkout, payment attempt/failure, Purchase, device, method, product, and exit page.
 
 ## Pancake POS
 
 ### Issues
 
-- No destructive live Pancake test was performed in this audit.
-- Provider availability and mapping drift remain operational risks even with correct code.
-
-### Fixes/verified behavior
-
-- Order creation commits locally before immediate Pancake export; a provider failure does not delete the order.
-- Deterministic outbox/link records prevent duplicate provider orders and preserve retry state.
-- Catalog/SKU mapping, inventory reconciliation, order export, inbound polling/webhook, tracking/status/payment mapping, and stale-update protection have automated coverage.
-- Existing production audits report complete catalog/inventory cycles, no active mapping conflicts, and synchronized linked orders.
-- Customer pages do not expose Pancake IDs, errors, API endpoints, or credentials.
-
-### Recommendations
-
-- P0: for the controlled post-deploy orders, verify exactly one Pancake order, correct item/SKU/size/quantity, COD or prepaid state, grand total, and inventory.
-- P1: alert the owner on blocked/failed outbox events, mapping conflicts, or stale inventory cycles.
-- P1: keep periodic recovery polling even when the authenticated webhook is active.
-
-## Error States and Recovery
-
-### Issues
-
-- Payment instructions are blank, so provider cancellation/retry confidence depends mostly on runtime error copy.
-- Password recovery is missing.
-- External media failure remains possible for Shopify-hosted product images.
+- Twenty-six historical exports are blocked because old orders lack structured delivery data.
+- J&T is configured in dry-run/manual export mode, not a live carrier booking integration.
 
 ### Fixes
 
-- Customer errors are sanitized; stack traces, database errors, PayMongo secrets, and Pancake provider details are not returned.
-- Stock errors identify the product/size/quantity rather than exposing internal variant IDs.
-- Empty collection and missing-size-chart messages are now customer-facing.
-- Duplicate-submit, stale quote, changed cart, expired checkout, sold-out upsell, and changed total have guarded recovery paths.
-- Admin email failure does not cancel the order and has a protected resend action.
+- Production live sync completed every catalog, inventory, inbound/outbound order stage after deployment.
+- Current checkout blocks incomplete delivery data before order creation/export.
+- Admin warns, filters, and prevents fulfillment-status advancement for incomplete historical orders.
+- Existing production evidence shows 602 successful Pancake events and 60 product/order mappings; historical blocks retain their reason and are not silently discarded.
 
 ### Recommendations
 
-- P1: add approved payment-cancelled/session-expired recovery text and retain the review draft.
-- P1: add password reset.
-- P2: add a product-image fallback with Messenger/contact action when all real images fail.
+- P1: manually resolve only historical orders that still require action; do not invent missing customer data.
+- P1: confirm the manual J&T export workflow is acceptable for launch.
+- P2: add live carrier booking only with an official supported Philippine API and owner-approved credentials.
 
-## Accessibility and Usability
+## Abandoned Checkout and Returning Customers
 
 ### Issues
 
-- Checkout/auth placeholders previously served as labels.
-- Size-chart and Report Issue modals previously lacked the shared focus trap.
-- Some secondary links and compact gallery controls remain smaller than ideal touch targets.
+- Cart sessions record abandoned/draft state, but automated recovery is not configured.
+- Marketing recovery requires consent, sending policy, unsubscribe handling, and a provider.
 
 ### Fixes
 
-- Visible form labels, autocomplete, input modes, error association, first-error focus, dialog focus trap, Escape close, background scroll lock, and focus restoration were added/verified.
-- No audited image lacked `alt`; decorative gallery thumbnails use empty alternative text appropriately.
-- No 320–1440 px document overflow was observed.
+- Production has persisted empty/draft/abandoned/converted cart-session states.
+- Customer accounts support saved address, order history, and stock-checked Buy Again.
+- OAuth buttons remain hidden because Google/Facebook providers are not configured, avoiding fake login controls.
 
 ### Recommendations
 
-- P1: run axe/WCAG checks in CI and manually test VoiceOver/TalkBack.
-- P2: increase remaining compact touch targets and confirm focus contrast on every customer/admin action.
-- P2: honor reduced motion for ticker, carousel, and page transitions if not already covered globally.
-
-## Admin Editability
-
-Implemented admin controls include banners, hero text/CTAs, collection definitions/order/visibility, logos, social links, info pages, contact data, shipping rates/free-shipping threshold, payment method visibility, Meta settings, authentication provider toggles, product content/size chart/review settings, reviews/import/moderation, discounts, inventory threshold, orders, customers, payments, Pancake, and issue reports.
-
-Remaining gaps:
-
-- Recommendation ranking/placement has no dedicated admin control.
-- Responsive image crops/derivatives are not administered.
-- Product/collection SEO fields are not fully rendered to initial HTML.
-- Funnel reporting and experiment assignment are absent.
+- P2: provide a safe “continue your cart” link for returning sessions.
+- P2: add one consented recovery email with a durable send-once record and unsubscribe.
+- P2: configure real OAuth only if the business wants it and production callback credentials are ready.
 
 ## Recommended New Features
 
-| Feature | Expected impact | Difficulty | Risk | Required admin controls | Backend/third party |
-| --- | --- | --- | --- | --- | --- |
-| Product search + availability/size filters | High as catalog grows | Medium | Low | Search visibility, filter order | Search endpoint/index eventually |
-| Responsive image pipeline | High mobile speed | Medium | Medium | Crop/focal point, alt text | Image transform/storage service or Sharp jobs |
-| Real review highlights/photo strip | High trust | Low after content exists | Low if published-only | Select/feature real published reviews | Existing review DB |
-| Password reset | High account retention | Medium | Medium security | Email templates/status | SMTP/Resend + signed expiring tokens |
-| Back-in-stock alerts | Medium | Medium | Consent/spam | Per-product alert toggle/log | Email/SMS provider, dedupe |
-| Recently viewed | Medium | Low | Privacy/storage | Global toggle | Local/session storage; no third party |
-| Saved cart | Medium | Medium | Stale stock/prices | Expiry and restore controls | Customer/cart session DB |
-| Abandoned checkout email | Medium | Medium | Consent/spam/privacy | Consent, delay, frequency, disable | Email provider + durable outbox |
-| Better related products | Medium | Medium | Bad relevance | Ranking/fallback/exclusions | Product metadata; order aggregates later |
-| Wishlist | Low–medium | Medium | Account complexity | Enable/disable | Customer DB |
-| Bundles/complete the look | Medium | High | Wrong discount/stock | Bundle products, price, eligibility | Authoritative quote/order changes |
-| Delivery estimate by region | Medium | Medium | Promise accuracy | Region SLA/calendar | Existing region data; optional courier feed |
-| First-party funnel dashboard | High decision quality | Medium | Privacy | Retention/consent | Event aggregate store |
-| Loyalty/referrals | Unproven | High | Fraud/liability | Full program controls | New ledger/provider |
+| Feature | Expected impact | Difficulty | Risk | Required admin controls | Backend changes | Third-party setup |
+| --- | --- | --- | --- | --- | --- | --- |
+| Real review/photo strip | High trust | Low after reviews exist | Sparse proof or privacy misuse | Published/photo selection | Existing system sufficient | None |
+| Back-in-stock alerts | Medium/high recovery | Medium | Consent and duplicate sends | Per-product toggle, queue status | Subscription and send-once outbox | Email/SMS provider |
+| Recently viewed | Medium discovery | Low | Storage/privacy clutter | Global toggle | None initially | None |
+| Saved-cart return link | Medium checkout recovery | Medium | Token/PII leakage | Expiry and disable controls | Signed resume token | Email only if sent |
+| Consent-aware abandoned email | Medium/high | High | Compliance and annoyance | Timing, template, kill switch | Consent, outbox, unsubscribe | Transactional email |
+| Product bundles | Medium AOV | High | Stock/discount complexity | Bundle products/pricing/limits | Authoritative quote and inventory bundle rules | None |
+| Customer photo gallery | High trust | Medium | Rights, moderation, performance | Publish/order/crop controls | Existing review images plus optimized aggregation | None |
+| Delivery estimate by region | Medium confidence | Medium | Overpromising | Approved ranges | Existing region engine; expose carefully | None |
+| Wishlist | Medium return visits | Medium | Low usage at current catalog size | Global toggle | Anonymous/account persistence | None |
+| Live J&T booking | Operational, indirect conversion | High | Provider/API and label errors | Credentials/mode/retry | Booking/webhook/label workflow | Official J&T PH API |
+
+Product comparison is not recommended for the current small, similar apparel catalog. Loyalty/referrals and advanced personalization should wait until the baseline funnel and repeat-purchase data are reliable.
 
 ## Priority Roadmap
 
 ### P0 — Before Deployment
 
-1. Correct Terms/FAQ/payment instructions for real COD + PayMongo rules.
-2. Correct CURIOSITY OFFWHITE color content and verify all product facts.
-3. Decide and configure Meta consent with privacy/legal approval.
-4. Deploy this changeset after backup; verify sitemap, HSTS, asset caching, health, and mobile fixes.
-5. Run one controlled COD and one controlled PayMongo order; verify database totals, inventory, admin email, Thank You, Pancake, Meta event ID/value, and no duplicate on retry/refresh.
-6. Run nginx container validation in the deployment environment; the local Docker daemon was unavailable during this audit.
+The audited release itself is deployed, but public launch readiness still requires:
+
+1. Complete one successful PayMongo production acceptance and verify all downstream systems.
+2. Align product shipping promises with the owner-approved global ranges.
+3. Confirm and correct MARIACLARA ROCKSTAR’s actual color.
+4. Decide and document Meta consent/privacy behavior.
+5. Test checkout and PayMongo handoff on one physical Android and one physical iPhone.
 
 ### P1 — First 30 Days
 
-1. Remove unintended `Copy` names and complete product content/image/size audits.
-2. Add approved PayMongo/payment-recovery content.
-3. Moderate real reviews and enable published reviews/ratings when evidence exists.
-4. Build responsive images and defer inactive hero media.
-5. Add product/collection SEO, OG, sitemap robots declaration, and real structured data.
-6. Replace product-list order scans with an indexed aggregate and safe cache invalidation.
-7. Add search and lightweight filters.
-8. Add password reset.
-9. Add first-party funnel and provider-failure monitoring.
-10. Enforce CSP only after reviewing report-only violations and adapting the Meta bootstrap with a nonce/hash.
+1. Publish only real moderated reviews and customer photos.
+2. Establish Lighthouse and Web Vitals/RUM baselines.
+3. Prerender product/collection metadata and structured data.
+4. Enforce CSP after report monitoring.
+5. Add sitemap declaration to Cloudflare robots and submit the sitemap.
+6. Add first-party funnel/payment-failure reporting.
+7. Confirm manual J&T workflow and review blocked historical exports.
 
 ### P2 — Next 60–90 Days
 
-1. Recently viewed and saved cart.
-2. Back-in-stock notifications with explicit consent and deduplication.
-3. Better related-product ranking and admin controls.
-4. Mobile sticky Add to Cart experiment.
-5. Customer photo/review gallery after real content volume exists.
-6. Real OAuth setup if the business will maintain provider credentials.
-7. iOS Safari/Android device regression suite and automated accessibility checks.
+1. Back-in-stock opt-in.
+2. Saved-cart/abandoned checkout recovery with consent.
+3. Recently viewed and wishlist.
+4. Product-specific real model sizing data.
+5. Transactional password reset.
+6. Server-side catalog filtering if catalog growth warrants it.
 
 ### P3 — Future Tests
 
-1. Wishlist if returning-customer usage justifies it.
-2. Bundles/complete-the-look after authoritative bundle pricing/stock design.
-3. Loyalty or referral program only with a fraud-resistant ledger and clear terms.
-4. Advanced personalization only after consented event volume and an experiment platform exist.
+1. Bundles and complete-the-look merchandising.
+2. Loyalty and referrals.
+3. Advanced recommendation personalization.
+4. Carrier API booking.
+5. Controlled checkout/CTA/layout experiments from `SALES_EXPERIMENT_PLAN.md`.
 
-## Prioritized Recommendation Ledger
+## Prioritized Recommendation Register
 
-| Priority | Problem | Customer impact | Solution | Conversion impact | Effort | Affected files/components | Fixed | Test result |
+| Priority | Problem | Customer impact | Recommended solution | Expected impact | Effort | Files/components | Fixed | Verification |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P0 | Terms contradict PayMongo | Payment distrust | Owner-approved content update | High | Low | Admin Settings/info pages | No | Live contradiction confirmed |
-| P0 | OFFWHITE says black | Returns/distrust | Correct verified product copy | High | Low | Admin Product Editor | No | Live content confirmed |
-| P0 | Consent mode unapproved | Privacy/trust risk | Approve lawful mode; preferably gate optional Meta until consent | Risk reduction | Low | Meta settings, privacy UI | No | Live `requireConsent:false` |
-| P0 | Current patch not deployed | Fixes absent live | Backup/deploy/smoke | High | Low | Deployment stack | No | Live sitemap 404; local 200 |
-| P0 | No new destructive live checkout test | Provider edge uncertainty | Controlled COD + PayMongo test | Critical | Medium | Full commerce stack | No | Automated only |
-| P1 | Mobile floating cluster obscured content | Product CTA/title obstruction | Hide mobile offer dock, compact chat, footer issue link | High | Low | Shell, ReportIssueWidget | Yes | 320 px Playwright passed |
-| P1 | Checkout/auth labels missing | Errors/autofill/accessibility | Persistent labels and described errors | High | Low | Checkout, CustomerAuth | Yes | Source + browser passed |
-| P1 | Disabled OAuth looked broken | Trust/friction | Render only enabled provider links | Medium | Low | Checkout, CustomerAuth | Yes | Live providers off; source passed |
-| P1 | Sold-out product recommendations | Dead-end upsell | Filter real stock, rank related collection | Medium | Low | Product | Yes | Source test passed |
-| P1 | Cart upsell picked size silently | Wrong item/abandonment | Require in-stock size selection | High | Low | Cart | Yes | Source/build passed |
-| P1 | Modal focus incomplete | Keyboard/mobile usability | Shared focus trap/restore | Medium | Low | Product, ReportIssueWidget | Yes | Browser focus passed |
-| P1 | Live sitemap missing | Index discovery | Dynamic real-data sitemap | Medium | Low | API, nginx | Code fixed | API test 200; deploy pending |
-| P1 | HSTS/assets caching absent | Security/repeat speed | HSTS + immutable hashed assets | Medium | Low | nginx | Code fixed | Source test; deploy pending |
-| P1 | Product/collection initial SEO generic | Weak search/share CTR | SSR/edge metadata + real schema | Medium–high | High | nginx/API/React head | No | Source/live inspection |
-| P1 | Images dominate transfer | Slow mobile data | Responsive variants, active hero first | High | Medium | Home, ProductCard, Product, media backend | No | 1.6–3.5 MB image transfer measured |
-| P1 | Catalog endpoint scans orders/no-store | Scales poorly | Indexed sales aggregate + invalidated cache | Medium | Medium | products route/repositories | No | Source inspection |
-| P1 | Reviews off/zero | No social proof | Publish only real moderated reviews | High | Content-dependent | Admin Reviews/settings | No | Live settings/data confirmed |
-| P1 | Password reset missing | Locked-out customers | Secure email reset | Medium | Medium | customer auth/email | No | Route/source search |
-| P1 | Search absent | Product discovery friction | Search + compact filters | Medium now, high later | Medium | Shell, Collection, API | No | Source/browser inspection |
-| P1 | CSP report-only | Reduced exploit protection | Review reports, nonce/hash inline bootstrap, enforce | Security | Medium | nginx/index | No | Live header confirmed |
-| P1 | Payment explanations blank | PayMongo hesitation | Approved method/cancel/retry copy | High | Low | Admin settings/CheckoutReview | No | Live settings confirmed |
-| P1 | Product `Copy` names | Unfinished-store signal | Verify/rename in admin | Medium | Low | Product records | No | Live data confirmed |
-| P2 | Recently viewed absent | Lost rediscovery | Session/local recent list | Medium | Low | Product/Shell | No | Source inspection |
-| P2 | Back-in-stock absent | Lost demand | Consent-based alerts | Medium | Medium | Product/admin/notifications | No | Source inspection |
-| P2 | Recommendation controls absent | Relevance ceiling | Admin ranking/exclusion controls | Medium | Medium | Admin settings/recommendation lib | No | Source inspection |
-| P2 | Abandoned email absent | Unrecovered intent | Consent, durable delayed outbox, dedupe | Medium | Medium | Cart sessions/admin/email | No | Draft tracking exists |
-| P2 | Social OAuth off | More login typing | Configure real providers or keep hidden | Low–medium | Medium/manual | OAuth settings/env | UI fixed | Live status both false |
-| P3 | No experiment assignment | Cannot attribute UI variants | First-party stable assignment + event metrics | Enables learning | Medium | Analytics/admin | No | Source inspection |
-| P3 | Loyalty/referral absent | Unknown repeat impact | Test only after baseline data | Unknown | High | New services | No | Not recommended yet |
+| P0 | PayMongo acceptance missing | Possible paid-checkout failure | Controlled production payment | Critical | Medium | PayMongo + checkout + admin | No | Automated only |
+| P0 | Shipping range contradiction | Trust/support risk | Owner-align product/global copy | High | Low | Product Editor/Settings | No | Production API audit |
+| P0 | ROCKSTAR color contradiction | Wrong item expectations | Owner confirm then edit | High | Low | Product Editor | No | Production API audit |
+| P0 | Meta consent decision | Compliance/trust risk | Approve and configure | High risk reduction | Low | Meta Settings/Privacy | No | Live setting checked |
+| P1 | OFFWHITE/MANDALA bad copy | Wrong product expectations | Correct verified facts | High | Low | SQL migration/products | Yes | Live API verified |
+| P1 | Cloned canonical handles | Weak SEO/trust | Clean handles + aliases | Medium/high | Medium | Migration/API/sitemap | Yes | New and four old handles verified |
+| P1 | Static free-shipping product copy | Rule could drift | Use admin setting | Medium | Low | `Product.jsx` | Yes | Source/build/E2E |
+| P1 | Generic cart upsells | Lower second-item relevance | Stable collection/type ranking | Medium | Low | `checkoutUpsell.js`, `Cart.jsx` | Yes | Unit/E2E |
+| P1 | Small tap controls | Mobile mis-taps | 44px targets | Medium | Low | Product/Cart | Yes | 7-viewport matrices |
+| P1 | No real reviews | Low trust | Collect/moderate/enable | High | Content operation | Reviews admin | No | Production count 0 |
+| P1 | Image/performance baseline absent | Unknown mobile abandonment | RUM/Lighthouse and derivatives | High | Medium | Media pipeline/Home/Product | No | Build sizes only |
+| P1 | Client-only SEO | Weaker discovery/share | Prerender metadata/schema | Medium/high | Medium/high | API/nginx/React | No | Source/live HTML audit |
+| P1 | CSP report-only | Reduced XSS defense | Monitor then enforce | Risk reduction | Medium | nginx | No | Live headers |
+| P1 | Thank You lacks item photos | Less order reassurance | Render real snapshots | Medium | Low | `ThankYou.jsx` | Yes | Source/E2E/build |
+| P1 | Ambiguous returns label | Invented policy impression | Use Store location | Medium trust | Low | `Contact.jsx` | Yes | Live build/source |
+| P1 | Admin menu focus race | Keyboard moderation friction | Preserve active focus | Medium admin usability | Low | `AdminActionMenu.jsx` | Yes | Full Playwright |
+| P2 | No recovery email | Lost carts | Consent-aware send-once recovery | Medium | High | Cart sessions/outbox | No | Architecture evaluated |
+| P2 | No back-in-stock alerts | Lost demand | Opt-in alert queue | Medium | Medium | Products/notifications | No | Recommended |
+| P2 | No password reset | Account friction | Transactional reset tokens | Medium | Medium | Auth/email | No | Source audit |
+| P3 | No experiment assignment | Cannot causally compare CRO changes | First-party persistent assignment | Measurement foundation | Medium | Cart sessions/analytics/admin | No | Plan created |
 
 ## Changes Implemented
 
-- `apps/api/src/routes/sitemap.js` — generates XML from real public product handles and visible collection definitions; excludes private/transactional routes.
-- `apps/api/src/app.js` — mounts `/sitemap.xml`.
-- `apps/api/test/health.test.js` — verifies real sitemap content, headers, and route exclusions.
-- `apps/web/nginx.conf` — proxies sitemap, adds HSTS, and caches hashed assets for one year.
-- `apps/web/src/components/Shell.jsx` — removes the obstructive mobile offer dock, makes Messenger icon-only on mobile, and adds mobile footer Report Issue access.
-- `apps/web/src/components/ReportIssueWidget.jsx` — supports an inline mobile trigger and shared accessible modal focus handling.
-- `apps/web/src/pages/Checkout.jsx` — adds visible labels/errors, hides unconfigured OAuth methods, and changes CTA to “Review order.”
-- `apps/web/src/pages/CustomerAuth.jsx` — displays only configured OAuth providers and adds visible email/password/registration labels.
-- `apps/web/src/pages/Product.jsx` — filters/ranks real in-stock recommendations, fixes dialog focus, improves missing-chart copy, and removes the React image attribute warning.
-- `apps/web/src/pages/Cart.jsx` — requires an explicit in-stock size for recommended add-ons and removes COD-only upsell copy.
-- `apps/web/src/pages/Account.jsx` — replaces COD-only account reminder with payment-neutral delivery/status copy.
-- `apps/web/src/pages/Collection.jsx` — replaces internal empty-collection language.
-- `apps/web/src/pages/SizeChart.jsx` — replaces internal configuration language with a customer support action.
-- `apps/web/test/cartUpsellSource.test.js` — covers size-explicit upsells.
-- `apps/web/test/customerMobilePolishSource.test.js` — covers checkout labels, sold-out recommendation filtering, and size-chart focus wiring.
-- `apps/web/test/customerOAuthSource.test.js` — rejects fake/disabled provider presentation.
-- `apps/web/test/customerThankYouCheckoutSource.test.js` — covers the clearer checkout CTA.
-- `apps/web/test/issueReportsSource.test.js` — covers inline mobile trigger and modal focus.
-- `apps/web/test/securityHeadersSource.test.js` — covers HSTS and hashed-asset caching.
-- `apps/web/test/storefrontCollections.test.js` — covers customer-safe empty collection copy.
-- `apps/web/test/storefrontEnhancements.test.js` — covers compact support and non-obstructive offer behavior.
-- `WEBSITE_CONVERSION_AND_SALES_AUDIT.md` — this audit and roadmap.
-- `SALES_EXPERIMENT_PLAN.md` — controlled test plan; no competing variants were implemented.
+### Customer and admin behavior
+
+- `apps/web/src/admin/AdminActionMenu.jsx` — preserves keyboard-selected focus when the menu’s delayed initial-focus callback runs.
+- `apps/web/src/lib/checkoutUpsell.js` — stable, in-stock recommendations now rank shared collection, then product type/category, and match cart items by ID or slug.
+- `apps/web/src/pages/Cart.jsx` — uses the centralized stable recommender and 44px quantity targets.
+- `apps/web/src/pages/Contact.jsx` — replaces the unverified “Returns address” label with “Store location.”
+- `apps/web/src/pages/Product.jsx` — dynamic free-shipping rule/copy, payment-neutral shipping fallback, 44px gallery/size/quantity/size-chart controls.
+- `apps/web/src/pages/ThankYou.jsx` — renders real ordered-product images.
+
+### Database and production content
+
+- `apps/api/db/migrations/20260716_conversion_audit_corrections.sql` — fixes CURIOSITY OFFWHITE and MANDALA BLACK copy; assigns four clean public handles; stores prior handles as aliases; updates SEO handles; guards conflicts.
+- `apps/api/test/conversionAuditCorrections.test.js` — validates the migration’s required corrections and alias strategy.
+
+### Automated customer journey coverage
+
+- `apps/web/e2e/conversion-route-matrix.spec.js` — real API-selected product plus ten public routes at seven viewport widths.
+- `apps/web/e2e/checkout-upsell-gallery.spec.js` — current phone placeholder and Review action.
+- `apps/web/e2e/storefront-offer-dock.spec.js` — verifies unobstructed mobile content and compact support.
+- `apps/web/test/adminOrderDetailSource.test.js`
+- `apps/web/test/cartUpsellSource.test.js`
+- `apps/web/test/checkoutDraft.test.js`
+- `apps/web/test/checkoutNamesUpsellSource.test.js`
+- `apps/web/test/checkoutUpsell.test.js`
+- `apps/web/test/customerMobilePolishSource.test.js`
+- `apps/web/test/customerThankYouCheckoutSource.test.js`
+- `apps/web/test/phase1AccessibilitySource.test.js`
+- `apps/web/test/productPageSource.test.js`
+- `apps/web/test/reviewsSystemSource.test.js`
+- `apps/web/test/storefrontSettingsSource.test.js`
+
+### Reports
+
+- `WEBSITE_CONVERSION_AND_SALES_AUDIT.md`
+- `SALES_EXPERIMENT_PLAN.md`
 
 ## Tests Performed
 
-- API suite: **445 total; 443 passed; 0 failed; 2 skipped** because `TEST_POSTGRES_URL` is not configured.
-- Frontend source/unit suite: **203 passed; 0 failed** in the final verification run.
-- Vite production build: passed. Main shared JS approximately **285.85 kB raw / 88.09 kB gzip**.
-- Production dependency audit: `npm audit --omit=dev --audit-level=high` reported **0 vulnerabilities**.
-- Backend syntax: modified CommonJS files passed `node --check`; Express has no compile step.
-- Live responsive browser matrix: 10 routes × 6 widths (320, 360, 390, 430, 768, 1440), HTTP 200, no page-level horizontal overflow, no broken visible images, and no page exceptions.
-- Live customer path: homepage → product → size chart → Add to Cart → cart → checkout validation. No live order/payment was created.
-- Post-fix 320 px Playwright: mobile offers hidden, compact chat, checkout labels visible, phone error described, first invalid field focused, size-chart focus trapped/restored, local sitemap populated, zero console errors.
-- Live performance: isolated mobile/desktop home, collection, and product measurements shown above.
-- Live public checks: health 200; Google/Facebook OAuth both disabled; COD and PayMongo enabled; reviews disabled; correct official social links; sitemap pre-deploy 404; robots 200; CSP report-only.
-- Docker/nginx runtime validation: **not run locally because the Docker daemon was not running**. The Vite build and nginx source tests passed; deployment must run container `nginx -t`/health checks.
-- Lint/typecheck: no lint or TypeScript/type-check scripts are defined in this JavaScript project.
+| Test | Result |
+| --- | --- |
+| Full API suite | 471 tests: 469 passed, 0 failed, 2 skipped because a separate `TEST_POSTGRES_URL` was not supplied |
+| Frontend source suite | 208 passed |
+| Full local Playwright suite | 48 total: 47 passed, 1 intentionally skipped admin mutation scenario |
+| Responsive route matrix, local | 7/7 passed; 70 route/viewport visits |
+| Responsive route matrix, production | 7/7 passed; 70 route/viewport visits |
+| Viewports | 320, 360, 390, 430, 768, 1024, 1440px |
+| Matrix checks | HTTP status, visible body, document/body overflow, broken visible images, page exceptions, internal-sensitive text |
+| Production Vite build | Passed; 113 modules |
+| Dependency audit | `npm audit --audit-level=high`: 0 vulnerabilities |
+| SQL migration | Applied in local PostgreSQL and production; schema migration recorded |
+| Production health | API, web, and PostgreSQL healthy |
+| Production Pancake startup sync | Catalog, inventory, inbound/outbound orders all complete |
+| Canonical handles | All four new handles live; all four old handles resolve to the correct product |
+| Product corrections | CURIOSITY OFFWHITE no longer says Black; MANDALA BLACK no longer says WHITE |
+| Public edge | Health, Shop, product, admin Reviews, HSTS, and sitemap return successfully |
 
-Automated coverage includes one/multi-item COD, quantities, discounts, shipping/free shipping, PayMongo paid/pending/failed/cancelled, stock failure/sold-out, idempotency, inventory movements, Pancake failures/retries, Meta values/deduplication, reviews with/without records, admin permissions, customer accounts, and email notification failure. The two skipped tests are the optional real-PostgreSQL concurrency/outbox integrations; production PostgreSQL paths have separate historical deployment evidence but should be included in CI through `TEST_POSTGRES_URL`.
+The environment has no dedicated lint or TypeScript script. Syntax/static regressions are covered by Node tests and the Vite production build. The two optional PostgreSQL integration tests were not run against production and were not pointed at the working local database because they require an isolated test database; their repository/unit coverage passed.
+
+No new live customer order or payment was fabricated during this audit. Existing controlled COD evidence was inspected read-only. A new PayMongo success remains a manual acceptance gate.
 
 ## Remaining Manual Setup
 
-1. Owner-approved corrections for Terms, FAQ, PayMongo instructions, OFFWHITE color content, and unintended `Copy` names.
-2. Privacy/legal decision for Meta consent; configure `requireConsent` accordingly.
-3. Deploy with the standard production backup, migration, and rollback workflow.
-4. Verify `/sitemap.xml`, HSTS, `/assets/` cache headers, robots sitemap declaration, canonical domain, and Cloudflare behavior.
-5. Run container/nginx validation because local Docker was unavailable.
-6. Complete controlled COD and PayMongo production orders and compare:
-   - checkout/admin/Thank You/database grand total;
-   - inventory movement and current stock;
-   - one admin email;
-   - exactly one Pancake order with correct payment/items;
-   - one deduplicated Meta Purchase with numeric PHP value;
-   - no duplicate after refresh/retry/webhook repeat.
-7. Configure `TEST_POSTGRES_URL` in CI so the two optional PostgreSQL integration tests run on every release.
-8. Moderate and publish real reviews before enabling customer-facing review/rating toggles.
-9. Review CSP violation telemetry before enforcing CSP.
-10. Configure Search Console and submit the sitemap after deployment.
+1. Complete one controlled successful PayMongo production payment and verify:
+   - paid amount equals the database grand total;
+   - one order, one inventory deduction, one admin email, one Pancake export;
+   - browser/server Meta Purchase share one event ID and Meta Test Events marks them deduplicated;
+   - refresh/reopen and webhook replay produce no second Purchase.
+2. Approve and align all shipping ranges.
+3. Confirm ROCKSTAR’s actual color and correct its copy.
+4. Decide Meta consent/privacy behavior.
+5. Enable Reviews only after real Published records are ready.
+6. Configure Cloudflare robots sitemap declaration and submit the sitemap.
+7. Run real Android/iPhone checkout and PayMongo handoff.
+8. Confirm J&T manual export/dry-run is acceptable for launch.
+9. Establish Lighthouse/Web Vitals monitoring.
 
 ## Final Recommendation
 
-**Not ready to deploy as-is.**
+**Not ready to deploy as an unrestricted public launch.**
 
-The application code is close and the safe conversion fixes are implemented. Deploy only after P0 content/privacy decisions are complete and the controlled production COD/PayMongo acceptance flow passes. If those gates pass, there is no known critical checkout, totals, inventory, Pancake, Meta Purchase, or mobile-layout defect in the audited implementation.
+The audited software release is deployed and healthy, and no known code-level COD, address, stock, total, Pancake, Meta deduplication, mobile overflow, or dependency vulnerability remains from this audit. Hold the final launch decision until the PayMongo acceptance, shipping-copy alignment, ROCKSTAR fact correction, privacy decision, and physical-device payment test are complete.

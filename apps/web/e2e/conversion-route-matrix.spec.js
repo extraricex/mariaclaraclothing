@@ -4,7 +4,6 @@ const ROUTES = [
   '/',
   '/shop',
   '/collections/freedom-of-mind',
-  '/product/curiosity-black',
   '/faq',
   '/shipping-returns',
   '/terms',
@@ -30,7 +29,14 @@ for (const viewport of VIEWPORTS) {
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
 
-    for (const route of ROUTES) {
+    const productsResponse = await page.request.get('/api/products');
+    expect(productsResponse.ok()).toBeTruthy();
+    const productsBody = await productsResponse.json();
+    const product = (productsBody.products || []).find((candidate) => candidate.publicHandle);
+    expect(product?.publicHandle).toBeTruthy();
+    const routes = [...ROUTES.slice(0, 3), `/product/${product.publicHandle}`, ...ROUTES.slice(3)];
+
+    for (const route of routes) {
       const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
       expect(response?.status(), `${route} should return a customer page`).toBeLessThan(400);
       await expect(page.locator('body')).toBeVisible();

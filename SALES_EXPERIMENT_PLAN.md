@@ -1,5 +1,34 @@
 # Maria Clara Clothing Sales Experiment Plan
 
+Plan updated: 2026-07-16
+
+Production baseline: commit `a1556df`
+
+## Current Status
+
+**Hold experiments until the launch gates are complete.**
+
+The storefront does not yet have a first-party experiment-assignment and reporting mechanism, so changing copy or layout ad hoc would not produce trustworthy evidence. The current verified baseline is:
+
+- 18 live products, including 2 sold-out products;
+- zero published reviews and global review display disabled;
+- real two-item free shipping configured on the server;
+- COD enabled;
+- PayMongo enabled but lacking one successful post-fix production acceptance;
+- Meta funnel events implemented, but Meta consent governance and Test Events confirmation remain owner tasks;
+- responsive public-route matrix passed at 320–1440px;
+- main production JS bundle about 88.63 kB gzip and CSS about 17.47 kB gzip.
+
+Before Experiment 1, complete these gates:
+
+1. Pass the controlled production PayMongo flow and physical Android/iPhone handoff.
+2. Align product shipping promises with the approved global ranges.
+3. Correct the owner-confirmed MARIACLARA ROCKSTAR color.
+4. Decide and document Meta/privacy consent behavior.
+5. Add privacy-safe first-party funnel storage, persistent assignment, test-traffic exclusion, and an admin kill switch.
+
+Do not use Meta Ads Purchase counts alone to declare an experiment winner. Meta remains an ad-delivery signal; experiment analysis needs its own aggregate exposure and outcome records.
+
 ## Experiment Rules
 
 Do not run competing variants until a stable experiment assignment and reporting mechanism exists. Assignment should be persistent per anonymous cart/customer, mutually exclusive per experiment, privacy-aware, and recorded with the same funnel events used for analysis.
@@ -179,9 +208,25 @@ Before Experiment 1:
 
 ## Experiment Sequence Recommendation
 
-1. First deploy measurement, fix P0 content, enable approved real reviews, and optimize images.
+1. First pass every launch gate, deploy measurement, enable approved real reviews, and establish image/performance baselines.
 2. Run only one major funnel experiment at a time: homepage CTA or mobile benefit line first.
 3. Next test product confidence: image order, size-chart placement, or review placement.
 4. Then test order-value mechanics: free-shipping progress and review-page upsell wording.
 5. Test payment presentation only after a controlled live PayMongo flow passes.
 6. Leave loyalty, referral, and advanced personalization until baseline conversion and repeat-purchase data are reliable.
+
+## Experiment Result Record
+
+For every launched test, record:
+
+- experiment and variant IDs;
+- start/end timestamp and owner;
+- exact production commit and approved copy/assets;
+- eligible audience and exclusions;
+- impressions and primary/secondary outcomes by variant;
+- mobile/desktop and COD/PayMongo guardrails;
+- payment, stock, cancellation, support, and performance regressions;
+- decision: ship, reject, extend, or inconclusive;
+- cleanup date for losing variants and stale assignment data.
+
+An inconclusive test is a valid result. Do not keep a variant merely because its raw order count is higher when exposure, traffic quality, or sample size differs.
