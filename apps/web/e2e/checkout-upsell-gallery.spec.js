@@ -63,13 +63,13 @@ async function reachReview(page) {
   await page.getByRole('dialog', { name: /your cart/i }).getByRole('link', { name: /^checkout$/i }).click();
   await page.getByPlaceholder('First name').fill('Upsell');
   await page.getByPlaceholder('Last name').fill('Customer');
-  await page.getByPlaceholder(/Mobile number/).fill('09171234567');
+  await page.getByPlaceholder('09XXXXXXXXX').fill('09171234567');
   await page.getByPlaceholder(/House no/).fill('12 Test Street');
   const selects = page.getByRole('combobox');
   await selects.nth(0).selectOption({ label: 'CAVITE' });
   await selects.nth(1).selectOption({ label: 'IMUS' });
   await selects.nth(2).selectOption({ label: 'BUCANDALA IV' });
-  await page.getByRole('button', { name: 'Continue to Checkout', exact: true }).click();
+  await page.getByRole('button', { name: 'Review order', exact: true }).click();
   await expect(page).toHaveURL(/\/checkout\/review$/);
 }
 

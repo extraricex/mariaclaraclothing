@@ -23,10 +23,12 @@ test('checkout review draft is session-scoped, versioned, and cart-bound', () =>
   const draft = saveCheckoutReviewDraft({
     cartSessionId: 'cart-1',
     cartFingerprint: checkoutCartFingerprint(items),
-    customer: { fullName: 'Maria Clara' }
+    customer: { fullName: 'Maria Clara' },
+    notes: 'legacy delivery note'
   }, storage);
 
-  assert.equal(draft.version, 2);
+  assert.equal(draft.version, 3);
+  assert.equal('notes' in draft, false);
   assert.equal(loadCheckoutReviewDraft(storage).customer.fullName, 'Maria Clara');
   assert.equal(checkoutDraftMatchesCart(draft, items, 'cart-1'), true);
   assert.equal(checkoutDraftMatchesCart(draft, [{ ...items[0], quantity: 1 }], 'cart-1'), false);

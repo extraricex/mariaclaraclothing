@@ -141,8 +141,11 @@ export default function ThankYou() {
           <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-clay">Items ordered</h2>
           <div className="mt-4 space-y-3">
             {summary.items.map((item, index) => (
-              <article key={`${item.variantId || item.productName || 'item'}-${index}`} className="flex min-w-0 justify-between gap-4 border-b border-line/60 pb-3 last:border-0 last:pb-0">
-                <div className="min-w-0">
+              <article key={`${item.variantId || item.productName || 'item'}-${index}`} className="flex min-w-0 items-start gap-3 border-b border-line/60 pb-3 last:border-0 last:pb-0">
+                {item.imageUrl && (
+                  <img src={item.imageUrl} alt={item.productName || 'Ordered product'} className="product-photo-blend h-20 w-16 shrink-0 object-contain" loading="lazy" />
+                )}
+                <div className="min-w-0 flex-1">
                   <h3 className="break-words text-sm font-semibold">{item.productName || 'Product'}</h3>
                   <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">
                     Qty {item.quantity}{item.size ? ` · Size ${item.size}` : ''}

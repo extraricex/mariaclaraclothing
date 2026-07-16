@@ -50,7 +50,11 @@ export default function AdminActionMenu({ label = 'More actions', items = [], bu
     document.addEventListener('keydown', closeOrNavigate);
     window.addEventListener('resize', placeMenu);
     window.addEventListener('scroll', placeMenu, true);
-    requestAnimationFrame(() => menuRef.current?.querySelector('button:not(:disabled)')?.focus());
+    requestAnimationFrame(() => {
+      if (!menuRef.current?.contains(document.activeElement)) {
+        menuRef.current?.querySelector('button:not(:disabled)')?.focus();
+      }
+    });
     return () => {
       document.removeEventListener('pointerdown', closeOutside);
       document.removeEventListener('keydown', closeOrNavigate);

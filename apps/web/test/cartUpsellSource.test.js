@@ -8,11 +8,12 @@ test('cart page renders product upsells backed by storefront products', async ()
 
   assert.match(source, /fetchProducts/);
   assert.match(source, /cartUpsells/);
+  assert.match(source, /selectStableCheckoutUpsells/);
+  assert.match(source, /cartSessionId: getCartSessionId\(\)/);
   assert.match(source, /You may also love this/);
   assert.match(source, /Add to cart/);
   assert.match(source, /addToCart/);
   assert.match(source, /stockQuantity/);
-  assert.match(source, /items\.some/);
   assert.match(source, /Choose size/);
   assert.match(source, /upsellVariantIds/);
   assert.match(source, /disabled=\{!variant\}/);

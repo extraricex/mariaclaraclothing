@@ -37,7 +37,7 @@ test('customer shell exposes a svg mobile menu and non-obstructive mobile offers
   assert.match(shell, /storefront-offer-cards/);
 });
 
-test('product page gallery uses smaller arrows and touch swipe navigation', async () => {
+test('product page gallery uses accessible arrows and touch swipe navigation', async () => {
   const product = await source('pages/Product.jsx');
 
   assert.match(product, /useRef/);
@@ -48,9 +48,9 @@ test('product page gallery uses smaller arrows and touch swipe navigation', asyn
   assert.match(product, /aria-label=\{`View product image \$\{index \+ 1\}`\}/);
   assert.match(product, /product-gallery-dot/);
   assert.match(product, /product-gallery-thumbnail/);
-  assert.match(product, /h-8 w-8/);
+  assert.match(product, /h-11 w-11/);
   assert.doesNotMatch(product, /rounded-full bg-white\/90 text-2xl/);
-  assert.match(product, /min-w-10 rounded-full border border-line px-3 py-2 text-\[11px\]/);
+  assert.match(product, /min-h-11 min-w-11 rounded-full border border-line px-3 py-2 text-\[11px\]/);
 });
 
 test('checkout validates missing fields with scroll focus and red field styling', async () => {

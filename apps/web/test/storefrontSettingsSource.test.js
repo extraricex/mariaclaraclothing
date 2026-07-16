@@ -42,11 +42,12 @@ test('storefront footer shows contact info from store settings', async () => {
   assert.match(source, /socialLinks/);
 });
 
-test('contact page shows the configured returns address', async () => {
+test('contact page shows the configured store location without implying an unverified returns policy', async () => {
   const source = await readFile(path.join(root, 'pages', 'Contact.jsx'), 'utf8');
 
   assert.match(source, /storeAddress/);
-  assert.match(source, /Returns address/);
+  assert.match(source, /Store location/);
+  assert.doesNotMatch(source, /Returns address/);
 });
 
 test('store settings lib carries website defaults and an SEO applier', async () => {

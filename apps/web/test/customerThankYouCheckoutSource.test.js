@@ -18,9 +18,11 @@ test('thank you page renders real order items and Messenger support from setting
   assert.match(thankYou, /summary\.discountTotalCents/);
   assert.match(thankYou, /summary\.discountCode/);
   assert.match(thankYou, /item\.productName/);
+  assert.match(thankYou, /item\.imageUrl/);
+  assert.match(thankYou, /alt=\{item\.productName \|\| 'Ordered product'\}/);
   assert.match(thankYou, /item\.quantity/);
   assert.match(thankYou, /formatMoney\(Number\(item\.unitPriceCents/);
-  assert.match(thankYou, /\['cancelled', 'failed', 'expired'\]/);
+  assert.match(thankYou, /\['cancelled', 'failed', 'expired', 'unreachable'\]/);
   assert.match(thankYou, /order\?\.paymentMethod === 'cash_on_delivery'/);
   assert.match(thankYou, /order\?\.paymentMethod === 'paymongo' && order\.paymentStatus === 'paid'/);
   assert.match(thankYou, /claimMetaPurchase\(order\.orderNumber, confirmation\.confirmationToken\)/);

@@ -49,7 +49,7 @@ export default function Contact() {
         <ContactLink href={instagram} label="Instagram" value="Maria Clara Clothing Instagram" />
         <ContactLink href={email ? `mailto:${email}` : ''} label="Email" value={email} />
         <ContactLink href={phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : ''} label="Phone" value={phone} />
-        <ContactDetail label="Returns address" value={address} />
+        <ContactDetail label="Store location" value={address} />
       </div>
     </div>
   );

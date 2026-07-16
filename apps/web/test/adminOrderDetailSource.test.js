@@ -32,11 +32,11 @@ test('admin order detail editor exposes contact and address editing while lockin
   assert.match(source, /Mark as fulfilled/);
   assert.match(source, /Mark as paid/);
   assert.match(source, /Timeline/);
-  assert.match(source, /Leave a comment/);
+  assert.match(source, /Internal admin notes/);
+  assert.match(source, /not a customer delivery-notes field and is not sent to Pancake POS/);
   assert.match(source, /Conversion summary/);
   assert.match(source, /Order risk/);
   assert.match(source, /J&T readiness/);
-  assert.match(source, /Notes/);
   assert.match(source, /Customer/);
   assert.match(source, /Billing address/);
   assert.match(source, /Print/);
@@ -57,7 +57,7 @@ test('admin order detail uses Pancake-style operational sections with real order
   assert.match(source, /Products/);
   assert.match(source, /Order value/);
   assert.match(source, /Payments/);
-  assert.match(source, /Extra notes/);
+  assert.match(source, /Internal admin notes/);
   assert.match(source, /Information/);
   assert.match(source, /Delivery/);
   assert.match(source, /Shipping/);
@@ -68,10 +68,8 @@ test('admin order detail uses Pancake-style operational sections with real order
   assert.match(source, /No tracking number yet/);
   assert.match(source, /Number of variations/);
   assert.match(source, /Total quantity/);
-  assert.match(source, /Message \/ Checkout note/);
   assert.match(source, /Internal/);
-  assert.match(source, /Printing/);
-  assert.match(source, /Conversation/);
+  assert.match(source, /Delivery confirmations/);
   assert.match(source, /customerPurchaseValueCents/);
   assert.match(source, /setOrderStatusFromAction/);
 });

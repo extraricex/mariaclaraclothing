@@ -5,10 +5,7 @@ import { addToCart, cartQuantity, getCartSessionId, removeFromCart, subtotalCent
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookAddToCart } from '../lib/metaPixel.js';
 import { productPath } from '../lib/productUrl.js';
-
-function firstAvailableVariant(product) {
-  return (product.variants || []).find((variant) => Number(variant.stockQuantity || 0) > 0) || null;
-}
+import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
 
 export default function Cart() {
   const items = useCart();
@@ -32,10 +29,12 @@ export default function Cart() {
     : freeShippingRemaining === null
       ? 'Shipping and promos refresh before checkout'
       : `Add ${freeShippingRemaining} more item${freeShippingRemaining === 1 ? '' : 's'} to unlock FREE shipping.`;
-  const cartUpsells = useMemo(() => products
-    .filter((product) => firstAvailableVariant(product))
-    .filter((product) => !items.some((item) => item.slug === product.slug || item.productId === product.id))
-    .slice(0, 3), [items, products]);
+  const cartUpsells = useMemo(() => selectStableCheckoutUpsells({
+    products,
+    cartItems: items,
+    cartSessionId: getCartSessionId(),
+    limit: 3
+  }), [items, products]);
 
   useEffect(() => {
     fetchProducts()
@@ -148,9 +147,9 @@ export default function Cart() {
               </div>
               <div className="mt-auto flex flex-wrap items-center gap-3 pt-3 sm:gap-4">
                 <div className="flex items-center rounded-[8px] border border-line bg-white">
-                  <button type="button" className="px-3 py-1.5" aria-label="Decrease quantity" onClick={() => decreaseItem(item)}>−</button>
+                  <button type="button" className="touch-target px-3 py-1.5" aria-label="Decrease quantity" onClick={() => decreaseItem(item)}>−</button>
                   <span className="min-w-8 text-center text-sm">{item.quantity}</span>
-                  <button type="button" className="px-3 py-1.5 disabled:cursor-not-allowed disabled:text-clay" aria-label="Increase quantity" disabled={Number(item.maxStock) > 0 && Number(item.quantity) >= Number(item.maxStock)} onClick={() => increaseItem(item)}>+</button>
+                  <button type="button" className="touch-target px-3 py-1.5 disabled:cursor-not-allowed disabled:text-clay" aria-label="Increase quantity" disabled={Number(item.maxStock) > 0 && Number(item.quantity) >= Number(item.maxStock)} onClick={() => increaseItem(item)}>+</button>
                 </div>
                 <button type="button" className="text-xs uppercase tracking-[0.12em] text-clay underline hover:text-accent" onClick={() => removeFromCart(item.variantId)}>
                   Remove

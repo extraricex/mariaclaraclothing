@@ -16,6 +16,10 @@ function product(id, stock = 3) {
   };
 }
 
+function productWithCollection(id, collection, productType = 'tee') {
+  return { ...product(id), collections: [collection], productType };
+}
+
 function memoryStorage() {
   const values = new Map();
   return {
@@ -65,4 +69,24 @@ test('adding a recommended product removes it and fills from another available p
   assert.equal(refreshed.length, 3);
   assert.equal(availableUpsellVariants(product('one')).length, 1);
   assert.equal(isUpsellProductAvailable(product('sold', 0)), false);
+});
+
+test('new recommendations prioritize a shared collection and then product type', () => {
+  const storage = memoryStorage();
+  const products = [
+    productWithCollection('cart', 'Freedom of Mind', 'oversized'),
+    productWithCollection('fallback', 'New Arrivals', 'regular'),
+    productWithCollection('same-type', 'New Arrivals', 'oversized'),
+    productWithCollection('same-collection', 'Freedom of Mind', 'regular')
+  ];
+  const selected = selectStableCheckoutUpsells({
+    products,
+    cartItems: [{ productId: 'catalog-cart' }],
+    cartSessionId: 'related-ranking',
+    storage,
+    limit: 3,
+    random: () => 0.5
+  });
+  assert.equal(selected[0].id, 'catalog-same-collection');
+  assert.equal(selected[1].id, 'catalog-same-type');
 });

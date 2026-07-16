@@ -32,6 +32,22 @@ function shuffled(values, random) {
   return result;
 }
 
+function normalizedValues(values = []) {
+  return new Set((Array.isArray(values) ? values : [values])
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean));
+}
+
+function recommendationScore(product, cartProducts) {
+  const cartCollections = normalizedValues(cartProducts.flatMap((item) => item.collections || []));
+  const cartTypes = normalizedValues(cartProducts.flatMap((item) => [item.productType, item.category]));
+  const productCollections = normalizedValues(product.collections || []);
+  const productTypes = normalizedValues([product.productType, product.category]);
+  const sharedCollection = [...productCollections].some((value) => cartCollections.has(value));
+  const sharedType = [...productTypes].some((value) => cartTypes.has(value));
+  return (sharedCollection ? 2 : 0) + (sharedType ? 1 : 0);
+}
+
 function readStoredSlugs(storage, key) {
   try {
     const parsed = JSON.parse(storage?.getItem(key) || 'null');
@@ -50,6 +66,10 @@ export function selectStableCheckoutUpsells({
   random = Math.random
 } = {}) {
   const cartProductIds = new Set((cartItems || []).map((item) => String(item.productId || '')));
+  const cartProductSlugs = new Set((cartItems || []).map((item) => String(item.slug || '')));
+  const cartProducts = (products || []).filter((product) =>
+    cartProductIds.has(String(product.id)) || cartProductSlugs.has(String(product.slug))
+  );
   const eligible = (products || []).filter((product) =>
     isUpsellProductAvailable(product) && !cartProductIds.has(String(product.id))
   );
@@ -65,8 +85,11 @@ export function selectStableCheckoutUpsells({
     selectedSlugs.add(slug);
   }
 
-  const remaining = eligible.filter((product) => !selectedSlugs.has(String(product.slug)));
-  for (const product of shuffled(remaining, random)) {
+  const remaining = shuffled(
+    eligible.filter((product) => !selectedSlugs.has(String(product.slug))),
+    random
+  ).sort((left, right) => recommendationScore(right, cartProducts) - recommendationScore(left, cartProducts));
+  for (const product of remaining) {
     if (selected.length >= limit) break;
     selected.push(product);
     selectedSlugs.add(String(product.slug));

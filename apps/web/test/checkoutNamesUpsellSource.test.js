@@ -6,13 +6,16 @@ import path from 'node:path';
 const source = (file) => readFile(path.join(import.meta.dirname, '..', 'src', file), 'utf8');
 
 test('checkout requires separate name fields while ZIP remains optional', async () => {
-  const checkout = await source('pages/Checkout.jsx');
+  const [checkout, validation] = await Promise.all([
+    source('pages/Checkout.jsx'),
+    source('lib/checkoutValidation.js')
+  ]);
   assert.match(checkout, /placeholder="First name"/);
   assert.match(checkout, /placeholder="Last name"/);
-  assert.match(checkout, /First Name is required\./);
-  assert.match(checkout, /Last Name is required\./);
+  assert.match(validation, /Please enter your first name\./);
+  assert.match(validation, /Please enter your last name\./);
   assert.match(checkout, /placeholder="ZIP code \(optional\)"/);
-  assert.match(checkout, /postalCode\.trim\(\) && !\/\^\\d\{4\}\$\//);
+  assert.match(validation, /postalCode && !\/\^\\d\{4\}\$\//);
   assert.doesNotMatch(checkout, /className=\{fieldClass\('postalCode'\)\} required/);
 });
 

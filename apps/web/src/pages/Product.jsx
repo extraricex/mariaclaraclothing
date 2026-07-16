@@ -204,6 +204,11 @@ export default function Product() {
 
   const soldOut = product.merchandisingStatus === 'sold_out';
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
+  const freeShippingEnabled = Boolean(settings.shipping?.freeShippingEnabled);
+  const freeShippingMinimumItems = Math.max(1, Number(settings.shipping?.freeShippingMinimumItems || 2));
+  const freeShippingProductCopy = freeShippingEnabled
+    ? `Nationwide delivery. Order ${freeShippingMinimumItems} or more item${freeShippingMinimumItems === 1 ? '' : 's'} and shipping is free; otherwise the fee is calculated from your delivery region.`
+    : 'Nationwide delivery. Your shipping fee is calculated from your delivery region at checkout.';
   const countdown = selectProductCountdown(product, settings);
   const variant = product.variants.find((candidate) => candidate.id === variantId) || null;
   const variantStock = Math.max(0, Math.trunc(Number(variant?.stockQuantity || 0)));
@@ -241,7 +246,7 @@ export default function Product() {
     {
       title: 'Shipping',
       type: 'text',
-      body: productPage.shippingText || 'Cash on delivery nationwide. Add 2 or more items and get free shipping.'
+      body: productPage.shippingText || freeShippingProductCopy
     }
   ].filter(Boolean);
   const activeTab = detailTabs[activeDetailTab] || detailTabs[0];
@@ -412,7 +417,7 @@ export default function Product() {
                   type="button"
                   aria-label="Previous product image"
                   onClick={showPreviousImage}
-                  className="absolute left-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-xl leading-none text-ink/70 transition-colors hover:text-ink sm:left-3 sm:h-9 sm:w-9"
+                  className="absolute left-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-xl leading-none text-ink/70 transition-colors hover:text-ink sm:left-3"
                 >
                   ‹
                 </button>
@@ -420,7 +425,7 @@ export default function Product() {
                   type="button"
                   aria-label="Next product image"
                   onClick={showNextImage}
-                  className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-xl leading-none text-ink/70 transition-colors hover:text-ink sm:right-3 sm:h-9 sm:w-9"
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-xl leading-none text-ink/70 transition-colors hover:text-ink sm:right-3"
                 >
                   ›
                 </button>
@@ -482,7 +487,7 @@ export default function Product() {
               <p className="eyebrow">Size</p>
               <button
                 type="button"
-                className="text-action text-[11px] font-semibold uppercase tracking-[0.14em] text-accent underline"
+                className="touch-target text-action inline-flex items-center text-[11px] font-semibold uppercase tracking-[0.14em] text-accent underline"
                 onClick={() => setSizeChartOpen(true)}
               >
                 View Size Chart
@@ -498,7 +503,7 @@ export default function Product() {
                     type="button"
                     disabled={out}
                     onClick={() => selectVariant(candidate)}
-                    className={`min-w-10 rounded-full border border-line px-3 py-2 text-[11px] font-semibold uppercase transition-colors sm:min-w-12 sm:px-4 sm:py-2.5 sm:text-xs ${
+                    className={`min-h-11 min-w-11 rounded-full border border-line px-3 py-2 text-[11px] font-semibold uppercase transition-colors sm:min-w-12 sm:px-4 sm:py-2.5 sm:text-xs ${
                       selected ? '!border-ink bg-ink text-paper' : 'hover:border-ink'
                     } ${out ? 'cursor-not-allowed text-clay line-through hover:border-line' : ''}`}
                   >
@@ -519,9 +524,9 @@ export default function Product() {
 
           <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
             <div className="flex items-center rounded border border-line bg-white">
-              <button type="button" className="px-3 py-2.5 text-base disabled:cursor-not-allowed disabled:text-clay sm:px-4 sm:py-3 sm:text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} disabled={variantSoldOut || quantity <= 1} aria-label="Decrease quantity">−</button>
+              <button type="button" className="touch-target px-3 py-2.5 text-base disabled:cursor-not-allowed disabled:text-clay sm:px-4 sm:py-3 sm:text-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))} disabled={variantSoldOut || quantity <= 1} aria-label="Decrease quantity">−</button>
               <span className="min-w-10 text-center text-sm font-semibold">{quantity}</span>
-              <button type="button" className="px-3 py-2.5 text-base disabled:cursor-not-allowed disabled:text-clay sm:px-4 sm:py-3 sm:text-lg" onClick={increaseQuantity} disabled={variantSoldOut || quantity >= variantStock} aria-label="Increase quantity">+</button>
+              <button type="button" className="touch-target px-3 py-2.5 text-base disabled:cursor-not-allowed disabled:text-clay sm:px-4 sm:py-3 sm:text-lg" onClick={increaseQuantity} disabled={variantSoldOut || quantity >= variantStock} aria-label="Increase quantity">+</button>
             </div>
             <button type="button" className="btn-ink customer-compact-button min-w-44 flex-1 !rounded" disabled={variantSoldOut} onClick={handleAdd}>
               {variantSoldOut ? (page.soldOutText || 'Sold Out') : added ? 'Added ✓' : 'Add to cart'}
@@ -534,9 +539,11 @@ export default function Product() {
               <Link to="/checkout" className="underline">checkout</Link>.
             </p>
           )}
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-ink">
-            Add 2 or more items and get free shipping.
-          </p>
+          {freeShippingEnabled && (
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-ink">
+              Add {freeShippingMinimumItems} or more item{freeShippingMinimumItems === 1 ? '' : 's'} and get free shipping.
+            </p>
+          )}
 
           {activeTab && (
             <div className="mt-10 border-t border-line">
@@ -616,11 +623,13 @@ export default function Product() {
         <section className="mt-20 border-t border-line pt-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="eyebrow">Free shipping on 2+ items</p>
+              <p className="eyebrow">{freeShippingEnabled ? `Free shipping on ${freeShippingMinimumItems}+ items` : 'More in-stock pieces'}</p>
               <h2 className="display mt-2 text-3xl sm:text-5xl">You May Also Like</h2>
             </div>
             <p className="max-w-xs text-sm leading-relaxed text-ink-soft">
-              Buy 2 or more items and your shipping fee is free at checkout.
+              {freeShippingEnabled
+                ? `Buy ${freeShippingMinimumItems} or more item${freeShippingMinimumItems === 1 ? '' : 's'} and your shipping fee is free at checkout.`
+                : 'Explore more available pieces from Maria Clara Clothing.'}
             </p>
           </div>
           <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
