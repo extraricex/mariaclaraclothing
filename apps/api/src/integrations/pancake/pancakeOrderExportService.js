@@ -1,11 +1,12 @@
 const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
 const inventoryOutboxRepositoryDefault = require('./pancakeInventoryOutboxRepository');
-const { buildPancakeOrderNote, buildPancakePaymentPayload } = require('./pancakeOrderMapper');
-const { customerFullName } = require('../../customers/customerName');
 const {
-  formatDeliveryAddress,
-  hasCompleteDeliveryInformation
-} = require('../../checkout/deliveryDetails');
+  buildPancakeOrderNote,
+  buildPancakePaymentPayload,
+  buildPancakeShippingAddress
+} = require('./pancakeOrderMapper');
+const { customerFullName } = require('../../customers/customerName');
+const { hasCompleteDeliveryInformation } = require('../../checkout/deliveryDetails');
 
 class PancakeOrderExportError extends Error {
   constructor(code) {
@@ -59,18 +60,6 @@ function assertReady(readiness) {
   }
 }
 
-function shippingAddress(order) {
-  const address = order.address || {};
-  const customer = order.customer || {};
-  return {
-    full_name: customerFullName(customer),
-    phone_number: String(customer.phone || '').trim(),
-    address: String(address.houseAddress || '').trim(),
-    full_address: formatDeliveryAddress(address),
-    post_code: String(address.postalCode || '').trim() || null
-  };
-}
-
 function buildPancakeOrderPayload(order, readiness) {
   if (!hasCompleteDeliveryInformation(order)) block('pancake_order_delivery_incomplete');
   assertReady(readiness);
@@ -107,7 +96,7 @@ function buildPancakeOrderPayload(order, readiness) {
     bill_full_name: customerFullName(customer),
     bill_phone_number: String(customer.phone || '').trim(),
     bill_email: String(customer.email || '').trim().toLowerCase(),
-    shipping_address: shippingAddress(order),
+    shipping_address: buildPancakeShippingAddress(order),
     items,
     shipping_fee: pesosFromCents(order.shippingFeeCents),
     total_discount: pesosFromCents(order.discountTotalCents),

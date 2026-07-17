@@ -43,7 +43,7 @@ const { CommerceError } = require('../checkout/commerceError');
 const { customerFullName, normalizeCustomerName } = require('../customers/customerName');
 const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
 const { enqueueOrderConfirmationNotifications } = require('../notifications/orderNotificationService');
-const { requireCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
+const { formatDeliveryAddress, requireCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
 
 const { enqueueOrderExport } = pancakeOrderExportRepository;
 
@@ -225,7 +225,7 @@ function orderConfirmationPayload(order) {
     trackingEventId: order.metaPurchaseEventId || metaPurchaseEventId(order),
     customerName: customerFullName(order.customer),
     paymentMethod: 'Cash on Delivery',
-    addressLine: order.address.addressLine,
+    addressLine: formatDeliveryAddress(order.address) || order.address?.formattedFullAddress || order.address?.addressLine || '',
     shippingRegionLabel: order.shippingRegionLabel,
     shippingFeeCents: order.shippingFeeCents,
     totalCents: order.totalCents,
@@ -411,7 +411,7 @@ function privateOrderPayload(order) {
     customerName: customerName.fullName,
     customerFirstName: customerName.firstName,
     customerLastName: customerName.lastName,
-    addressLine: order.address?.addressLine || '',
+    addressLine: formatDeliveryAddress(order.address) || order.address?.formattedFullAddress || order.address?.addressLine || '',
     address: order.address || {},
     paymentMethod: order.paymentMethod,
     paymentMethodLabel,

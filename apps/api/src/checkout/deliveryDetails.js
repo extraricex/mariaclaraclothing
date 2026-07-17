@@ -78,11 +78,26 @@ function customerFields(customer = {}, options = {}) {
 }
 
 function addressFields(address = {}) {
-  const houseAddress = cleanText(address.houseAddress || address.addressLine1 || address.street);
-  const barangay = cleanText(address.barangay);
-  const city = cleanText(address.city || address.municipality);
-  const province = cleanText(address.province);
-  const postalCode = cleanText(address.postalCode || address.zipCode);
+  const houseAddress = cleanText(
+    address.houseAddress || address.addressLine1 || address.address_line_1 || address.street
+  );
+  const barangay = cleanText(
+    address.barangay || address.barangayName || address.barangay_name
+      || address.commune_name || address.commnue_name || address.ward
+  );
+  const city = cleanText(
+    address.city || address.cityName || address.city_name || address.municipality
+      || address.district_name || address.district
+  );
+  const province = cleanText(
+    address.province || address.provinceName || address.province_name || address.region
+  );
+  const postalCode = cleanText(
+    address.postalCode || address.postal_code || address.zipCode || address.zip_code || address.post_code
+  );
+  const barangayCode = cleanText(address.barangayCode || address.barangay_code);
+  const cityCode = cleanText(address.cityCode || address.city_code);
+  const provinceCode = cleanText(address.provinceCode || address.province_code);
   const fields = {};
   if (!houseAddress) fields.street = FIELD_MESSAGES.street;
   if (!barangay) fields.barangay = FIELD_MESSAGES.barangay;
@@ -95,14 +110,39 @@ function addressFields(address = {}) {
       ...address,
       houseAddress,
       addressLine1: houseAddress,
+      provinceCode,
+      provinceName: province,
       barangay,
+      barangayCode,
+      barangayName: barangay,
       city,
+      cityCode,
+      cityName: city,
       municipality: city,
       province,
       postalCode,
       zipCode: postalCode,
       country: 'Philippines'
     }
+  };
+}
+
+function canonicalDeliveryAddress(address = {}) {
+  const normalized = addressFields(address).address;
+  const generated = formatDeliveryAddress(normalized);
+  const suppliedFullAddress = cleanText(
+    address.formattedFullAddress || address.fullAddress || address.full_address || address.addressLine
+  );
+  const hasAllStructuredFields = Boolean(
+    normalized.houseAddress && normalized.barangay && normalized.city && normalized.province
+  );
+  const formattedFullAddress = hasAllStructuredFields
+    ? generated
+    : suppliedFullAddress || generated;
+  return {
+    ...normalized,
+    addressLine: formattedFullAddress,
+    formattedFullAddress
   };
 }
 
@@ -121,17 +161,12 @@ function formatDeliveryAddress(address = {}) {
 function deliveryValidationResult(input = {}, options = {}) {
   const customerResult = customerFields(input.customer || {}, options);
   const addressResult = addressFields(input.address || {});
-  const address = addressResult.address;
-  const formattedFullAddress = formatDeliveryAddress(address);
+  const address = canonicalDeliveryAddress(addressResult.address);
   return {
     valid: Object.keys(customerResult.fields).length === 0 && Object.keys(addressResult.fields).length === 0,
     fields: { ...customerResult.fields, ...addressResult.fields },
     customer: customerResult.customer,
-    address: {
-      ...address,
-      addressLine: formattedFullAddress,
-      formattedFullAddress
-    }
+    address
   };
 }
 
@@ -154,8 +189,7 @@ function normalizeDeliveryAddress(address = {}, options = {}) {
       details: { fields: result.fields }
     });
   }
-  const formattedFullAddress = formatDeliveryAddress(result.address);
-  return { ...result.address, addressLine: formattedFullAddress, formattedFullAddress };
+  return canonicalDeliveryAddress(result.address);
 }
 
 function requireCompleteDeliveryInformation(input = {}, options = {}) {
@@ -187,6 +221,7 @@ function hasCompleteDeliveryInformation(order = {}) {
 
 module.exports = {
   FIELD_MESSAGES,
+  canonicalDeliveryAddress,
   cleanText,
   deliveryInformationIssues,
   deliveryValidationResult,

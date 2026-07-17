@@ -5,6 +5,7 @@ import { fetchProduct } from '../lib/api.js';
 import { addToCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import { customerNameParts } from '../lib/customerName.js';
+import { formatCheckoutAddress } from '../lib/checkoutValidation.js';
 
 const STATUS_STEPS = ['received', 'confirmed', 'packed', 'shipped', 'delivered'];
 
@@ -136,7 +137,7 @@ export default function Account() {
                 <dt className="text-xs uppercase tracking-[0.1em] text-clay">Saved shipping address</dt>
                 <dd className="text-ink-soft">
                   {customer.savedAddress
-                    ? `${customer.savedAddress.houseAddress}, ${customer.savedAddress.barangay}, ${customer.savedAddress.city}, ${customer.savedAddress.province}`
+                    ? formatCheckoutAddress(customer.savedAddress)
                     : 'None yet'}
                 </dd>
               </div>
@@ -181,6 +182,8 @@ export default function Account() {
                   {order.trackingNumber && (
                     <p className="mt-1 text-xs text-clay">J&T tracking: <strong className="text-ink">{order.trackingNumber}</strong></p>
                   )}
+                  {order.phone && <p className="mt-2 text-xs text-clay">Contact: <span className="text-ink">{order.phone}</span></p>}
+                  {order.addressLine && <p className="mt-1 break-words text-xs text-clay">Deliver to: <span className="text-ink">{order.addressLine}</span></p>}
                 </div>
                 <div className="flex items-center gap-4 lg:flex-col lg:items-end">
                   <strong className="text-base">{formatMoney(order.totalCents)}</strong>

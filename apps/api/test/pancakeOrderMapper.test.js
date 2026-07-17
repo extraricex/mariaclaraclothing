@@ -37,6 +37,9 @@ test('normalizes Pancake order payload into local order fields', () => {
     shipping_address: {
       address: '123 Street',
       full_address: '123 Street, Barangay, Makati, Metro Manila, Philippines',
+      commune_name: 'Barangay',
+      district_name: 'Makati',
+      province_name: 'Metro Manila',
       post_code: '1200'
     },
     items: [{ variation_info: { name: 'Shirt' }, variation_id: 'PV-1', quantity: 2, price: 899 }],
@@ -54,6 +57,12 @@ test('normalizes Pancake order payload into local order fields', () => {
   assert.equal(order.status, 'delivered');
   assert.equal(order.totalCents, 184800);
   assert.equal(order.shippingFeeCents, 10000);
+  assert.equal(order.address.houseAddress, '123 Street');
+  assert.equal(order.address.barangay, 'Barangay');
+  assert.equal(order.address.city, 'Makati');
+  assert.equal(order.address.province, 'Metro Manila');
+  assert.equal(order.address.postalCode, '1200');
+  assert.equal(order.address.formattedFullAddress, '123 Street, Barangay, Makati, Metro Manila 1200, Philippines');
 });
 
 test('normalizes Pancake shipping payment and tracking fields', () => {
@@ -143,6 +152,12 @@ test('builds outbound Pancake order update payload from local order changes', ()
   assert.equal(payload.partner.extend_code, 'JNT123');
   assert.equal(payload.shipping_partner, 'J&T Express');
   assert.equal(payload.bill_full_name, 'Maria Customer');
+  assert.equal(payload.shipping_address.address, '123 Street');
+  assert.equal(payload.shipping_address.commune_name, 'Barangay One');
+  assert.equal(payload.shipping_address.district_name, 'Makati');
+  assert.equal(payload.shipping_address.province_name, 'Metro Manila');
+  assert.equal(payload.shipping_address.post_code, '1200');
+  assert.match(payload.shipping_address.full_address, /Barangay One, Makati, Metro Manila 1200/);
   assert.doesNotMatch(payload.note_print, /Pack carefully/);
   assert.match(payload.note_print, /website_status=shipped/);
 });

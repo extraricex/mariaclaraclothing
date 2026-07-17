@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { customerJson, useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { loadBarangays, loadCities, loadProvinces } from '../lib/addressGuide.js';
 import { customerNameParts } from '../lib/customerName.js';
+import { formatCheckoutAddress } from '../lib/checkoutValidation.js';
 
 export default function AccountSettings() {
   const navigate = useNavigate();
@@ -133,7 +134,7 @@ export default function AccountSettings() {
           {!editAddress ? (
             <p className="mt-4 text-sm text-ink-soft">
               {customer.savedAddress
-                ? `${customer.savedAddress.houseAddress}, ${customer.savedAddress.barangay}, ${customer.savedAddress.city}, ${customer.savedAddress.province}`
+                ? formatCheckoutAddress(customer.savedAddress)
                 : 'None yet — save one and checkout prefills automatically.'}
             </p>
           ) : (

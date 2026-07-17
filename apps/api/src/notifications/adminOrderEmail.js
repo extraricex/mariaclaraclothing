@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const nodemailer = require('nodemailer');
 const { customerFullName } = require('../customers/customerName');
+const { formatDeliveryAddress } = require('../checkout/deliveryDetails');
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -38,15 +39,7 @@ function readablePaymentMethod(value) {
 }
 
 function completeAddress(address = {}) {
-  if (String(address.addressLine || '').trim()) return String(address.addressLine).trim();
-  return [
-    address.houseAddress,
-    address.barangay,
-    address.city,
-    address.province,
-    address.postalCode,
-    address.country || 'Philippines'
-  ].map((value) => String(value || '').trim()).filter(Boolean).join(', ');
+  return formatDeliveryAddress(address) || String(address.formattedFullAddress || address.addressLine || '').trim();
 }
 
 function safeImageUrl(value, siteUrl) {

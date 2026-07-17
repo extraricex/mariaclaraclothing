@@ -10,6 +10,8 @@
     "db:seed": "node scripts/db-seed.js",
     "dev": "node --watch src/server.js",
     "audit:product-images": "node scripts/audit-product-images.js",
+    "pancake:address-audit": "node scripts/backfill-pancake-delivery-addresses.js",
+    "pancake:address-backfill": "node scripts/backfill-pancake-delivery-addresses.js --apply",
     "jnt:address-guide": "node scripts/generate-jnt-address-guide.js",
     "start": "node src/server.js",
     "test": "node --test --test-concurrency=1"

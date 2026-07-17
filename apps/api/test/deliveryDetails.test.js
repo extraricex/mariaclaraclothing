@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  canonicalDeliveryAddress,
   deliveryInformationIssues,
   formatDeliveryAddress,
   normalizePhilippineMobile,
@@ -40,6 +41,24 @@ test('complete delivery data is normalized and ZIP remains optional', () => {
   assert.equal(result.address.postalCode, '');
   assert.equal(result.address.addressLine, '12 Test Street, Bucandala IV, Imus, Cavite, Philippines');
   assert.equal(result.address.formattedFullAddress, result.address.addressLine);
+  assert.equal(result.address.barangayName, 'Bucandala IV');
+  assert.equal(result.address.cityName, 'Imus');
+  assert.equal(result.address.provinceName, 'Cavite');
+});
+
+test('canonical address accepts integration aliases without saving codes as readable names', () => {
+  const address = canonicalDeliveryAddress({
+    address_line_1: '123 Sample Street',
+    commune_name: 'Bucandala IV',
+    district_name: 'Imus City',
+    province_name: 'Cavite',
+    post_code: '4103'
+  });
+  assert.equal(address.houseAddress, '123 Sample Street');
+  assert.equal(address.barangay, 'Bucandala IV');
+  assert.equal(address.city, 'Imus City');
+  assert.equal(address.province, 'Cavite');
+  assert.equal(address.formattedFullAddress, '123 Sample Street, Bucandala IV, Imus City, Cavite 4103, Philippines');
 });
 
 test('whitespace, null literals, and missing structured address fields are rejected together', () => {

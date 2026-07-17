@@ -67,6 +67,10 @@ test('builds a Pancake shadow order payload from a mapped COD order', () => {
   assert.equal(payload.shipping_address.phone_number, '09171234567');
   assert.equal(payload.shipping_address.address, '12 Test St');
   assert.match(payload.shipping_address.full_address, /BUCANDALA IV/);
+  assert.equal(payload.shipping_address.commune_name, 'BUCANDALA IV');
+  assert.equal(payload.shipping_address.district_name, 'IMUS');
+  assert.equal(payload.shipping_address.province_name, 'CAVITE');
+  assert.equal(payload.shipping_address.post_code, '4103');
   assert.equal(Object.hasOwn(payload.shipping_address, 'country_code'), false);
   assert.equal(payload.items[0].product_id, 'pp-1');
   assert.equal(payload.items[0].variation_id, 'pv-1');
@@ -94,6 +98,9 @@ test('builds PayMongo orders as non-COD and exports a verified paid amount only 
   }), readiness());
   assert.equal(pending.cod, 0);
   assert.equal(pending.transfer_money, 0);
+  assert.equal(pending.shipping_address.commune_name, 'BUCANDALA IV');
+  assert.equal(pending.shipping_address.district_name, 'IMUS');
+  assert.equal(pending.shipping_address.province_name, 'CAVITE');
   assert.match(pending.note_print, /payment_method=paymongo/);
   assert.match(pending.note_print, /paymongo_checkout_session_id=cs_test_1/);
 
@@ -103,6 +110,7 @@ test('builds PayMongo orders as non-COD and exports a verified paid amount only 
   }), readiness());
   assert.equal(paid.cod, 0);
   assert.equal(paid.transfer_money, 1480);
+  assert.equal(paid.shipping_address.full_address, pending.shipping_address.full_address);
   assert.match(paid.note_print, /payment_status=paid/);
   assert.match(paid.note_print, /paymongo_payment_id=pay_test_1/);
 });

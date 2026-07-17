@@ -37,9 +37,9 @@ export function checkoutDetailsErrors(customer = {}, address = {}, options = {})
   const phone = normalizePhilippineMobile(customer.phone);
   const email = cleanCheckoutText(customer.email).toLowerCase();
   const house = cleanCheckoutText(address.houseAddress || address.addressLine1 || address.street);
-  const barangay = cleanCheckoutText(address.barangay);
-  const city = cleanCheckoutText(address.city || address.municipality);
-  const province = cleanCheckoutText(address.province);
+  const barangay = cleanCheckoutText(address.barangay || address.barangayName || address.barangay_name);
+  const city = cleanCheckoutText(address.city || address.cityName || address.city_name || address.municipality);
+  const province = cleanCheckoutText(address.province || address.provinceName || address.province_name);
   const postalCode = cleanCheckoutText(address.postalCode || address.zipCode);
 
   if (!firstName) errors.firstName = CHECKOUT_FIELD_MESSAGES.firstName;
@@ -59,16 +59,21 @@ export function normalizedCheckoutDetails(customer = {}, address = {}, options =
   const firstName = cleanCheckoutText(customer.firstName);
   const lastName = cleanCheckoutText(customer.lastName);
   const houseAddress = cleanCheckoutText(address.houseAddress || address.addressLine1 || address.street);
-  const city = cleanCheckoutText(address.city || address.municipality);
+  const barangay = cleanCheckoutText(address.barangay || address.barangayName || address.barangay_name);
+  const city = cleanCheckoutText(address.city || address.cityName || address.city_name || address.municipality);
+  const province = cleanCheckoutText(address.province || address.provinceName || address.province_name);
   const postalCode = cleanCheckoutText(address.postalCode || address.zipCode);
   const normalizedAddress = {
     ...address,
     houseAddress,
     addressLine1: houseAddress,
-    barangay: cleanCheckoutText(address.barangay),
+    barangay,
+    barangayName: barangay,
     city,
+    cityName: city,
     municipality: city,
-    province: cleanCheckoutText(address.province),
+    province,
+    provinceName: province,
     postalCode,
     zipCode: postalCode,
     country: 'Philippines'
@@ -91,13 +96,13 @@ export function normalizedCheckoutDetails(customer = {}, address = {}, options =
 
 export function formatCheckoutAddress(address = {}) {
   const provinceAndZip = [
-    cleanCheckoutText(address.province),
+    cleanCheckoutText(address.province || address.provinceName || address.province_name),
     cleanCheckoutText(address.postalCode || address.zipCode)
   ].filter(Boolean).join(' ');
   const parts = [
     cleanCheckoutText(address.houseAddress || address.addressLine1 || address.street),
-    cleanCheckoutText(address.barangay),
-    cleanCheckoutText(address.city || address.municipality),
+    cleanCheckoutText(address.barangay || address.barangayName || address.barangay_name),
+    cleanCheckoutText(address.city || address.cityName || address.city_name || address.municipality),
     provinceAndZip
   ].filter(Boolean).join(', ');
   return parts ? `${parts}, Philippines` : '';

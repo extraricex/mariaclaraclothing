@@ -13,8 +13,14 @@ test('server resolves a valid J&T address and Cavite shipping region', () => {
 
   assert.equal(result.houseAddress, '12 Test St');
   assert.equal(result.province, 'CAVITE');
+  assert.equal(result.provinceName, 'CAVITE');
   assert.equal(result.city, 'IMUS');
+  assert.equal(result.cityName, 'IMUS');
   assert.equal(result.barangay, 'BUCANDALA IV');
+  assert.equal(result.barangayName, 'BUCANDALA IV');
+  assert.equal(result.provinceCode, 'CAVITE');
+  assert.equal(result.cityCode, 'CAVITE|IMUS');
+  assert.equal(result.barangayCode, 'CAVITE|IMUS|BUCANDALA IV');
   assert.equal(result.postalCode, '4103');
   assert.equal(result.addressLine, '12 Test St, BUCANDALA IV, IMUS, CAVITE 4103, Philippines');
   assert.equal(result.shippingRegion, 'metro_manila_cavite');

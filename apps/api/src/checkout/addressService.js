@@ -1,6 +1,6 @@
 const guide = require('../../public/data/jnt-address-guide.json');
 const { CommerceError } = require('./commerceError');
-const { formatDeliveryAddress } = require('./deliveryDetails');
+const { canonicalDeliveryAddress } = require('./deliveryDetails');
 
 const VISAYAS_MINDANAO = new Set([
   'AGUSAN-DEL-NORTE',
@@ -114,11 +114,14 @@ function resolveCheckoutAddress(input = {}) {
     addressLine1: houseAddress,
     provinceCode,
     province: provinceName,
+    provinceName,
     cityCode,
     city: cityName,
+    cityName,
     municipality: cityName,
     barangayCode,
     barangay: barangayName,
+    barangayName,
     postalCode,
     zipCode: postalCode,
     country: 'Philippines',
@@ -126,8 +129,7 @@ function resolveCheckoutAddress(input = {}) {
     shippingRegion: shippingRegionForProvince(provinceCode),
     datasetVersion: String(guide.metadata?.generatedAt || '')
   };
-  const formattedFullAddress = formatDeliveryAddress(resolved);
-  return { ...resolved, addressLine: formattedFullAddress, formattedFullAddress };
+  return canonicalDeliveryAddress(resolved);
 }
 
 module.exports = { resolveCheckoutAddress, shippingRegionForProvince };

@@ -188,13 +188,16 @@ function inboundOrderPatch(normalized, existing = {}) {
     });
   }
   const candidate = { ...existing, ...patch };
-  if (!hasCompleteDeliveryInformation(candidate)
+  const completeDelivery = hasCompleteDeliveryInformation(candidate);
+  if (!completeDelivery
     && ['confirmed', 'packed', 'shipped', 'delivered'].includes(normalized.status)) {
     patch.status = existing.status || 'received';
     patch.fulfillmentStatus = existing.fulfillmentStatus || 'unfulfilled';
     patch.codConfirmationStatus = existing.codConfirmationStatus || 'pending';
     patch.deliveryStatus = existing.deliveryStatus || 'pending';
     patch.tags = [...new Set([...(existing.tags || []), 'missing_delivery_information'])];
+  } else if (completeDelivery && (existing.tags || []).includes('missing_delivery_information')) {
+    patch.tags = (existing.tags || []).filter((tag) => tag !== 'missing_delivery_information');
   }
   return patch;
 }

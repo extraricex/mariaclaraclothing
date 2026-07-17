@@ -214,6 +214,11 @@ test('customer accounts: register, login, profile, order linking', async () => {
     assert.equal(orders.length, 1);
     assert.ok(orders.every((order) => order.items.length === 1));
     assert.ok(orders.every((order) => order.totalCents === 64900 + 8000));
+    assert.equal(orders[0].phone, '09998887777');
+    assert.equal(orders[0].address.barangay, 'BUCANDALA IV');
+    assert.equal(orders[0].address.city, 'IMUS');
+    assert.equal(orders[0].address.province, 'CAVITE');
+    assert.match(orders[0].addressLine, /BUCANDALA IV, IMUS, CAVITE/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     restoreEnv('ORDERS_DATA_FILE', previousOrdersFile);

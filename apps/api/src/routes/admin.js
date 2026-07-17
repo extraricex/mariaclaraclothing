@@ -118,6 +118,7 @@ const { createAdminReviewsRouter } = require('./adminReviews');
 const { CommerceError } = require('../checkout/commerceError');
 const {
   deliveryInformationIssues,
+  formatDeliveryAddress,
   hasCompleteDeliveryInformation,
   normalizeCheckoutCustomer,
   normalizeDeliveryAddress
@@ -2577,7 +2578,8 @@ function ordersCsv(orders, syncDetails = new Map()) {
       rows.push([
         order.orderNumber, order.placedAt, order.status, order.fulfillmentStatus, order.deliveryStatus,
         customer.firstName, customer.lastName, customer.fullName, order.customer?.phone || '', order.customer?.email || '',
-        order.address?.addressLine || '', order.address?.barangay || '', order.address?.city || '',
+        formatDeliveryAddress(order.address) || order.address?.formattedFullAddress || order.address?.addressLine || '',
+        order.address?.barangay || '', order.address?.city || '',
         order.address?.province || '', order.address?.postalCode || '', item.productName || '', item.sku || '',
         item.size || '', item.quantity || '', moneyCsv(item.unitPriceCents),
         moneyCsv(Number(item.unitPriceCents || 0) * Number(item.quantity || 0)), moneyCsv(order.subtotalCents),

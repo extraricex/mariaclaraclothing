@@ -35,6 +35,8 @@ const {
 const { env } = require('../config/env');
 const { getStoreSettings } = require('../settings/storeSettingsRepository');
 const { normalizeCustomerName } = require('../customers/customerName');
+const { canonicalDeliveryAddress } = require('../checkout/deliveryDetails');
+const { resolveCheckoutAddress } = require('../checkout/addressService');
 const {
   authorizationUrl,
   exchangeOAuthCode,
@@ -298,6 +300,9 @@ router.put('/me', requireCustomer, requireCustomerCsrf, async (req, res, next) =
     if (body.phone !== undefined && !normalizePhilippinePhone(String(body.phone))) {
       throw badRequest('A valid Philippine mobile number is required');
     }
+    if (body.savedAddress !== undefined && body.savedAddress !== null) {
+      body.savedAddress = resolveCheckoutAddress(body.savedAddress);
+    }
 
     const account = await updateAccount(req.customerAccount.id, body);
     return res.json({ customer: publicCustomer(await withLoginProviders(account)) });
@@ -322,24 +327,32 @@ router.get('/orders', requireCustomer, async (req, res, next) => {
     const account = req.customerAccount;
     const customerOrders = orders
       .filter((order) => order.customerAccountId === account.id)
-      .map((order) => ({
-        orderNumber: order.orderNumber,
-        placedAt: order.placedAt,
-        status: order.status,
-        fulfillmentStatus: order.fulfillmentStatus,
-        deliveryStatus: order.deliveryStatus || 'pending',
-        trackingNumber: order.trackingNumber || '',
-        totalCents: order.totalCents,
-        shippingFeeCents: order.shippingFeeCents,
-        items: (order.items || []).map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId,
-          productName: item.productName,
-          size: item.size,
-          quantity: item.quantity,
-          unitPriceCents: item.unitPriceCents
-        }))
-      }));
+      .map((order) => {
+        const orderCustomer = normalizeCustomerName(order.customer);
+        const address = canonicalDeliveryAddress(order.address || {});
+        return {
+          orderNumber: order.orderNumber,
+          placedAt: order.placedAt,
+          status: order.status,
+          fulfillmentStatus: order.fulfillmentStatus,
+          deliveryStatus: order.deliveryStatus || 'pending',
+          trackingNumber: order.trackingNumber || '',
+          totalCents: order.totalCents,
+          shippingFeeCents: order.shippingFeeCents,
+          customerName: orderCustomer.fullName,
+          phone: String(order.customer?.phone || '').trim(),
+          address,
+          addressLine: address.formattedFullAddress,
+          items: (order.items || []).map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId,
+            productName: item.productName,
+            size: item.size,
+            quantity: item.quantity,
+            unitPriceCents: item.unitPriceCents
+          }))
+        };
+      });
 
     customerOrders.sort((a, b) => new Date(b.placedAt || 0) - new Date(a.placedAt || 0));
     return res.json({ orders: customerOrders });

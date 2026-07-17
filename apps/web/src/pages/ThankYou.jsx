@@ -114,6 +114,9 @@ export default function ThankYou() {
         {summary.customerName && (
           <div className="flex justify-between gap-6"><dt className="text-clay">Customer</dt><dd className="min-w-0 break-words text-right">{summary.customerName}</dd></div>
         )}
+        {summary.customer?.phone && (
+          <div className="flex justify-between gap-6"><dt className="text-clay">Contact number</dt><dd className="min-w-0 break-words text-right">{summary.customer.phone}</dd></div>
+        )}
         {summary.addressLine && (
           <div className="flex justify-between gap-6"><dt className="text-clay">Deliver to</dt><dd className="min-w-0 break-words text-right">{summary.addressLine}</dd></div>
         )}

@@ -1,5 +1,6 @@
 const { customerFullName, normalizeCustomerName } = require('../../customers/customerName');
 const {
+  canonicalDeliveryAddress,
   formatDeliveryAddress,
   hasCompleteDeliveryInformation
 } = require('../../checkout/deliveryDetails');
@@ -135,6 +136,21 @@ function buildPancakeOrderNote(order = {}) {
   return lines.filter(Boolean).join('\n');
 }
 
+function buildPancakeShippingAddress(order = {}) {
+  const address = canonicalDeliveryAddress(order.address || {});
+  const customer = order.customer || {};
+  return {
+    full_name: customerFullName(customer),
+    phone_number: String(customer.phone || '').trim(),
+    address: String(address.houseAddress || '').trim(),
+    full_address: formatDeliveryAddress(address),
+    commune_name: String(address.barangay || '').trim(),
+    district_name: String(address.city || '').trim(),
+    province_name: String(address.province || '').trim(),
+    post_code: String(address.postalCode || '').trim() || null
+  };
+}
+
 function firstText(...values) {
   for (const value of values) {
     const text = String(value ?? '').trim();
@@ -237,24 +253,36 @@ function normalizePancakeOrder(payload = {}) {
     ? 'paid'
     : paymentMethod === 'cash_on_delivery' ? 'cod_pending' : 'pending_payment';
 
+  const normalizedAddress = canonicalDeliveryAddress({
+    houseAddress: firstText(shipping.address, shipping.address_line_1),
+    barangay: firstText(
+      shipping.commune_name,
+      shipping.commnue_name,
+      shipping.ward,
+      shipping.barangay
+    ),
+    city: firstText(shipping.district_name, shipping.district, shipping.city),
+    province: firstText(shipping.province_name, shipping.province, shipping.region),
+    postalCode: firstText(shipping.post_code, shipping.postal_code, shipping.zip_code),
+    formattedFullAddress: firstText(shipping.full_address, shipping.new_full_address),
+    country: firstText(shipping.country_name, shipping.country) || 'Philippines',
+    pancakeProvinceId: firstText(shipping.province_id, shipping.new_province_id),
+    pancakeDistrictId: firstText(shipping.district_id),
+    pancakeCommuneId: firstText(shipping.commune_id, shipping.new_commune_id)
+  });
+
   return {
     pancakeOrderId,
     orderNumber,
     pancakeUpdatedAt: updatedAt,
     customer: {
-      ...normalizeCustomerName({ fullName: payload.bill_full_name || payload.customer?.name }),
-      phone: String(payload.bill_phone_number || payload.customer?.phone || '').trim(),
+      ...normalizeCustomerName({
+        fullName: firstText(payload.bill_full_name, shipping.full_name, payload.customer?.name)
+      }),
+      phone: firstText(payload.bill_phone_number, shipping.phone_number, payload.customer?.phone),
       email: String(payload.bill_email || payload.customer?.email || '').trim().toLowerCase()
     },
-    address: {
-      addressLine: String(shipping.full_address || shipping.address || '').trim(),
-      houseAddress: String(shipping.address || '').trim(),
-      barangay: String(shipping.ward || shipping.barangay || '').trim(),
-      city: String(shipping.district || shipping.city || '').trim(),
-      province: String(shipping.province || shipping.region || '').trim(),
-      country: String(shipping.country || 'Philippines').trim(),
-      postalCode: String(shipping.post_code || shipping.postal_code || '').trim()
-    },
+    address: normalizedAddress,
     items,
     subtotalCents,
     discountTotalCents,
@@ -360,11 +388,7 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
     payload.bill_email = String(order.customer?.email || '').trim().toLowerCase();
   }
   if (fields.has('address')) {
-    payload.shipping_address = {
-      address: String(order.address?.houseAddress || '').trim(),
-      full_address: formatDeliveryAddress(order.address),
-      post_code: String(order.address?.postalCode || '').trim()
-    };
+    payload.shipping_address = buildPancakeShippingAddress(order);
   }
   if (fields.has('paymentStatus') || fields.has('paymentMethod') || fields.has('status')) {
     payload.note_print = buildPancakeOrderNote(order);
@@ -377,6 +401,7 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
 
 module.exports = {
   buildPancakeOrderNote,
+  buildPancakeShippingAddress,
   buildPancakeOrderUpdatePayload,
   buildPancakePaymentPayload,
   mapPancakeStatus,

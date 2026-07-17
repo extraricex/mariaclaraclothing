@@ -60,8 +60,11 @@ export function buildCheckoutQuoteRequest(input) {
   const address = input.address ? {
     houseAddress: String(input.address.houseAddress || '').trim(),
     provinceCode: String(input.address.provinceCode || '').trim(),
+    provinceName: String(input.address.provinceName || input.address.province || '').trim(),
     cityCode: String(input.address.cityCode || '').trim(),
+    cityName: String(input.address.cityName || input.address.city || input.address.municipality || '').trim(),
     barangayCode: String(input.address.barangayCode || '').trim(),
+    barangayName: String(input.address.barangayName || input.address.barangay || '').trim(),
     postalCode: String(input.address.postalCode || '').trim()
   } : null;
   return {

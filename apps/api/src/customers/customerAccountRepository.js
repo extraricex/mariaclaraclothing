@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { hasDatabaseUrl, query, transaction } = require('../db/postgres');
 const { normalizeCustomerName } = require('./customerName');
+const { canonicalDeliveryAddress } = require('../checkout/deliveryDetails');
 
 const DEFAULT_ACCOUNTS_FILE = path.join(__dirname, '..', '..', 'data', 'customer-accounts.json');
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -78,15 +79,25 @@ function verifyCustomerToken(token, now = Date.now()) {
 
 function normalizeSavedAddress(address) {
   if (!address || typeof address !== 'object') return null;
+  const canonical = canonicalDeliveryAddress(address);
   const normalized = {
-    houseAddress: String(address.houseAddress || '').trim(),
-    provinceCode: String(address.provinceCode || '').trim(),
-    cityCode: String(address.cityCode || '').trim(),
-    barangayCode: String(address.barangayCode || '').trim(),
-    barangay: String(address.barangay || '').trim(),
-    city: String(address.city || '').trim(),
-    province: String(address.province || '').trim(),
-    postalCode: String(address.postalCode || '').trim(),
+    houseAddress: canonical.houseAddress,
+    addressLine1: canonical.addressLine1,
+    provinceCode: canonical.provinceCode,
+    provinceName: canonical.province,
+    province: canonical.province,
+    cityCode: canonical.cityCode,
+    cityName: canonical.city,
+    city: canonical.city,
+    municipality: canonical.city,
+    barangayCode: canonical.barangayCode,
+    barangayName: canonical.barangay,
+    barangay: canonical.barangay,
+    postalCode: canonical.postalCode,
+    zipCode: canonical.postalCode,
+    formattedFullAddress: canonical.formattedFullAddress,
+    addressLine: canonical.addressLine,
+    country: 'Philippines',
     datasetVersion: String(address.datasetVersion || '').trim()
   };
   if (!normalized.houseAddress && !normalized.barangay && !normalized.city && !normalized.province) {

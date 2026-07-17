@@ -19,21 +19,24 @@ function memoryStorage() {
   };
 }
 
-test('quote request sends only item identity, quantity, cart session, discount, and address codes', () => {
+test('quote request sends item identity plus structured address codes and readable labels', () => {
   assert.deepEqual(buildCheckoutQuoteRequest({
     cartSessionId: 'cart-1',
     items: [{ productId: 'P-1', variantId: 'V-1', quantity: 2, unitPriceCents: 1 }],
     discountCode: ' SAVE ',
     address: {
       houseAddress: '12 Test', provinceCode: 'CAVITE', cityCode: 'CAVITE|IMUS',
-      barangayCode: 'B', postalCode: '4103', province: 'client claim', shippingRegion: 'client claim'
+      barangayCode: 'B', postalCode: '4103', province: 'Cavite', city: 'Imus City',
+      barangay: 'Bucandala IV', shippingRegion: 'client claim'
     }
   }), {
     cartSessionId: 'cart-1',
     items: [{ productId: 'P-1', variantId: 'V-1', quantity: 2 }],
     discountCode: 'SAVE',
     address: {
-      houseAddress: '12 Test', provinceCode: 'CAVITE', cityCode: 'CAVITE|IMUS', barangayCode: 'B', postalCode: '4103'
+      houseAddress: '12 Test', provinceCode: 'CAVITE', provinceName: 'Cavite',
+      cityCode: 'CAVITE|IMUS', cityName: 'Imus City', barangayCode: 'B',
+      barangayName: 'Bucandala IV', postalCode: '4103'
     }
   });
 });
