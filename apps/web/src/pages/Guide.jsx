@@ -1,8 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { CustomerButton } from '../components/ui/Button.jsx';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
+import SEO from '../components/SEO.jsx';
+import { absoluteSeoUrl, breadcrumbStructuredData } from '../lib/seo.js';
 
 const GUIDE_COPY = {
   '240-gsm-shirts': {
@@ -59,17 +61,34 @@ export default function Guide() {
     ? paymentShippingGuide(settings)
     : GUIDE_COPY[slug], [settings, slug]);
 
-  useEffect(() => {
-    if (!guide) return undefined;
-    const previousTitle = document.title;
-    document.title = `${guide.title} | Maria Clara Clothing`;
-    return () => { document.title = previousTitle; };
-  }, [guide]);
-
   if (!guide) return null;
+
+  const canonicalPath = `/guides/${encodeURIComponent(slug)}`;
 
   return (
     <article className="customer-page mx-auto max-w-4xl px-5 py-12 lg:px-8 lg:py-16">
+      <SEO
+        title={`${guide.title} | Maria Clara Clothing`}
+        description={guide.description}
+        canonical={canonicalPath}
+        type="article"
+        structuredData={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Article',
+            headline: guide.title,
+            description: guide.description,
+            mainEntityOfPage: absoluteSeoUrl(canonicalPath),
+            author: { '@type': 'Organization', name: 'Maria Clara Clothing' },
+            publisher: { '@type': 'Organization', name: 'Maria Clara Clothing' }
+          },
+          breadcrumbStructuredData([
+            { name: 'Home', path: '/' },
+            { name: 'Guides', path: '/size-chart' },
+            { name: guide.title }
+          ])
+        ]}
+      />
       <Breadcrumbs items={[{ label: 'Home', to: '/' }, { label: 'Guides', to: '/size-chart' }, { label: guide.title }]} />
       <p className="eyebrow mt-8">{guide.eyebrow}</p>
       <h1 className="display mt-3 text-4xl leading-tight sm:text-6xl">{guide.title}</h1>

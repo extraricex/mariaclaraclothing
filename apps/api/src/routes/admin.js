@@ -16,6 +16,11 @@ const { previewJntParcel } = require('../jnt/jntParcelService');
 const { enqueueDeliveredOrderNotifications } = require('../notifications/orderNotificationService');
 const { listForOrder: listOrderNotifications } = require('../notifications/orderNotificationOutboxRepository');
 const { resendAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
+const {
+  previewMissedAdminOrderEmails,
+  queueMissedAdminOrderEmails,
+  sendAdminOrderNotificationTest
+} = require('../notifications/adminOrderNotificationAuditService');
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
 const { normalizeCustomerName } = require('../customers/customerName');
 const { cartSessionSummary, deleteCartSession, listCartSessions } = require('../cartSessions/cartSessionRepository');
@@ -127,6 +132,8 @@ const {
   contentReadinessSummary,
   storefrontAnalyticsSummary
 } = require('../analytics/storefrontAnalyticsService');
+const { metaOrderReconciliation } = require('../analytics/metaOrderReconciliationService');
+const { buildSeoAudit, seoAuditCsv } = require('../seo/seoAudit');
 
 const router = express.Router();
 
@@ -276,9 +283,61 @@ router.get('/analytics', async (req, res, next) => {
   }
 });
 
+router.get('/analytics/meta-reconciliation', async (req, res, next) => {
+  try {
+    const reconciliation = await metaOrderReconciliation({
+      start: req.query.start,
+      end: req.query.end,
+      timezone: req.query.timezone
+    });
+    return res.json({ reconciliation });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/content-readiness', async (_req, res, next) => {
   try {
     return res.json({ readiness: await contentReadinessSummary() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/seo', async (_req, res, next) => {
+  try {
+    const [products, settings] = await Promise.all([
+      listEditableProducts(),
+      getStoreSettings()
+    ]);
+    return res.json(buildSeoAudit({
+      products,
+      collections: settings.collectionDefinitions,
+      siteUrl: process.env.FRONTEND_URL || ''
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/seo/export.csv', async (_req, res, next) => {
+  try {
+    const [products, settings] = await Promise.all([
+      listEditableProducts(),
+      getStoreSettings()
+    ]);
+    const audit = buildSeoAudit({
+      products,
+      collections: settings.collectionDefinitions,
+      siteUrl: process.env.FRONTEND_URL || ''
+    });
+    const date = new Date().toISOString().slice(0, 10);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="maria-clara-product-seo-${date}.csv"`,
+      'Cache-Control': 'no-store'
+    });
+    return res.send(seoAuditCsv(audit));
   } catch (error) {
     return next(error);
   }
@@ -614,6 +673,11 @@ router.get('/settings', async (_req, res, next) => {
   try {
     const settings = await getStoreSettings();
     if (env.meta.enabled) settings.marketing.metaPixel.pixelId = env.meta.pixelId;
+    const browserPurchaseEnabled = Boolean(
+      env.meta.enabled
+      && env.meta.browserPurchaseEnabled
+      && settings.marketing.metaPixel.enabled
+    );
     return res.json({
       settings,
       paymentProviders: {
@@ -626,10 +690,53 @@ router.get('/settings', async (_req, res, next) => {
       },
       metaProvider: {
         conversionsApiEnabled: env.meta.enabled,
+        browserPurchaseConfigured: Boolean(env.meta.enabled && env.meta.browserPurchaseEnabled),
+        browserPurchaseEnabled,
+        testEventCodeActive: Boolean(env.meta.enabled && env.meta.testEventCode),
+        purchaseAuthority: !env.meta.enabled
+          ? 'disabled'
+          : browserPurchaseEnabled ? 'browser_and_server' : 'server_capi',
         pixelIdLocked: env.meta.enabled,
         pixelId: env.meta.enabled ? env.meta.pixelId : ''
+      },
+      notificationProvider: {
+        provider: 'smtp',
+        smtpConfigured: Boolean(env.notifications.adminOrderEmail.transportConfigured),
+        serviceStatus: env.notifications.adminOrderEmail.transportConfigured ? 'ready' : 'not_configured',
+        environmentRecipientConfigured: Boolean(env.notifications.adminOrderEmail.recipient)
       }
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/order-notifications/test', async (_req, res, next) => {
+  try {
+    const test = await sendAdminOrderNotificationTest({
+      config: env.notifications.adminOrderEmail
+    });
+    return res.json({ test });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/order-notifications/backfill/preview', async (req, res, next) => {
+  try {
+    const preview = await previewMissedAdminOrderEmails(req.body || {});
+    return res.json({ preview });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/order-notifications/backfill', async (req, res, next) => {
+  try {
+    const result = await queueMissedAdminOrderEmails(req.body || {}, {
+      config: env.notifications.adminOrderEmail
+    });
+    return res.json({ result });
   } catch (error) {
     return next(error);
   }
@@ -1927,7 +2034,7 @@ function normalizeProductImages(images) {
   return records
     .map((image, index) => ({
       url: String(image.url || image || '').trim(),
-      altText: String(image.altText || 'Product image').trim(),
+      altText: normalizeSeoPlainText(image.altText, 'Image alt text', 500),
       sortOrder: Number.isInteger(Number(image.sortOrder)) ? Number(image.sortOrder) : index
     }))
     .filter((image) => image.url);
@@ -1948,11 +2055,46 @@ function normalizeProductVariants(variants) {
 
 function normalizeSeo(seo) {
   const record = seo && typeof seo === 'object' ? seo : {};
+  const secondaryKeywords = normalizeTags(record.secondaryKeywords);
+  if (secondaryKeywords.some((keyword) => keyword.length > 80 || /[<>]/.test(keyword))) {
+    throw httpError(400, 'Secondary keywords must be plain text and 80 characters or fewer.');
+  }
   return {
-    title: String(record.title || '').trim(),
-    description: String(record.description || '').trim(),
-    handle: String(record.handle || '').trim()
+    title: normalizeSeoPlainText(record.title, 'SEO title', 200),
+    description: normalizeSeoPlainText(record.description, 'Meta description', 500),
+    handle: String(record.handle || '').trim(),
+    mainKeyword: normalizeSeoPlainText(record.mainKeyword, 'Main keyword', 80),
+    secondaryKeywords,
+    imageAltText: normalizeSeoPlainText(record.imageAltText, 'Main image alt text', 500),
+    canonicalUrl: normalizeSeoUrl(record.canonicalUrl, 'Canonical URL'),
+    indexable: record.indexable === undefined ? true : Boolean(record.indexable),
+    ogTitle: normalizeSeoPlainText(record.ogTitle, 'Open Graph title', 200),
+    ogDescription: normalizeSeoPlainText(record.ogDescription, 'Open Graph description', 500),
+    ogImageUrl: normalizeSeoUrl(record.ogImageUrl, 'Open Graph image'),
+    feedTitle: normalizeSeoPlainText(record.feedTitle, 'Product feed title', 150),
+    marketplaceTitle: normalizeSeoPlainText(record.marketplaceTitle, 'Marketplace title', 150)
   };
+}
+
+function normalizeSeoPlainText(value, label, maximum) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ');
+  if (text.length > maximum) throw httpError(400, `${label} must be ${maximum} characters or fewer.`);
+  if (/[<>]/.test(text)) throw httpError(400, `${label} must be plain text without HTML.`);
+  return text;
+}
+
+function normalizeSeoUrl(value, label) {
+  const input = String(value || '').trim();
+  if (!input) return '';
+  if (input.length > 500) throw httpError(400, `${label} must be 500 characters or fewer.`);
+  if (input.startsWith('/') && !input.startsWith('//')) return input;
+  try {
+    const url = new URL(input);
+    if (url.protocol !== 'https:') throw new Error('HTTPS required');
+    return url.toString();
+  } catch (_error) {
+    throw httpError(400, `${label} must be an HTTPS URL or a site-relative path.`);
+  }
 }
 
 function normalizeMetafields(metafields) {
@@ -2506,6 +2648,9 @@ function orderSummary(order) {
     missingDeliveryFields: Object.keys(deliveryInformationIssues(order)),
     tags: Array.isArray(order.tags) ? order.tags : [],
     cancellationReason: order.cancellationReason || '',
+    adminEmailStatus: order.adminEmailSentAt ? 'sent' : (order.adminEmailStatus || 'not_queued'),
+    adminEmailSentAt: order.adminEmailSentAt || '',
+    adminEmailError: order.adminEmailError || '',
     isTestOrder: Boolean(order.isTestOrder),
     placedAt: order.placedAt
   };
@@ -2520,12 +2665,19 @@ function filterAndSortOrders(orders, input = {}) {
   const sort = String(input.sort || 'placed_desc').trim();
   const missingDelivery = String(input.missingDelivery || input.missingDeliveryInformation || '').trim() === 'true';
   const isTestOrder = String(input.isTestOrder || '').trim();
+  const notificationStatus = String(input.notificationStatus || '').trim().toLowerCase();
   return orders
     .filter((order) => !status || order.status === status)
     .filter((order) => !fulfillmentStatus || order.fulfillmentStatus === fulfillmentStatus)
     .filter((order) => !paymentStatus || order.paymentStatus === paymentStatus)
     .filter((order) => !missingDelivery || !hasCompleteDeliveryInformation(order))
     .filter((order) => !isTestOrder || Boolean(order.isTestOrder) === (isTestOrder === 'true'))
+    .filter((order) => {
+      if (!notificationStatus) return true;
+      const value = order.adminEmailSentAt ? 'sent' : String(order.adminEmailStatus || 'not_queued').toLowerCase();
+      if (notificationStatus === 'pending') return ['pending', 'sending', 'retrying'].includes(value);
+      return value === notificationStatus;
+    })
     .filter((order) => !search || orderSearchText(order).includes(search))
     .filter((order) => matchesOrderDateFilter(order, dateFilter))
     .sort((a, b) => {
@@ -2546,7 +2698,10 @@ function orderListSummary(orders) {
     totalSalesCents: revenueOrders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0),
     totalItems: orders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0),
     delivered: orders.filter((order) => order.status === 'delivered' || order.fulfillmentStatus === 'delivered' || order.deliveryStatus === 'delivered').length,
-    missingDeliveryInformation: orders.filter((order) => !hasCompleteDeliveryInformation(order)).length
+    missingDeliveryInformation: orders.filter((order) => !hasCompleteDeliveryInformation(order)).length,
+    notificationFailed: orders.filter((order) => !order.adminEmailSentAt && order.adminEmailStatus === 'failed').length,
+    notificationPending: orders.filter((order) => ['pending', 'sending', 'retrying'].includes(order.adminEmailStatus)).length,
+    notificationSent: orders.filter((order) => Boolean(order.adminEmailSentAt) || order.adminEmailStatus === 'sent').length
   };
 }
 

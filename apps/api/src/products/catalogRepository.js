@@ -435,6 +435,7 @@ function toCatalogProduct(product) {
   const status = product.merchandisingStatus || (variants.some((variant) => variant.available) ? 'sale' : 'sold_out');
 
   return {
+    id: product.id,
     slug: product.slug,
     publicHandle: product.publicHandle,
     urlAliases: product.urlAliases || [],
@@ -446,7 +447,17 @@ function toCatalogProduct(product) {
     parcelWeightGrams: product.parcelWeightGrams,
     compareAtPrice: product.compareAtPriceCents,
     status,
+    publicationStatus: product.status,
     featured: Boolean(product.featured),
+    category: product.category,
+    productType: product.productType,
+    vendor: product.vendor,
+    tags: product.tags || [],
+    seo: product.seo || {},
+    metafields: product.metafields || {},
+    themeTemplate: product.themeTemplate,
+    createdAt: product.createdAt || '',
+    updatedAt: product.updatedAt || '',
     image: images[0],
     images,
     imageRecords,
@@ -836,11 +847,54 @@ function normalizeOptionalStringList(value) {
   return values.map((item) => String(item || '').trim()).filter(Boolean);
 }
 
-function normalizeSeo(seo, name, publicHandle, description) {
+function seoValidationError(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+function normalizeSeoPlainText(value, label, maximum) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ');
+  if (text.length > maximum) throw seoValidationError(`${label} must be ${maximum} characters or fewer.`);
+  if (/[<>]/.test(text)) throw seoValidationError(`${label} must be plain text without HTML.`);
+  return text;
+}
+
+function normalizeSeoUrl(value, label) {
+  const input = String(value || '').trim();
+  if (!input) return '';
+  if (input.length > 500) throw seoValidationError(`${label} must be 500 characters or fewer.`);
+  if (input.startsWith('/') && !input.startsWith('//')) return input;
+  try {
+    const url = new URL(input);
+    if (url.protocol !== 'https:') throw new Error('HTTPS required');
+    return url.toString();
+  } catch (_error) {
+    throw seoValidationError(`${label} must be an HTTPS URL or a site-relative path.`);
+  }
+}
+
+function normalizeSeo(seo, _name, publicHandle, _description) {
   const record = seo && typeof seo === 'object' ? seo : {};
+  const secondaryKeywords = normalizeOptionalStringList(record.secondaryKeywords);
+  if (secondaryKeywords.some((keyword) => keyword.length > 80 || /[<>]/.test(keyword))) {
+    throw seoValidationError('Secondary keywords must be plain text and 80 characters or fewer.');
+  }
   return {
-    title: String(record.title || name || '').trim(),
-    description: String(record.description || description || '').trim(),
+    title: normalizeSeoPlainText(record.title, 'SEO title', 200),
+    description: normalizeSeoPlainText(record.description, 'Meta description', 500),
+    mainKeyword: normalizeSeoPlainText(record.mainKeyword, 'Main keyword', 80),
+    secondaryKeywords,
+    imageAltText: normalizeSeoPlainText(record.imageAltText, 'Main image alt text', 500),
+    canonicalUrl: normalizeSeoUrl(record.canonicalUrl || record.canonicalUrlOverride, 'Canonical URL'),
+    indexable: record.indexable === undefined
+      ? !(record.noindex === true || record.index === false)
+      : Boolean(record.indexable),
+    ogTitle: normalizeSeoPlainText(record.ogTitle || record.openGraphTitle, 'Open Graph title', 200),
+    ogDescription: normalizeSeoPlainText(record.ogDescription || record.openGraphDescription, 'Open Graph description', 500),
+    ogImageUrl: normalizeSeoUrl(record.ogImageUrl || record.ogImage || record.openGraphImage, 'Open Graph image'),
+    feedTitle: normalizeSeoPlainText(record.feedTitle || record.productFeedTitle, 'Product feed title', 150),
+    marketplaceTitle: normalizeSeoPlainText(record.marketplaceTitle, 'Marketplace title', 150),
     handle: publicHandle
   };
 }

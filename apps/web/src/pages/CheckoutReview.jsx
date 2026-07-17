@@ -154,6 +154,17 @@ export default function CheckoutReview() {
   }, [settings, paymentMethod]);
 
   useEffect(() => {
+    if (!settingsLoaded || !quote || !paymentMethod || !items.length) return;
+    trackFacebookAddPaymentInfo(
+      quote.items || items,
+      quote,
+      paymentMethod,
+      `payment:${cartSessionId}:${quote.id}:${paymentMethod}`,
+      { path: '/checkout/review' }
+    );
+  }, [cartSessionId, items, paymentMethod, quote, settingsLoaded]);
+
+  useEffect(() => {
     if (!draftMatchesCart || !deliveryReady || !items.length) return;
     let cancelled = false;
     setLoadingQuote(true);

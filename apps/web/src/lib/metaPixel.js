@@ -1,4 +1,4 @@
-import { trackFunnelEvent } from './funnelAnalytics.js';
+import { createFunnelEventId, trackFunnelEvent } from './funnelAnalytics.js';
 
 export const META_CURRENCY = 'PHP';
 const META_SCRIPT_URL = 'https://connect.facebook.net/en_US/fbevents.js';
@@ -38,8 +38,10 @@ export function getMetaTrackingConsent(storage = defaultConsentStorage()) {
 export function setMetaTrackingConsent(value, options = {}) {
   const storage = options.storage || defaultConsentStorage();
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
-  if (value === 'accepted' || value === 'declined') storage?.setItem(META_CONSENT_KEY, value);
-  else storage?.removeItem(META_CONSENT_KEY);
+  try {
+    if (value === 'accepted' || value === 'declined') storage?.setItem(META_CONSENT_KEY, value);
+    else storage?.removeItem(META_CONSENT_KEY);
+  } catch (_error) { /* privacy storage failure must not break the storefront */ }
   const requested = value === 'accepted' ? 'grant' : 'revoke';
   const effective = runtimePixelConfig?.requireConsent === false ? 'grant' : requested;
   setFacebookPixelConsent(windowRef, effective);
@@ -54,6 +56,8 @@ function setFacebookPixelConsent(windowRef, value) {
 }
 
 function hasMetaTrackingConsent(options = {}) {
+  const navigatorRef = options.navigatorRef || (typeof navigator !== 'undefined' ? navigator : null);
+  if (navigatorRef?.doNotTrack === '1' || navigatorRef?.globalPrivacyControl === true) return false;
   const requireConsent = options.requireConsent ?? runtimePixelConfig?.requireConsent ?? true;
   if (!requireConsent) return true;
   return options.consent ?? getMetaTrackingConsent(options.consentStorage) === 'accepted';
@@ -72,7 +76,8 @@ export function configureFacebookMetaPixel(settings = {}) {
   runtimePixelConfig = {
     enabled: Boolean(settings.enabled && pixelId),
     pixelId,
-    requireConsent: Boolean(settings.requireConsent)
+    requireConsent: Boolean(settings.requireConsent),
+    browserPurchaseEnabled: Boolean(settings.browserPurchaseEnabled)
   };
   if (!runtimePixelConfig.enabled && typeof window !== 'undefined') {
     setFacebookPixelConsent(window, 'revoke');
@@ -82,7 +87,45 @@ export function configureFacebookMetaPixel(settings = {}) {
 }
 
 export function isFacebookAdminPath(path) {
-  return String(path || '').startsWith('/admin');
+  const pathname = String(path || '').split(/[?#]/, 1)[0].replace(/\/+$/, '').toLowerCase() || '/';
+  return pathname === '/admin' || pathname.startsWith('/admin/');
+}
+
+// Temporary production safety boundary: account-side Event Setup rules cannot
+// create a second Purchase on checkout confirmation routes while server CAPI is
+// authoritative. Re-enable browser Purchase only after Meta Test Events proves
+// that automatic rules are removed and browser/server event IDs deduplicate.
+export function isFacebookPurchaseSensitivePath(path) {
+  const pathname = String(path || '').split(/[?#]/, 1)[0].replace(/\/+$/, '').toLowerCase() || '/';
+  return pathname === '/checkout/review' || pathname === '/thank-you';
+}
+
+export function isFacebookBrowserPurchaseReady(options = {}) {
+  const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
+  return isBrowserPurchaseEnabled(options, windowRef) && hasMetaTrackingConsent(options);
+}
+
+export function isFacebookPrivateQueryPath(path) {
+  const value = String(path || '');
+  const [pathname, search = ''] = value.split('?', 2);
+  if (!search) return false;
+  const normalized = pathname.replace(/\/+$/, '').toLowerCase() || '/';
+  const params = new URLSearchParams(search);
+  return (normalized === '/reset-password' && params.has('token'))
+    || (normalized === '/cart' && params.has('restore'));
+}
+
+function canonicalMetaPath(path) {
+  return String(path || '/').split(/[?#]/, 1)[0] || '/';
+}
+
+function isBrowserPurchaseEnabled(options = {}, windowRef = null) {
+  return Boolean(
+    options.browserPurchaseEnabled
+    ?? runtimePixelConfig?.browserPurchaseEnabled
+    ?? windowRef?.__mariaClaraFacebookPixelConfig?.browserPurchaseEnabled
+    ?? false
+  );
 }
 
 export function shouldTrackFacebookPath(previousPath, nextPath) {
@@ -246,7 +289,7 @@ export function buildFacebookViewContent(product = {}) {
     content_ids: [contentId],
     content_name: String(product.name || '').trim(),
     content_type: 'product',
-    content_category: String(product.collection || ''),
+    content_category: String(product.collection || (Array.isArray(product.collections) ? product.collections.join(', ') : '')),
     content_variant: String(product.size || ''),
     contents: [{ id: contentId, quantity: 1, item_price: value }],
     currency: META_CURRENCY,
@@ -311,6 +354,9 @@ export function trackFacebookEvent(eventName, payload = {}, options = {}) {
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
   const path = options.path ?? windowRef?.location?.pathname ?? '';
   if (runtimePixelConfig?.enabled === false || isFacebookAdminPath(path)) return false;
+  if (eventName === 'Purchase' && !isBrowserPurchaseEnabled(options, windowRef)) {
+    return false;
+  }
   if (!hasValidMonetaryPayload(eventName, payload)) {
     if (import.meta.env?.DEV && typeof console !== 'undefined') {
       console.warn('Meta monetary event not sent because value or currency is invalid.', {
@@ -322,6 +368,7 @@ export function trackFacebookEvent(eventName, payload = {}, options = {}) {
     }
     return false;
   }
+  if (!hasMetaTrackingConsent(options)) return false;
   if (!windowRef?.fbq) {
     if (runtimePixelConfig === null && pendingPixelEvents.length < 50) {
       const key = `${eventName}:${options.eventId || ''}:${JSON.stringify(payload)}`;
@@ -332,7 +379,6 @@ export function trackFacebookEvent(eventName, payload = {}, options = {}) {
     }
     return false;
   }
-  if (!hasMetaTrackingConsent(options)) return false;
 
   if (options.eventId) {
     windowRef.fbq('track', eventName, payload, { eventID: options.eventId });
@@ -356,20 +402,28 @@ export function flushPendingFacebookEvents(options = {}) {
 }
 
 export function trackFacebookPageView(path, options = {}) {
-  trackFunnelEvent('page_view', { path, dedupeKey: path, dedupeMilliseconds: 1200 });
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
-  const initialPath = String(windowRef?.__mariaClaraInitialMetaPageViewPath || '');
-  if (initialPath) {
-    delete windowRef.__mariaClaraInitialMetaPageViewPath;
-    lastTrackedPagePath = initialPath;
-    lastViewContentKey = '';
-    if (initialPath === path) return true;
-  }
-  if (!shouldTrackFacebookPath(lastTrackedPagePath, path)) return false;
-  const tracked = trackFacebookEvent('PageView', {}, { ...options, path });
+  const canonicalPath = canonicalMetaPath(path);
+  if (!shouldTrackFacebookPath(lastTrackedPagePath, canonicalPath)) return false;
+  const eventId = createFunnelEventId('pageview');
+  const privateQuery = isFacebookPrivateQueryPath(path);
+  const tracked = privateQuery ? false : trackFacebookEvent('PageView', {}, {
+    ...options,
+    path: canonicalPath,
+    eventId
+  });
+  trackFunnelEvent('page_view', {
+    path: canonicalPath,
+    eventId,
+    dedupeKey: canonicalPath,
+    dedupeMilliseconds: 1200,
+    metaBrowserSent: tracked,
+    metaEventName: 'PageView'
+  });
+  lastTrackedPagePath = canonicalPath;
+  lastViewContentKey = '';
   if (tracked) {
-    lastTrackedPagePath = path;
-    lastViewContentKey = '';
+    windowRef.__mariaClaraLastMetaPageViewEventId = eventId;
   }
   return tracked;
 }
@@ -377,47 +431,62 @@ export function trackFacebookPageView(path, options = {}) {
 export function trackFacebookViewContent(product, options = {}) {
   const payload = buildFacebookViewContent(product);
   if (!payload?.content_ids.length) return false;
+  const eventId = createFunnelEventId('viewcontent');
+  const key = `${options.path || ''}:${payload.content_ids.join(',')}`;
+  if (key === lastViewContentKey) return false;
+  const tracked = trackFacebookEvent('ViewContent', payload, { ...options, eventId });
   trackFunnelEvent('product_view', {
+    eventId,
     path: options.path,
     productId: String(product.productId || product.id || product.slug || payload.content_ids[0] || ''),
     variantId: String(product.variantId || payload.content_ids[0] || ''),
     quantity: 1,
     valueCents: product.priceCents,
     dedupeKey: `${options.path || ''}:${payload.content_ids[0]}`,
-    dedupeMilliseconds: 1500
+    dedupeMilliseconds: 1500,
+    metaBrowserSent: tracked,
+    metaEventName: 'ViewContent',
+    metaCustomData: payload
   });
-  const key = `${options.path || ''}:${payload.content_ids.join(',')}`;
-  if (key === lastViewContentKey) return false;
-  const tracked = trackFacebookEvent('ViewContent', payload, options);
-  if (tracked) lastViewContentKey = key;
+  lastViewContentKey = key;
   return tracked;
 }
 
 export function trackFacebookAddToCart(item, options = {}) {
   const payload = buildFacebookAddToCart(item);
   if (!payload?.content_ids.length) return false;
+  const eventId = String(options.eventId || createFunnelEventId('addtocart'));
+  const tracked = trackFacebookEvent('AddToCart', payload, { ...options, eventId });
   trackFunnelEvent('add_to_cart', {
+    eventId,
     path: options.path,
     productId: String(item.productId || item.slug || payload.content_ids[0] || ''),
     variantId: String(item.variantId || payload.content_ids[0] || ''),
     quantity: payload.num_items,
-    valueCents: Math.round(payload.value * 100)
+    valueCents: Math.round(payload.value * 100),
+    metaBrowserSent: tracked,
+    metaEventName: 'AddToCart',
+    metaCustomData: payload
   });
-  return trackFacebookEvent('AddToCart', payload, options);
+  return tracked;
 }
 
 export function trackFacebookInitiateCheckout(items, totals, eventId, options = {}) {
   if (!eventId || lastCheckoutEventId === eventId) return false;
   const payload = buildFacebookInitiateCheckout(items, totals);
   if (!payload?.content_ids.length) return false;
+  const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId });
   trackFunnelEvent('initiate_checkout', {
+    eventId,
     path: options.path,
     quantity: payload.num_items,
     valueCents: totals.totalCents,
     dedupeKey: String(eventId),
-    dedupeMilliseconds: 60_000
+    dedupeMilliseconds: 60_000,
+    metaBrowserSent: tracked,
+    metaEventName: 'InitiateCheckout',
+    metaCustomData: payload
   });
-  const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId });
   if (tracked) lastCheckoutEventId = eventId;
   return tracked;
 }
@@ -427,19 +496,23 @@ export function trackFacebookAddPaymentInfo(items, totals, paymentMethod, eventI
   if (!normalizedEventId) return false;
   const payload = buildFacebookAddPaymentInfo(items, totals, paymentMethod);
   if (!payload?.content_ids.length) return false;
+  const storage = options.storage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+  const storageKey = `maria-clara-facebook-${normalizedEventId}`;
+  if (storageGet(storage, storageKey)) return false;
+  const tracked = trackFacebookEvent('AddPaymentInfo', payload, { ...options, eventId: normalizedEventId });
   trackFunnelEvent('add_payment_info', {
+    eventId: normalizedEventId,
     path: options.path,
     quantity: payload.num_items,
     valueCents: totals.totalCents,
     paymentMethod,
     dedupeKey: normalizedEventId,
-    dedupeMilliseconds: 60_000
+    dedupeMilliseconds: 60_000,
+    metaBrowserSent: tracked,
+    metaEventName: 'AddPaymentInfo',
+    metaCustomData: payload
   });
-  const storage = options.storage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
-  const storageKey = `maria-clara-facebook-${normalizedEventId}`;
-  if (storage?.getItem(storageKey)) return false;
-  const tracked = trackFacebookEvent('AddPaymentInfo', payload, { ...options, eventId: normalizedEventId });
-  if (tracked) storage?.setItem(storageKey, 'tracked');
+  if (tracked) storageSet(storage, storageKey, 'tracked');
   return tracked;
 }
 

@@ -7,15 +7,15 @@ import Stars from './Stars.jsx';
 import { responsiveImageAttributes } from '../lib/responsiveImage.js';
 
 export function totalStock(product) {
-  return product.variants.reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
+  return (product.variants || []).reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
 }
 
 export default function ProductCard({ product, index }) {
   const settings = useStorefrontSettings();
   const image = product.images[0];
   const hoverImage = product.images[1];
-  const soldOut = product.merchandisingStatus === 'sold_out';
   const stock = totalStock(product);
+  const soldOut = String(product.merchandisingStatus || '').toLowerCase() === 'sold_out' || stock <= 0;
   const limited = !soldOut && stock > 0 && stock <= settings.inventory.lowStockThreshold;
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
   const showRating = settings.reviews?.enabled !== false &&
@@ -35,9 +35,11 @@ export default function ProductCard({ product, index }) {
           {image && (
             <img
               src={image.url}
-              alt={image.altText || product.name}
+              alt={product.seo?.imageAltText || image.altText || product.name}
               loading="lazy"
               decoding="async"
+              width="1000"
+              height="1250"
               {...responsiveImageAttributes(image.url, {
                 sizes: '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw',
                 shopifyWidths: [360, 720, 1000]
@@ -52,6 +54,8 @@ export default function ProductCard({ product, index }) {
               aria-hidden="true"
               loading="lazy"
               decoding="async"
+              width="1000"
+              height="1250"
               {...responsiveImageAttributes(hoverImage.url, {
                 sizes: '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw',
                 shopifyWidths: [360, 720, 1000]

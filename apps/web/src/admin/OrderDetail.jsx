@@ -532,13 +532,19 @@ export default function OrderDetail() {
   const statusEvents = Array.isArray(order.statusEvents) ? order.statusEvents : [];
   const trackingNotifications = Array.isArray(order.trackingNotifications) ? order.trackingNotifications : [];
   const orderNotifications = Array.isArray(order.notifications) ? order.notifications : [];
-  const adminEmailNotification = orderNotifications.find((notification) => notification.eventName === 'admin_new_order');
-  const deliveryNotifications = orderNotifications.filter((notification) => notification.eventName !== 'admin_new_order');
+  const adminEmailNotifications = orderNotifications.filter((notification) => (
+    notification.eventName === 'admin_new_order' || notification.eventName === 'admin_payment_confirmed'
+  ));
+  const newOrderEmailNotifications = adminEmailNotifications.filter((notification) => notification.eventName === 'admin_new_order');
+  const deliveryNotifications = orderNotifications.filter((notification) => ![
+    'admin_new_order', 'admin_payment_confirmed'
+  ].includes(notification.eventName));
   const adminEmailStatus = order.adminEmailSentAt
     ? 'sent'
-    : adminEmailNotification?.status || order.adminEmailStatus || 'not_queued';
-  const adminEmailError = order.adminEmailError || adminEmailNotification?.lastError || '';
-  const canResendAdminEmail = adminEmailStatus === 'failed' && !order.adminEmailSentAt;
+    : order.adminEmailStatus || newOrderEmailNotifications[0]?.status || 'not_queued';
+  const adminEmailError = order.adminEmailError || newOrderEmailNotifications.find((notification) => notification.lastError)?.lastError || '';
+  const canResendAdminEmail = newOrderEmailNotifications.some((notification) => notification.status === 'failed')
+    && !order.adminEmailSentAt;
   const metaTrackingStatus = order.metaPurchaseStatus || 'legacy';
   const metaPurchaseValue = Number(order.metaPurchaseValue ?? (Number(order.totalCents || 0) / 100));
   const metaPurchaseCurrency = String(order.metaPurchaseCurrency || order.currency || 'PHP');
@@ -1051,7 +1057,7 @@ export default function OrderDetail() {
               )) : <p className="text-sm text-[var(--admin-muted)]">Created automatically when the order is first marked delivered.</p>}
             </DetailCard>
 
-            <DetailCard title="Admin order email" className="xl:col-span-6">
+            <DetailCard title="Order notifications" className="xl:col-span-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <span className={orderStatusBadge(
@@ -1079,6 +1085,27 @@ export default function OrderDetail() {
                   </button>
                 )}
               </div>
+              {adminEmailNotifications.length > 0 && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {adminEmailNotifications.map((notification) => (
+                    <article key={notification.id} className="rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold text-[var(--admin-text)]">
+                          {notification.eventName === 'admin_payment_confirmed' ? 'Payment Confirmation' : 'New Order'}
+                        </p>
+                        <span className={orderStatusBadge(
+                          notification.status,
+                          notification.status === 'sent' ? 'success' : notification.status === 'failed' ? 'danger' : 'warning'
+                        )}>{titleCase(notification.status)}</span>
+                      </div>
+                      <p className="mt-2 break-all text-xs text-[var(--admin-muted)]">{notification.recipient || 'Recipient not configured'}</p>
+                      <p className="mt-1 text-xs text-[var(--admin-muted)]">Attempts: {Number(notification.attemptCount || 0)}</p>
+                      {notification.sentAt && <p className="mt-1 text-xs text-[var(--admin-muted)]">Sent {new Date(notification.sentAt).toLocaleString('en-PH')}</p>}
+                      {notification.lastError && <p className="mt-2 text-xs text-[#ff8b98]">{notification.lastError}</p>}
+                    </article>
+                  ))}
+                </div>
+              )}
             </DetailCard>
 
             <DetailCard title="Meta Purchase tracking" className="xl:col-span-6">

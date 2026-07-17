@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS order_notification_outbox (
   channel text NOT NULL CHECK (channel IN ('sms', 'email')),
   recipient text NOT NULL DEFAULT '',
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'sent', 'failed', 'skipped')),
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'retrying', 'sent', 'failed', 'skipped', 'cancelled')),
   attempt_count integer NOT NULL DEFAULT 0,
   next_attempt_at timestamptz NOT NULL DEFAULT now(),
   locked_at timestamptz,
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS order_notification_outbox (
   last_error text NOT NULL DEFAULT '',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (order_number, event_name, channel)
+  UNIQUE (order_number, event_name, channel, recipient)
 );
 
 CREATE INDEX IF NOT EXISTS order_notification_outbox_due_idx ON order_notification_outbox(status, next_attempt_at);
@@ -461,7 +461,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_checkout_idempotency_key_idx
 CREATE TABLE IF NOT EXISTS marketing_event_outbox (
   id text PRIMARY KEY,
   provider text NOT NULL CHECK (provider = 'meta'),
-  event_name text NOT NULL CHECK (event_name = 'Purchase'),
+  event_name text NOT NULL CHECK (event_name IN ('PageView','ViewContent','AddToCart','InitiateCheckout','AddPaymentInfo','Purchase')),
   event_id text NOT NULL UNIQUE,
   aggregate_id text NOT NULL,
   payload jsonb NOT NULL,
@@ -478,6 +478,47 @@ CREATE TABLE IF NOT EXISTS marketing_event_outbox (
 
 CREATE INDEX IF NOT EXISTS marketing_event_outbox_pending_idx
   ON marketing_event_outbox(status, next_attempt_at, created_at);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM marketing_event_outbox
+     WHERE event_name = 'Purchase'
+     GROUP BY aggregate_id, event_name
+    HAVING count(*) > 1
+  ) THEN
+    EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS marketing_event_outbox_order_event_idx
+      ON marketing_event_outbox(aggregate_id, event_name) WHERE event_name = ''Purchase''';
+  ELSE
+    RAISE WARNING 'Historical duplicate Meta outbox rows found; order-level uniqueness will be added after reconciliation cleanup.';
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS meta_event_dispatches (
+  id text PRIMARY KEY,
+  order_number text NULL REFERENCES orders(order_number) ON DELETE CASCADE,
+  event_name text NOT NULL CHECK (event_name IN ('PageView','ViewContent','AddToCart','InitiateCheckout','AddPaymentInfo','Purchase')),
+  event_id text NOT NULL,
+  source text NOT NULL CHECK (source IN ('browser', 'server')),
+  value numeric(14,2) CHECK (value IS NULL OR value > 0),
+  currency text NOT NULL DEFAULT 'PHP' CHECK (currency = 'PHP'),
+  status text NOT NULL CHECK (status IN ('pending', 'claimed', 'sending', 'sent', 'failed', 'skipped')),
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  claim_id text NOT NULL DEFAULT '',
+  provider_response_id text NOT NULL DEFAULT '',
+  error_code text NOT NULL DEFAULT '',
+  error_message text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  sent_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (order_number, event_name, source),
+  UNIQUE (event_id, event_name, source)
+);
+
+CREATE INDEX IF NOT EXISTS meta_event_dispatches_order_idx
+  ON meta_event_dispatches(order_number, event_name, source);
+CREATE INDEX IF NOT EXISTS meta_event_dispatches_status_idx
+  ON meta_event_dispatches(status, created_at DESC);
 
 UPDATE orders AS order_record
 SET meta_capi_purchase_queued_at = COALESCE(order_record.meta_capi_purchase_queued_at, event.created_at),

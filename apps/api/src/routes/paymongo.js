@@ -1,14 +1,13 @@
 const express = require('express');
 const { env } = require('../config/env');
 const { getStoreSettings } = require('../settings/storeSettingsRepository');
-const { findOrderByNumber } = require('../orders/orderRepository');
 const { placeAuthoritativeCheckout } = require('../checkout/authoritativeCheckoutService');
 const { parseMetaCookies } = require('../marketing/metaEvent');
 const {
   defaultAuthoritativeDependencies, exportPancakeOrderNow, resolveCustomerAccountId, syncOrderInventoryNow
 } = require('./orders');
 const { createPayMongoClient } = require('../payments/paymongoClient');
-const { attachCheckoutSession, checkoutSessionPayload, processPaidWebhook } = require('../payments/paymongoPaymentService');
+const { ensureCheckoutSession, processPaidWebhook } = require('../payments/paymongoPaymentService');
 const { processRefundWebhook } = require('../payments/paymongoRefundService');
 const { verifyPayMongoSignature } = require('../payments/paymongoWebhookSignature');
 const { createPancakeClient } = require('../integrations/pancake/pancakeClient');
@@ -47,15 +46,23 @@ function createPayMongoRouter(dependencies = {}) {
       const result = await placeAuthoritativeCheckout({
         ...req.body, paymentMethod: 'paymongo', paymentExpiresAt, customerAccountId,
         idempotencyKey: req.get('Idempotency-Key') || '',
-        requestContext: { ...cookies, clientIp: req.ip, clientUserAgent: req.get('user-agent') || '', sourceUrl: sourceUrl(req) }
+        requestContext: {
+          ...cookies,
+          clientIp: req.ip,
+          clientUserAgent: req.get('user-agent') || '',
+          sourceUrl: sourceUrl(req),
+          metaConsentGranted: settings.marketing?.metaPixel?.requireConsent
+            ? req.body?.metaTrackingConsent === 'accepted'
+            : true,
+          metaTrackingConsent: settings.marketing?.metaPixel?.requireConsent
+            ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
+              : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')
+            : 'not_required'
+        }
       }, defaultAuthoritativeDependencies(req));
-      let order = await findOrderByNumber(result.orderNumber, { includeRelated: false });
-      let checkoutUrl = order.paymentMetadata?.checkoutUrl || '';
-      if (!order.providerCheckoutSessionId || !checkoutUrl) {
-        const session = await client.createCheckoutSession(checkoutSessionPayload(order, config));
-        order = await attachCheckoutSession(order, session, config);
-        checkoutUrl = session.checkoutUrl;
-      }
+      const checkout = await (dependencies.ensureCheckoutSession || ensureCheckoutSession)(result.orderNumber, { client, config });
+      const order = checkout.order;
+      const checkoutUrl = checkout.checkoutUrl;
       try {
         const pancakeExport = await exportPancakeOrderNow(order.orderNumber);
         if (Number(pancakeExport?.summary?.sentCount || 0) > 0) await syncOrderInventoryNow(order.orderNumber);

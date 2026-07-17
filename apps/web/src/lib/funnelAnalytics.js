@@ -11,6 +11,10 @@ function randomId(prefix = 'event') {
   return `${prefix}_${value}`.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100);
 }
 
+export function createFunnelEventId(prefix = 'event') {
+  return randomId(prefix);
+}
+
 function sessionId() {
   const session = storage();
   const existing = session?.getItem(SESSION_KEY) || '';
@@ -61,7 +65,7 @@ export function trackFunnelEvent(eventName, input = {}) {
     ? null
     : Math.round(Number(input.valueCents));
   const payload = {
-    eventId: randomId('event'),
+    eventId: String(input.eventId || randomId('event')).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100),
     eventName,
     sessionId: sessionId(),
     path,
@@ -73,7 +77,15 @@ export function trackFunnelEvent(eventName, input = {}) {
     metricName: String(input.metricName || ''),
     metricValue: Number.isFinite(Number(input.metricValue)) ? Number(input.metricValue) : null,
     referrer: document.referrer || '',
-    ...campaign()
+    ...campaign(),
+    ...(input.metaBrowserSent === true ? {
+      metaBrowserSent: true,
+      metaEventId: String(input.eventId || '').slice(0, 100),
+      metaEventName: String(input.metaEventName || '').slice(0, 40),
+      metaCustomData: input.metaCustomData && typeof input.metaCustomData === 'object'
+        ? input.metaCustomData
+        : undefined
+    } : {})
   };
   fetch('/api/analytics/events', {
     method: 'POST',

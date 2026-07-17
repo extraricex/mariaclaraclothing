@@ -6,7 +6,8 @@ const path = require('node:path');
 const { notificationConfig } = require('../src/config/env');
 const {
   buildAdminNewOrderEmail,
-  sendAdminNewOrderEmail
+  sendAdminNewOrderEmail,
+  smtpRetryable
 } = require('../src/notifications/adminOrderEmail');
 const {
   ADMIN_NEW_ORDER_EVENT,
@@ -85,7 +86,7 @@ test('SMTP admin order configuration is server-side, validated, and starts the o
 
 test('new-order email contains authoritative quantities and totals without internal product identifiers', () => {
   const message = buildAdminNewOrderEmail(orderFixture(), smtpConfig);
-  assert.equal(message.subject, 'New Maria Clara Order — MCC-20260715-001 — ₱1,778.00');
+  assert.equal(message.subject, 'New Maria Clara Clothing Order — MCC-20260715-001');
   assert.match(message.html, /Maria Clara Blouse/);
   assert.match(message.html, /Size \/ variant: Medium/);
   assert.match(message.html, /Quantity: 2/);
@@ -116,7 +117,16 @@ test('Nodemailer receives the complete message but no SMTP credential is placed 
   assert.match(sentMail.messageId, /^<admin-order-[a-f0-9]{32}@mariaclaraclothing\.com>$/);
 });
 
-test('COD queues one durable email only after checkout writes, while PayMongo waits for paid status', async () => {
+test('temporary SMTP and network failures retry, while authentication and rejection errors do not', () => {
+  for (const code of ['ECONNECTION', 'ECONNREFUSED', 'ECONNRESET', 'EDNS', 'ETIMEDOUT']) {
+    assert.equal(smtpRetryable({ code }), true);
+  }
+  assert.equal(smtpRetryable({ responseCode: 421 }), true);
+  assert.equal(smtpRetryable({ code: 'EAUTH', responseCode: 535 }), false);
+  assert.equal(smtpRetryable({ code: 'EENVELOPE', responseCode: 550 }), false);
+});
+
+test('COD and pending PayMongo orders each queue exactly one durable New Order email after commit', async () => {
   const inserted = new Set();
   const states = [];
   const repository = {
@@ -141,10 +151,10 @@ test('COD queues one durable email only after checkout writes, while PayMongo wa
     orderNumber: 'MCC-PENDING', paymentMethod: 'paymongo', paymentProvider: 'paymongo',
     paymentStatus: 'pending_payment', status: 'pending_payment'
   });
-  assert.equal((await enqueueAdminNewOrderEmail(pendingPayMongo, options)).length, 0);
+  assert.equal((await enqueueAdminNewOrderEmail(pendingPayMongo, options)).length, 1);
   pendingPayMongo.paymentStatus = 'paid';
   pendingPayMongo.status = 'confirmed';
-  assert.equal((await enqueueAdminNewOrderEmail(pendingPayMongo, options)).length, 1);
+  assert.equal((await enqueueAdminNewOrderEmail(pendingPayMongo, options)).length, 0);
 });
 
 test('automatic worker sends one admin email, stores sent state, and skips a previously sent order', async () => {

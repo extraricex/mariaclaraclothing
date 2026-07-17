@@ -17,6 +17,7 @@ function buildRobotsTxt(siteUrl) {
     'Disallow: /register',
     'Disallow: /forgot-password',
     'Disallow: /reset-password',
+    'Disallow: /api/',
     '',
     `Sitemap: ${origin}/sitemap.xml`,
     ''

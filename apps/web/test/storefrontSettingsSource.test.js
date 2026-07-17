@@ -50,8 +50,12 @@ test('contact page shows the configured store location without implying an unver
   assert.doesNotMatch(source, /Returns address/);
 });
 
-test('store settings lib carries website defaults and an SEO applier', async () => {
-  const source = await readFile(path.join(root, 'lib', 'storeSettings.js'), 'utf8');
+test('store settings lib carries website defaults while centralized SEO owns route tags', async () => {
+  const [source, seo, main] = await Promise.all([
+    readFile(path.join(root, 'lib', 'storeSettings.js'), 'utf8'),
+    readFile(path.join(root, 'lib', 'seo.js'), 'utf8'),
+    readFile(path.join(root, 'main.jsx'), 'utf8')
+  ]);
 
   assert.match(source, /ticker:/);
   assert.match(source, /DEFAULT_INFO_PAGES/);
@@ -60,7 +64,9 @@ test('store settings lib carries website defaults and an SEO applier', async () 
   assert.match(source, /maintenanceMode: false/);
   assert.match(source, /hero:/);
   assert.match(source, /primaryButtonText: 'Shop new arrivals'/);
-  assert.match(source, /export function applySeoTags/);
+  assert.doesNotMatch(source, /applySeoTags/);
+  assert.match(seo, /export function applySeoDescriptor/);
+  assert.match(main, /<RouteSeoDefaults \/>/);
 });
 
 test('homepage renders hero text and buttons from storefront settings', async () => {
@@ -77,10 +83,14 @@ test('homepage renders hero text and buttons from storefront settings', async ()
   assert.doesNotMatch(source, /Shop new arrivals<\/CustomerButton>/);
 });
 
-test('shell renders the ticker and SEO tags from settings', async () => {
-  const source = await readFile(path.join(root, 'components', 'Shell.jsx'), 'utf8');
+test('shell renders the ticker while centralized SEO owns route tags', async () => {
+  const [source, seo] = await Promise.all([
+    readFile(path.join(root, 'components', 'Shell.jsx'), 'utf8'),
+    readFile(path.join(root, 'components', 'SEO.jsx'), 'utf8')
+  ]);
 
-  assert.match(source, /applySeoTags/);
+  assert.doesNotMatch(source, /applySeoTags/);
+  assert.match(seo, /applySeoDescriptor/);
   assert.match(source, /storeInfo\?\.ticker/);
   assert.match(source, /function Ticker\(\{ items \}\)/);
 });

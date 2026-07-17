@@ -5,6 +5,8 @@ const { findOrderByNumber, updateOrderAdminEmailState } = require('../orders/ord
 const { sendAdminNewOrderEmail, sendTransactionalSmtpEmail } = require('./adminOrderEmail');
 const {
   ADMIN_NEW_ORDER_EVENT,
+  ADMIN_PAYMENT_CONFIRMED_EVENT,
+  aggregateNewOrderState,
   finalizeSuccessfulAdminEmail,
   safeAdminOrderEmailError,
   safeLog
@@ -37,7 +39,7 @@ function createOrderNotificationWorker({
     const events = await repository.claimDue(client, { now: current, limit: 10 });
     const result = { claimed: events.length, sent: 0, retried: 0, failed: 0 };
     for (const event of events) {
-      const isAdminOrderEmail = event.eventName === ADMIN_NEW_ORDER_EVENT;
+      const isAdminOrderEmail = [ADMIN_NEW_ORDER_EVENT, ADMIN_PAYMENT_CONFIRMED_EVENT].includes(event.eventName);
       try {
         if (isAdminOrderEmail) {
           const order = await findOrder(event.orderNumber, { includeRelated: false });
@@ -47,13 +49,18 @@ function createOrderNotificationWorker({
             error.retryable = false;
             throw error;
           }
-          if (order.adminEmailSentAt) {
+          if (event.eventName === ADMIN_NEW_ORDER_EVENT && order.adminEmailSentAt) {
             await repository.markSent(client, event.id, { providerMessageId: event.providerMessageId || '' });
             result.sent += 1;
             continue;
           }
-          await updateOrderState(order.orderNumber, { status: 'sending', error: '' });
-          const response = await sendAdminEmail(order, { config: config.adminOrderEmail });
+          if (event.eventName === ADMIN_NEW_ORDER_EVENT) {
+            await updateOrderState(order.orderNumber, { status: 'sending', error: '' });
+          }
+          const response = await sendAdminEmail(order, {
+            config: { ...config.adminOrderEmail, recipient: event.recipient },
+            event
+          });
           await finalizeSuccessfulAdminEmail(event, order, response, {
             client,
             repository,
@@ -61,7 +68,7 @@ function createOrderNotificationWorker({
             now,
             logger
           });
-          safeLog(logger, 'info', 'Admin order email sent.', order.orderNumber, 'sent');
+          safeLog(logger, 'info', 'Admin order email sent.', order.orderNumber, 'sent', null, event.eventName);
         } else {
           const response = event.channel === 'sms'
             ? await sendSms(event, { config: config.sms })
@@ -75,18 +82,24 @@ function createOrderNotificationWorker({
         const message = isAdminOrderEmail
           ? safeAdminOrderEmailError(error)
           : String(error?.message || 'Notification delivery failed').slice(0, 1000);
-        if (error?.retryable && Number(event.attemptCount ?? event.attempt_count) < MAX_ATTEMPTS) {
+        const configuredAttempts = Number(event.payload?.maximumRetryAttempts || MAX_ATTEMPTS);
+        const maximumAttempts = Number.isInteger(configuredAttempts)
+          ? Math.max(1, Math.min(20, configuredAttempts))
+          : MAX_ATTEMPTS;
+        if (error?.retryable && Number(event.attemptCount ?? event.attempt_count) < maximumAttempts) {
           await repository.scheduleRetry(client, event.id, { nextAttemptAt: new Date(current.getTime() + retryDelayMs(event.attemptCount ?? event.attempt_count, random)), error: message });
-          if (isAdminOrderEmail) {
-            await updateOrderState(event.orderNumber, { status: 'pending', error: message }).catch(() => {});
-            safeLog(logger, 'warn', 'Admin order email will be retried.', event.orderNumber, 'pending', error);
+          if (event.eventName === ADMIN_NEW_ORDER_EVENT) {
+            const summary = await aggregateNewOrderState(event.orderNumber, { repository, updateOrderState, now }).catch(() => null);
+            if (!summary) await updateOrderState(event.orderNumber, { status: 'pending', error: message }).catch(() => {});
+            safeLog(logger, 'warn', 'Admin order email will be retried.', event.orderNumber, 'retrying', error, event.eventName);
           }
           result.retried += 1;
         } else {
           await repository.markFailed(client, event.id, message);
-          if (isAdminOrderEmail) {
-            await updateOrderState(event.orderNumber, { status: 'failed', error: message }).catch(() => {});
-            safeLog(logger, 'error', 'Admin order email failed.', event.orderNumber, 'failed', error);
+          if (event.eventName === ADMIN_NEW_ORDER_EVENT) {
+            const summary = await aggregateNewOrderState(event.orderNumber, { repository, updateOrderState, now }).catch(() => null);
+            if (!summary) await updateOrderState(event.orderNumber, { status: 'failed', error: message }).catch(() => {});
+            safeLog(logger, 'error', 'Admin order email failed.', event.orderNumber, 'failed', error, event.eventName);
           }
           result.failed += 1;
         }

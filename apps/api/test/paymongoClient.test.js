@@ -10,10 +10,11 @@ test('PayMongo client creates an official V2 hosted checkout with server-side Ba
     return { ok: true, json: async () => ({ data: { id: 'cs_test_1', attributes: { checkout_url: 'https://checkout.paymongo.com/cs_test_1' } } }) };
   });
   const payload = { data: { attributes: { line_items: [] } } };
-  const result = await client.createCheckoutSession(payload);
+  const result = await client.createCheckoutSession(payload, { idempotencyKey: 'paymongo-checkout-MCC-1001' });
   assert.equal(request.url, 'https://api.paymongo.com/v2/checkout_sessions');
   assert.equal(request.options.method, 'POST');
   assert.equal(request.options.headers.Authorization, `Basic ${Buffer.from('sk_test_secret:').toString('base64')}`);
+  assert.equal(request.options.headers['Idempotency-Key'], 'paymongo-checkout-MCC-1001');
   assert.deepEqual(JSON.parse(request.options.body), payload);
   assert.equal(result.checkoutUrl, 'https://checkout.paymongo.com/cs_test_1');
 });

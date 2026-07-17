@@ -77,7 +77,7 @@ test('GET /sitemap.xml lists real public product and collection URLs only', asyn
   }
 });
 
-test('GET /collections/all serves the storefront collection page', async () => {
+test('legacy all-products collection redirects permanently to the canonical shop page', async () => {
   const app = createApp();
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
@@ -86,13 +86,10 @@ test('GET /collections/all serves the storefront collection page', async () => {
   const { port } = server.address();
 
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/collections/all`);
-    const html = await response.text();
+    const response = await fetch(`http://127.0.0.1:${port}/collections/all`, { redirect: 'manual' });
 
-    assert.equal(response.status, 200);
-    assert.match(response.headers.get('content-type') || '', /text\/html/);
-    assert.match(html, /id="new-arrivals"/);
-    assert.match(html, /Maria Clara/);
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/shop');
   } finally {
     server.close();
   }

@@ -1,4 +1,5 @@
 import { fetchWithRecovery, responseErrorMessage } from './network.js';
+import { getMetaTrackingConsent } from './metaPixel.js';
 
 async function request(path, options = {}) {
   const response = await fetchWithRecovery(path, { cache: 'no-store', credentials: 'same-origin', ...options });
@@ -92,7 +93,8 @@ export function buildOrderRequest(input, quoteId, idempotencyKey) {
       quoteId,
       cartSessionId: input.cartSessionId,
       customer: input.customer,
-      paymentMethod: input.paymentMethod
+      paymentMethod: input.paymentMethod,
+      metaTrackingConsent: getMetaTrackingConsent()
     }
   };
 }

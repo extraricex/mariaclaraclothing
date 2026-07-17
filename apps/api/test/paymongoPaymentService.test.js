@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  applyPaidWebhookEvent, checkoutSessionPayload, closeCheckoutSessionForExpiry, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
+  applyPaidWebhookEvent, checkoutSessionPayload, closeCheckoutSessionForExpiry, ensureCheckoutSession, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
 } = require('../src/payments/paymongoPaymentService');
 
 function completeDelivery() {
@@ -48,6 +48,125 @@ test('PayMongo session creation rejects incomplete delivery data before contacti
       && Boolean(error.details.fields.street)
       && Boolean(error.details.fields.barangay)
   );
+});
+
+test('PayMongo checkout session creation locks the order and reuses one stable provider identity', async () => {
+  const calls = [];
+  const order = {
+    orderNumber: 'MCC-PAY-IDEMPOTENT', totalCents: 76900,
+    ...completeDelivery(),
+    items: [{ productName: 'Maria Clara Shirt', size: 'M', quantity: 1 }],
+    paymentMethod: 'paymongo', paymentProvider: 'paymongo',
+    paymentStatus: 'pending_payment', status: 'pending_payment',
+    inventoryReservationStatus: 'reserved', paymentExpiresAt: '2026-07-17T01:00:00.000Z',
+    paymentMetadata: {}
+  };
+  const result = await ensureCheckoutSession(order.orderNumber, {
+    config: {
+      reservationMinutes: 30, livemode: true,
+      paymentMethodTypes: ['gcash'],
+      successUrl: 'https://mariaclaraclothing.com/thank-you',
+      cancelUrl: 'https://mariaclaraclothing.com/checkout'
+    },
+    client: {
+      createCheckoutSession: async (_payload, options) => {
+        calls.push(options);
+        return { id: 'cs_one', checkoutUrl: 'https://checkout.paymongo.com/cs_one' };
+      }
+    },
+    transactionFn: async (callback) => callback({ query: async () => ({ rows: [] }) }),
+    findOrder: async (_orderNumber, options) => {
+      assert.equal(options.forUpdate, true);
+      assert.ok(options.client);
+      return order;
+    },
+    attachSession: async (current, session, _config, options) => {
+      assert.ok(options.client);
+      return {
+        ...current,
+        providerCheckoutSessionId: session.id,
+        paymentMetadata: { checkoutUrl: session.checkoutUrl }
+      };
+    },
+    now: () => new Date('2026-07-17T00:00:00.000Z')
+  });
+
+  assert.equal(result.order.providerCheckoutSessionId, 'cs_one');
+  assert.equal(result.checkoutUrl, 'https://checkout.paymongo.com/cs_one');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].idempotencyKey, 'paymongo-checkout-MCC-PAY-IDEMPOTENT');
+});
+
+test('PayMongo checkout session retries reuse the stored session without contacting PayMongo', async () => {
+  const stored = {
+    orderNumber: 'MCC-PAY-REUSED',
+    paymentMethod: 'paymongo', paymentStatus: 'pending_payment', status: 'pending_payment',
+    inventoryReservationStatus: 'reserved', paymentExpiresAt: '2026-07-17T01:00:00.000Z',
+    providerCheckoutSessionId: 'cs_existing',
+    paymentMetadata: { checkoutUrl: 'https://checkout.paymongo.com/cs_existing' }
+  };
+  let providerCalls = 0;
+  const result = await ensureCheckoutSession(stored.orderNumber, {
+    config: {},
+    client: { createCheckoutSession: async () => { providerCalls += 1; } },
+    transactionFn: async (callback) => callback({}),
+    findOrder: async () => stored,
+    now: () => new Date('2026-07-17T00:00:00.000Z')
+  });
+  assert.equal(result.reused, true);
+  assert.equal(result.checkoutUrl, stored.paymentMetadata.checkoutUrl);
+  assert.equal(providerCalls, 0);
+});
+
+test('PayMongo checkout recovers an existing provider session URL instead of creating another session', async () => {
+  const stored = {
+    orderNumber: 'MCC-PAY-RECOVERED',
+    paymentMethod: 'paymongo', paymentStatus: 'pending_payment', status: 'pending_payment',
+    inventoryReservationStatus: 'reserved', paymentExpiresAt: '2026-07-17T01:00:00.000Z',
+    providerCheckoutSessionId: 'cs_existing',
+    paymentMetadata: {}
+  };
+  let createCalls = 0;
+  const databaseClient = { query: async () => ({ rows: [] }) };
+  const result = await ensureCheckoutSession(stored.orderNumber, {
+    config: { livemode: true },
+    client: {
+      createCheckoutSession: async () => { createCalls += 1; },
+      retrieveCheckoutSession: async () => ({
+        id: 'cs_existing',
+        attributes: { status: 'active', checkout_url: 'https://checkout.paymongo.com/cs_existing' }
+      })
+    },
+    transactionFn: async (callback) => callback(databaseClient),
+    findOrder: async () => stored,
+    updateOrderRecord: async (_orderNumber, changes, options) => {
+      assert.equal(options.client, databaseClient);
+      return { ...stored, ...changes };
+    },
+    now: () => new Date('2026-07-17T00:00:00.000Z')
+  });
+  assert.equal(result.reused, true);
+  assert.equal(result.checkoutUrl, 'https://checkout.paymongo.com/cs_existing');
+  assert.equal(result.order.paymentMetadata.checkoutUrl, result.checkoutUrl);
+  assert.equal(createCalls, 0);
+});
+
+test('PayMongo checkout session replay cannot revive an expired reservation', async () => {
+  let providerCalls = 0;
+  await assert.rejects(ensureCheckoutSession('MCC-PAY-EXPIRED', {
+    config: {},
+    client: { createCheckoutSession: async () => { providerCalls += 1; } },
+    transactionFn: async (callback) => callback({}),
+    findOrder: async () => ({
+      orderNumber: 'MCC-PAY-EXPIRED',
+      paymentMethod: 'paymongo', paymentStatus: 'pending_payment', status: 'pending_payment',
+      inventoryReservationStatus: 'reserved', paymentExpiresAt: '2026-07-17T00:00:00.000Z',
+      paymentMetadata: { checkoutUrl: 'https://checkout.paymongo.com/cs_expired' },
+      providerCheckoutSessionId: 'cs_expired'
+    }),
+    now: () => new Date('2026-07-17T00:01:00.000Z')
+  }), (error) => error.code === 'paymongo_checkout_expired');
+  assert.equal(providerCalls, 0);
 });
 
 test('PayMongo paid event parser extracts session, payment, amount, and reference', () => {

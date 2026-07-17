@@ -197,12 +197,12 @@ test('successful checkout performs every commerce write in one transaction', asy
   assert.equal(result.status, 'confirmed');
 });
 
-test('PayMongo checkout does not queue an admin email until payment is verified', async () => {
+test('PayMongo checkout queues one pending-payment New Order email but no confirmation or Purchase', async () => {
   const deps = createDependencies();
   const result = await placeAuthoritativeCheckout(requestFixture({ paymentMethod: 'paymongo' }), deps);
   assert.equal(result.status, 'pending_payment');
   assert.equal(result.paymentStatus, 'pending_payment');
-  assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+  assert.equal(deps.calls.includes('enqueueAdminEmail'), true);
   assert.equal(deps.calls.includes('enqueueCustomerConfirmation'), false);
   assert.equal(deps.calls.includes('insertMeta'), false);
 });

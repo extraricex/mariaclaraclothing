@@ -8,6 +8,7 @@ const {
   metaPurchaseEligibility,
   queueMetaPurchase
 } = require('../src/marketing/metaPurchaseService');
+const { buildMetaPurchaseEvent } = require('../src/marketing/metaEvent');
 
 function order(overrides = {}) {
   return {
@@ -28,20 +29,46 @@ function order(overrides = {}) {
     inventoryReservationStatus: 'committed',
     totalCents: 127800,
     placedAt: '2026-07-15T04:00:00.000Z',
-    customer: {},
+    customer: {
+      firstName: 'Juan', lastName: 'Dela Cruz', fullName: 'Juan Dela Cruz',
+      phone: '09171234567', email: 'juan@example.com'
+    },
+    address: {
+      houseAddress: '123 Sample Street', barangay: 'Bucandala IV', city: 'Imus City', province: 'Cavite'
+    },
     items: [{ variantId: 'variant-1', quantity: 2, unitPriceCents: 64900 }],
     ...overrides
   };
 }
 
-function browserDependencies(initialOrder) {
+function browserDependencies(initialOrder, snapshotOrder = initialOrder) {
   let saved = { ...initialOrder };
+  let dispatch = null;
   let nextClaim = 0;
   const logs = [];
+  const immutableEvent = buildMetaPurchaseEvent({ order: snapshotOrder });
   return {
     dependencies: {
+      browserPurchaseEnabled: true,
       transaction: async (work) => work({}),
       findOrder: async () => saved,
+      findDispatch: async () => dispatch,
+      findServerSnapshot: async () => ({
+        aggregate_id: snapshotOrder.orderNumber,
+        event_id: immutableEvent.event_id,
+        payload: immutableEvent,
+        status: 'pending'
+      }),
+      claimDispatch: async (_client, claim) => {
+        if (dispatch) return null;
+        dispatch = { ...claim, status: 'claimed' };
+        return dispatch;
+      },
+      completeDispatch: async (_client, completion) => {
+        if (!dispatch || dispatch.claimId !== completion.claimId || dispatch.status !== 'claimed') return null;
+        dispatch = { ...dispatch, status: completion.sent ? 'sent' : 'failed' };
+        return dispatch;
+      },
       verifyToken: (token, hash) => token === 'confirmation-token' && hash === 'valid-hash',
       now: () => new Date('2026-07-15T04:05:00.000Z'),
       randomId: () => `claim-${++nextClaim}`,
@@ -71,6 +98,10 @@ function browserDependencies(initialOrder) {
       logger: { info: (message, details) => logs.push({ message, details }) }
     },
     get order() { return saved; },
+    get dispatch() { return dispatch; },
+    clearOrderClaim() {
+      saved = { ...saved, metaBrowserPurchaseClaimId: '', metaBrowserPurchaseClaimedAt: '' };
+    },
     logs
   };
 }
@@ -87,7 +118,7 @@ test('COD browser Purchase is claimed once, completed once, and blocked on refre
 
   const concurrent = await claimBrowserMetaPurchase(input, state.dependencies);
   assert.equal(concurrent.shouldSend, false);
-  assert.equal(concurrent.reason, 'claim_active');
+  assert.equal(concurrent.reason, 'browser_dispatch_already_attempted');
 
   const completed = await completeBrowserMetaPurchase({ ...input, claimId: first.claimId, sent: true }, state.dependencies);
   assert.equal(completed.completed, true);
@@ -148,6 +179,43 @@ test('failed, legacy, uncommitted, and invalid-total orders cannot claim browser
   assert.equal(metaPurchaseEligibility(order({ metaPurchaseTrackingVersion: 1 })).reason, 'legacy_order_locked');
   assert.equal(metaPurchaseEligibility(order({ inventoryReservationStatus: 'released' })).reason, 'order_not_committed');
   assert.equal(metaPurchaseEligibility(order({ totalCents: 0 })).reason, 'invalid_purchase_data');
+  assert.equal(metaPurchaseEligibility(order({ isTestOrder: true })).reason, 'test_order');
+  assert.equal(metaPurchaseEligibility(order({ address: { houseAddress: '123 Sample Street' } })).reason, 'delivery_incomplete');
+});
+
+test('browser Purchase is disabled by default when server CAPI is authoritative', async () => {
+  const state = browserDependencies(order());
+  state.dependencies.browserPurchaseEnabled = false;
+  const claim = await claimBrowserMetaPurchase({
+    orderNumber: state.order.orderNumber,
+    confirmationToken: 'confirmation-token'
+  }, state.dependencies);
+  assert.equal(claim.shouldSend, false);
+  assert.equal(claim.reason, 'browser_purchase_disabled');
+  assert.equal(state.dispatch, null);
+});
+
+test('durable browser dispatch blocks a second Pixel attempt even if the order lease is lost', async () => {
+  const state = browserDependencies(order());
+  const input = { orderNumber: state.order.orderNumber, confirmationToken: 'confirmation-token' };
+  const first = await claimBrowserMetaPurchase(input, state.dependencies);
+  assert.equal(first.shouldSend, true);
+  state.clearOrderClaim(); // Simulate a lost completion request and expired legacy lease.
+  const retry = await claimBrowserMetaPurchase(input, state.dependencies);
+  assert.equal(retry.shouldSend, false);
+  assert.equal(retry.reason, 'browser_dispatch_already_attempted');
+});
+
+test('browser Purchase payload is the immutable CAPI outbox snapshot', async () => {
+  const snapshot = order({ totalCents: 127800 });
+  const current = order({ totalCents: 200000, metaPurchaseValue: 2000 });
+  const state = browserDependencies(current, snapshot);
+  const claim = await claimBrowserMetaPurchase({
+    orderNumber: current.orderNumber,
+    confirmationToken: 'confirmation-token'
+  }, state.dependencies);
+  assert.equal(claim.shouldSend, true);
+  assert.equal(claim.purchase.payload.value, 1278);
 });
 
 test('centralized CAPI queue sends one authoritative stored-ID event and reports duplicates', async () => {
@@ -182,6 +250,19 @@ test('centralized CAPI queue stores a safe validation failure instead of dispatc
   assert.equal(failures.length, 1);
   assert.equal(failures[0].orderNumber, 'MCC-DEDUP-1');
   assert.match(failures[0].error, /stored order total or item data is invalid/);
+});
+
+test('centralized CAPI queue never dispatches test orders or orders with incomplete delivery data', async () => {
+  for (const [candidate, reason] of [
+    [order({ isTestOrder: true }), 'test_order'],
+    [order({ address: { houseAddress: '123 Sample Street' } }), 'delivery_incomplete']
+  ]) {
+    const result = await queueMetaPurchase({ client: {}, order: candidate, enabled: true }, {
+      insertEvent: async () => assert.fail('ineligible order must not enter the Meta outbox'),
+      logger: { info() {}, warn() {} }
+    });
+    assert.equal(result.status, reason);
+  }
 });
 
 test('Meta order migration stores permanent IDs, browser/server timestamps, and unique protection', async () => {

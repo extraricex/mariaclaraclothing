@@ -5,18 +5,20 @@ const path = require('node:path');
 const { createApp } = require('../src/app');
 const { buildMerchantFeedXml } = require('../src/routes/merchantFeed');
 const { buildRobotsTxt } = require('../src/routes/robots');
-const { pageDescriptor, renderSeoBody, renderSeoHead } = require('../src/seo/storefrontSeo');
+const { pageDescriptor, renderSeoBody, renderSeoHead, visibleCollections } = require('../src/seo/storefrontSeo');
 
 test('product SEO is database-backed and present as initial-head markup', async () => {
   const descriptor = await pageDescriptor('/product/imperial-choco-tee', { siteUrl: 'https://mariaclaraclothing.com' });
   assert.equal(descriptor.noindex, false);
-  assert.match(descriptor.title, /IMPERIAL CHOCO TEE/);
+  assert.match(descriptor.title, /Imperial Choco Tee/);
   assert.equal(descriptor.canonical, 'https://mariaclaraclothing.com/product/imperial-choco-tee');
   const head = renderSeoHead(descriptor, { nonce: 'request_nonce_123' });
-  assert.match(head, /<title>IMPERIAL CHOCO TEE/);
+  assert.match(head, /<title>Imperial Choco Tee/);
   assert.match(head, /rel="canonical" href="https:\/\/mariaclaraclothing\.com\/product\/imperial-choco-tee"/);
   assert.match(head, /"@type":"Product"/);
   assert.match(head, /"priceCurrency":"PHP"/);
+  assert.match(head, /property="product:price:currency" content="PHP"/);
+  assert.match(head, /property="product:availability" content="(?:in stock|out of stock)"/);
   assert.match(head, /nonce="request_nonce_123"/);
   assert.match(head, /rel="preload" as="image"/);
   assert.match(head, /imagesrcset="[^"]*width=480 480w[^"]*width=960 960w/);
@@ -30,6 +32,31 @@ test('private commerce routes are explicitly noindex', async () => {
   const descriptor = await pageDescriptor('/checkout/review', { siteUrl: 'https://mariaclaraclothing.com' });
   assert.equal(descriptor.noindex, true);
   assert.match(renderSeoHead(descriptor), /content="noindex,nofollow"/);
+});
+
+test('collection breadcrumbs include Shop and match the public hierarchy', async () => {
+  const populated = await pageDescriptor('/collections/freedom-of-mind', { siteUrl: 'https://mariaclaraclothing.com' });
+  assert.equal(populated.noindex, false);
+  const head = renderSeoHead(populated);
+  assert.match(head, /"name":"Shop","item":"https:\/\/mariaclaraclothing\.com\/shop"/);
+});
+
+test('collection placement flags control navigation placement, not public-page eligibility', () => {
+  const collections = visibleCollections({
+    collectionDefinitions: [
+      { name: 'Editorial', slug: 'editorial', visible: true, showOnHomepage: false, showOnShop: false },
+      { name: 'Hidden', slug: 'hidden', visible: false, showOnHomepage: true, showOnShop: true }
+    ]
+  });
+  assert.deepEqual(collections.map((collection) => collection.slug), ['editorial']);
+});
+
+test('informational SSI fallback contains the visible configured content and contextual links', async () => {
+  const faq = await pageDescriptor('/faq', { siteUrl: 'https://mariaclaraclothing.com' });
+  const body = renderSeoBody(faq);
+  assert.match(body, /How does Cash on Delivery work/);
+  assert.match(body, /href="\/size-chart"/);
+  assert.match(body, /href="\/shipping-returns"/);
 });
 
 test('home SEO fallback reuses responsive campaign media without occupying the React root', async () => {
@@ -55,7 +82,9 @@ test('Merchant Center feed contains authoritative variant price and availability
   assert.match(xml, /<g:price>649\.00 PHP<\/g:price>/);
   assert.match(xml, /<g:availability>in_stock<\/g:availability>/);
   assert.match(xml, /<g:color>Black<\/g:color>/);
-  assert.match(xml, /<link>https:\/\/mariaclaraclothing\.com\/product\/test-shirt<\/link>/);
+  assert.match(xml, /<g:title>Test Shirt - Size M<\/g:title>/);
+  assert.match(xml, /<g:description>A real product description\.<\/g:description>/);
+  assert.match(xml, /<g:link>https:\/\/mariaclaraclothing\.com\/product\/test-shirt\?size=m<\/g:link>/);
 });
 
 test('robots advertises the sitemap and protects private flows', () => {
@@ -84,6 +113,7 @@ test('public SEO endpoints return fragments without exposing API errors', async 
     assert.match(await body.text(), /<h1>All Products<\/h1>/);
     assert.equal(feed.status, 200);
     assert.match(feed.headers.get('content-type'), /application\/xml/);
+    assert.equal(feed.headers.get('cache-control'), 'public, max-age=60, must-revalidate');
     assert.equal(robots.status, 200);
   } finally {
     await new Promise((resolve) => server.close(resolve));

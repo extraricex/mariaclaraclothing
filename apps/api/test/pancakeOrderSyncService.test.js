@@ -397,6 +397,50 @@ test('processOutboundOrderEvents sends due admin changes to Pancake', async () =
   assert.equal(calls[0].payload.partner.extend_code, 'TRACK-1');
 });
 
+test('processOutboundOrderEvents preserves authoritative totals during an address resync', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'MCC-ADDRESS-RESYNC', status: 'received',
+    paymentMethod: 'cash_on_delivery', paymentStatus: 'cod_pending',
+    subtotalCents: 64900, shippingFeeCents: 12000, discountTotalCents: 0,
+    totalCents: 76900, freeShippingUnlocked: false,
+    items: [{ quantity: 1, unitPriceCents: 64900 }],
+    ...completeDelivery(), notes: ''
+  });
+  await syncRepo.upsertOrderLink({
+    orderNumber: 'MCC-ADDRESS-RESYNC', pancakeOrderId: 'PK-ADDRESS-RESYNC',
+    shopId: 'shop-1', syncStatus: 'pending_sync'
+  });
+  await syncRepo.enqueueSyncEvent({
+    direction: 'outbound', entityType: 'order', entityId: 'MCC-ADDRESS-RESYNC',
+    orderNumber: 'MCC-ADDRESS-RESYNC', pancakeOrderId: 'PK-ADDRESS-RESYNC',
+    eventKey: 'MCC-ADDRESS-RESYNC:address', payloadHash: 'address-hash',
+    payload: { changedFields: ['address'] }
+  });
+  const calls = [];
+
+  const result = await service.processOutboundOrderEvents({
+    config: { shopId: 'shop-1', syncMaxAttempts: 3 },
+    client: { updateOrder: async (shopId, pancakeOrderId, payload) => calls.push({ shopId, pancakeOrderId, payload }) },
+    orderRepository: orders,
+    syncRepository: syncRepo,
+    now: () => new Date('2026-07-17T00:00:00.000Z')
+  });
+
+  assert.equal(result.status, 'complete');
+  assert.equal(result.updatedCount, 1);
+  assert.equal(calls[0].payload.shipping_fee, 120);
+  assert.equal(calls[0].payload.total_discount, 0);
+  assert.equal(calls[0].payload.is_free_shipping, false);
+  assert.equal(calls[0].payload.cod, 769);
+  assert.equal(calls[0].payload.transfer_money, 0);
+  assert.match(calls[0].payload.note_print, /cod_amount=769/);
+  assert.equal(649 + calls[0].payload.shipping_fee - calls[0].payload.total_discount, calls[0].payload.cod);
+});
+
 test('processOutboundOrderEvents maps failed orders to Pancake waiting-for-confirmation with a marker', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');

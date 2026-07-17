@@ -14,6 +14,7 @@
     "db:seed": "npm run db:seed -w apps/api",
     "db:reset:local": "npm run db:reset:local -w apps/api",
     "audit:product-images": "npm run audit:product-images -w apps/api",
+    "pancake:financial-reconcile": "npm run pancake:financial-reconcile -w apps/api --",
     "jnt:address-guide": "npm run jnt:address-guide -w apps/api"
   }
 }

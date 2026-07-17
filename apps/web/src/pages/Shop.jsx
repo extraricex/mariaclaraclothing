@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import ProductCard, { totalStock } from '../components/ProductCard.jsx';
 import { fetchProducts } from '../lib/api.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
-import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
+import { collectionMembers, normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
+import SEO from '../components/SEO.jsx';
+import { breadcrumbStructuredData, INDEX_ROBOTS, NOINDEX_FOLLOW_ROBOTS } from '../lib/seo.js';
 
 function searchableText(product) {
   return [
@@ -50,7 +52,8 @@ export default function Shop() {
   }, [availability, collection, query, setParams, size]);
 
   const collections = useMemo(() => normalizeCollectionDefinitions(settings.collectionDefinitions || [])
-    .filter((item) => item.visible && item.showOnShop), [settings.collectionDefinitions]);
+    .filter((item) => item.visible && item.showOnShop)
+    .filter((item) => collectionMembers(products, item).length > 0), [products, settings.collectionDefinitions]);
   const sizes = useMemo(() => [...new Set(products.flatMap((product) => (product.variants || [])
     .filter((variant) => Number(variant.stockQuantity || 0) > 0)
     .map((variant) => String(variant.size || '').trim())).filter(Boolean))], [products]);
@@ -85,6 +88,13 @@ export default function Shop() {
 
   return (
     <div className="customer-page mx-auto max-w-7xl px-5 py-10 sm:py-14 lg:px-8">
+      <SEO
+        title="Shop Premium T-Shirts | Maria Clara Clothing"
+        description="Shop Maria Clara Clothing oversized, regular-fit, and crop-box shirts with current size availability and nationwide delivery."
+        canonical="/shop"
+        robots={params.toString() ? NOINDEX_FOLLOW_ROBOTS : INDEX_ROBOTS}
+        structuredData={breadcrumbStructuredData([{ name: 'Home', path: '/' }, { name: 'Shop' }])}
+      />
       <p className="eyebrow">Shop</p>
       <h1 className="display mt-2 text-4xl sm:text-6xl">Find your next piece</h1>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-soft">Search real in-stock products and filter by collection, available size, or price.</p>

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { adminJson, adminSend } from '../lib/adminApi.js';
 import { invalidateStorefrontSettings } from '../lib/storeSettings.js';
 import { collectionMembers } from '../lib/storefrontCollections.js';
 import useAdminCollections from './useAdminCollections.js';
+import SeoSearchPreview from './SeoSearchPreview.jsx';
+import { collectionSeoAnalysis } from '../lib/seoAdmin.js';
 
 function acceptedCollectionNames(collection) {
   return new Set([collection?.name, ...(collection?.aliases || [])]
@@ -16,11 +18,17 @@ function inCollection(product, collection) {
 }
 
 function draftFrom(collection) {
-  return collection ? { ...collection } : null;
+  return collection ? {
+    ...collection,
+    aliases: [...(collection.aliases || [])],
+    urlAliases: [...(collection.urlAliases || [])],
+    secondaryKeywords: [...(collection.secondaryKeywords || [])]
+  } : null;
 }
 
 export default function Collections() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { collectionDefinitions, error: collectionError, reload: reloadCollections } = useAdminCollections();
   const [products, setProducts] = useState([]);
   const [activeSlug, setActiveSlug] = useState('new-arrivals');
@@ -29,8 +37,16 @@ export default function Collections() {
   const [newCollectionName, setNewCollectionName] = useState('');
   const [savingCollection, setSavingCollection] = useState(false);
   const [imageFile, setImageFile] = useState(null);
+  const [serverSeoWarnings, setServerSeoWarnings] = useState([]);
 
   const activeCollection = useMemo(() => collectionDefinitions.find((collection) => collection.slug === activeSlug) || collectionDefinitions[0] || null, [activeSlug, collectionDefinitions]);
+
+  useEffect(() => {
+    const requestedSlug = String(searchParams.get('collection') || '').trim().toLowerCase();
+    if (requestedSlug && requestedSlug !== activeSlug && collectionDefinitions.some((collection) => collection.slug === requestedSlug)) {
+      setActiveSlug(requestedSlug);
+    }
+  }, [activeSlug, collectionDefinitions, searchParams]);
 
   function loadProducts() {
     adminJson('/api/admin/products?sort=name_asc')
@@ -46,6 +62,16 @@ export default function Collections() {
     setDraft(draftFrom(activeCollection));
     setImageFile(null);
   }, [activeCollection, activeSlug]);
+
+  useEffect(() => {
+    if (!activeCollection?.slug) return;
+    adminJson('/api/admin/seo')
+      .then((body) => {
+        const row = (body.collections || []).find((candidate) => candidate.slug === activeCollection.slug);
+        setServerSeoWarnings(Array.isArray(row?.warnings) ? row.warnings : []);
+      })
+      .catch(() => setServerSeoWarnings([]));
+  }, [activeCollection?.slug]);
 
   async function addCollection(event) {
     event.preventDefault();
@@ -109,6 +135,8 @@ export default function Collections() {
 
   const members = activeCollection ? collectionMembers(products, activeCollection).sort((a, b) => a.name.localeCompare(b.name)) : [];
   const available = activeCollection ? products.filter((product) => !inCollection(product, activeCollection)).sort((a, b) => a.name.localeCompare(b.name)) : [];
+  const seoAnalysis = draft ? collectionSeoAnalysis(draft, members.length) : null;
+  const seoWarnings = seoAnalysis ? [...new Set([...seoAnalysis.warnings, ...serverSeoWarnings])] : [];
 
   function removeAssignment(collections) {
     const accepted = acceptedCollectionNames(activeCollection);
@@ -151,6 +179,12 @@ export default function Collections() {
             <label className="text-sm font-semibold md:col-span-2">Description
               <textarea className="field mt-2 min-h-24" maxLength="500" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
             </label>
+            <label className="text-sm font-semibold md:col-span-2">Concise introduction above product grid
+              <textarea className="field mt-2 min-h-20" value={draft.introText || ''} onChange={(event) => setDraft({ ...draft, introText: event.target.value })} placeholder="Briefly explain the collection and products customers will find." />
+            </label>
+            <label className="text-sm font-semibold md:col-span-2">Supporting text below product grid
+              <textarea className="field mt-2 min-h-28" value={draft.supportingText || ''} onChange={(event) => setDraft({ ...draft, supportingText: event.target.value })} placeholder="Optional useful details about fit, fabric, styling, or the collection story." />
+            </label>
             <label className="text-sm font-semibold">Image URL
               <input className="field mt-2" placeholder="https://... or /uploads/..." value={draft.imageUrl} onChange={(event) => setDraft({ ...draft, imageUrl: event.target.value })} />
             </label>
@@ -165,8 +199,56 @@ export default function Collections() {
               <label className="flex items-center gap-2"><input type="checkbox" checked={draft.showOnHomepage} onChange={(event) => setDraft({ ...draft, showOnHomepage: event.target.checked })} /> Show on Homepage</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={draft.showOnShop} onChange={(event) => setDraft({ ...draft, showOnShop: event.target.checked })} /> Show in Shop categories</label>
             </div>
+
+            <section className="border-t border-line pt-5 md:col-span-2" aria-labelledby="collection-seo-heading">
+              <h2 id="collection-seo-heading" className="text-sm font-semibold uppercase tracking-[0.12em]">Search & sharing</h2>
+              <p className="mt-2 text-xs leading-relaxed text-clay">Warnings are advisory and do not block saving. Empty collections are automatically noindex on the storefront.</p>
+              {seoAnalysis && (
+                <SeoSearchPreview
+                  title={seoAnalysis.fallbacks.title}
+                  description={seoAnalysis.fallbacks.description}
+                  url={seoAnalysis.fallbacks.canonical}
+                  score={seoAnalysis.score}
+                  warnings={seoWarnings}
+                />
+              )}
+              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                <label className="text-sm font-semibold">SEO title
+                  <input className="field mt-2" value={draft.seoTitle || ''} onChange={(event) => setDraft({ ...draft, seoTitle: event.target.value })} placeholder={seoAnalysis?.fallbacks.title} />
+                  <span className={`mt-1 block text-[11px] ${String(draft.seoTitle || '').length > 70 ? 'text-amber-700' : 'text-clay'}`}>{String(draft.seoTitle || '').length} characters · soft guidance: about 50–70</span>
+                </label>
+                <label className="text-sm font-semibold">Main search keyword
+                  <input className="field mt-2" value={draft.mainKeyword || ''} onChange={(event) => setDraft({ ...draft, mainKeyword: event.target.value })} placeholder="One collection-level commercial phrase" />
+                </label>
+                <label className="text-sm font-semibold md:col-span-2">Meta description
+                  <textarea className="field mt-2 min-h-24" value={draft.metaDescription || ''} onChange={(event) => setDraft({ ...draft, metaDescription: event.target.value })} placeholder="Describe the collection and its confirmed customer value." />
+                  <span className={`mt-1 block text-[11px] ${String(draft.metaDescription || '').length > 160 ? 'text-amber-700' : 'text-clay'}`}>{String(draft.metaDescription || '').length} characters · soft guidance: about 120–160</span>
+                </label>
+                <label className="text-sm font-semibold md:col-span-2">Secondary keywords
+                  <input className="field mt-2" value={(draft.secondaryKeywords || []).join(', ')} onChange={(event) => setDraft({ ...draft, secondaryKeywords: event.target.value.split(',').map((keyword) => keyword.trim()).filter(Boolean) })} placeholder="Closely related phrases, comma separated" />
+                </label>
+                <label className="text-sm font-semibold">Canonical URL override
+                  <input className="field mt-2" value={draft.canonicalUrl || ''} onChange={(event) => setDraft({ ...draft, canonicalUrl: event.target.value })} placeholder={`/collections/${draft.slug}`} autoCapitalize="none" spellCheck="false" />
+                </label>
+                <label className="text-sm font-semibold">Open Graph image URL
+                  <input className="field mt-2" value={draft.ogImageUrl || ''} onChange={(event) => setDraft({ ...draft, ogImageUrl: event.target.value })} placeholder={draft.imageUrl || 'https://... or /uploads/...'} />
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm md:col-span-2">
+                  <span><strong className="block text-ink">Search engine visibility</strong><span className="text-xs text-clay">Allow this non-empty, enabled collection to be indexed</span></span>
+                  <input type="checkbox" checked={draft.indexable !== false} onChange={(event) => setDraft({ ...draft, indexable: event.target.checked })} />
+                </label>
+              </div>
+              {(draft.urlAliases || []).length > 0 && (
+                <div className="mt-5 border-t border-line pt-4 text-xs text-clay">
+                  <p className="font-semibold uppercase tracking-[0.1em] text-ink">Redirected previous collection slugs</p>
+                  <ul className="mt-2 space-y-1">
+                    {draft.urlAliases.map((alias) => <li key={alias} className="break-all">/collections/{alias}</li>)}
+                  </ul>
+                </div>
+              )}
+            </section>
           </div>
-          {draft.imageUrl && <img src={draft.imageUrl} alt="Collection preview" className="mt-5 aspect-[16/5] w-full max-w-2xl object-cover" />}
+          {draft.imageUrl && <img src={draft.imageUrl} alt="Collection preview" className="mt-5 aspect-[16/5] w-full max-w-2xl object-cover" width="1600" height="500" loading="lazy" />}
           <button type="submit" className="btn-ink mt-5" disabled={savingCollection}>{savingCollection ? 'Saving...' : 'Save collection settings'}</button>
         </form>
       )}

@@ -7,8 +7,8 @@ export const DEFAULT_INFO_PAGES = {
     { heading: 'How does online payment work?', body: 'Choose Online Payment at checkout to continue to PayMongo. The payment methods currently available for your order appear on the secure PayMongo page. Your order is confirmed after PayMongo verifies successful payment.' },
     { heading: 'How long is delivery?', body: 'Metro Manila and Cavite: 2–4 days. Other Luzon provinces: 3–6 days. Visayas and Mindanao: 5–8 days. Estimates begin after your order is reviewed and prepared for shipment.' },
     { heading: 'How much is shipping?', body: 'Metro Manila & Cavite ₱80, Luzon ₱120, Visayas/Mindanao ₱180. Order any 2 items and shipping is free.' },
-    { heading: 'What if my size is sold out?', body: 'Drops are limited runs. Follow our socials for restocks — once a run sells through, it usually does not return.' },
-    { heading: 'What is 240 GSM cotton?', body: 'GSM is fabric weight. 240 GSM is heavyweight tee territory: structured, opaque, and it keeps its shape after repeated washing.' }
+    { heading: 'What if my size is sold out?', body: 'Check the product page for current size availability and follow our social channels for confirmed restock announcements.' },
+    { heading: 'What is 240 GSM cotton?', body: 'GSM means grams per square metre and describes fabric weight. A 240 GSM shirt uses more fabric weight than a lightweight tee, which can give it a heavier, more structured feel. Check the exact product details before ordering.' }
   ],
   shippingReturns: [
     { heading: 'Shipping coverage', body: 'We ship nationwide via J&T Express with structured Philippine addresses (province, city/municipality, barangay). Some barangays are not confirmed for door-to-door delivery; we review those orders before shipping and coordinate by text.' },
@@ -33,15 +33,18 @@ export const DEFAULT_SIZE_CHART = {
 export const DEFAULT_COLLECTION_DEFINITIONS = [
   {
     name: 'New Arrivals', slug: 'new-arrivals', description: 'Explore the latest Maria Clara Clothing releases in oversized, regular-fit, and crop-box cuts. Each product page shows current size availability, measurements, price, and delivery information.', imageUrl: '',
-    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 0, aliases: []
+    introText: 'Explore the latest Maria Clara Clothing releases in oversized, regular-fit, and crop-box cuts.', supportingText: '', seoTitle: '', metaDescription: '', mainKeyword: '', secondaryKeywords: [], canonicalUrl: '', indexable: true, ogImageUrl: '',
+    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 0, aliases: [], urlAliases: []
   },
   {
     name: 'Tees', slug: 'tees', description: 'Shop Maria Clara Clothing tees in oversized, regular-fit, and crop-box cuts made for everyday streetwear. Compare real garment measurements and available sizes before ordering.', imageUrl: '',
-    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 1, aliases: ['Catalog']
+    introText: 'Shop Maria Clara Clothing tees in oversized, regular-fit, and crop-box cuts made for everyday streetwear.', supportingText: '', seoTitle: '', metaDescription: '', mainKeyword: '', secondaryKeywords: [], canonicalUrl: '', indexable: true, ogImageUrl: '',
+    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 1, aliases: ['Catalog'], urlAliases: []
   },
   {
     name: 'Freedom of Mind', slug: 'freedom-of-mind', description: 'The statement line - graphics for loud thoughts and quiet days.', imageUrl: '',
-    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 2, aliases: []
+    introText: 'The statement line - graphics for loud thoughts and quiet days.', supportingText: '', seoTitle: '', metaDescription: '', mainKeyword: '', secondaryKeywords: [], canonicalUrl: '', indexable: true, ogImageUrl: '',
+    visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 2, aliases: [], urlAliases: []
   }
 ];
 
@@ -59,7 +62,8 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
   metaPixel: {
     enabled: false,
     pixelId: '',
-    requireConsent: true
+    requireConsent: true,
+    browserPurchaseEnabled: false
   },
   reviews: {
     enabled: true,
@@ -90,8 +94,8 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     'Ships via J&T Express'
   ],
   seo: {
-    title: 'Maria Clara Clothing — Premium Philippine Streetwear',
-    description: 'Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items.',
+    title: 'Maria Clara Clothing | Premium Filipino Streetwear',
+    description: 'Shop oversized, regular-fit, and crop-box T-shirts from Maria Clara Clothing, a Philippine streetwear brand with nationwide online ordering.',
     imageUrl: '/brand/hero1v2-web.jpg'
   },
   hero: {
@@ -173,23 +177,6 @@ export function freeShippingHint(settings, quantity) {
   if (!settings.shipping.freeShippingEnabled) return 'Standard shipping rates apply.';
   const needed = Math.max(0, settings.shipping.freeShippingMinimumItems - quantity);
   return `Add ${needed} more item${needed === 1 ? '' : 's'} to unlock FREE shipping.`;
-}
-
-function upsertMetaTag(attribute, name, content) {
-  let tag = document.head.querySelector(`meta[${attribute}="${name}"]`);
-  if (!tag) {
-    tag = document.createElement('meta');
-    tag.setAttribute(attribute, name);
-    document.head.appendChild(tag);
-  }
-  tag.setAttribute('content', content);
-}
-
-export function applySeoTags(seo) {
-  if (!seo) return;
-  if (seo.title) document.title = seo.title;
-  if (seo.description) upsertMetaTag('name', 'description', seo.description);
-  if (seo.imageUrl) upsertMetaTag('property', 'og:image', seo.imageUrl);
 }
 
 export function useStorefrontSettings() {

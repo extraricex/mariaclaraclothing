@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('node:path');
 const { adminRouter } = require('./routes/admin');
 const { productRouter } = require('./routes/products');
+const { collectionRouter } = require('./routes/collections');
 const { orderRouter } = require('./routes/orders');
 const { cartSessionRouter } = require('./routes/cartSessions');
 const { siteContentRouter } = require('./routes/siteContent');
@@ -169,7 +170,7 @@ function createApp() {
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   app.get('/collections/all', (_req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+    res.redirect(301, '/shop');
   });
 
   app.get('/api/health', (_req, res) => {
@@ -201,6 +202,7 @@ function createApp() {
   app.use('/api/admin/reviews', adminSensitiveRateLimit);
 
   app.use('/api/products', productRouter);
+  app.use('/api/collections', collectionRouter);
   app.use('/api/site-content', siteContentRouter);
   app.use('/api/orders', orderRouter);
   app.use('/api/checkout', checkoutRouter);

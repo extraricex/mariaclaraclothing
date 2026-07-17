@@ -89,6 +89,32 @@ test('memory sync repository deduplicates events by deterministic key', async ()
   }
 });
 
+test('memory sync repository lists scoped links and atomically claims one event by id', async () => {
+  const { repo, restore } = memoryRepo();
+  try {
+    await repo.upsertOrderLink({ orderNumber: 'MCC-2', pancakeOrderId: 'PK-2', syncStatus: 'synced' });
+    await repo.upsertOrderLink({ orderNumber: 'MCC-1', pancakeOrderId: 'PK-1', syncStatus: 'synced' });
+    assert.deepEqual(
+      (await repo.listOrderLinks({ orderNumbers: ['MCC-2'] })).map((link) => link.orderNumber),
+      ['MCC-2']
+    );
+
+    const identity = {
+      direction: 'outbound', entityType: 'order', entityId: 'MCC-2', eventKey: 'financial:hash'
+    };
+    await repo.enqueueSyncEvent({
+      ...identity, orderNumber: 'MCC-2', pancakeOrderId: 'PK-2', payloadHash: 'hash', payload: {}
+    });
+    const stored = await repo.getSyncEventByIdentity(identity);
+    const claimed = await repo.claimSyncEventById(stored.id, { now: '2026-07-17T00:00:00.000Z' });
+    const duplicateClaim = await repo.claimSyncEventById(stored.id, { now: '2026-07-17T00:00:00.000Z' });
+    assert.equal(claimed.status, 'processing');
+    assert.equal(duplicateClaim, null);
+  } finally {
+    restore();
+  }
+});
+
 test('memory sync repository claims due events and marks retryable failure with backoff', async () => {
   const { repo, restore } = memoryRepo();
   try {

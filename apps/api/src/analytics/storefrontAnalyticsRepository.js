@@ -117,8 +117,13 @@ function validationError(message) {
 
 async function recordAnalyticsEvent(input, request = {}) {
   const event = normalizeEvent(input, request);
+  return persistNormalizedAnalyticsEvent(event);
+}
+
+async function persistNormalizedAnalyticsEvent(event, { client } = {}) {
   if (usePostgres()) {
-    const result = await query(
+    const execute = client?.query ? client.query.bind(client) : query;
+    const result = await execute(
       `INSERT INTO storefront_analytics_events (
          event_id,event_name,session_hash,path,product_id,variant_id,quantity,value_cents,currency,
          payment_method,device_type,referrer_host,utm_source,utm_medium,utm_campaign,metric_name,metric_value,occurred_at
@@ -197,6 +202,7 @@ module.exports = {
   deviceType,
   listAnalyticsEvents,
   normalizeEvent,
+  persistNormalizedAnalyticsEvent,
   recordAnalyticsEvent,
   sessionHash
 };

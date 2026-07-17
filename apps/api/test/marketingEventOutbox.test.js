@@ -44,7 +44,7 @@ test('Meta outbox repository inserts and atomically claims due events', async ()
   await claimDueMetaEvents(client, { now: new Date('2026-06-20T12:00:00Z'), limit: 10 });
 
   assert.match(client.calls[0].sql, /INSERT INTO marketing_event_outbox/);
-  assert.match(client.calls[0].sql, /ON CONFLICT \(event_id\) DO NOTHING/);
+  assert.match(client.calls[0].sql, /ON CONFLICT DO NOTHING/);
   assert.match(client.calls[1].sql, /FOR UPDATE SKIP LOCKED/);
   assert.match(client.calls[1].sql, /status = 'sending'/);
 });
@@ -75,6 +75,25 @@ test('Meta order schema persists exact Purchase value and PHP currency', async (
   }
   assert.match(migration, /CHECK \(currency = 'PHP'\)/);
   assert.match(migration, /CHECK \(meta_purchase_value IS NULL OR meta_purchase_value > 0\)/);
+});
+
+test('Meta dispatch migration adds durable browser/server identities and order-level uniqueness', async () => {
+  const schema = await fs.readFile(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8');
+  const migration = await fs.readFile(
+    path.join(__dirname, '..', 'db', 'migrations', '20260717_meta_purchase_dispatch_ledger.sql'),
+    'utf8'
+  );
+  for (const sql of [schema, migration]) {
+    assert.match(sql, /CREATE TABLE IF NOT EXISTS meta_event_dispatches/);
+    assert.match(sql, /UNIQUE \(order_number, event_name, source\)/);
+    assert.match(sql, /UNIQUE \(event_id, event_name, source\)/);
+    assert.match(sql, /marketing_event_outbox_order_event_idx/);
+    assert.match(sql, /HAVING count\(\*\) > 1/);
+    assert.match(sql, /Historical duplicate Meta outbox rows found/);
+  }
+  assert.match(migration, /ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_value/);
+  assert.match(migration, /row_number\(\) OVER/);
+  assert.match(migration, /uncertain in-flight browser/);
 });
 
 test('Meta outbox repository records sent, retry, failed and stale states', async () => {

@@ -36,8 +36,21 @@ test('Meta CAPI validates enabled configuration', () => {
     accessToken: 'test-token',
     graphApiVersion: 'v-test',
     testEventCode: '',
+    browserPurchaseEnabled: false,
     currency: 'PHP'
   });
+});
+
+test('browser Purchase requires an explicit boolean opt-in', () => {
+  const base = {
+    META_CONVERSIONS_API_ENABLED: 'true',
+    META_PIXEL_ID: '595813035761213',
+    META_CONVERSIONS_API_ACCESS_TOKEN: 'test-token',
+    META_GRAPH_API_VERSION: 'v-test',
+    DATABASE_URL: 'postgres://test'
+  };
+  assert.equal(metaConfig({ ...base, META_BROWSER_PURCHASE_ENABLED: 'true' }).browserPurchaseEnabled, true);
+  assert.throws(() => metaConfig({ ...base, META_BROWSER_PURCHASE_ENABLED: 'yes' }), /must be true or false/);
 });
 
 test('Meta currency always resolves to the store ISO currency', () => {

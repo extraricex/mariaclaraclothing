@@ -8,7 +8,7 @@ const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrder
 const { buildMetaPurchaseEvent } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 const { queueMetaPurchase } = require('../marketing/metaPurchaseService');
-const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
+const { enqueueAdminPaymentConfirmationEmail } = require('../notifications/adminOrderEmailNotificationService');
 const { enqueueOrderConfirmationNotifications } = require('../notifications/orderNotificationService');
 const {
   deliveryInformationIssues,
@@ -47,13 +47,93 @@ function checkoutSessionPayload(order, config) {
   };
 }
 
-async function attachCheckoutSession(order, session, config) {
+async function attachCheckoutSession(order, session, config, options = {}) {
   const expiresAt = order.paymentExpiresAt || new Date(Date.now() + config.reservationMinutes * 60_000).toISOString();
   return updateOrder(order.orderNumber, {
     paymentMethod: 'paymongo', paymentStatus: 'pending_payment', status: 'pending_payment',
     paymentProvider: 'paymongo', providerCheckoutSessionId: session.id,
     paymentExpiresAt: expiresAt, inventoryReservationStatus: 'reserved',
     paymentMetadata: { ...(order.paymentMetadata || {}), checkoutUrl: session.checkoutUrl, livemode: config.livemode }
+  }, options);
+}
+
+async function ensureCheckoutSession(orderNumber, {
+  client,
+  config,
+  transactionFn = transaction,
+  findOrder = findOrderByNumber,
+  attachSession = attachCheckoutSession,
+  updateOrderRecord = updateOrder,
+  now = () => new Date()
+} = {}) {
+  if (!client || !config) throw new Error('PayMongo client and configuration are required.');
+  return transactionFn(async (databaseClient) => {
+    const order = await findOrder(orderNumber, {
+      client: databaseClient,
+      forUpdate: true,
+      includeRelated: false
+    });
+    if (!order) {
+      const error = new Error('PayMongo order was not found.');
+      error.status = 404;
+      error.code = 'order_not_found';
+      throw error;
+    }
+    const currentTime = now();
+    const expiresAt = new Date(order.paymentExpiresAt || 0);
+    const awaitingPayment = (order.paymentMethod === 'paymongo' || order.paymentProvider === 'paymongo')
+      && order.paymentStatus === 'pending_payment'
+      && order.status === 'pending_payment'
+      && order.inventoryReservationStatus === 'reserved';
+    const reservationExpired = Number.isFinite(expiresAt.getTime()) && expiresAt <= currentTime;
+    if (!awaitingPayment || reservationExpired) {
+      const error = new Error('This PayMongo checkout is no longer active. Start a new checkout.');
+      error.status = 409;
+      error.code = reservationExpired ? 'paymongo_checkout_expired' : 'paymongo_checkout_not_active';
+      throw error;
+    }
+    const existingUrl = String(order.paymentMetadata?.checkoutUrl || '').trim();
+    if (order.providerCheckoutSessionId && existingUrl) {
+      return { order, checkoutUrl: existingUrl, reused: true };
+    }
+    if (order.providerCheckoutSessionId && !existingUrl) {
+      const existingSession = await client.retrieveCheckoutSession(order.providerCheckoutSessionId);
+      const providerStatus = String(existingSession?.attributes?.status || '').trim().toLowerCase();
+      if (providerStatus && providerStatus !== 'active') {
+        const error = new Error('The existing PayMongo checkout needs reconciliation before it can be reused.');
+        error.status = 409;
+        error.code = 'paymongo_checkout_reconciliation_required';
+        throw error;
+      }
+      const recoveredUrl = String(existingSession?.attributes?.checkout_url || '').trim();
+      if (recoveredUrl.startsWith('https://')) {
+        const updated = await updateOrderRecord(order.orderNumber, {
+          paymentMetadata: {
+            ...(order.paymentMetadata || {}),
+            checkoutUrl: recoveredUrl,
+            livemode: config.livemode
+          }
+        }, { client: databaseClient, existingOrder: order });
+        return { order: updated, checkoutUrl: recoveredUrl, reused: true };
+      }
+      const error = new Error('PayMongo did not return the existing checkout URL.');
+      error.status = 502;
+      error.code = 'paymongo_checkout_url_unavailable';
+      throw error;
+    }
+
+    // The database row lock prevents simultaneous API requests from creating
+    // two provider sessions. The stable provider key also protects a retry if
+    // PayMongo accepted the request before the local transaction completed.
+    const session = await client.createCheckoutSession(
+      checkoutSessionPayload(order, config),
+      { idempotencyKey: `paymongo-checkout-${order.orderNumber}` }
+    );
+    const updated = await attachSession(order, session, config, {
+      client: databaseClient,
+      existingOrder: order
+    });
+    return { order: updated, checkoutUrl: session.checkoutUrl, reused: false };
   });
 }
 
@@ -92,7 +172,8 @@ function restockItems(order) {
 
 async function processPaidWebhook(payload, {
   metaEnabled = false,
-  enqueueAdminEmail = enqueueAdminNewOrderEmail,
+  enqueuePaymentConfirmation = enqueueAdminPaymentConfirmationEmail,
+  enqueueAdminEmail,
   enqueueCustomerConfirmation = enqueueOrderConfirmationNotifications
 } = {}) {
   const event = parsePaidEvent(payload);
@@ -103,7 +184,7 @@ async function processPaidWebhook(payload, {
   const result = await transaction((client) => applyPaidWebhookEvent(event, {
     client,
     metaEnabled,
-    enqueueAdminEmail,
+    enqueuePaymentConfirmation: enqueueAdminEmail || enqueuePaymentConfirmation,
     enqueueCustomerConfirmation
   }));
   if (result.status === 'paid' || result.status === 'duplicate') {
@@ -143,7 +224,8 @@ async function processPaidWebhook(payload, {
 async function applyPaidWebhookEvent(event, {
   client,
   metaEnabled = false,
-  enqueueAdminEmail = enqueueAdminNewOrderEmail,
+  enqueuePaymentConfirmation = enqueueAdminPaymentConfirmationEmail,
+  enqueueAdminEmail,
   enqueueCustomerConfirmation = enqueueOrderConfirmationNotifications,
   findOrder = findOrderByNumber,
   updateOrderRecord = updateOrder,
@@ -210,7 +292,7 @@ async function applyPaidWebhookEvent(event, {
     });
   }
   if (!paidAfterCancellation && deliveryComplete) {
-    await enqueueAdminEmail(updated, { client });
+    await (enqueueAdminEmail || enqueuePaymentConfirmation)(updated, { client });
     await enqueueCustomerConfirmation(updated, { client });
   }
   return { status: 'paid', orderNumber: updated.orderNumber, order: updated };
@@ -359,6 +441,6 @@ async function releaseExpiredReservations({ now = new Date(), limit = 50, client
 }
 
 module.exports = {
-  applyPaidWebhookEvent, attachCheckoutSession, checkoutSessionPayload, closeCheckoutSessionForExpiry, parsePaidEvent, processPaidWebhook,
+  applyPaidWebhookEvent, attachCheckoutSession, checkoutSessionPayload, closeCheckoutSessionForExpiry, ensureCheckoutSession, parsePaidEvent, processPaidWebhook,
   paidSessionPayload, reconcilePendingPayments, releaseExpiredReservations, restockItems, withOrderParam
 };

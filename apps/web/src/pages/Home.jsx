@@ -9,6 +9,8 @@ import { CustomerButton } from '../components/ui/Button.jsx';
 import { CustomerCard } from '../components/ui/Card.jsx';
 import { recentlyViewedProducts } from '../lib/recentlyViewed.js';
 import { preloadResponsiveImage, responsiveImageAttributes } from '../lib/responsiveImage.js';
+import SEO from '../components/SEO.jsx';
+import { absoluteSeoUrl, storefrontOrigin } from '../lib/seo.js';
 
 function initialHeroBanners() {
   const image = document.querySelector('#seo-fallback .seo-fallback-image');
@@ -65,6 +67,7 @@ export default function Home() {
   const [products, setProducts] = useState([]);
   const [banners, setBanners] = useState(initialHeroBanners);
   const [collectionBanner, setCollectionBanner] = useState(null);
+  const [siteLogo, setSiteLogo] = useState(null);
   const [collections, setCollections] = useState(DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
   const [storefrontSettings, setStorefrontSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
   const [recentProducts, setRecentProducts] = useState([]);
@@ -83,6 +86,7 @@ export default function Home() {
         if (contentResult.status === 'fulfilled') {
           setBanners(contentResult.value.siteContent?.homepageBanners || []);
           setCollectionBanner(contentResult.value.siteContent?.collectionBanner || null);
+          setSiteLogo(contentResult.value.siteContent?.logo || null);
         }
         if (settingsResult.status === 'fulfilled') {
           setStorefrontSettings(settingsResult.value);
@@ -99,6 +103,34 @@ export default function Home() {
   const onlinePaymentEnabled = storefrontSettings.paymentMethods?.some((method) => method.id === 'paymongo');
   const freeShippingEnabled = Boolean(storefrontSettings.shipping?.freeShippingEnabled);
   const freeShippingMinimumItems = Math.max(1, Number(storefrontSettings.shipping?.freeShippingMinimumItems || 2));
+  const seoOrigin = storefrontOrigin();
+  const storeName = storefrontSettings.storeName || 'Maria Clara Clothing';
+  const socialProfiles = Object.values(storefrontSettings.socialLinks || {})
+    .map((url) => absoluteSeoUrl(url, seoOrigin))
+    .filter(Boolean);
+  const storeLogo = absoluteSeoUrl(siteLogo?.url, seoOrigin);
+  const homeStructuredData = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'OnlineStore',
+      '@id': `${seoOrigin}/#store`,
+      name: storeName,
+      url: `${seoOrigin}/`,
+      ...(storeLogo ? { logo: storeLogo } : {}),
+      ...(storefrontSettings.contactEmail ? { email: storefrontSettings.contactEmail } : {}),
+      ...(storefrontSettings.contactNumber ? { telephone: storefrontSettings.contactNumber } : {}),
+      ...(storefrontSettings.storeAddress ? { address: { '@type': 'PostalAddress', streetAddress: storefrontSettings.storeAddress, addressCountry: 'PH' } } : {}),
+      ...(socialProfiles.length ? { sameAs: socialProfiles } : {})
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      '@id': `${seoOrigin}/#website`,
+      name: storeName,
+      url: `${seoOrigin}/`,
+      publisher: { '@id': `${seoOrigin}/#store` }
+    }
+  ];
 
   useEffect(() => {
     setRecentProducts(recentlyViewedProducts(products, { limit: 4 }));
@@ -166,6 +198,16 @@ export default function Home() {
 
   return (
     <div className="customer-page pb-4">
+      {catalogLoaded && (
+        <SEO
+          title={storefrontSettings.seo?.title}
+          description={storefrontSettings.seo?.description}
+          canonical="/"
+          image={storefrontSettings.seo?.imageUrl || activeBanner?.url}
+          imageAlt={activeBanner?.altText || 'Maria Clara Clothing'}
+          structuredData={homeStructuredData}
+        />
+      )}
       <section
         className="customer-hero grain relative -mt-[97px] min-h-[min(58svh,430px)] touch-pan-y overflow-hidden bg-ink text-center text-paper sm:min-h-[min(68svh,560px)] lg:-mt-[105px] lg:min-h-[min(78vh,720px)]"
         onTouchStart={handleHeroTouchStart}
@@ -180,6 +222,8 @@ export default function Home() {
               alt={activeBanner.altText || 'Maria Clara Clothing'}
               fetchPriority="high"
               loading="eager"
+              width="2200"
+              height="825"
               {...responsiveImageAttributes(activeBanner.url)}
               className="hero-slide absolute inset-0 h-full w-full object-cover object-center opacity-100 contrast-[1.05] saturate-[1.04]"
             />
@@ -253,7 +297,7 @@ export default function Home() {
             onlinePaymentEnabled
               ? ['COD + Online', 'Choose Cash on Delivery or continue to secure online checkout through PayMongo.']
               : ['COD', 'Cash on delivery nationwide. Pay the rider when your order arrives.'],
-            ['240 GSM', 'Dense, structured cotton that holds its shape wash after wash.'],
+            ['240 GSM', 'A heavier fabric weight with a more structured feel. Check each product page for confirmed material and fit details.'],
             ['Ready to ship', 'Orders are prepared carefully for secure packing and nationwide delivery.'],
             freeShippingEnabled
               ? [`${freeShippingMinimumItems} = Free`, `Add any ${freeShippingMinimumItems} piece${freeShippingMinimumItems === 1 ? '' : 's'} and shipping is on us, anywhere in the Philippines.`]

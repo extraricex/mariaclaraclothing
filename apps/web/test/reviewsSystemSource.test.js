@@ -36,7 +36,7 @@ test('admin routes cover moderation, settings, import preview, bulk actions, aud
   assert.match(app, /path="reviews\/import"/);
   assert.match(app, /path="reviews\/settings"/);
   assert.ok(nginx.includes('|/reviews(?:/import|/settings)?|'));
-  const routeLine = nginx.split('\n').find((line) => line.trim().startsWith('location ~ ^/(?:shop|collections'));
+  const routeLine = nginx.split('\n').find((line) => line.trim().startsWith('location ~ ^/(?:shop|guides'));
   const routePattern = routeLine.trim().replace(/^location ~ /, '').replace(/ \{$/, '');
   const productionSpaRoute = new RegExp(routePattern);
   for (const path of ['/admin/reviews', '/admin/reviews/', '/admin/reviews/import', '/admin/reviews/settings']) {

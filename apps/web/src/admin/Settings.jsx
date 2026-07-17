@@ -230,6 +230,182 @@ function PaymentsCard({ initial, providers = {} }) {
   );
 }
 
+function OrderNotificationsCard({ initial, provider = {} }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const thirtyDaysAgo = new Date(Date.now() - (30 * 86_400_000)).toISOString().slice(0, 10);
+  const [form, setForm] = useState({
+    enabled: initial?.enabled !== false,
+    primaryRecipientEmail: initial?.primaryRecipientEmail || '',
+    additionalRecipientEmails: Array.isArray(initial?.additionalRecipientEmails)
+      ? initial.additionalRecipientEmails.join(', ')
+      : '',
+    sendPaymongoPaymentConfirmation: Boolean(initial?.sendPaymongoPaymentConfirmation),
+    maximumRetryAttempts: Number(initial?.maximumRetryAttempts || 8)
+  });
+  const [status, setStatus] = useState(null);
+  const [working, setWorking] = useState('');
+  const [range, setRange] = useState({ from: thirtyDaysAgo, to: today });
+  const [preview, setPreview] = useState(null);
+  const [selected, setSelected] = useState(() => new Set());
+  const [confirmed, setConfirmed] = useState(false);
+
+  function set(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function save() {
+    setWorking('save');
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/orderNotifications', {
+        ...form,
+        additionalRecipientEmails: form.additionalRecipientEmails
+          .split(',').map((email) => email.trim()).filter(Boolean),
+        maximumRetryAttempts: Number(form.maximumRetryAttempts)
+      });
+      const saved = body.settings.orderNotifications;
+      setForm({
+        ...saved,
+        additionalRecipientEmails: (saved.additionalRecipientEmails || []).join(', ')
+      });
+      setStatus({ tone: 'ok', message: 'Order notification settings saved.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function sendTest() {
+    setWorking('test');
+    setStatus(null);
+    try {
+      const body = await adminSend('POST', '/api/admin/order-notifications/test', {});
+      setStatus({ tone: 'ok', message: `Test email accepted for ${body.test.recipient}.` });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function previewBackfill() {
+    setWorking('preview');
+    setStatus(null);
+    setConfirmed(false);
+    try {
+      const body = await adminSend('POST', '/api/admin/order-notifications/backfill/preview', range);
+      setPreview(body.preview);
+      setSelected(new Set((body.preview.records || []).map((record) => record.orderNumber)));
+      setStatus({
+        tone: 'ok',
+        message: `Checked ${body.preview.ordersChecked} real orders; found ${body.preview.records.length} missing or failed notifications.`
+      });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setWorking('');
+    }
+  }
+
+  async function queueBackfill() {
+    if (!confirmed || !selected.size) return;
+    setWorking('backfill');
+    setStatus(null);
+    try {
+      const body = await adminSend('POST', '/api/admin/order-notifications/backfill', {
+        ...range,
+        confirm: true,
+        orderNumbers: [...selected]
+      });
+      const queuedMessage = `${body.result.queued} delayed notifications queued; ${body.result.skipped} skipped.`;
+      setConfirmed(false);
+      await previewBackfill();
+      setStatus({ tone: 'ok', message: queuedMessage });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setWorking('');
+    }
+  }
+
+  function toggle(orderNumber) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(orderNumber)) next.delete(orderNumber); else next.add(orderNumber);
+      return next;
+    });
+  }
+
+  return (
+    <SectionCard title="Order notifications" hint="Durable New Order email delivery, retries, and missed-order backfill.">
+      <div className="mt-4 rounded-xl border border-line bg-paper/60 p-3 text-xs text-clay">
+        SMTP service: <strong>{provider.smtpConfigured ? 'Configured' : 'Not configured'}</strong>. Secrets are never displayed.
+      </div>
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" checked={form.enabled} onChange={(event) => set('enabled', event.target.checked)} />
+          Enable New Order emails
+        </label>
+        <Field label="Primary recipient email">
+          <input className="field mt-1" type="email" value={form.primaryRecipientEmail} onChange={(event) => set('primaryRecipientEmail', event.target.value)} />
+        </Field>
+        <Field label="Additional recipients (comma-separated)">
+          <input className="field mt-1" type="text" value={form.additionalRecipientEmails} onChange={(event) => set('additionalRecipientEmails', event.target.value)} />
+        </Field>
+        <Field label="Maximum retry attempts">
+          <input className="field mt-1 max-w-32" type="number" min="1" max="20" value={form.maximumRetryAttempts} onChange={(event) => set('maximumRetryAttempts', event.target.value)} />
+        </Field>
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" checked={form.sendPaymongoPaymentConfirmation} onChange={(event) => set('sendPaymongoPaymentConfirmation', event.target.checked)} />
+          Send a separate PayMongo Payment Confirmed email
+        </label>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button type="button" className="btn-ink" disabled={Boolean(working)} onClick={save}>{working === 'save' ? 'Saving…' : 'Save notification settings'}</button>
+        <button type="button" className="btn-ghost" disabled={Boolean(working) || !provider.smtpConfigured} onClick={sendTest}>{working === 'test' ? 'Sending…' : 'Send test email'}</button>
+      </div>
+
+      <div className="mt-7 border-t border-line pt-5">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Missed email audit</h3>
+        <p className="mt-1 text-xs text-clay">Preview is read-only. Historical emails are never queued without selecting orders and confirming below.</p>
+        <div className="mt-3 flex flex-wrap gap-3">
+          <Field label="From"><input className="field mt-1" type="date" value={range.from} onChange={(event) => setRange((current) => ({ ...current, from: event.target.value }))} /></Field>
+          <Field label="To"><input className="field mt-1" type="date" value={range.to} onChange={(event) => setRange((current) => ({ ...current, to: event.target.value }))} /></Field>
+          <button type="button" className="btn-ghost self-end" disabled={Boolean(working)} onClick={previewBackfill}>{working === 'preview' ? 'Checking…' : 'Preview missed emails'}</button>
+        </div>
+        {preview && (
+          <div className="mt-4 space-y-2">
+            {(preview.records || []).map((record) => (
+              <label key={record.orderNumber} className="flex items-start gap-3 rounded-lg border border-line p-3 text-sm">
+                <input type="checkbox" checked={selected.has(record.orderNumber)} onChange={() => toggle(record.orderNumber)} />
+                <span>
+                  <strong>{record.orderNumber}</strong> · {record.reason === 'failed_notification' ? 'Failed' : 'No notification record'}
+                  <span className="mt-1 block text-xs text-clay">{new Date(record.placedAt).toLocaleString('en-PH')} · ₱{(Number(record.totalCents || 0) / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                  {record.lastError && <span className="mt-1 block text-xs text-accent-deep">{record.lastError}</span>}
+                </span>
+              </label>
+            ))}
+            {!preview.records?.length && <p className="text-sm text-clay">No missing or terminally failed New Order notifications were found.</p>}
+            {preview.records?.length > 0 && (
+              <>
+                <label className="flex items-start gap-3 text-sm">
+                  <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+                  I confirm these are real orders and delayed New Order emails should be queued.
+                </label>
+                <button type="button" className="btn-ink" disabled={Boolean(working) || !confirmed || !selected.size} onClick={queueBackfill}>
+                  {working === 'backfill' ? 'Queueing…' : `Queue ${selected.size} delayed email${selected.size === 1 ? '' : 's'}`}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
 function SecurityCard() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -371,6 +547,15 @@ function MarketingCard({ initial, provider = {} }) {
   const [form, setForm] = useState(initial.metaPixel);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
+  const browserPurchaseEnabled = provider.browserPurchaseConfigured === undefined
+    ? Boolean(provider.browserPurchaseEnabled)
+    : Boolean(provider.browserPurchaseConfigured && form.enabled);
+  const purchaseAuthority = {
+    browser_and_server: 'Browser Pixel + server CAPI',
+    server_capi: 'Server CAPI only',
+    disabled: 'Disabled'
+  }[browserPurchaseEnabled ? 'browser_and_server' : provider.conversionsApiEnabled ? 'server_capi' : provider.purchaseAuthority]
+    || (browserPurchaseEnabled ? 'Browser Pixel + server CAPI' : 'Server CAPI only');
 
   async function save() {
     setSaving(true);
@@ -397,6 +582,13 @@ function MarketingCard({ initial, provider = {} }) {
           <input className="field mt-1" inputMode="numeric" value={form.pixelId || ''} disabled={Boolean(provider.pixelIdLocked)} onChange={(event) => setForm((current) => ({ ...current, pixelId: event.target.value.replace(/\D/g, '') }))} />
         </Field>
         {provider.pixelIdLocked && <p className="text-xs text-clay">Locked to the same dataset used by the server Conversions API so Purchase events can deduplicate.</p>}
+        {provider.conversionsApiEnabled && (
+          <div className="rounded-xl border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-xs leading-5 text-[var(--admin-muted)]">
+            <p><strong className="text-[var(--admin-text)]">Purchase authority:</strong> {purchaseAuthority}</p>
+            <p><strong className="text-[var(--admin-text)]">Meta Test Events code:</strong> {provider.testEventCodeActive ? 'Active — production Ads reporting is intentionally bypassed' : 'Off'}</p>
+            {!browserPurchaseEnabled && <p className="mt-1">Browser Purchase remains disabled until Meta Test Events proves account-side rules are removed and browser/server IDs deduplicate.</p>}
+          </div>
+        )}
         <label className="flex items-start gap-3 text-sm">
           <input type="checkbox" checked={Boolean(form.requireConsent)} onChange={(event) => setForm((current) => ({ ...current, requireConsent: event.target.checked }))} />
           <span>
@@ -613,7 +805,8 @@ export default function Settings() {
       .then((body) => setSettings({
         ...body.settings,
         paymentProviders: body.paymentProviders || {},
-        metaProvider: body.metaProvider || {}
+        metaProvider: body.metaProvider || {},
+        notificationProvider: body.notificationProvider || {}
       }))
       .catch((loadError) => setError(loadError.message));
   }, []);
@@ -632,6 +825,7 @@ export default function Settings() {
         <GeneralCard initial={settings.general} />
         <ShippingCard initial={settings.shipping} />
         <PaymentsCard initial={settings.payments} providers={settings.paymentProviders || {}} />
+        <OrderNotificationsCard initial={settings.orderNotifications} provider={settings.notificationProvider} />
         <InventoryCard initial={settings.inventory} />
         <AuthenticationCard initial={settings.authentication} />
         <MarketingCard initial={settings.marketing} provider={settings.metaProvider} />

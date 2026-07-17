@@ -138,7 +138,7 @@ test('website settings merge partial updates over the stored section', async () 
     const defaults = repository.getStoreSettings();
     assert.equal(defaults.website.maintenanceMode, false);
     assert.equal(defaults.website.ticker.length, 4);
-    assert.equal(defaults.website.seo.title, 'Maria Clara Clothing — Premium Philippine Streetwear');
+    assert.equal(defaults.website.seo.title, 'Maria Clara Clothing | Premium Filipino Streetwear');
     assert.deepEqual(defaults.website.hero, {
       eyebrow: '',
       title: 'Maria Clara',
@@ -318,11 +318,26 @@ test('storefront collections persist unique names and receive countdown defaults
 
     const edited = await repository.updateStorefrontCollection('summer-drop', {
       name: 'Summer Edit', slug: 'summer-edit', description: 'Seasonal collection.',
+      introText: 'A concise seasonal introduction.',
+      supportingText: 'More information shown below the product grid.',
+      seoTitle: 'Summer Edit T-Shirts | Maria Clara Clothing',
+      metaDescription: 'Shop the current Summer Edit collection from Maria Clara Clothing.',
+      mainKeyword: 'summer streetwear shirts',
+      secondaryKeywords: ['graphic T-shirts', 'Philippine streetwear'],
+      canonicalUrl: '/collections/summer-edit',
+      indexable: false,
+      ogImageUrl: '/brand/hero1v2-web.jpg',
       visible: true, showOnHomepage: false, showOnShop: true, sortOrder: 9
     });
     const definition = edited.collectionDefinitions.find((collection) => collection.slug === 'summer-edit');
     assert.equal(definition.showOnHomepage, false);
     assert.ok(definition.aliases.includes('Summer Drop'));
+    assert.ok(definition.urlAliases.includes('summer-drop'));
+    assert.equal(definition.seoTitle, 'Summer Edit T-Shirts | Maria Clara Clothing');
+    assert.equal(definition.metaDescription, 'Shop the current Summer Edit collection from Maria Clara Clothing.');
+    assert.equal(definition.introText, 'A concise seasonal introduction.');
+    assert.equal(definition.indexable, false);
+    assert.deepEqual(definition.secondaryKeywords, ['graphic T-shirts', 'Philippine streetwear']);
     assert.ok(edited.collectionCountdowns['Summer Edit']);
 
     await repository.updateStorefrontCollection('freedom-of-mind', {

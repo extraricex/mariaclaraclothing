@@ -17,7 +17,9 @@ const PRODUCT_SUBNAV = [
 ];
 
 const REVIEW_NAV_ITEM = { to: '/admin/reviews', label: 'Reviews', badge: 'reviews' };
-const ANALYTICS_NAV_ITEM = { to: '/admin/analytics', label: 'Sales & SEO' };
+const ANALYTICS_NAV_ITEM = { to: '/admin/analytics', label: 'Sales & SEO', end: true };
+const META_RECONCILIATION_NAV_ITEM = { to: '/admin/analytics/meta-reconciliation', label: 'Meta reconciliation' };
+const SEO_NAV_ITEM = { to: '/admin/marketing/seo', label: 'Marketing · SEO' };
 
 // Items below the two collapsible sections, in display order.
 const SECONDARY_NAV = [
@@ -34,6 +36,8 @@ const SECONDARY_NAV = [
 const MOBILE_NAV = [
   { to: '/admin', label: 'Dashboard', end: true },
   ANALYTICS_NAV_ITEM,
+  META_RECONCILIATION_NAV_ITEM,
+  SEO_NAV_ITEM,
   REVIEW_NAV_ITEM,
   { to: '/admin/orders', label: 'Orders' },
   { to: '/admin/products', label: 'Products' },
@@ -147,8 +151,16 @@ export default function AdminLayout() {
             Dashboard
           </NavLink>
 
-          <NavLink to={ANALYTICS_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>
+          <NavLink to={ANALYTICS_NAV_ITEM.to} end={ANALYTICS_NAV_ITEM.end} className={({ isActive }) => topLinkClass(isActive)}>
             {ANALYTICS_NAV_ITEM.label}
+          </NavLink>
+
+          <NavLink to={META_RECONCILIATION_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>
+            {META_RECONCILIATION_NAV_ITEM.label}
+          </NavLink>
+
+          <NavLink to={SEO_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>
+            {SEO_NAV_ITEM.label}
           </NavLink>
 
           <NavLink to={REVIEW_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>

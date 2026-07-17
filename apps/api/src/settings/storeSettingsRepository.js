@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-se
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
 const SETTINGS_KEY = 'storeSettings';
 const CREDENTIALS_KEY = 'adminCredentials';
-const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication', 'marketing', 'reviews'];
+const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication', 'marketing', 'reviews', 'orderNotifications'];
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'paymongo', 'gcash', 'bank_transfer'];
@@ -125,6 +125,46 @@ function normalizeCollectionImageUrl(value) {
   return imageUrl;
 }
 
+function normalizeCollectionSeoText(value, fallback, label, maxLength) {
+  const text = String(value === undefined ? fallback || '' : value).trim().replace(/\s+/g, ' ');
+  if (text.length > maxLength) throw badRequest(`${label} must be ${maxLength} characters or fewer.`);
+  if (/[<>]/.test(text)) throw badRequest(`${label} must be plain text without HTML.`);
+  return text;
+}
+
+function normalizeCanonicalOverride(value, fallback = '') {
+  const input = String(value === undefined ? fallback : value).trim();
+  if (!input) return '';
+  if (input.length > 500) throw badRequest('Canonical URL must be 500 characters or fewer.');
+  if (input.startsWith('/') && !input.startsWith('//')) return input;
+  try {
+    const url = new URL(input);
+    if (url.protocol !== 'https:') throw new Error('HTTPS required');
+    return url.toString();
+  } catch (_error) {
+    throw badRequest('Canonical URL must be an HTTPS URL or a site-relative path.');
+  }
+}
+
+function normalizeKeywordList(value, fallback = []) {
+  const incoming = value === undefined ? fallback : value;
+  const values = Array.isArray(incoming) ? incoming : String(incoming || '').split(',');
+  const keywords = [...new Set(values.map((item) => String(item || '').trim().replace(/\s+/g, ' ')).filter(Boolean))];
+  if (keywords.length > 20 || keywords.some((keyword) => keyword.length > 80 || /[<>]/.test(keyword))) {
+    throw badRequest('Use up to 20 plain-text secondary keywords of 80 characters or fewer.');
+  }
+  return keywords;
+}
+
+function normalizeCollectionUrlAliases(value, fallback = [], currentSlug = '') {
+  const aliases = [...new Set([
+    ...(Array.isArray(fallback) ? fallback : []),
+    ...(Array.isArray(value) ? value : [])
+  ].map((item) => collectionSlug(item)).filter((item) => item && item !== currentSlug))];
+  if (aliases.length > 30) throw badRequest('Collection URL history is limited to 30 aliases.');
+  return aliases;
+}
+
 function normalizeCollectionDefinition(value, index, fallback = {}) {
   const input = value && typeof value === 'object' ? value : { name: value };
   const name = normalizeCollectionName(input.name === undefined ? fallback.name : input.name);
@@ -140,10 +180,20 @@ function normalizeCollectionDefinition(value, index, fallback = {}) {
   ].map((alias) => String(alias || '').trim()).filter(Boolean))]
     .filter((alias) => alias.toLowerCase() !== name.toLowerCase());
   const bestSeller = ['best seller', 'best sellers'].includes(name.toLowerCase());
+  const slug = collectionSlug(input.slug === undefined ? fallback.slug : input.slug, name);
   return {
     name,
-    slug: collectionSlug(input.slug === undefined ? fallback.slug : input.slug, name),
+    slug,
     description,
+    introText: normalizeCollectionSeoText(input.introText, fallback.introText || description, 'Collection introduction', 1000),
+    supportingText: normalizeCollectionSeoText(input.supportingText, fallback.supportingText, 'Collection supporting text', 5000),
+    seoTitle: normalizeCollectionSeoText(input.seoTitle, fallback.seoTitle, 'Collection SEO title', 200),
+    metaDescription: normalizeCollectionSeoText(input.metaDescription, fallback.metaDescription, 'Collection meta description', 500),
+    mainKeyword: normalizeCollectionSeoText(input.mainKeyword, fallback.mainKeyword, 'Collection main keyword', 80),
+    secondaryKeywords: normalizeKeywordList(input.secondaryKeywords, fallback.secondaryKeywords),
+    canonicalUrl: normalizeCanonicalOverride(input.canonicalUrl, fallback.canonicalUrl),
+    indexable: input.indexable === undefined ? fallback.indexable !== false : Boolean(input.indexable),
+    ogImageUrl: normalizeCollectionImageUrl(input.ogImageUrl === undefined ? fallback.ogImageUrl : input.ogImageUrl),
     imageUrl: normalizeCollectionImageUrl(input.imageUrl === undefined ? fallback.imageUrl : input.imageUrl),
     visible: input.visible === undefined ? fallback.visible !== false : Boolean(input.visible),
     showOnHomepage: input.showOnHomepage === undefined
@@ -151,7 +201,8 @@ function normalizeCollectionDefinition(value, index, fallback = {}) {
       : Boolean(input.showOnHomepage),
     showOnShop: input.showOnShop === undefined ? fallback.showOnShop !== false : Boolean(input.showOnShop),
     sortOrder,
-    aliases
+    aliases,
+    urlAliases: normalizeCollectionUrlAliases(input.urlAliases, fallback.urlAliases, slug)
   };
 }
 
@@ -190,6 +241,14 @@ function normalizeCollectionDefinitions(value, legacyNames) {
   if (duplicateName) throw conflict('Collection names must be unique.');
   const duplicateSlug = definitions.find((collection, index) => definitions.findIndex((candidate) => candidate.slug === collection.slug) !== index);
   if (duplicateSlug) throw conflict('Collection slugs must be unique.');
+  const routes = new Map();
+  for (const collection of definitions) {
+    for (const route of [collection.slug, ...(collection.urlAliases || [])]) {
+      const owner = routes.get(route);
+      if (owner && owner !== collection.slug) throw conflict(`Collection URL "${route}" is already in use.`);
+      routes.set(route, collection.slug);
+    }
+  }
   return definitions.sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
 }
 
@@ -247,6 +306,13 @@ function defaultStoreSettings() {
       showStoreReviews: false,
       allowReviewPhotos: true
     },
+    orderNotifications: {
+      enabled: true,
+      primaryRecipientEmail: '',
+      additionalRecipientEmails: [],
+      sendPaymongoPaymentConfirmation: false,
+      maximumRetryAttempts: 8
+    },
     website: {
       ticker: [
         'Free shipping on 2+ items',
@@ -255,8 +321,8 @@ function defaultStoreSettings() {
         'Ships via J&T Express'
       ],
       seo: {
-        title: 'Maria Clara Clothing — Premium Philippine Streetwear',
-        description: 'Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items.',
+        title: 'Maria Clara Clothing | Premium Filipino Streetwear',
+        description: 'Shop oversized, regular-fit, and crop-box T-shirts from Maria Clara Clothing, a Philippine streetwear brand with nationwide online ordering.',
         imageUrl: '/brand/hero1v2-web.jpg'
       },
       hero: {
@@ -276,8 +342,8 @@ function defaultStoreSettings() {
           { heading: 'How does online payment work?', body: 'Choose Online Payment at checkout to continue to PayMongo. The payment methods currently available for your order appear on the secure PayMongo page. Your order is confirmed after PayMongo verifies successful payment.' },
           { heading: 'How long is delivery?', body: 'Metro Manila and Cavite: 2–4 days. Other Luzon provinces: 3–6 days. Visayas and Mindanao: 5–8 days. Estimates begin after your order is reviewed and prepared for shipment.' },
           { heading: 'How much is shipping?', body: 'Metro Manila & Cavite ₱80, Luzon ₱120, Visayas/Mindanao ₱180. Order any 2 items and shipping is free.' },
-          { heading: 'What if my size is sold out?', body: 'Drops are limited runs. Follow our socials for restocks — once a run sells through, it usually does not return.' },
-          { heading: 'What is 240 GSM cotton?', body: 'GSM is fabric weight. 240 GSM is heavyweight tee territory: structured, opaque, and it keeps its shape after repeated washing.' }
+          { heading: 'What if my size is sold out?', body: 'Check the product page for current size availability and follow our social channels for confirmed restock announcements.' },
+          { heading: 'What is 240 GSM cotton?', body: 'GSM means grams per square metre and describes fabric weight. A 240 GSM shirt uses more fabric weight than a lightweight tee, which can give it a heavier, more structured feel. Check the exact product details before ordering.' }
         ],
         shippingReturns: [
           { heading: 'Shipping coverage', body: 'We ship nationwide via J&T Express with structured Philippine addresses (province, city/municipality, barangay). Some barangays are not confirmed for door-to-door delivery; we review those orders before shipping and coordinate by text.' },
@@ -652,6 +718,50 @@ function normalizeReviews(reviews) {
   ]));
 }
 
+function normalizeNotificationEmail(value, label, { required = false } = {}) {
+  const email = String(value || '').trim().toLowerCase();
+  if (!email && !required) return '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    throw badRequest(`${label} is invalid.`);
+  }
+  return email;
+}
+
+function normalizeOrderNotifications(orderNotifications) {
+  const value = orderNotifications && typeof orderNotifications === 'object' ? orderNotifications : {};
+  const defaults = defaultStoreSettings().orderNotifications;
+  const primaryRecipientEmail = normalizeNotificationEmail(
+    value.primaryRecipientEmail === undefined ? defaults.primaryRecipientEmail : value.primaryRecipientEmail,
+    'Primary order-notification email'
+  );
+  const incomingAdditional = value.additionalRecipientEmails === undefined
+    ? defaults.additionalRecipientEmails
+    : Array.isArray(value.additionalRecipientEmails)
+      ? value.additionalRecipientEmails
+      : String(value.additionalRecipientEmails || '').split(',');
+  const additionalRecipientEmails = [...new Set(incomingAdditional
+    .map((email) => normalizeNotificationEmail(email, 'Additional order-notification email'))
+    .filter((email) => email && email !== primaryRecipientEmail))];
+  if (additionalRecipientEmails.length > 10) {
+    throw badRequest('Use no more than 10 additional order-notification recipients.');
+  }
+  const maximumRetryAttempts = Number(value.maximumRetryAttempts === undefined
+    ? defaults.maximumRetryAttempts
+    : value.maximumRetryAttempts);
+  if (!Number.isInteger(maximumRetryAttempts) || maximumRetryAttempts < 1 || maximumRetryAttempts > 20) {
+    throw badRequest('Maximum order-notification retry attempts must be an integer from 1 to 20.');
+  }
+  return {
+    enabled: value.enabled === undefined ? defaults.enabled : Boolean(value.enabled),
+    primaryRecipientEmail,
+    additionalRecipientEmails,
+    sendPaymongoPaymentConfirmation: value.sendPaymongoPaymentConfirmation === undefined
+      ? defaults.sendPaymongoPaymentConfirmation
+      : Boolean(value.sendPaymongoPaymentConfirmation),
+    maximumRetryAttempts
+  };
+}
+
 function normalizeStoreSettings(settings) {
   const value = settings && typeof settings === 'object' ? settings : {};
   const collectionDefinitions = normalizeCollectionDefinitions(value.collectionDefinitions, value.storefrontCollections);
@@ -665,6 +775,7 @@ function normalizeStoreSettings(settings) {
     authentication: normalizeAuthentication(value.authentication),
     marketing: normalizeMarketing(value.marketing),
     reviews: normalizeReviews(value.reviews),
+    orderNotifications: normalizeOrderNotifications(value.orderNotifications),
     storefrontCollections,
     collectionDefinitions,
     collectionCountdowns: normalizeCollectionCountdowns(value.collectionCountdowns, storefrontCollections)
@@ -714,6 +825,7 @@ function normalizeSectionValue(section, value, current) {
   if (section === 'authentication') return normalizeAuthentication(value);
   if (section === 'marketing') return normalizeMarketing(value);
   if (section === 'reviews') return normalizeReviews(value);
+  if (section === 'orderNotifications') return normalizeOrderNotifications(value);
   return normalizeWebsite(value, current.website);
 }
 
@@ -805,6 +917,18 @@ function nextUpdatedStorefrontCollection(current, identifier, input) {
   }
   if (record.name.toLowerCase() !== previous.name.toLowerCase()) {
     record.aliases = [...new Set([...record.aliases, previous.name])];
+  }
+  if (record.slug !== previous.slug) {
+    record.urlAliases = [...new Set([...(record.urlAliases || []), previous.slug])]
+      .filter((alias) => alias !== record.slug);
+  }
+  const occupiedRoutes = new Map();
+  current.collectionDefinitions.forEach((collection, candidateIndex) => {
+    if (candidateIndex === index) return;
+    [collection.slug, ...(collection.urlAliases || [])].forEach((route) => occupiedRoutes.set(route, collection.slug));
+  });
+  for (const route of [record.slug, ...(record.urlAliases || [])]) {
+    if (occupiedRoutes.has(route)) throw conflict(`Collection URL "${route}" is already in use.`);
   }
   const collectionDefinitions = current.collectionDefinitions
     .map((collection, candidateIndex) => candidateIndex === index ? record : collection)

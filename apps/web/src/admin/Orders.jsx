@@ -78,6 +78,7 @@ export default function Orders() {
   const [fulfillmentStatus, setFulfillmentStatus] = useState('');
   const [missingDelivery, setMissingDelivery] = useState(false);
   const [testOrderFilter, setTestOrderFilter] = useState('');
+  const [notificationStatus, setNotificationStatus] = useState('');
   const [sort, setSort] = useState('placed_desc');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, hasPrevious: false, hasNext: false });
@@ -97,6 +98,7 @@ export default function Orders() {
     if (fulfillmentStatus) params.set('fulfillmentStatus', fulfillmentStatus);
     if (missingDelivery) params.set('missingDelivery', 'true');
     if (testOrderFilter) params.set('isTestOrder', testOrderFilter);
+    if (notificationStatus) params.set('notificationStatus', notificationStatus);
     params.set('sort', sort);
     params.set('page', String(page));
     params.set('pageSize', '25');
@@ -110,7 +112,7 @@ export default function Orders() {
         setSelected((previous) => new Set([...previous].filter((orderNumber) => visible.has(orderNumber))));
       })
       .catch((err) => setMessage(err.message));
-  }, [status, dateRange, dateFrom, dateTo, query, paymentStatus, fulfillmentStatus, missingDelivery, testOrderFilter, sort, page]);
+  }, [status, dateRange, dateFrom, dateTo, query, paymentStatus, fulfillmentStatus, missingDelivery, testOrderFilter, notificationStatus, sort, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -134,7 +136,8 @@ export default function Orders() {
     ['Total sales', formatMoney(listSummary?.totalSalesCents ?? 0)],
     ['Items sold', listSummary?.totalItems ?? 0],
     ['Delivered', listSummary?.delivered ?? 0],
-    ['Missing delivery info', listSummary?.missingDeliveryInformation ?? 0]
+    ['Missing delivery info', listSummary?.missingDeliveryInformation ?? 0],
+    ['Email failed', listSummary?.notificationFailed ?? 0]
   ];
 
   function toggle(orderNumber) {
@@ -180,7 +183,7 @@ export default function Orders() {
       await adminDownload('/api/admin/orders/export', {
         orderNumbers: selectedOrderNumbers,
         status, dateRange, dateFrom, dateTo, q: query, paymentStatus, fulfillmentStatus,
-        missingDelivery, isTestOrder: testOrderFilter, sort
+        missingDelivery, isTestOrder: testOrderFilter, notificationStatus, sort
       }, `maria-clara-orders-${new Date().toISOString().slice(0, 10)}.csv`);
       setMessage(`${selectedOrderNumbers.length ? `${selectedOrderNumbers.length} selected` : 'Filtered'} orders exported.`);
     } catch (error) {
@@ -299,6 +302,13 @@ export default function Orders() {
           <option value="">All real and test orders</option>
           <option value="false">Real orders only</option>
           <option value="true">Test orders only</option>
+        </select>
+        <select className="field max-w-48" value={notificationStatus} onChange={(event) => { setNotificationStatus(event.target.value); setPage(1); }} aria-label="Order notification filter">
+          <option value="">All notification statuses</option>
+          <option value="failed">Notification Failed</option>
+          <option value="pending">Notification Pending</option>
+          <option value="sent">Notification Sent</option>
+          <option value="not_queued">Notification Not Queued</option>
         </select>
         <select className="field max-w-44" value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} aria-label="Sort orders">
           {ORDER_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}

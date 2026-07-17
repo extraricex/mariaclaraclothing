@@ -12,10 +12,12 @@ test('shop search and filters use live catalog fields without demo products', as
   ]);
   assert.match(app, /path="\/shop"/);
   assert.match(shell, /to: '\/shop', label: 'Shop'/);
-  assert.match(nginx, /\(\?:shop\|collections/);
+  assert.match(nginx, /\(\?:shop\|guides/);
+  assert.match(nginx, /location ~ \^\/collections\/\(\?<storefront_collection_slug>/);
   assert.match(shop, /fetchProducts\(\)/);
   assert.match(shop, /Name, SKU, fit, or color/);
   assert.match(shop, /All collections/);
+  assert.match(shop, /collectionMembers\(products, item\)\.length > 0/);
   assert.match(shop, /All sizes/);
   assert.match(shop, /In stock/);
   assert.match(shop, /Minimum price/);

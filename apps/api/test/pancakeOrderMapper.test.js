@@ -140,6 +140,13 @@ test('builds outbound Pancake order update payload from local order changes', ()
       deliveryMethod: 'J&T Express',
       trackingNumber: 'JNT123',
       customer: { fullName: 'Maria Customer', phone: '09171234567', email: 'buyer@example.com' },
+      items: [{ quantity: 1, unitPriceCents: 64900 }],
+      totalCents: 76900,
+      shippingFeeCents: 12000,
+      discountTotalCents: 0,
+      freeShippingUnlocked: false,
+      paymentMethod: 'cash_on_delivery',
+      paymentStatus: 'cod_pending',
       address: {
         houseAddress: '123 Street', barangay: 'Barangay One', city: 'Makati',
         province: 'Metro Manila', addressLine: '123 Street, Barangay One, Makati, Metro Manila, Philippines', postalCode: '1200'
@@ -158,8 +165,66 @@ test('builds outbound Pancake order update payload from local order changes', ()
   assert.equal(payload.shipping_address.province_name, 'Metro Manila');
   assert.equal(payload.shipping_address.post_code, '1200');
   assert.match(payload.shipping_address.full_address, /Barangay One, Makati, Metro Manila, 1200/);
+  assert.equal(payload.shipping_fee, 120);
+  assert.equal(payload.total_discount, 0);
+  assert.equal(payload.is_free_shipping, false);
+  assert.equal(payload.cod, 769);
+  assert.equal(payload.transfer_money, 0);
+  assert.equal(649 + payload.shipping_fee - payload.total_discount, payload.cod);
   assert.doesNotMatch(payload.note_print, /Pack carefully/);
+  assert.match(payload.note, /cod_amount=769/);
   assert.match(payload.note_print, /website_status=shipped/);
+});
+
+test('address resync preserves discounted and free-shipping website totals', () => {
+  const { buildPancakeOrderUpdatePayload } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const payload = buildPancakeOrderUpdatePayload({
+    order: {
+      orderNumber: 'MCC-ADDRESS-2',
+      status: 'received',
+      items: [{ quantity: 2, unitPriceCents: 64900 }],
+      totalCents: 119800,
+      shippingFeeCents: 0,
+      discountTotalCents: 10000,
+      freeShippingUnlocked: true,
+      paymentMethod: 'cash_on_delivery',
+      paymentStatus: 'cod_pending',
+      customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+      address: {
+        houseAddress: '12 Test', barangay: 'BUCANDALA IV', city: 'IMUS',
+        province: 'CAVITE', postalCode: '4103'
+      }
+    },
+    changedFields: ['address']
+  });
+
+  assert.equal(payload.shipping_fee, 0);
+  assert.equal(payload.total_discount, 100);
+  assert.equal(payload.is_free_shipping, true);
+  assert.equal(payload.cod, 1198);
+  assert.equal(payload.transfer_money, 0);
+  assert.equal((649 * 2) - payload.total_discount + payload.shipping_fee, payload.cod);
+  assert.match(payload.note_print, /cod_amount=1198/);
+});
+
+test('address resync preserves the verified PayMongo paid amount', () => {
+  const { buildPancakeOrderUpdatePayload } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const payload = buildPancakeOrderUpdatePayload({
+    order: {
+      orderNumber: 'MCC-ADDRESS-PAY', status: 'confirmed',
+      items: [{ quantity: 1, unitPriceCents: 64900 }],
+      totalCents: 76900, shippingFeeCents: 12000, discountTotalCents: 0,
+      paymentMethod: 'paymongo', paymentStatus: 'paid', paidAmountCents: 76900,
+      customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
+      address: { houseAddress: '12 Test', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE' }
+    },
+    changedFields: ['address']
+  });
+
+  assert.equal(payload.shipping_fee, 120);
+  assert.equal(payload.cod, 0);
+  assert.equal(payload.transfer_money, 769);
+  assert.match(payload.note_print, /paid_amount=769/);
 });
 
 test('builds a verified PayMongo payment update with zero COD and prepaid transfer amount', () => {
@@ -191,6 +256,7 @@ test('normalizes Pancake transfer payments and website status markers safely', (
   assert.equal(paid.paymentMethod, 'paymongo');
   assert.equal(paid.paymentStatus, 'paid');
   assert.equal(paid.codAmountCents, 0);
+  assert.equal(paid.prepaidAmountCents, 72900);
 
   const unreachable = normalizePancakeOrder({
     id: 'PK-UNREACHABLE', custom_id: 'MCC-UNREACHABLE', status: 17,

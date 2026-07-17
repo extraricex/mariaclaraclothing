@@ -22,6 +22,8 @@ import CollectionDropdown from './CollectionDropdown.jsx';
 import QueuedProductMedia from './QueuedProductMedia.jsx';
 import { productPath } from '../lib/productUrl.js';
 import AdminConfirmDialog from './AdminConfirmDialog.jsx';
+import SeoSearchPreview from './SeoSearchPreview.jsx';
+import { productSeoAnalysis } from '../lib/seoAdmin.js';
 
 const STATUSES = ['active', 'draft', 'archived'];
 const DESCRIPTION_TOOLS = [
@@ -47,7 +49,21 @@ const EMPTY_PRODUCT = {
   themeTemplate: 'Default product',
   status: 'active',
   featured: false,
-  seo: { title: '', description: '', handle: '' },
+  seo: {
+    title: '',
+    description: '',
+    handle: '',
+    mainKeyword: '',
+    secondaryKeywords: [],
+    imageAltText: '',
+    canonicalUrl: '',
+    indexable: true,
+    ogTitle: '',
+    ogDescription: '',
+    ogImageUrl: '',
+    feedTitle: '',
+    marketplaceTitle: ''
+  },
   metafields: { color: [], material: [], fit: [], fabricWeight: [], modelHeight: [], modelWearsSize: [] },
   reviewSettings: { reviewsEnabled: true, showRatingSummary: true },
   collections: [],
@@ -85,6 +101,7 @@ export default function ProductEditor() {
   const [pancakeSyncBusy, setPancakeSyncBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [serverSeoWarnings, setServerSeoWarnings] = useState([]);
   const descriptionEditorRef = useRef(null);
   const queuedImagesRef = useRef([]);
 
@@ -114,6 +131,16 @@ export default function ProductEditor() {
   }, [slug, isNew]);
 
   useEffect(() => {
+    if (isNew || !slug) return;
+    adminJson('/api/admin/seo')
+      .then((body) => {
+        const row = (body.products || []).find((candidate) => candidate.slug === slug || candidate.handle === slug);
+        setServerSeoWarnings(Array.isArray(row?.warnings) ? row.warnings : []);
+      })
+      .catch(() => setServerSeoWarnings([]));
+  }, [isNew, slug]);
+
+  useEffect(() => {
     if (!product || !descriptionEditorRef.current) return;
     descriptionEditorRef.current.innerHTML = sanitizeRichHtml(product.description || '');
   }, [product?.slug]);
@@ -132,6 +159,13 @@ export default function ProductEditor() {
 
   function update(field, value) {
     setProduct((previous) => ({ ...previous, [field]: value }));
+  }
+
+  function updateSeo(field, value) {
+    setProduct((previous) => ({
+      ...previous,
+      seo: { ...(previous.seo || {}), [field]: value }
+    }));
   }
 
   function clearFieldError(field) {
@@ -251,6 +285,8 @@ export default function ProductEditor() {
   const imageCount = product.images?.length || 0;
   const productPage = product.productPage || {};
   const sizeChartRows = Array.isArray(productPage.sizeChart) ? productPage.sizeChart : [];
+  const seoAnalysis = productSeoAnalysis(product);
+  const seoWarnings = [...new Set([...seoAnalysis.warnings, ...serverSeoWarnings])];
 
   function syncDescriptionFromEditor() {
     const html = sanitizeRichHtml(descriptionEditorRef.current?.innerHTML || '');
@@ -918,17 +954,76 @@ export default function ProductEditor() {
 
           <section className="border border-line bg-paper p-6">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Search & sharing</h2>
+            <p className="mt-2 text-xs leading-relaxed text-clay">Optional custom fields override the safe storefront fallbacks. Warnings never block saving.</p>
+            <SeoSearchPreview
+              title={seoAnalysis.fallbacks.title}
+              description={seoAnalysis.fallbacks.description}
+              url={seoAnalysis.fallbacks.canonical}
+              score={seoAnalysis.score}
+              warnings={seoWarnings}
+            />
             <label className="mt-4 block">
               <span className="eyebrow">SEO title</span>
-              <input className="field mt-1" maxLength="70" value={product.seo?.title || ''} onChange={(event) => update('seo', { ...(product.seo || {}), title: event.target.value })} placeholder={product.name} />
-              <span className="mt-1 block text-[11px] text-clay">{String(product.seo?.title || '').length}/70 characters</span>
+              <input className="field mt-1" value={product.seo?.title || ''} onChange={(event) => updateSeo('title', event.target.value)} placeholder={seoAnalysis.fallbacks.title} />
+              <span className={`mt-1 block text-[11px] ${String(product.seo?.title || '').length > 70 ? 'text-amber-700' : 'text-clay'}`}>{String(product.seo?.title || '').length} characters · soft guidance: about 50–70</span>
             </label>
             <label className="mt-4 block">
               <span className="eyebrow">Meta description</span>
-              <textarea className="field mt-1 min-h-24" maxLength="180" value={product.seo?.description || ''} onChange={(event) => update('seo', { ...(product.seo || {}), description: event.target.value })} placeholder="Describe the product’s confirmed fabric, fit, and main benefit." />
-              <span className="mt-1 block text-[11px] text-clay">{String(product.seo?.description || '').length}/180 characters</span>
+              <textarea className="field mt-1 min-h-24" value={product.seo?.description || ''} onChange={(event) => updateSeo('description', event.target.value)} placeholder="Describe the product’s confirmed fabric, fit, color, and customer benefit." />
+              <span className={`mt-1 block text-[11px] ${String(product.seo?.description || '').length > 160 ? 'text-amber-700' : 'text-clay'}`}>{String(product.seo?.description || '').length} characters · soft guidance: about 120–160</span>
             </label>
-            <p className="mt-3 text-xs text-clay">The product page, social preview, canonical URL, and Product schema use these saved fields.</p>
+            <label className="mt-4 block">
+              <span className="eyebrow">Main search keyword</span>
+              <input className="field mt-1" value={product.seo?.mainKeyword || ''} onChange={(event) => updateSeo('mainKeyword', event.target.value)} placeholder="One product-specific phrase" />
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Secondary keywords</span>
+              <input className="field mt-1" value={(product.seo?.secondaryKeywords || []).join(', ')} onChange={(event) => updateSeo('secondaryKeywords', event.target.value.split(',').map((keyword) => keyword.trim()).filter(Boolean))} placeholder="Related phrases, comma separated" />
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Main image alt text</span>
+              <input className="field mt-1" value={product.seo?.imageAltText || ''} onChange={(event) => updateSeo('imageAltText', event.target.value)} placeholder={`${product.name || 'Product'}, front view`} />
+              <span className="mt-1 block text-[11px] text-clay">Fallback for the first product image. Keep angle-specific alt text on every gallery image below.</span>
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Canonical URL override</span>
+              <input className="field mt-1" value={product.seo?.canonicalUrl || ''} onChange={(event) => updateSeo('canonicalUrl', event.target.value)} placeholder={seoAnalysis.fallbacks.pathname} autoCapitalize="none" spellCheck="false" />
+              <span className="mt-1 block text-[11px] text-clay">Leave blank to use the clean product URL. Use only an HTTPS URL or a site-relative path when consolidation is genuinely required.</span>
+            </label>
+            <label className="mt-4 flex items-center justify-between gap-3 text-sm">
+              <span><strong className="block text-ink">Search engine visibility</strong><span className="text-xs text-clay">Allow this active product to be indexed</span></span>
+              <input type="checkbox" checked={product.seo?.indexable !== false} onChange={(event) => updateSeo('indexable', event.target.checked)} />
+            </label>
+
+            <div className="mt-5 border-t border-line pt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.12em]">Open Graph sharing</h3>
+              <label className="mt-4 block">
+                <span className="eyebrow">Open Graph title</span>
+                <input className="field mt-1" value={product.seo?.ogTitle || ''} onChange={(event) => updateSeo('ogTitle', event.target.value)} placeholder={seoAnalysis.fallbacks.title} />
+              </label>
+              <label className="mt-4 block">
+                <span className="eyebrow">Open Graph description</span>
+                <textarea className="field mt-1 min-h-20" value={product.seo?.ogDescription || ''} onChange={(event) => updateSeo('ogDescription', event.target.value)} placeholder={seoAnalysis.fallbacks.description} />
+              </label>
+              <label className="mt-4 block">
+                <span className="eyebrow">Open Graph image URL</span>
+                <input className="field mt-1" value={product.seo?.ogImageUrl || ''} onChange={(event) => updateSeo('ogImageUrl', event.target.value)} placeholder={product.images?.[0]?.url || 'https://... or /uploads/...'} />
+              </label>
+            </div>
+
+            <div className="mt-5 border-t border-line pt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.12em]">Channel titles</h3>
+              <label className="mt-4 block">
+                <span className="eyebrow">Product feed title</span>
+                <input className="field mt-1" value={product.seo?.feedTitle || ''} onChange={(event) => updateSeo('feedTitle', event.target.value)} placeholder={product.name} />
+                <span className={`mt-1 block text-[11px] ${String(product.seo?.feedTitle || '').length > 150 ? 'text-amber-700' : 'text-clay'}`}>{String(product.seo?.feedTitle || '').length}/150 Merchant Center maximum</span>
+              </label>
+              <label className="mt-4 block">
+                <span className="eyebrow">Marketplace title</span>
+                <input className="field mt-1" value={product.seo?.marketplaceTitle || ''} onChange={(event) => updateSeo('marketplaceTitle', event.target.value)} placeholder={product.name} />
+              </label>
+            </div>
+            <p className="mt-4 text-xs text-clay">The storefront metadata, social preview, canonical URL, Product schema, and product feed use these saved fields or their documented fallbacks.</p>
           </section>
 
           <section className="border border-line bg-paper p-6">

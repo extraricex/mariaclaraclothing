@@ -44,7 +44,9 @@ function buildOrder(input, request, quote, orderNumber, tokenHash, now) {
     metaBrowserPurchaseSentAt: '',
     metaCapiPurchaseQueuedAt: '',
     metaCapiPurchaseSentAt: '',
-    metaPurchaseStatus: paymentMethod === 'paymongo' ? 'pending_payment' : 'eligible',
+    metaPurchaseStatus: input.requestContext?.metaConsentGranted === false
+      ? 'consent_not_granted'
+      : paymentMethod === 'paymongo' ? 'pending_payment' : 'eligible',
     metaPurchaseLastError: '',
     metaPurchaseValue: purchaseValue(snapshot.totalCents),
     metaPurchaseCurrency: META_CURRENCY,
@@ -73,9 +75,12 @@ function buildOrder(input, request, quote, orderNumber, tokenHash, now) {
     paymentStatus: input.paymentMethod === 'cash_on_delivery' ? 'cod_pending' : 'pending_payment',
     paymentExpiresAt: input.paymentExpiresAt || null,
     inventoryReservationStatus: input.paymentMethod === 'paymongo' ? 'reserved' : 'committed',
-    paymentMetadata: input.paymentMethod === 'paymongo'
-      ? { metaRequestContext: input.requestContext || {} }
-      : {},
+    paymentMetadata: {
+      metaTrackingConsent: String(input.requestContext?.metaTrackingConsent || 'unset'),
+      ...(input.paymentMethod === 'paymongo'
+        ? { metaRequestContext: input.requestContext || {} }
+        : {})
+    },
     codConfirmationStatus: 'pending',
     deliveryStatus: 'pending',
     deliveryMethod: 'Standard shipping',
@@ -206,7 +211,10 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     await deps.consumeQuote(client, quote.id, orderNumber);
     const response = checkoutResponse(order);
     await deps.completeIdempotency(client, { keyHash, orderNumber, response });
-    if (order.paymentMethod !== 'paymongo' && deps.enqueueAdminEmail) {
+    // The notification outbox is part of the same transaction as the order.
+    // PayMongo orders are announced immediately as Pending Payment; the paid
+    // webhook may create a separate payment-confirmation notification.
+    if (deps.enqueueAdminEmail) {
       await deps.enqueueAdminEmail(order, { client });
     }
     if (order.paymentMethod !== 'paymongo' && deps.enqueueCustomerConfirmation) {

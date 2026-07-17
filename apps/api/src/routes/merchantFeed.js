@@ -1,6 +1,12 @@
 const express = require('express');
 const { listCatalogProducts } = require('../products/catalogPresenter');
-const { plainText, productPath, storefrontOrigin } = require('../seo/storefrontSeo');
+const {
+  DEFAULT_BRAND_NAME,
+  buildProductSeo,
+  safeOrigin,
+  variantLandingUrl,
+  wordSafeText
+} = require('../seo/productSeo');
 
 const router = express.Router();
 
@@ -14,55 +20,55 @@ function xmlEscape(value) {
 }
 
 function merchantTitle(value) {
-  const title = plainText(value, 140);
-  if (!title || title !== title.toUpperCase()) return title;
-  return title.toLowerCase().replace(/(^|[\s\-/])([a-z])/g, (_match, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
+  return wordSafeText(value, 140);
 }
 
-function firstMetafield(product, ...keys) {
-  for (const key of keys) {
-    const value = product?.metafields?.[key];
-    const candidate = Array.isArray(value) ? value[0] : value;
-    if (String(candidate || '').trim()) return String(candidate).trim();
-  }
-  return '';
+function supportedValue(value, allowed) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return allowed.includes(normalized) ? normalized : '';
 }
 
 function buildMerchantFeedXml({ products = [], siteUrl = '' } = {}) {
-  const origin = storefrontOrigin(siteUrl);
+  const origin = safeOrigin(siteUrl);
   const items = [];
   for (const product of products) {
+    const seo = buildProductSeo(product, { origin, brandName: DEFAULT_BRAND_NAME });
+    if (!seo.indexable) continue;
     const variants = Array.isArray(product.variants) && product.variants.length ? product.variants : [{}];
-    const productUrl = `${origin}${productPath(product)}`;
-    const images = (product.images || []).map((image) => String(image?.url || '').trim()).filter(Boolean);
-    const title = merchantTitle(product.name);
-    const description = plainText(product.seo?.description || product.description || product.productPage?.intro, 5000);
-    const color = firstMetafield(product, 'color', 'colour');
-    const gender = firstMetafield(product, 'gender');
-    const ageGroup = firstMetafield(product, 'age_group', 'ageGroup');
+    const productUrl = seo.canonical;
+    const images = seo.images.map((image) => image.url);
+    const title = merchantTitle(seo.feedTitle);
+    const description = seo.schemaDescription;
+    const color = seo.facts.color;
+    const material = seo.facts.material;
+    const gender = supportedValue(seo.facts.gender, ['male', 'female', 'unisex']);
+    const ageGroup = supportedValue(seo.facts.ageGroup, ['newborn', 'infant', 'toddler', 'kids', 'adult']);
     for (const [index, variant] of variants.entries()) {
       const size = String(variant.size || '').trim();
       const id = String(variant.sku || variant.id || `${product.id || product.slug}-${index + 1}`).trim();
       const priceCents = Number(variant.priceCents || product.priceCents || 0);
       if (!id || !title || !description || !images[0] || !Number.isInteger(priceCents) || priceCents <= 0) continue;
+      const variantTitle = wordSafeText(size ? `${title} - Size ${size.toUpperCase()}` : title, 150);
+      const variantUrl = variantLandingUrl(productUrl, size);
       const fields = [
         `<g:id>${xmlEscape(id)}</g:id>`,
         `<g:item_group_id>${xmlEscape(product.id || product.slug)}</g:item_group_id>`,
-        `<title>${xmlEscape(size ? `${title} - Size ${size.toUpperCase()}` : title)}</title>`,
-        `<description>${xmlEscape(description)}</description>`,
-        `<link>${xmlEscape(productUrl)}</link>`,
+        `<g:title>${xmlEscape(variantTitle)}</g:title>`,
+        `<g:description>${xmlEscape(description)}</g:description>`,
+        `<g:link>${xmlEscape(variantUrl)}</g:link>`,
         `<g:image_link>${xmlEscape(new URL(images[0], `${origin}/`).toString())}</g:image_link>`,
         ...images.slice(1, 11).map((image) => `<g:additional_image_link>${xmlEscape(new URL(image, `${origin}/`).toString())}</g:additional_image_link>`),
         `<g:availability>${Number(variant.stockQuantity || 0) > 0 ? 'in_stock' : 'out_of_stock'}</g:availability>`,
         `<g:price>${(priceCents / 100).toFixed(2)} PHP</g:price>`,
         '<g:condition>new</g:condition>',
-        '<g:brand>Maria Clara Clothing</g:brand>',
+        `<g:brand>${xmlEscape(seo.brandName)}</g:brand>`,
         `<g:product_type>${xmlEscape(product.category || product.productType || 'Apparel & Accessories > Clothing > Shirts & Tops')}</g:product_type>`,
         '<g:google_product_category>Apparel &amp; Accessories &gt; Clothing &gt; Shirts &amp; Tops</g:google_product_category>',
         ...(size ? [`<g:size>${xmlEscape(size.toUpperCase())}</g:size>`] : []),
         ...(color ? [`<g:color>${xmlEscape(color)}</g:color>`] : []),
-        ...(gender ? [`<g:gender>${xmlEscape(gender.toLowerCase())}</g:gender>`] : []),
-        ...(ageGroup ? [`<g:age_group>${xmlEscape(ageGroup.toLowerCase())}</g:age_group>`] : [])
+        ...(material ? [`<g:material>${xmlEscape(material)}</g:material>`] : []),
+        ...(gender ? [`<g:gender>${xmlEscape(gender)}</g:gender>`] : []),
+        ...(ageGroup ? [`<g:age_group>${xmlEscape(ageGroup)}</g:age_group>`] : [])
       ];
       items.push(`    <item>\n      ${fields.join('\n      ')}\n    </item>`);
     }
@@ -87,7 +93,7 @@ router.get('/', async (_req, res, next) => {
     const xml = buildMerchantFeedXml({ products, siteUrl: process.env.FRONTEND_URL });
     res.set({
       'Content-Type': 'application/xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=900, stale-while-revalidate=3600'
+      'Cache-Control': 'public, max-age=60, must-revalidate'
     });
     return res.status(200).send(xml);
   } catch (error) {

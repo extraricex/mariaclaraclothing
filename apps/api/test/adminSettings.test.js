@@ -10,8 +10,17 @@ const { storefrontMetaPixel } = require('../src/routes/storeSettings');
 test('storefront Pixel is locked to the CAPI dataset without changing consent mode', () => {
   assert.deepEqual(storefrontMetaPixel(
     { enabled: true, pixelId: 'browser-old', requireConsent: false },
-    { enabled: true, pixelId: 'server-dataset' }
-  ), { enabled: true, pixelId: 'server-dataset', requireConsent: false });
+    { enabled: true, pixelId: 'server-dataset', browserPurchaseEnabled: true }
+  ), {
+    enabled: true,
+    pixelId: 'server-dataset',
+    requireConsent: false,
+    browserPurchaseEnabled: true
+  });
+  assert.equal(storefrontMetaPixel(
+    { enabled: false, pixelId: 'browser-old', requireConsent: false },
+    { enabled: true, pixelId: 'server-dataset', browserPurchaseEnabled: true }
+  ).browserPurchaseEnabled, false);
   assert.deepEqual(storefrontMetaPixel(
     { enabled: true, pixelId: 'browser-only', requireConsent: true },
     { enabled: false }
@@ -87,6 +96,29 @@ test('admin settings require authentication', async () => {
   await withSettingsServer(async (port) => {
     const response = await fetch(`http://127.0.0.1:${port}/api/admin/settings`);
     assert.equal(response.status, 401);
+  });
+});
+
+test('admin SEO overview and CSV export are authenticated and use a non-ranking completeness label', async () => {
+  await withSettingsServer(async (port) => {
+    const unauthenticated = await fetch(`http://127.0.0.1:${port}/api/admin/seo`);
+    assert.equal(unauthenticated.status, 401);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/admin/seo`, adminRequest());
+    assert.equal(response.status, 200);
+    const audit = await response.json();
+    assert.ok(Number.isInteger(audit.summary.totalActiveProducts));
+    assert.ok(Array.isArray(audit.products));
+    assert.ok(Array.isArray(audit.collections));
+    assert.equal(audit.technical.scoreLabel, 'SEO Content Completeness');
+    assert.match(audit.technical.scoreDisclaimer, /not a Google ranking score/i);
+
+    const csvResponse = await fetch(`http://127.0.0.1:${port}/api/admin/seo/export.csv`, adminRequest());
+    assert.equal(csvResponse.status, 200);
+    assert.match(csvResponse.headers.get('content-type') || '', /text\/csv/);
+    const csv = await csvResponse.text();
+    assert.match(csv, /Product ID.*SKU.*Product name.*Current URL/);
+    assert.doesNotMatch(csv, /reviewer_email|order_number|customer_address/i);
   });
 });
 

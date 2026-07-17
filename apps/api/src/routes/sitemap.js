@@ -1,6 +1,8 @@
 const express = require('express');
 const { listCatalogProducts } = require('../products/catalogPresenter');
 const { getStoreSettings } = require('../settings/storeSettingsRepository');
+const { buildProductSeo } = require('../seo/productSeo');
+const { buildCollectionSeo } = require('../seo/collectionSeo');
 
 const router = express.Router();
 
@@ -41,23 +43,27 @@ function buildSitemapXml({ products = [], collectionDefinitions = [], siteUrl = 
   const urls = new Map(STATIC_STOREFRONT_PATHS.map((pathname) => [pathname, { pathname }]));
 
   for (const collection of collectionDefinitions || []) {
-    if (collection?.visible === false || !collection?.slug) continue;
-    const pathname = `/collections/${encodeURIComponent(collection.slug)}`;
-    urls.set(pathname, { pathname, images: collection.imageUrl ? [{ url: collection.imageUrl, title: `${collection.name} collection` }] : [] });
-  }
-
-  for (const product of products || []) {
-    const handle = String(product?.publicHandle || product?.slug || '').trim();
-    if (!handle) continue;
-    const pathname = `/product/${encodeURIComponent(handle)}`;
-    urls.set(pathname, {
-      pathname,
-      lastmod: validLastModified(product.updatedAt || product.createdAt),
-      images: (product.images || []).map((image) => ({ url: image.url, title: image.altText || product.name })).filter((image) => image.url)
+    const collectionSeo = buildCollectionSeo(collection, products, { origin });
+    if (!collectionSeo.indexable) continue;
+    urls.set(collectionSeo.canonical, {
+      loc: collectionSeo.canonical,
+      images: collectionSeo.image ? [{ url: collectionSeo.image, title: `${collectionSeo.name} collection` }] : []
     });
   }
 
-  const entries = [...urls.values()].sort((left, right) => left.pathname.localeCompare(right.pathname));
+  for (const product of products || []) {
+    const productSeo = buildProductSeo(product, { origin });
+    if (!productSeo.indexable || !productSeo.canonical) continue;
+    urls.set(productSeo.canonical, {
+      loc: productSeo.canonical,
+      lastmod: validLastModified(product.updatedAt || product.createdAt),
+      images: productSeo.images.map((image) => ({ url: image.url, title: image.altText }))
+    });
+  }
+
+  const entries = [...urls.values()].sort((left, right) => (
+    String(left.loc || left.pathname).localeCompare(String(right.loc || right.pathname))
+  ));
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -74,10 +80,12 @@ function validLastModified(value) {
 }
 
 function sitemapEntry(origin, entry) {
-  const lines = ['  <url>', `    <loc>${xmlEscape(`${origin}${entry.pathname}`)}</loc>`];
+  const loc = entry.loc || `${origin}${entry.pathname}`;
+  const lines = ['  <url>', `    <loc>${xmlEscape(loc)}</loc>`];
   if (entry.lastmod) lines.push(`    <lastmod>${xmlEscape(entry.lastmod)}</lastmod>`);
   for (const image of entry.images || []) {
-    const imageUrl = new URL(String(image.url), `${origin}/`).toString();
+    const imageUrl = sitemapImageUrl(origin, image.url);
+    if (!imageUrl) continue;
     lines.push('    <image:image>');
     lines.push(`      <image:loc>${xmlEscape(imageUrl)}</image:loc>`);
     if (image.title) lines.push(`      <image:title>${xmlEscape(image.title)}</image:title>`);
@@ -85,6 +93,15 @@ function sitemapEntry(origin, entry) {
   }
   lines.push('  </url>');
   return lines.join('\n');
+}
+
+function sitemapImageUrl(origin, value) {
+  try {
+    const url = new URL(String(value || ''), `${origin}/`);
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '';
+  } catch (_error) {
+    return '';
+  }
 }
 
 router.get('/', async (_req, res, next) => {
@@ -108,4 +125,4 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
-module.exports = { sitemapRouter: router, buildSitemapXml, storefrontOrigin, validLastModified };
+module.exports = { sitemapRouter: router, buildSitemapXml, sitemapImageUrl, storefrontOrigin, validLastModified };

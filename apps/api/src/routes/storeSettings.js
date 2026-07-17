@@ -6,7 +6,11 @@ const router = express.Router();
 
 function storefrontMetaPixel(metaPixel, metaConfig) {
   return metaConfig?.enabled
-    ? { ...(metaPixel || {}), pixelId: metaConfig.pixelId }
+    ? {
+      ...(metaPixel || {}),
+      pixelId: metaConfig.pixelId,
+      browserPurchaseEnabled: Boolean(metaConfig.browserPurchaseEnabled && metaPixel?.enabled)
+    }
     : metaPixel;
 }
 

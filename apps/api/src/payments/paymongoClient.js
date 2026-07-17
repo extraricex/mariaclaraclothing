@@ -63,8 +63,13 @@ function createPayMongoClient(config, fetchImpl = fetch) {
     return body.data;
   }
 
-  async function createCheckoutSession(payload) {
-    const data = await request('/v2/checkout_sessions', { method: 'POST', body: payload });
+  async function createCheckoutSession(payload, { idempotencyKey = '' } = {}) {
+    const normalizedKey = String(idempotencyKey || '').trim();
+    const data = await request('/v2/checkout_sessions', {
+      method: 'POST',
+      body: payload,
+      ...(normalizedKey ? { headers: { 'Idempotency-Key': normalizedKey } } : {})
+    });
     const checkoutUrl = String(data.attributes.checkout_url || '');
     if (!checkoutUrl.startsWith('https://')) throw new PayMongoApiError('paymongo_invalid_response');
     return { id: String(data.id), checkoutUrl, attributes: data.attributes };

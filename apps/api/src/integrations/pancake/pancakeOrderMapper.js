@@ -136,6 +136,20 @@ function buildPancakeOrderNote(order = {}) {
   return lines.filter(Boolean).join('\n');
 }
 
+function buildPancakeOrderFinancialPayload(order = {}) {
+  const payment = buildPancakePaymentPayload(order);
+  const paymentNote = buildPancakeOrderNote(order);
+  return {
+    shipping_fee: pesosFromCents(order.shippingFeeCents),
+    total_discount: pesosFromCents(order.discountTotalCents),
+    is_free_shipping: Boolean(order.freeShippingUnlocked),
+    cod: payment.cod,
+    transfer_money: payment.transfer_money,
+    note: paymentNote,
+    note_print: paymentNote
+  };
+}
+
 function buildPancakeShippingAddress(order = {}) {
   const address = canonicalDeliveryAddress(order.address || {});
   const customer = order.customer || {};
@@ -289,6 +303,7 @@ function normalizePancakeOrder(payload = {}) {
     shippingFeeCents,
     totalCents,
     codAmountCents,
+    prepaidAmountCents,
     paymentMethod,
     paymentStatus,
     codConfirmationStatus: 'pending',
@@ -389,17 +404,22 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
   }
   if (fields.has('address')) {
     payload.shipping_address = buildPancakeShippingAddress(order);
+    // Pancake can recalculate shipping when an address is changed. Always
+    // resend the website-owned financial snapshot with an address update so
+    // a provider default cannot replace the committed order totals.
+    Object.assign(payload, buildPancakeOrderFinancialPayload(order));
   }
-  if (fields.has('paymentStatus') || fields.has('paymentMethod') || fields.has('status')) {
+  if (!fields.has('address') && (fields.has('paymentStatus') || fields.has('paymentMethod') || fields.has('status'))) {
     payload.note_print = buildPancakeOrderNote(order);
   }
-  if (fields.has('paymentStatus') || fields.has('paymentMethod')) {
-    Object.assign(payload, buildPancakePaymentPayload(order));
+  if (!fields.has('address') && (fields.has('paymentStatus') || fields.has('paymentMethod'))) {
+    Object.assign(payload, buildPancakeOrderFinancialPayload(order));
   }
   return payload;
 }
 
 module.exports = {
+  buildPancakeOrderFinancialPayload,
   buildPancakeOrderNote,
   buildPancakeShippingAddress,
   buildPancakeOrderUpdatePayload,

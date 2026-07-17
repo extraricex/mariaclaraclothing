@@ -5,7 +5,7 @@ import { formatMoney } from '../lib/money.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { clearCart, clearCheckoutIdempotencyKey, resetCartSessionId } from '../lib/cart.js';
 import { clearCheckoutReviewDraft } from '../lib/checkoutDraft.js';
-import { trackFacebookPurchasePayload, wasFacebookPurchaseTracked } from '../lib/metaPixel.js';
+import { isFacebookBrowserPurchaseReady, trackFacebookPurchasePayload, wasFacebookPurchaseTracked } from '../lib/metaPixel.js';
 
 function storedConfirmation() {
   try {
@@ -21,6 +21,7 @@ export default function ThankYou() {
   const [order, setOrder] = useState(null);
   const [confirmation] = useState(storedConfirmation);
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
+  const [storefrontSettingsLoaded, setStorefrontSettingsLoaded] = useState(false);
   const [purchaseRetry, setPurchaseRetry] = useState(0);
   const purchaseAttempts = useRef(new Set());
 
@@ -35,7 +36,9 @@ export default function ThankYou() {
           if (body.order.paymentMethod === 'paymongo' && body.order.paymentStatus === 'pending_payment') {
             timer = setTimeout(refresh, 2500);
           }
-        }).catch(() => {});
+        }).catch(() => {
+          if (!stopped) timer = setTimeout(refresh, 2500);
+        });
       refresh();
     }
     return () => { stopped = true; if (timer) clearTimeout(timer); };
@@ -50,6 +53,12 @@ export default function ThankYou() {
       : order?.paymentMethod === 'paymongo' && order.paymentStatus === 'paid' && !unsuccessfulOrder && successfulOrder;
     if (!eligible || !confirmation?.confirmationToken || confirmation.orderNumber !== order.orderNumber) return;
 
+    clearCheckoutReviewDraft(); clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
+    if (!storefrontSettingsLoaded || !isFacebookBrowserPurchaseReady({
+      browserPurchaseEnabled: settings.metaPixel?.browserPurchaseEnabled,
+      requireConsent: Boolean(settings.metaPixel?.requireConsent)
+    })) return;
+
     const attemptKey = `${order.orderNumber}:${order.paymentStatus}:${purchaseRetry}`;
     if (purchaseAttempts.current.has(attemptKey)) return;
     purchaseAttempts.current.add(attemptKey);
@@ -63,7 +72,10 @@ export default function ThankYou() {
           return;
         }
         const alreadyTracked = wasFacebookPurchaseTracked(claim.purchase?.eventId);
-        const sent = alreadyTracked || trackFacebookPurchasePayload(claim.purchase);
+        const sent = alreadyTracked || trackFacebookPurchasePayload(claim.purchase, {
+          browserPurchaseEnabled: true,
+          requireConsent: Boolean(settings.metaPixel.requireConsent)
+        });
         await completeMetaPurchase(
           order.orderNumber,
           confirmation.confirmationToken,
@@ -76,11 +88,13 @@ export default function ThankYou() {
         window.setTimeout(() => setPurchaseRetry((value) => value + 1), 2500);
       });
 
-    clearCheckoutReviewDraft(); clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
-  }, [confirmation, order, purchaseRetry]);
+  }, [confirmation, order, purchaseRetry, settings.metaPixel, storefrontSettingsLoaded]);
 
   useEffect(() => {
-    loadStorefrontSettings().then(setSettings);
+    loadStorefrontSettings().then((nextSettings) => {
+      setSettings(nextSettings);
+      setStorefrontSettingsLoaded(true);
+    });
   }, []);
 
   const summary = order;

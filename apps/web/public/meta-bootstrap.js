@@ -2,7 +2,8 @@
   var privacySafeFallback = {
     enabled: false,
     pixelId: '',
-    requireConsent: true
+    requireConsent: true,
+    browserPurchaseEnabled: false
   };
   var settingsRequest = fetch('/api/storefront-settings', {
     cache: 'no-store',
@@ -21,17 +22,24 @@
     var pixelId = String(config.pixelId || '').trim();
     var enabled = Boolean(config.enabled && /^\d{5,30}$/.test(pixelId));
     var requireConsent = Boolean(config.requireConsent);
-    var customerPath = !window.location.pathname.startsWith('/admin');
+    var browserPurchaseEnabled = Boolean(config.browserPurchaseEnabled);
+    var normalizedPath = (window.location.pathname.replace(/\/+$/, '') || '/').toLowerCase();
+    var customerPath = normalizedPath !== '/admin' && !normalizedPath.startsWith('/admin/');
 
     window.__mariaClaraFacebookPixelConfig = {
       enabled: enabled,
       pixelId: enabled ? pixelId : '',
-      requireConsent: requireConsent
+      requireConsent: requireConsent,
+      browserPurchaseEnabled: browserPurchaseEnabled
     };
+    // Server CAPI is authoritative until Meta account-side automatic Purchase
+    // rules and browser/server deduplication are verified in Test Events.
     if (!enabled || !customerPath) return;
 
-    var consent = !requireConsent ||
-      localStorage.getItem('maria-clara-meta-tracking-consent') === 'accepted';
+    var storedConsent = '';
+    try { storedConsent = localStorage.getItem('maria-clara-meta-tracking-consent') || ''; }
+    catch (_error) { storedConsent = ''; }
+    var consent = !requireConsent || storedConsent === 'accepted';
     if (!consent) {
       window.__mariaClaraFacebookConsent = 'revoke';
       window.__mariaClaraFacebookPixelId = '';
@@ -52,11 +60,10 @@
     fbq('init', pixelId);
 
     if (requireConsent) fbq('consent', 'grant');
-    fbq('track', 'PageView');
     window.__mariaClaraFacebookConsent = 'grant';
     window.__mariaClaraFacebookPixelId = pixelId;
-    window.__mariaClaraInitialMetaPageViewPath =
-      window.location.pathname + window.location.search;
+    // React's centralized route tracker sends the initial PageView with one
+    // event ID shared by Pixel and the first-party CAPI bridge.
   }
 
   settingsRequest

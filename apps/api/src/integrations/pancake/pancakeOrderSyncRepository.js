@@ -176,6 +176,25 @@ async function getOrderLinkByPancakeOrderId(pancakeOrderId) {
   return result.rows[0] ? rowLink(result.rows[0]) : null;
 }
 
+async function listOrderLinks({ orderNumbers = [] } = {}) {
+  const scoped = [...new Set((orderNumbers || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  if (!hasDatabaseUrl()) {
+    return memory.links
+      .filter((item) => !scoped.length || scoped.includes(item.orderNumber))
+      .map(rowLink)
+      .sort((left, right) => left.orderNumber.localeCompare(right.orderNumber));
+  }
+  const result = scoped.length
+    ? await query(
+      `SELECT * FROM pancake_order_links
+       WHERE order_number = ANY($1::text[])
+       ORDER BY order_number ASC`,
+      [scoped]
+    )
+    : await query('SELECT * FROM pancake_order_links ORDER BY order_number ASC');
+  return result.rows.map(rowLink);
+}
+
 async function backfillSentOrderExportLinks({ limit = 100 } = {}) {
   const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
   if (!hasDatabaseUrl()) return { linkedCount: 0 };
@@ -283,6 +302,50 @@ async function claimDueSyncEvents({ direction, limit = 25, now = memoryNow() } =
 async function getSyncEvent(id) {
   if (!hasDatabaseUrl()) return rowEvent(memory.events.find((item) => item.id === id));
   const result = await query('SELECT * FROM pancake_sync_events WHERE id=$1', [id]);
+  return result.rows[0] ? rowEvent(result.rows[0]) : null;
+}
+
+async function getSyncEventByIdentity({ direction, entityType, entityId, eventKey }) {
+  const identity = {
+    direction: String(direction || '').trim(),
+    entityType: String(entityType || '').trim(),
+    entityId: String(entityId || '').trim(),
+    eventKey: String(eventKey || '').trim()
+  };
+  if (!Object.values(identity).every(Boolean)) return null;
+  if (!hasDatabaseUrl()) {
+    return rowEvent(memory.events.find((item) =>
+      item.direction === identity.direction
+      && item.entityType === identity.entityType
+      && item.entityId === identity.entityId
+      && item.eventKey === identity.eventKey
+    ));
+  }
+  const result = await query(
+    `SELECT * FROM pancake_sync_events
+     WHERE direction=$1 AND entity_type=$2 AND entity_id=$3 AND event_key=$4`,
+    [identity.direction, identity.entityType, identity.entityId, identity.eventKey]
+  );
+  return result.rows[0] ? rowEvent(result.rows[0]) : null;
+}
+
+async function claimSyncEventById(id, { now = memoryNow() } = {}) {
+  const normalized = String(id || '').trim();
+  if (!normalized) return null;
+  if (!hasDatabaseUrl()) {
+    const event = memory.events.find((item) => item.id === normalized);
+    if (!event || !['pending', 'failed_retryable'].includes(event.status)) return null;
+    event.status = 'processing';
+    event.updatedAt = now;
+    return rowEvent(event);
+  }
+  const result = await query(
+    `UPDATE pancake_sync_events
+     SET status='processing', locked_at=now(), updated_at=now()
+     WHERE id=$1 AND status IN ('pending','failed_retryable')
+     RETURNING *`,
+    [normalized]
+  );
   return result.rows[0] ? rowEvent(result.rows[0]) : null;
 }
 
@@ -396,12 +459,15 @@ async function getOrderSyncSummary() {
 module.exports = {
   appendSyncLog,
   backfillSentOrderExportLinks,
+  claimSyncEventById,
   claimDueSyncEvents,
   enqueueSyncEvent,
   getOrderSyncSummary,
   getOrderSyncDetail,
   getOrderLinkByPancakeOrderId,
   getSyncEvent,
+  getSyncEventByIdentity,
+  listOrderLinks,
   markSyncEventBlocked,
   markSyncEventRetryable,
   markSyncEventSucceeded,

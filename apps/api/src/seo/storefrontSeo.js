@@ -1,9 +1,17 @@
 const { listCatalogProducts, findCatalogProductBySlug } = require('../products/catalogPresenter');
 const { getStoreSettings } = require('../settings/storeSettingsRepository');
 const { getSiteContent } = require('../siteContent/siteContentRepository');
-const { reviewSummariesByProduct } = require('../reviews/reviewRepository');
+const { listPublishedReviews, reviewSummariesByProduct } = require('../reviews/reviewRepository');
+const {
+  DEFAULT_BRAND_NAME,
+  buildProductSeo,
+  productPath,
+  productStructuredData,
+  wordSafeText
+} = require('./productSeo');
+const { buildCollectionSeo, collectionMembers, collectionPath } = require('./collectionSeo');
 
-const BRAND_NAME = 'Maria Clara Clothing';
+const BRAND_NAME = DEFAULT_BRAND_NAME;
 const PRIVATE_PATH_PREFIXES = [
   '/admin', '/account', '/checkout', '/thank-you', '/cart', '/login', '/register',
   '/forgot-password', '/reset-password'
@@ -75,17 +83,7 @@ function escapeHtml(value) {
 }
 
 function plainText(value, limit = 320) {
-  return String(value || '')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, limit);
+  return wordSafeText(value, limit);
 }
 
 function normalizePathname(value) {
@@ -152,14 +150,6 @@ function responsiveShopifySrcSet(value, widths = [480, 960, 1600]) {
   }
 }
 
-function productPath(product) {
-  return `/product/${encodeURIComponent(String(product?.publicHandle || product?.slug || '').trim())}`;
-}
-
-function collectionPath(collection) {
-  return `/collections/${encodeURIComponent(String(collection?.slug || '').trim())}`;
-}
-
 function isPrivatePath(pathname) {
   return PRIVATE_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
@@ -177,13 +167,12 @@ function jsonLdScript(data, nonce = '') {
 
 function visibleCollections(settings) {
   return (settings?.collectionDefinitions || []).filter((collection) => (
-    collection?.visible !== false && collection?.slug && (collection.showOnShop !== false || collection.showOnHomepage !== false)
+    collection?.visible !== false && collection?.slug
   ));
 }
 
 function productInCollection(product, collection) {
-  const names = new Set((product?.collections || []).map((value) => String(value || '').trim().toLowerCase()));
-  return names.has(String(collection?.name || '').trim().toLowerCase());
+  return collectionMembers([product], collection).length > 0;
 }
 
 function breadcrumbSchema(origin, entries) {
@@ -228,42 +217,6 @@ function homeSchemas({ origin, settings, content }) {
   ];
 }
 
-function productSchema({ origin, product, summary }) {
-  const url = `${origin}${productPath(product)}`;
-  const images = (product.images || []).map((image) => absoluteUrl(origin, image.url)).filter(Boolean);
-  const description = plainText(product.seo?.description || product.description || product.productPage?.intro);
-  const variants = Array.isArray(product.variants) ? product.variants : [];
-  const offer = {
-    '@type': 'Offer',
-    url,
-    priceCurrency: 'PHP',
-    price: (Number(product.priceCents || 0) / 100).toFixed(2),
-    availability: variants.some((variant) => Number(variant.stockQuantity || 0) > 0)
-      ? 'https://schema.org/InStock'
-      : 'https://schema.org/OutOfStock',
-    itemCondition: 'https://schema.org/NewCondition'
-  };
-  return {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    '@id': `${url}#product`,
-    name: product.name,
-    description,
-    image: images,
-    sku: variants[0]?.sku || undefined,
-    brand: { '@type': 'Brand', name: BRAND_NAME },
-    category: product.category || product.productType || 'T-Shirts',
-    offers: offer,
-    ...(Number(summary?.totalReviews || 0) > 0 ? {
-      aggregateRating: {
-        '@type': 'AggregateRating',
-        ratingValue: Number(summary.averageRating).toFixed(1),
-        reviewCount: Number(summary.totalReviews)
-      }
-    } : {})
-  };
-}
-
 function shippingGuideParagraphs(settings) {
   const regions = (settings?.shipping?.regions || []).map((region) => {
     const fee = Number(region.feeCents || 0) / 100;
@@ -290,7 +243,7 @@ async function pageDescriptor(pathValue, options = {}) {
   const base = {
     pathname,
     origin,
-    title: siteSeo.title || `${BRAND_NAME} — Premium Philippine Streetwear`,
+    title: siteSeo.title || `${BRAND_NAME} | Premium Filipino Streetwear`,
     description: plainText(siteSeo.description || 'Premium Philippine streetwear with nationwide delivery.'),
     canonical: `${origin}${pathname === '/' ? '/' : pathname}`,
     image: defaultImage,
@@ -310,7 +263,11 @@ async function pageDescriptor(pathValue, options = {}) {
   }
 
   if (pathname === '/') {
-    const collections = visibleCollections(settings);
+    const products = await Promise.resolve(listCatalogProducts());
+    const collections = visibleCollections(settings).filter((collection) => (
+      collection.showOnHomepage !== false &&
+      buildCollectionSeo(collection, products, { origin }).members.length > 0
+    ));
     const heroImage = absoluteUrl(origin, content?.homepageBanners?.[0]?.url) || defaultImage;
     return {
       ...base,
@@ -331,7 +288,7 @@ async function pageDescriptor(pathValue, options = {}) {
     return {
       ...base,
       title: `Shop Premium T-Shirts | ${BRAND_NAME}`,
-      description: `Shop ${BRAND_NAME} oversized, regular-fit, and crop-box 240 GSM cotton shirts with real size availability and nationwide delivery.`,
+      description: `Shop ${BRAND_NAME} oversized, regular-fit, and crop-box shirts with current size availability and nationwide delivery.`,
       canonical: `${origin}/shop`,
       schemas: [breadcrumbSchema(origin, [{ name: 'Home', path: '/' }, { name: 'Shop' }])],
       body: {
@@ -351,30 +308,45 @@ async function pageDescriptor(pathValue, options = {}) {
     ]);
     if (!product) return { ...base, noindex: true, notFound: true, title: `Product not found | ${BRAND_NAME}`, body: { eyebrow: 'Product', heading: 'Product not found', paragraphs: [], links: [{ label: 'Shop current products', path: '/shop' }] } };
     const summary = summaries[product.slug] || { averageRating: 0, totalReviews: 0 };
-    const canonicalPath = productPath(product);
+    const reviewsPublic = Boolean(
+      settings?.reviews?.enabled &&
+      settings?.reviews?.showOnProductPages &&
+      product.reviewSettings?.reviewsEnabled !== false &&
+      product.reviewSettings?.showRatingSummary !== false &&
+      Number(summary.totalReviews || 0) > 0
+    );
+    const publicReviews = reviewsPublic
+      ? (await listPublishedReviews({ reviewType: 'product', productSlug: product.slug, page: 1, pageSize: 5 })).reviews
+      : [];
+    const productSeo = buildProductSeo(product, { origin, brandName: BRAND_NAME });
     const collections = visibleCollections(settings);
     const collection = collections.find((candidate) => productInCollection(product, candidate));
-    const description = plainText(product.seo?.description || product.description || product.productPage?.intro);
-    const image = absoluteUrl(origin, product.images?.[0]?.url) || defaultImage;
-    const breadcrumbs = [{ name: 'Home', path: '/' }];
+    const image = productSeo.openGraphImage || defaultImage;
+    const breadcrumbs = [{ name: 'Home', path: '/' }, { name: 'Shop', path: '/shop' }];
     if (collection) breadcrumbs.push({ name: collection.name, path: collectionPath(collection) });
     breadcrumbs.push({ name: product.name });
     return {
       ...base,
       product,
-      title: plainText(product.seo?.title || `${product.name} | ${BRAND_NAME}`, 120),
-      description,
-      canonical: `${origin}${canonicalPath}`,
+      noindex: !productSeo.indexable,
+      title: productSeo.title,
+      description: productSeo.description,
+      canonical: productSeo.canonical,
       image,
+      openGraphTitle: productSeo.openGraphTitle,
+      openGraphDescription: productSeo.openGraphDescription,
       type: 'product',
-      schemas: [productSchema({ origin, product, summary }), breadcrumbSchema(origin, breadcrumbs)],
+      schemas: [
+        productStructuredData({ product, origin, reviewSummary: summary, publicReviews, reviewsPublic }),
+        breadcrumbSchema(origin, breadcrumbs)
+      ],
       body: {
         eyebrow: collection?.name || product.category || 'Product',
         heading: product.name,
-        paragraphs: [description],
+        paragraphs: [productSeo.schemaDescription],
         priceCents: product.priceCents,
-        image,
-        imageAlt: product.images?.[0]?.altText || product.name,
+        image: productSeo.images[0]?.url || image,
+        imageAlt: productSeo.images[0]?.altText || product.name,
         sizes: (product.variants || []).filter((variant) => Number(variant.stockQuantity || 0) > 0).map((variant) => variant.size),
         links: collection ? [{ label: `Shop ${collection.name}`, path: collectionPath(collection) }] : [{ label: 'Shop all products', path: '/shop' }]
       }
@@ -385,24 +357,25 @@ async function pageDescriptor(pathValue, options = {}) {
     const slug = pathname.slice('/collections/'.length).toLowerCase();
     const collection = visibleCollections(settings).find((candidate) => String(candidate.slug).toLowerCase() === slug);
     if (!collection) return { ...base, noindex: true, notFound: true, title: `Collection not found | ${BRAND_NAME}`, body: { eyebrow: 'Collection', heading: 'Collection unavailable', paragraphs: [], links: [{ label: 'Shop current products', path: '/shop' }] } };
-    const products = (await Promise.resolve(listCatalogProducts())).filter((product) => productInCollection(product, collection));
-    const canonicalPath = collectionPath(collection);
-    const description = plainText(collection.description || `Shop ${collection.name} from ${BRAND_NAME}.`);
-    const image = absoluteUrl(origin, collection.imageUrl) || defaultImage;
+    const allProducts = await Promise.resolve(listCatalogProducts());
+    const collectionSeo = buildCollectionSeo(collection, allProducts, { origin });
+    const products = collectionSeo.members;
+    const image = collectionSeo.image || defaultImage;
     return {
       ...base,
-      title: `${collection.name} | ${BRAND_NAME}`,
-      description,
-      canonical: `${origin}${canonicalPath}`,
+      noindex: !collectionSeo.indexable,
+      title: collectionSeo.title,
+      description: collectionSeo.description,
+      canonical: collectionSeo.canonical,
       image,
       schemas: [
-        breadcrumbSchema(origin, [{ name: 'Home', path: '/' }, { name: collection.name }]),
+        breadcrumbSchema(origin, [{ name: 'Home', path: '/' }, { name: 'Shop', path: '/shop' }, { name: collection.name }]),
         {
           '@context': 'https://schema.org',
           '@type': 'CollectionPage',
           name: collection.name,
-          description,
-          url: `${origin}${canonicalPath}`,
+          description: collectionSeo.description,
+          url: collectionSeo.canonical,
           mainEntity: {
             '@type': 'ItemList',
             itemListElement: products.map((product, index) => ({
@@ -414,7 +387,7 @@ async function pageDescriptor(pathValue, options = {}) {
       body: {
         eyebrow: 'Collection',
         heading: collection.name,
-        paragraphs: [description],
+        paragraphs: [collectionSeo.introText, collectionSeo.supportingText].filter(Boolean),
         image,
         imageAlt: `${collection.name} collection`,
         links: products.map((product) => ({ label: product.name, path: productPath(product) }))
@@ -424,9 +397,22 @@ async function pageDescriptor(pathValue, options = {}) {
 
   const staticPage = STATIC_PAGES[pathname];
   if (staticPage) {
+    const infoPageKey = { '/faq': 'faq', '/shipping-returns': 'shippingReturns', '/terms': 'terms' }[pathname];
+    const infoParagraphs = infoPageKey
+      ? (settings?.website?.infoPages?.[infoPageKey] || []).map((section) => `${section.heading}: ${section.body}`)
+      : [];
     const guideParagraphs = pathname === '/guides/payment-and-shipping'
       ? shippingGuideParagraphs(settings)
-      : (staticPage.paragraphs || []);
+      : pathname === '/contact'
+        ? [settings?.general?.contactEmail && `Email: ${settings.general.contactEmail}`, settings?.general?.contactNumber && `Phone: ${settings.general.contactNumber}`].filter(Boolean)
+        : infoParagraphs.length ? infoParagraphs : (staticPage.paragraphs || []);
+    const contextualLinks = pathname === '/size-chart'
+      ? [{ label: 'Shop current shirts', path: '/shop' }, { label: 'Compare T-shirt fits', path: '/guides/t-shirt-fit-guide' }]
+      : pathname.startsWith('/guides/')
+        ? [{ label: 'Shop current shirts', path: '/shop' }, { label: 'View the size guide', path: '/size-chart' }]
+        : pathname === '/faq'
+          ? [{ label: 'View the size guide', path: '/size-chart' }, { label: 'Shipping and returns', path: '/shipping-returns' }]
+          : [{ label: 'Shop current shirts', path: '/shop' }];
     const schemaType = pathname.startsWith('/guides/') ? 'Article' : 'WebPage';
     return {
       ...base,
@@ -444,7 +430,7 @@ async function pageDescriptor(pathValue, options = {}) {
           publisher: { '@type': 'Organization', name: BRAND_NAME }
         }
       ],
-      body: { eyebrow: staticPage.eyebrow, heading: staticPage.heading, paragraphs: guideParagraphs, links: [] }
+      body: { eyebrow: staticPage.eyebrow, heading: staticPage.heading, paragraphs: guideParagraphs, links: contextualLinks }
     };
   }
 
@@ -461,6 +447,8 @@ async function pageDescriptor(pathValue, options = {}) {
 function renderSeoHead(descriptor, options = {}) {
   const nonce = validNonce(options.nonce);
   const robots = descriptor.noindex ? 'noindex,nofollow' : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1';
+  const socialTitle = descriptor.openGraphTitle || descriptor.title;
+  const socialDescription = descriptor.openGraphDescription || descriptor.description;
   const tags = [
     `<title>${escapeHtml(descriptor.title)}</title>`,
     `<meta name="description" content="${escapeHtml(descriptor.description)}">`,
@@ -468,20 +456,24 @@ function renderSeoHead(descriptor, options = {}) {
     `<link rel="canonical" href="${escapeHtml(descriptor.canonical)}">`,
     `<meta property="og:site_name" content="${BRAND_NAME}">`,
     `<meta property="og:type" content="${escapeHtml(descriptor.type || 'website')}">`,
-    `<meta property="og:title" content="${escapeHtml(descriptor.title)}">`,
-    `<meta property="og:description" content="${escapeHtml(descriptor.description)}">`,
+    `<meta property="og:title" content="${escapeHtml(socialTitle)}">`,
+    `<meta property="og:description" content="${escapeHtml(socialDescription)}">`,
     `<meta property="og:url" content="${escapeHtml(descriptor.canonical)}">`,
     '<meta name="twitter:card" content="summary_large_image">',
-    `<meta name="twitter:title" content="${escapeHtml(descriptor.title)}">`,
-    `<meta name="twitter:description" content="${escapeHtml(descriptor.description)}">`
+    `<meta name="twitter:title" content="${escapeHtml(socialTitle)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(socialDescription)}">`
   ];
   if (descriptor.image) {
     tags.push(`<meta property="og:image" content="${escapeHtml(descriptor.image)}">`);
+    tags.push(`<meta property="og:image:alt" content="${escapeHtml(descriptor.body?.imageAlt || socialTitle)}">`);
     tags.push(`<meta name="twitter:image" content="${escapeHtml(descriptor.image)}">`);
+    tags.push(`<meta name="twitter:image:alt" content="${escapeHtml(descriptor.body?.imageAlt || socialTitle)}">`);
   }
   if (descriptor.product) {
     tags.push(`<meta property="product:price:amount" content="${(Number(descriptor.product.priceCents || 0) / 100).toFixed(2)}">`);
     tags.push('<meta property="product:price:currency" content="PHP">');
+    const inStock = (descriptor.product.variants || []).some((variant) => Number(variant.stockQuantity || 0) > 0);
+    tags.push(`<meta property="product:availability" content="${inStock ? 'in stock' : 'out of stock'}">`);
   }
   const priorityImage = descriptor.body?.image || '';
   if (priorityImage) {
@@ -522,5 +514,6 @@ module.exports = {
   responsiveShopifySrcSet,
   renderSeoBody,
   renderSeoHead,
-  storefrontOrigin
+  storefrontOrigin,
+  visibleCollections
 };

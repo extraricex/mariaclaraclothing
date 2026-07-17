@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart, getCart, openCartDrawer } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
@@ -16,12 +16,17 @@ import { productPath } from '../lib/productUrl.js';
 import useModalFocus from '../hooks/useModalFocus.js';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { responsiveImageAttributes } from '../lib/responsiveImage.js';
+import SEO from '../components/SEO.jsx';
+import { productSeoDescriptor } from '../lib/seo.js';
+import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
 
 const ProductReviews = lazy(() => import('../components/ProductReviews.jsx'));
 
 export default function Product() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedSize = String(searchParams.get('size') || '').trim().toLowerCase();
   const settings = useStorefrontSettings();
   const [product, setProduct] = useState(null);
   const [error, setError] = useState('');
@@ -54,6 +59,7 @@ export default function Product() {
     setActiveImage(0);
     setActiveDetailTab(0);
     setQuantity(1);
+    setVariantId('');
     setAdded(false);
     setStockMessage('');
     fetchProduct(slug)
@@ -62,123 +68,31 @@ export default function Product() {
         if (body.product.publicHandle && body.product.publicHandle !== slug) {
           navigate(productPath(body.product), { replace: true });
         }
+        const requestedVariant = requestedSize
+          ? body.product.variants.find((variant) => String(variant.size || '').trim().toLowerCase() === requestedSize)
+          : null;
         const firstInStock = body.product.variants.find((variant) => Number(variant.stockQuantity) > 0);
-        setVariantId(firstInStock?.id || '');
+        setVariantId(requestedVariant?.id || firstInStock?.id || body.product.variants[0]?.id || '');
       })
       .catch((err) => setError(err.message));
     fetchProducts()
       .then((body) => setRecommendations(body.products || []))
       .catch(() => setRecommendations([]));
-  }, [slug, navigate]);
-
-  useEffect(() => {
-    if (!product) return undefined;
-    const previousTitle = document.title;
-    const metaChanges = [];
-    const setMeta = (attribute, key, value) => {
-      let element = document.head.querySelector(`meta[${attribute}="${key}"]`);
-      const created = !element;
-      const previous = element?.getAttribute('content') || '';
-      if (!element) {
-        element = document.createElement('meta');
-        element.setAttribute(attribute, key);
-        document.head.appendChild(element);
-      }
-      element.setAttribute('content', String(value || ''));
-      metaChanges.push({ element, created, previous });
-    };
-    let canonical = document.querySelector('link[rel="canonical"]');
-    const createdCanonical = !canonical;
-    const previousCanonical = canonical?.getAttribute('href') || '';
-    if (!canonical) {
-      canonical = document.createElement('link');
-      canonical.setAttribute('rel', 'canonical');
-      document.head.appendChild(canonical);
-    }
-    const canonicalUrl = `${window.location.origin}${productPath(product)}`;
-    const descriptionDocument = new DOMParser().parseFromString(
-      String(product.seo?.description || product.description || ''),
-      'text/html'
-    );
-    const description = String(descriptionDocument.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300);
-    const imageUrl = product.images?.[0]?.url || '';
-    const absoluteImageUrl = imageUrl ? new URL(imageUrl, window.location.origin).href : '';
-    const seoTitle = String(product.seo?.title || '').trim() || `${product.name} | Maria Clara Clothing`;
-    document.title = seoTitle;
-    canonical.setAttribute('href', canonicalUrl);
-    setMeta('name', 'description', description);
-    setMeta('property', 'og:type', 'product');
-    setMeta('property', 'og:title', seoTitle);
-    setMeta('property', 'og:description', description);
-    setMeta('property', 'og:url', canonicalUrl);
-    if (absoluteImageUrl) setMeta('property', 'og:image', absoluteImageUrl);
-    setMeta('name', 'twitter:card', absoluteImageUrl ? 'summary_large_image' : 'summary');
-    setMeta('name', 'twitter:title', seoTitle);
-    setMeta('name', 'twitter:description', description);
-    if (absoluteImageUrl) setMeta('name', 'twitter:image', absoluteImageUrl);
-    setMeta('property', 'product:price:amount', (Number(product.priceCents || 0) / 100).toFixed(2));
-    setMeta('property', 'product:price:currency', 'PHP');
-
-    const productSchema = {
-      '@context': 'https://schema.org',
-      '@type': 'Product',
-      name: product.name,
-      description,
-      image: (product.images || []).map((item) => item.url).filter(Boolean),
-      sku: product.variants?.[0]?.sku || undefined,
-      brand: { '@type': 'Brand', name: 'Maria Clara Clothing' },
-      offers: {
-        '@type': 'Offer',
-        url: canonicalUrl,
-        priceCurrency: 'PHP',
-        price: (Number(product.priceCents || 0) / 100).toFixed(2),
-        availability: product.variants?.some((variant) => Number(variant.stockQuantity || 0) > 0)
-          ? 'https://schema.org/InStock'
-          : 'https://schema.org/OutOfStock'
-      },
-      ...(Number(product.reviewSummary?.totalReviews || 0) > 0 ? {
-        aggregateRating: {
-          '@type': 'AggregateRating',
-          ratingValue: Number(product.reviewSummary.averageRating).toFixed(1),
-          reviewCount: Number(product.reviewSummary.totalReviews)
-        }
-      } : {})
-    };
-    const serverSchema = document.head.querySelector('script[data-mcc-schema="Product"]');
-    const schema = serverSchema || document.createElement('script');
-    const createdSchema = !serverSchema;
-    const previousSchema = serverSchema?.textContent || '';
-    if (createdSchema) {
-      schema.type = 'application/ld+json';
-      schema.dataset.mccSchema = 'Product';
-      document.head.appendChild(schema);
-    }
-    schema.textContent = JSON.stringify(productSchema);
-    return () => {
-      document.title = previousTitle;
-      if (createdCanonical) canonical.remove();
-      else canonical.setAttribute('href', previousCanonical);
-      for (const change of metaChanges) {
-        if (change.created) change.element.remove();
-        else change.element.setAttribute('content', change.previous);
-      }
-      if (createdSchema) schema.remove();
-      else schema.textContent = previousSchema;
-    };
-  }, [product]);
+  }, [slug, navigate, requestedSize]);
 
   useEffect(() => {
     if (!product) return;
     rememberRecentlyViewed(product);
-    const firstInStock = product.variants?.find((candidate) => Number(candidate.stockQuantity) > 0);
+    const selectedVariant = product.variants?.find((candidate) => candidate.id === variantId);
+    if (!selectedVariant) return;
     trackFacebookViewContent({
       ...product,
-      variantId: firstInStock?.id || '',
-      externalPosVariantId: firstInStock?.externalPosVariantId || '',
-      size: firstInStock?.size || '',
-      priceCents: firstInStock?.priceCents ?? product.priceCents
+      variantId: selectedVariant.id || '',
+      externalPosVariantId: selectedVariant.externalPosVariantId || '',
+      size: selectedVariant.size || '',
+      priceCents: selectedVariant.priceCents ?? product.priceCents
     }, { path: productPath(product) });
-  }, [product?.id]);
+  }, [product, variantId]);
 
   const descriptionHtml = useMemo(
     () => sanitizeRichHtml(product?.productPage?.intro || product?.description || ''),
@@ -193,6 +107,17 @@ export default function Product() {
       return true;
     });
   }, [product?.images]);
+  const parentCollection = useMemo(() => {
+    if (!product) return null;
+    const assigned = (product.collections || []).map((name) => String(name || '').trim().toLowerCase());
+    const definitions = normalizeCollectionDefinitions(settings.collectionDefinitions || []);
+    for (const assignedName of assigned) {
+      const match = definitions.find((collection) => collection.visible && [collection.name, ...(collection.aliases || [])]
+        .some((name) => String(name || '').trim().toLowerCase() === assignedName));
+      if (match) return match;
+    }
+    return null;
+  }, [product, settings.collectionDefinitions]);
 
   useEffect(() => {
     if (activeImage < productImages.length) return;
@@ -220,7 +145,8 @@ export default function Product() {
     return <div className="mx-auto max-w-7xl px-5 py-24 text-sm text-clay">Loading…</div>;
   }
 
-  const soldOut = product.merchandisingStatus === 'sold_out';
+  const soldOut = String(product.merchandisingStatus || '').toLowerCase() === 'sold_out' ||
+    !(product.variants || []).some((candidate) => Number(candidate.stockQuantity || 0) > 0);
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
   const freeShippingEnabled = Boolean(settings.shipping?.freeShippingEnabled);
   const freeShippingMinimumItems = Math.max(1, Number(settings.shipping?.freeShippingMinimumItems || 2));
@@ -254,7 +180,7 @@ export default function Product() {
     .filter((section) => {
       const sectionTitle = String(section.title || '').trim().toLowerCase();
       if (productPage.detailsText && sectionTitle === 'product details') return false;
-      if (productPage.shippingText && sectionTitle === 'shipping') return false;
+      if (sectionTitle === 'shipping') return false;
       if (sizeChartRows.length && sectionTitle === 'size chart') return false;
       if (productPage.shippingText && sectionTitle !== 'shipping') return true;
       if (sizeChartRows.length && sectionTitle !== 'size chart') return true;
@@ -275,11 +201,18 @@ export default function Product() {
     {
       title: 'Shipping',
       type: 'text',
-      body: productPage.shippingText || freeShippingProductCopy
+      body: freeShippingProductCopy
     }
   ].filter(Boolean);
   const activeTab = detailTabs[activeDetailTab] || detailTabs[0];
   const productCollections = new Set((product.collections || []).map((name) => String(name).trim().toLowerCase()));
+  const normalizedCandidateFact = (candidate, key) => {
+    const value = candidate.metafields?.[key];
+    return String(Array.isArray(value) ? value[0] || '' : value || '').trim().toLowerCase();
+  };
+  const currentFit = normalizedCandidateFact(product, 'fit');
+  const currentColor = normalizedCandidateFact(product, 'color');
+  const currentProductType = String(product.productType || product.category || '').trim().toLowerCase();
   const recommendedProducts = recommendations
     .filter((candidate) => candidate.id !== product.id)
     .filter((candidate) => String(candidate.merchandisingStatus || '').toLowerCase() !== 'sold_out')
@@ -287,9 +220,13 @@ export default function Product() {
     .map((candidate, index) => ({
       candidate,
       index,
-      related: (candidate.collections || []).some((name) => productCollections.has(String(name).trim().toLowerCase()))
+      score:
+        ((candidate.collections || []).some((name) => productCollections.has(String(name).trim().toLowerCase())) ? 8 : 0) +
+        (currentFit && normalizedCandidateFact(candidate, 'fit') === currentFit ? 4 : 0) +
+        (currentProductType && String(candidate.productType || candidate.category || '').trim().toLowerCase() === currentProductType ? 2 : 0) +
+        (currentColor && normalizedCandidateFact(candidate, 'color') === currentColor ? 1 : 0)
     }))
-    .sort((left, right) => Number(right.related) - Number(left.related) || left.index - right.index)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
     .slice(0, 4);
 
   function displaySectionTitle(title) {
@@ -408,9 +345,17 @@ export default function Product() {
 
   return (
     <div className="customer-page mx-auto max-w-7xl px-5 py-10 lg:px-8">
+      <SEO {...productSeoDescriptor(product, {
+        collection: parentCollection,
+        includeReviews: settings.reviews?.enabled !== false &&
+          settings.reviews?.showOnProductPages !== false &&
+          product.reviewSettings?.reviewsEnabled !== false &&
+          product.reviewSettings?.showRatingSummary !== false
+      })} />
       <Breadcrumbs items={[
         { label: 'Home', to: '/' },
         { label: 'Shop', to: '/shop' },
+        ...(parentCollection ? [{ label: parentCollection.name, to: `/collections/${encodeURIComponent(parentCollection.slug)}` }] : []),
         { label: product.name }
       ]} />
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
@@ -431,10 +376,13 @@ export default function Product() {
               <img
                 key={image.url}
                 src={image.url}
-                alt={image.altText || `${product.name}, image ${activeImage + 1}`}
+                alt={(activeImage === 0 ? product.seo?.imageAltText : '') || image.altText || `${product.name}, image ${activeImage + 1}`}
                 className={`product-photo-blend h-full w-full object-contain transition-opacity duration-300 ${mainImageLoaded ? 'opacity-100' : 'opacity-0'}`}
                 fetchPriority={activeImage === 0 ? 'high' : 'auto'}
+                loading={activeImage === 0 ? 'eager' : 'lazy'}
                 decoding="async"
+                width="1200"
+                height="1500"
                 {...responsiveImageAttributes(image.url, {
                   sizes: '(min-width: 1024px) 55vw, 100vw',
                   shopifyWidths: [480, 960, 1600]
@@ -489,8 +437,10 @@ export default function Product() {
                     src={thumb.url}
                     alt=""
                     className="product-photo-blend h-full w-full object-cover"
-                    loading={index === 0 ? 'eager' : 'lazy'}
+                    loading="lazy"
                     decoding="async"
+                    width="160"
+                    height="200"
                     {...responsiveImageAttributes(thumb.url, {
                       sizes: '64px',
                       shopifyWidths: [128, 256]
@@ -605,6 +555,16 @@ export default function Product() {
               Add {freeShippingMinimumItems} or more item{freeShippingMinimumItems === 1 ? '' : 's'} and get free shipping.
             </p>
           )}
+
+          <nav className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold uppercase tracking-[0.1em] text-accent" aria-label="Product help and collection links">
+            {parentCollection && (
+              <Link to={`/collections/${encodeURIComponent(parentCollection.slug)}`} className="underline hover:text-accent-deep">
+                More in {parentCollection.name}
+              </Link>
+            )}
+            <Link to="/size-chart" className="underline hover:text-accent-deep">Full size guide</Link>
+            <Link to="/shipping-returns" className="underline hover:text-accent-deep">Shipping & returns</Link>
+          </nav>
 
           {activeTab && (
             <div className="mt-10 border-t border-line">

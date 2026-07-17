@@ -6,8 +6,8 @@ import { createCheckoutQuote, fetchProducts, fetchSiteContent } from '../lib/api
 import { formatMoney } from '../lib/money.js';
 import { productPath } from '../lib/productUrl.js';
 import { getMetaTrackingConsent, setMetaTrackingConsent } from '../lib/metaPixel.js';
-import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
-import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
+import { loadStorefrontSettings } from '../lib/storeSettings.js';
+import { collectionMembers, normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
 import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storefrontSupport.js';
 import useModalFocus from '../hooks/useModalFocus.js';
 import PageTransition from './PageTransition.jsx';
@@ -315,6 +315,7 @@ export default function Shell() {
   const [storeInfo, setStoreInfo] = useState(null);
   const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
   const [recommendation, setRecommendation] = useState(null);
+  const [catalogProducts, setCatalogProducts] = useState([]);
   const [mobileOffersOpen, setMobileOffersOpen] = useState(false);
   const [recommendationDismissed, setRecommendationDismissed] = useState(() => {
     try {
@@ -393,7 +394,11 @@ export default function Shell() {
     let cancelled = false;
     fetchProducts()
       .then((body) => {
-        if (!cancelled) setRecommendation(selectNewArrivalRecommendation(body.products));
+        if (!cancelled) {
+          const products = body.products || [];
+          setCatalogProducts(products);
+          setRecommendation(selectNewArrivalRecommendation(products));
+        }
       })
       .catch(() => {});
     return () => {
@@ -415,10 +420,6 @@ export default function Shell() {
       document.removeEventListener('pointerdown', closeMobileOffers);
     };
   }, [mobileOffersOpen]);
-
-  useEffect(() => {
-    applySeoTags(storeInfo?.seo);
-  }, [storeInfo]);
 
   useEffect(() => {
     function openDrawer() {
@@ -504,7 +505,8 @@ export default function Shell() {
   const facebookUrl = storeInfo?.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
   const onlinePaymentEnabled = storeInfo?.paymentMethods?.some((method) => method.id === 'paymongo');
   const shopCollections = normalizeCollectionDefinitions(storeInfo?.collectionDefinitions || [])
-    .filter((collection) => collection.visible && collection.showOnShop);
+    .filter((collection) => collection.visible && collection.showOnShop)
+    .filter((collection) => collectionMembers(catalogProducts, collection).length > 0);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -683,7 +685,7 @@ export default function Shell() {
             <div>
               <p className="eyebrow text-paper/60">Shop</p>
               <ul className="mt-3 space-y-2 text-sm text-paper/80">
-                <li><Link to="/" className="text-action hover:text-accent">All products</Link></li>
+                <li><Link to="/shop" className="text-action hover:text-accent">All products</Link></li>
                 {shopCollections.map((collection) => (
                   <li key={collection.slug}><Link to={`/collections/${collection.slug}`} className="text-action hover:text-accent">{collection.name}</Link></li>
                 ))}
@@ -705,7 +707,7 @@ export default function Shell() {
             <div>
               <p className="eyebrow text-paper/60">Product details</p>
               <p className="mt-3 max-w-xs text-sm text-paper/80">
-                Premium 240 GSM cotton, cut oversized. {onlinePaymentEnabled
+                Explore current oversized, regular-fit, and crop-box shirts. Product pages show confirmed material, fabric weight, measurements, price, and stock. {onlinePaymentEnabled
                   ? 'Choose Cash on Delivery or secure online checkout through PayMongo.'
                   : 'Cash on delivery is available nationwide, with every order reviewed before shipment.'}
               </p>

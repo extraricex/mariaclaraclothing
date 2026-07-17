@@ -17,12 +17,18 @@ test('unknown storefront and product routes render a noindex not-found page', as
   assert.match(app, /<Route path="\*" element=\{<NotFound \/>\} \/>/);
   assert.doesNotMatch(app, /path="\*" element=\{<MaintenanceGate><Shell/);
   assert.match(notFound, /Page not found/);
-  assert.match(notFound, /noindex, nofollow/);
+  assert.match(notFound, /noindex/);
   assert.match(notFound, /Back to shop/);
   assert.match(product, /title="Product not found"/);
   assert.match(nginx, /error_page 404 =404 \/index\.html/);
   assert.match(nginx, /try_files \$uri \$uri\/ =404/);
   assert.match(nginx, /proxy_pass \$api_origin\/api\/products\/\$storefront_product_slug\/route/);
+  assert.match(nginx, /location ~ \^\/product[\s\S]*error_page 404 =404 \/index\.html\?seo_path=\$uri/);
+  assert.match(nginx, /proxy_pass \$api_origin\/api\/products\/\$legacy_product_slug\/route/);
+  assert.match(nginx, /location ~ \^\/products\/oranges-mcc-box-tee\/\?\$ \{\s*return 301 \/product\/mariaclara-orange-crop-box-240-gsm-shirt;/);
+  assert.match(nginx, /proxy_pass \$api_origin\/api\/collections\/\$storefront_collection_slug\/route/);
+  assert.match(nginx, /location = \/pages\/terms-of-use[\s\S]*return 301 \/terms/);
+  assert.match(nginx, /location = \/collections\/all[\s\S]*return 301 \/shop/);
   assert.match(nginx, /error_page 404 =404 \/index\.html/);
 });
 
@@ -42,7 +48,7 @@ test('product links use public handles while carts retain internal product ident
   assert.match(productCard, /to=\{productPath\(product\)\}/);
   assert.match(productPage, /slug: product\.slug/);
   assert.match(productPage, /publicHandle: product\.publicHandle/);
-  assert.match(productPage, /link\[rel="canonical"\]/);
+  assert.match(productPage, /productSeoDescriptor/);
   assert.match(editor, /Public handle/);
   assert.match(editor, /Product ID/);
   assert.match(editor, /Internal slug/);

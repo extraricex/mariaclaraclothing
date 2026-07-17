@@ -201,7 +201,8 @@ export default function Analytics() {
         </Panel>
       )}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Link to="/admin/analytics/meta-reconciliation" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Reconcile website, Pancake, and Meta orders →</Link>
         <Link to="/admin/pancake" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Review Pancake POS health →</Link>
         <Link to="/admin/payments" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Review PayMongo operations →</Link>
         <Link to="/admin/settings" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Review Meta and store settings →</Link>

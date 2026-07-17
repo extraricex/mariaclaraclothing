@@ -12,6 +12,8 @@ import {
   facebookMoneyValue,
   facebookPurchaseValue,
   initializeFacebookMetaPixel,
+  isFacebookAdminPath,
+  isFacebookPurchaseSensitivePath,
   META_CURRENCY,
   getMetaTrackingConsent,
   metaPixelConfig,
@@ -103,7 +105,7 @@ test('Pixel initializes once on customer paths and never on admin paths', () => 
     documentRef,
     enabled: true,
     pixelId: '595813035761213',
-    path: '/admin/orders'
+    path: '/Admin/orders'
   }), false);
   assert.equal(adminWindow.fbq, undefined);
 
@@ -174,21 +176,24 @@ test('admin runtime setting can enable immediate Pixel events without consent', 
   ]);
 });
 
-test('React consumes the HTML bootstrap PageView without sending a duplicate', () => {
+test('React owns the initial PageView and emits one browser event with an event ID', () => {
   configureFacebookMetaPixel({ enabled: true, pixelId: '595813035761213', requireConsent: false });
   const calls = [];
   const windowRef = {
-    fbq: (...args) => calls.push(args),
-    __mariaClaraInitialMetaPageViewPath: '/bootstrap-test'
+    fbq: (...args) => calls.push(args)
   };
 
   assert.equal(trackFacebookPageView('/bootstrap-test', { windowRef, path: '/bootstrap-test' }), true);
   assert.equal(trackFacebookPageView('/bootstrap-test', { windowRef, path: '/bootstrap-test' }), false);
-  assert.equal(calls.length, 0);
-  assert.equal(windowRef.__mariaClaraInitialMetaPageViewPath, undefined);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'track');
+  assert.equal(calls[0][1], 'PageView');
+  assert.match(calls[0][3].eventID, /^pageview_/);
 
   assert.equal(trackFacebookPageView('/bootstrap-next', { windowRef, path: '/bootstrap-next' }), true);
-  assert.deepEqual(calls, [['track', 'PageView', {}]]);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1][1], 'PageView');
+  assert.notEqual(calls[1][3].eventID, calls[0][3].eventID);
 });
 
 test('SPA page views skip repeated and admin paths', () => {
@@ -198,6 +203,104 @@ test('SPA page views skip repeated and admin paths', () => {
   assert.equal(shouldTrackFacebookPath('/', '/admin'), false);
   assert.equal(shouldTrackFacebookPath('/', '/admin/login'), false);
   assert.equal(shouldTrackFacebookPath('/', '/admin/orders/MCC-1'), false);
+  assert.equal(shouldTrackFacebookPath('/', '/ADMIN/orders/MCC-1'), false);
+  assert.equal(isFacebookAdminPath('/administrator'), false);
+});
+
+test('checkout review and thank-you routes allow normal events while Purchase remains explicitly gated', () => {
+  assert.equal(isFacebookPurchaseSensitivePath('/checkout/review'), true);
+  assert.equal(isFacebookPurchaseSensitivePath('/thank-you?order=MCC-1'), true);
+  assert.equal(isFacebookPurchaseSensitivePath('/Checkout/Review'), true);
+  assert.equal(isFacebookPurchaseSensitivePath('/THANK-YOU/?order=MCC-1'), true);
+  assert.equal(isFacebookPurchaseSensitivePath('/checkout'), false);
+  assert.equal(isFacebookPurchaseSensitivePath('/product/example'), false);
+
+  configureFacebookMetaPixel({ enabled: true, pixelId: '595813035761213', requireConsent: false });
+  const inserted = [];
+  const documentRef = {
+    createElement: () => ({}),
+    getElementsByTagName: () => [{ parentNode: { insertBefore: (node) => inserted.push(node) } }]
+  };
+  const windowRef = { location: { pathname: '/checkout/review' } };
+  assert.equal(initializeFacebookMetaPixel({ windowRef, documentRef, path: '/checkout/review' }), true);
+  assert.equal(typeof windowRef.fbq, 'function');
+  assert.equal(inserted.length, 1);
+  assert.equal(trackFacebookEvent('PageView', {}, { windowRef, path: '/checkout/review' }), true);
+  assert.equal(trackFacebookEvent('Purchase', { value: 649, currency: 'PHP' }, {
+    windowRef, path: '/checkout/review', eventId: 'purchase_gated'
+  }), false);
+
+  windowRef.location.pathname = '/shop';
+  assert.equal(initializeFacebookMetaPixel({ windowRef, documentRef, path: '/shop' }), true);
+  assert.equal(inserted.length, 1);
+  assert.equal(windowRef.__mariaClaraFacebookConsent, 'grant');
+
+  windowRef.location.pathname = '/thank-you';
+  assert.equal(initializeFacebookMetaPixel({ windowRef, documentRef, path: '/thank-you?order=MCC-1' }), true);
+  assert.equal(windowRef.__mariaClaraFacebookConsent, 'grant');
+  assert.equal(trackFacebookEvent('PageView', {}, { windowRef, path: '/thank-you?order=MCC-1' }), true);
+
+  windowRef.location.pathname = '/product/example';
+  assert.equal(initializeFacebookMetaPixel({ windowRef, documentRef, path: '/product/example' }), true);
+  assert.equal(windowRef.__mariaClaraFacebookConsent, 'grant');
+  assert.equal(trackFacebookEvent('PageView', {}, { windowRef, path: '/product/example' }), true);
+});
+
+test('explicit browser Purchase opt-in permits the canonical ThankYou dispatch', () => {
+  configureFacebookMetaPixel({
+    enabled: true,
+    pixelId: '595813035761213',
+    requireConsent: false,
+    browserPurchaseEnabled: true
+  });
+  const inserted = [];
+  const documentRef = {
+    createElement: () => ({}),
+    getElementsByTagName: () => [{ parentNode: { insertBefore: (node) => inserted.push(node) } }]
+  };
+  const windowRef = { location: { pathname: '/THANK-YOU' } };
+  assert.equal(initializeFacebookMetaPixel({ windowRef, documentRef, path: '/THANK-YOU?order=MCC-OPT-IN' }), true);
+  assert.equal(inserted.length, 1);
+
+  const purchase = {
+    eventId: 'purchase_MCC-OPT-IN',
+    payload: {
+      content_ids: ['V-OPT-IN'], content_type: 'product',
+      contents: [{ id: 'V-OPT-IN', quantity: 1, item_price: 649 }],
+      currency: 'PHP', num_items: 1, order_id: 'MCC-OPT-IN', value: 649
+    }
+  };
+  assert.equal(trackFacebookPurchasePayload(purchase, {
+    windowRef,
+    storage: { getItem: () => null, setItem: () => {} },
+    path: '/THANK-YOU?order=MCC-OPT-IN'
+  }), true);
+  const purchaseCall = windowRef.fbq.queue.find((call) => call[0] === 'track' && call[1] === 'Purchase');
+  assert.deepEqual(Array.from(purchaseCall), [
+    'track', 'Purchase', purchase.payload, { eventID: purchase.eventId }
+  ]);
+});
+
+test('an uninitialized Pixel never reports a queued Purchase without consent', () => {
+  configureFacebookMetaPixel({
+    enabled: true,
+    pixelId: '595813035761213',
+    requireConsent: true,
+    browserPurchaseEnabled: true
+  });
+  const purchase = {
+    eventId: 'purchase_MCC-NO-CONSENT',
+    payload: {
+      content_ids: ['V-1'], content_type: 'product',
+      contents: [{ id: 'V-1', quantity: 1, item_price: 649 }],
+      currency: 'PHP', num_items: 1, order_id: 'MCC-NO-CONSENT', value: 649
+    }
+  };
+  assert.equal(trackFacebookPurchasePayload(purchase, {
+    windowRef: { location: { pathname: '/thank-you' } },
+    storage: { getItem: () => null, setItem: () => {} },
+    path: '/thank-you'
+  }), false);
 });
 
 test('ViewContent uses the product ID and PHP price', () => {
@@ -288,7 +391,7 @@ test('AddPaymentInfo includes the selected method and dispatches once per event 
   };
   const calls = [];
   const windowRef = { fbq: (...args) => calls.push(args) };
-  const options = { windowRef, storage, path: '/checkout/review' };
+  const options = { windowRef, storage, path: '/checkout' };
   assert.equal(trackFacebookAddPaymentInfo([item], { totalCents: 89900 }, 'paymongo', 'payment:1', options), true);
   assert.equal(trackFacebookAddPaymentInfo([item], { totalCents: 89900 }, 'paymongo', 'payment:1', options), false);
   assert.equal(calls.length, 1);
@@ -307,8 +410,9 @@ test('Purchase dispatches once with the server event ID', () => {
   const order = { orderNumber: 'MCC-1', totalCents: 79900 };
   const items = [{ variantId: 'V-1', quantity: 1, unitPriceCents: 79900 }];
 
-  assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-1', { windowRef, storage, path: '/checkout', consent: true }), true);
-  assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-1', { windowRef, storage, path: '/checkout', consent: true }), false);
+  const options = { windowRef, storage, path: '/checkout', consent: true, browserPurchaseEnabled: true };
+  assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-1', options), true);
+  assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-1', options), false);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][3], { eventID: 'purchase_MCC-1' });
 });
@@ -328,7 +432,10 @@ test('server-claimed browser Purchase payload stays numeric and dispatches once'
       currency: 'PHP', num_items: 2, order_id: 'MCC-CLAIMED', value: 1298
     }
   };
-  const options = { windowRef: { fbq: (...args) => calls.push(args) }, storage, path: '/thank-you' };
+  const options = {
+    windowRef: { fbq: (...args) => calls.push(args) }, storage,
+    path: '/pixel-dedup-test', browserPurchaseEnabled: true
+  };
   assert.equal(trackFacebookPurchasePayload(purchase, options), true);
   assert.equal(wasFacebookPurchaseTracked(purchase.eventId, storage), true);
   assert.equal(trackFacebookPurchasePayload(purchase, options), false);
@@ -357,20 +464,20 @@ test('Purchase remains safe when browser storage is unavailable and rejects inva
     { sku: 'SKU-BAD-PRICE', quantity: 1, unitPriceCents: 'PHP 10' }
   ];
   assert.doesNotThrow(() => trackFacebookPurchase(order, items, 'purchase_MCC-STORAGE', {
-    windowRef, storage, path: '/thank-you', consent: true
+    windowRef, storage, path: '/pixel-dedup-test', consent: true, browserPurchaseEnabled: true
   }));
   assert.equal(trackFacebookPurchase(order, items, 'purchase_MCC-STORAGE', {
-    windowRef, storage, path: '/thank-you', consent: true
+    windowRef, storage, path: '/pixel-dedup-test', consent: true, browserPurchaseEnabled: true
   }), false);
   assert.equal(calls.length, 0);
 
   const validOrder = { orderNumber: 'MCC-STORAGE-VALID', totalCents: 129800 };
   const validItems = [{ sku: 'SKU-VALID', quantity: 2, unitPriceCents: 64900 }];
   assert.equal(trackFacebookPurchase(validOrder, validItems, 'purchase_MCC-STORAGE-VALID', {
-    windowRef, storage, path: '/thank-you', consent: true
+    windowRef, storage, path: '/pixel-dedup-test', consent: true, browserPurchaseEnabled: true
   }), true);
   assert.equal(trackFacebookPurchase(validOrder, validItems, 'purchase_MCC-STORAGE-VALID', {
-    windowRef, storage, path: '/thank-you', consent: true
+    windowRef, storage, path: '/pixel-dedup-test', consent: true, browserPurchaseEnabled: true
   }), false);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0][2].content_ids, ['SKU-VALID']);

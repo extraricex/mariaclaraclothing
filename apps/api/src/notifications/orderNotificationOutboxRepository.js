@@ -13,10 +13,14 @@ async function enqueueMany(orderNumber, eventName, notifications, options = {}) 
     const rows = [];
     for (const item of notifications) {
       const result = await db.query(
-        `INSERT INTO order_notification_outbox (id, order_number, event_name, channel, recipient, payload, status)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)
-         ON CONFLICT (order_number,event_name,channel) DO NOTHING RETURNING *`,
-        [crypto.randomUUID(), orderNumber, eventName, item.channel, item.recipient, JSON.stringify(item.payload), item.status]
+        `INSERT INTO order_notification_outbox (
+           id, order_number, event_name, channel, recipient, payload, status, last_error
+         ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)
+         ON CONFLICT (order_number,event_name,channel,recipient) DO NOTHING RETURNING *`,
+        [
+          crypto.randomUUID(), orderNumber, eventName, item.channel, item.recipient,
+          JSON.stringify(item.payload), item.status, String(item.lastError || '').slice(0, 1000)
+        ]
       );
       if (result.rows[0]) rows.push(fromRow(result.rows[0]));
     }
@@ -25,31 +29,42 @@ async function enqueueMany(orderNumber, eventName, notifications, options = {}) 
   const store = await readStore();
   const created = [];
   for (const item of notifications) {
-    if (store.some((row) => row.orderNumber === orderNumber && row.eventName === eventName && row.channel === item.channel)) continue;
+    if (store.some((row) => row.orderNumber === orderNumber && row.eventName === eventName
+      && row.channel === item.channel && row.recipient === item.recipient)) continue;
     const now = new Date().toISOString();
-    const row = { id: crypto.randomUUID(), orderNumber, eventName, channel: item.channel, recipient: item.recipient, payload: item.payload, status: item.status, attemptCount: 0, nextAttemptAt: now, lockedAt: '', sentAt: '', providerMessageId: '', lastError: '', createdAt: now, updatedAt: now };
+    const row = { id: crypto.randomUUID(), orderNumber, eventName, channel: item.channel, recipient: item.recipient, payload: item.payload, status: item.status, attemptCount: 0, nextAttemptAt: now, lockedAt: '', sentAt: '', providerMessageId: '', lastError: String(item.lastError || '').slice(0, 1000), createdAt: now, updatedAt: now };
     store.push(row); created.push(row);
   }
   await writeStore(store);
   return created;
 }
 
-async function claimFailedForManualResend(client, { orderNumber, eventName, channel = 'email' }) {
+async function claimFailedForManualResend(client, { orderNumber, eventName, channel = 'email', recipient = '' }) {
   if (hasDatabaseUrl()) {
     const db = client || { query };
     const result = await db.query(
-      `UPDATE order_notification_outbox
+      `WITH candidate AS (
+         SELECT id FROM order_notification_outbox
+          WHERE order_number=$1 AND event_name=$2 AND channel=$3 AND status='failed'
+            AND ($4='' OR recipient=$4)
+          ORDER BY created_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+       )
+       UPDATE order_notification_outbox AS notification
           SET status='sending', locked_at=now(), attempt_count=attempt_count+1,
               last_error='', updated_at=now()
-        WHERE order_number=$1 AND event_name=$2 AND channel=$3 AND status='failed'
-        RETURNING *`,
-      [orderNumber, eventName, channel]
+         FROM candidate
+        WHERE notification.id=candidate.id
+        RETURNING notification.*`,
+      [orderNumber, eventName, channel, recipient]
     );
     return result.rows[0] ? fromRow(result.rows[0]) : null;
   }
   const store = await readStore();
   const row = store.find((item) => item.orderNumber === orderNumber
-    && item.eventName === eventName && item.channel === channel && item.status === 'failed');
+    && item.eventName === eventName && item.channel === channel && item.status === 'failed'
+    && (!recipient || item.recipient === recipient));
   if (!row) return null;
   row.status = 'sending';
   row.lockedAt = new Date().toISOString();
@@ -68,14 +83,59 @@ async function listForOrder(orderNumber) {
   return (await readStore()).filter((row) => row.orderNumber === orderNumber).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-async function claimDue(client, { now = new Date(), limit = 10 } = {}) {
+async function summarizeForOrderEvent(orderNumber, eventName) {
+  const rows = (await listForOrder(orderNumber)).filter((row) => row.eventName === eventName && row.channel === 'email');
+  const sent = rows.filter((row) => row.status === 'sent').length;
+  const active = rows.filter((row) => ['pending', 'retrying', 'sending'].includes(row.status)).length;
+  const failed = rows.filter((row) => row.status === 'failed').length;
+  const skipped = rows.filter((row) => ['skipped', 'cancelled'].includes(row.status)).length;
+  return {
+    total: rows.length,
+    sent,
+    active,
+    failed,
+    skipped,
+    complete: rows.length > 0 && sent + skipped === rows.length,
+    rows
+  };
+}
+
+async function requeueFailedForOrder(orderNumber, eventName, { delayed = false } = {}) {
   if (hasDatabaseUrl()) {
-    const db = client || { query };
-    const result = await db.query(`WITH due AS (SELECT id FROM order_notification_outbox WHERE status='pending' AND next_attempt_at <= $1 ORDER BY next_attempt_at,created_at FOR UPDATE SKIP LOCKED LIMIT $2) UPDATE order_notification_outbox n SET status='sending',locked_at=$1,attempt_count=attempt_count+1,updated_at=$1 FROM due WHERE n.id=due.id RETURNING n.*`, [now, limit]);
+    const result = await query(
+      `UPDATE order_notification_outbox
+          SET status='retrying', next_attempt_at=now(), locked_at=NULL,
+              payload=jsonb_set(payload, '{delayed}', to_jsonb($3::boolean), true),
+              updated_at=now()
+        WHERE order_number=$1 AND event_name=$2 AND channel='email' AND status='failed'
+        RETURNING *`,
+      [orderNumber, eventName, Boolean(delayed)]
+    );
     return result.rows.map(fromRow);
   }
   const store = await readStore();
-  const due = store.filter((row) => row.status === 'pending' && row.nextAttemptAt <= now.toISOString()).slice(0, limit);
+  const now = new Date().toISOString();
+  const rows = store.filter((row) => row.orderNumber === orderNumber
+    && row.eventName === eventName && row.channel === 'email' && row.status === 'failed');
+  for (const row of rows) {
+    row.status = 'retrying';
+    row.nextAttemptAt = now;
+    row.lockedAt = '';
+    row.payload = { ...(row.payload || {}), delayed: Boolean(delayed) };
+    row.updatedAt = now;
+  }
+  if (rows.length) await writeStore(store);
+  return rows;
+}
+
+async function claimDue(client, { now = new Date(), limit = 10 } = {}) {
+  if (hasDatabaseUrl()) {
+    const db = client || { query };
+    const result = await db.query(`WITH due AS (SELECT id FROM order_notification_outbox WHERE status IN ('pending','retrying') AND next_attempt_at <= $1 ORDER BY next_attempt_at,created_at FOR UPDATE SKIP LOCKED LIMIT $2) UPDATE order_notification_outbox n SET status='sending',locked_at=$1,attempt_count=attempt_count+1,updated_at=$1 FROM due WHERE n.id=due.id RETURNING n.*`, [now, limit]);
+    return result.rows.map(fromRow);
+  }
+  const store = await readStore();
+  const due = store.filter((row) => ['pending', 'retrying'].includes(row.status) && row.nextAttemptAt <= now.toISOString()).slice(0, limit);
   for (const row of due) { row.status = 'sending'; row.lockedAt = now.toISOString(); row.attemptCount += 1; row.updatedAt = now.toISOString(); }
   await writeStore(store); return due;
 }
@@ -91,13 +151,13 @@ async function updateState(client, id, changes) {
 }
 
 const markSent = (client, id, response = {}) => updateState(client, id, { status: 'sent', lockedAt: '', sentAt: new Date().toISOString(), providerMessageId: response.providerMessageId || '', lastError: '' });
-const scheduleRetry = (client, id, { nextAttemptAt, error }) => updateState(client, id, { status: 'pending', lockedAt: '', nextAttemptAt: nextAttemptAt.toISOString(), lastError: error });
+const scheduleRetry = (client, id, { nextAttemptAt, error }) => updateState(client, id, { status: 'retrying', lockedAt: '', nextAttemptAt: nextAttemptAt.toISOString(), lastError: error });
 const markFailed = (client, id, error) => updateState(client, id, { status: 'failed', lockedAt: '', lastError: error });
 
 async function recoverStaleClaims(client, cutoff) {
-  if (hasDatabaseUrl()) { const db = client || { query }; const result = await db.query("UPDATE order_notification_outbox SET status='pending',locked_at=NULL,updated_at=now() WHERE status='sending' AND locked_at < $1", [cutoff]); return result.rowCount; }
+  if (hasDatabaseUrl()) { const db = client || { query }; const result = await db.query("UPDATE order_notification_outbox SET status='retrying',locked_at=NULL,updated_at=now() WHERE status='sending' AND locked_at < $1", [cutoff]); return result.rowCount; }
   const store = await readStore(); let count = 0;
-  for (const row of store) if (row.status === 'sending' && row.lockedAt && row.lockedAt < cutoff.toISOString()) { row.status = 'pending'; row.lockedAt = ''; count += 1; }
+  for (const row of store) if (row.status === 'sending' && row.lockedAt && row.lockedAt < cutoff.toISOString()) { row.status = 'retrying'; row.lockedAt = ''; count += 1; }
   if (count) await writeStore(store); return count;
 }
 
@@ -110,8 +170,10 @@ module.exports = {
   claimFailedForManualResend,
   enqueueMany,
   listForOrder,
+  summarizeForOrderEvent,
   markFailed,
   markSent,
   recoverStaleClaims,
+  requeueFailedForOrder,
   scheduleRetry
 };

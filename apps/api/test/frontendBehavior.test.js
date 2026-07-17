@@ -27,7 +27,7 @@ test('customer storefront pages are prepared for Meta Pixel without tracking adm
   }
 });
 
-test('legacy storefront exposes pre-purchase events but cannot emit Purchase', () => {
+test('legacy static storefront Meta implementation is permanently retired', () => {
   const config = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'meta-pixel-config.js'), 'utf8');
   const pixel = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'meta-pixel.js'), 'utf8');
   const storefront = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'storefront.js'), 'utf8');
@@ -37,17 +37,9 @@ test('legacy storefront exposes pre-purchase events but cannot emit Purchase', (
 
   assert.match(config, /MARIA_CLARA_META_PIXEL_ID/);
   assert.match(config, /''/);
-  assert.match(pixel, /facebook\.com\/tr/);
-  assert.match(pixel, /connect\.facebook\.net\/en_US\/fbevents\.js/);
-  assert.match(pixel, /fbq\('init', pixelId\)/);
-  assert.match(pixel, /fbq\('set', 'autoConfig', false, pixelId\)/);
-  assert.match(pixel, /fbq\('track', 'PageView'\)/);
-  assert.match(pixel, /trackMetaPixelEvent/);
-  assert.match(pixel, /trackMetaPixelEvent\('ViewContent'/);
-  assert.match(pixel, /trackMetaPixelEvent\('AddToCart'/);
-  assert.match(pixel, /trackMetaPixelEvent\('InitiateCheckout'/);
-  assert.doesNotMatch(pixel, /trackMetaPixelEvent\('Purchase'/);
-  assert.match(pixel, /if \(eventName === 'Purchase'\) return false/);
+  assert.match(pixel, /retireLegacyMetaPixel/);
+  assert.match(pixel, /retiredMetaPixelEvent/);
+  assert.doesNotMatch(pixel, /fbq|connect\.facebook\.net|facebook\.com\/tr/);
 
   assert.match(storefront, /trackMetaPixelViewContent\?\.\(product, selectedVariant\)/);
   assert.match(storefront, /trackMetaPixelAddToCart\?\.\(product, selectedVariant/);

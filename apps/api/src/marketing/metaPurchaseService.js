@@ -1,18 +1,32 @@
 const crypto = require('node:crypto');
 const { META_CURRENCY, buildMetaPurchaseEvent, logMetaPurchaseDevelopment, purchaseValue } = require('./metaEvent');
 const { validateMetaPurchaseEvent } = require('./metaMoney');
+const { hasCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
 const {
   insertMetaPurchaseOutbox,
   recordMetaPurchaseValidationFailure
 } = require('./marketingEventOutboxRepository');
+const {
+  claimBrowserMetaPurchaseDispatch,
+  completeBrowserMetaPurchaseDispatch,
+  findMetaPurchaseDispatch,
+  findMetaPurchaseOutboxSnapshot
+} = require('./metaEventDispatchRepository');
 
 const BROWSER_CLAIM_LEASE_MS = 2 * 60_000;
 const PURCHASE_SUCCESSFUL_STATUSES = new Set(['received', 'confirmed', 'packed', 'shipped', 'delivered']);
 
 function metaPurchaseEligibility(order, { allowLegacyServer = false } = {}) {
   if (!order?.orderNumber) return { eligible: false, reason: 'order_missing' };
+  if (order.isTestOrder) return { eligible: false, reason: 'test_order' };
+  if (['declined', 'unset'].includes(String(order.paymentMetadata?.metaTrackingConsent || ''))) {
+    return { eligible: false, reason: 'consent_not_granted' };
+  }
   if (!allowLegacyServer && Number(order.metaPurchaseTrackingVersion || 1) < 2) {
     return { eligible: false, reason: 'legacy_order_locked' };
+  }
+  if (!hasCompleteDeliveryInformation(order)) {
+    return { eligible: false, reason: 'delivery_incomplete' };
   }
   const status = String(order.status || '').toLowerCase();
   const paymentStatus = String(order.paymentStatus || '').toLowerCase();
@@ -58,12 +72,47 @@ async function claimBrowserMetaPurchase({ orderNumber, confirmationToken }, depe
     const order = await dependencies.findOrder(orderNumber, { client, forUpdate: true, includeRelated: false });
     if (!order || !dependencies.verifyToken(confirmationToken, order.confirmationTokenHash)) return null;
 
+    // CAPI is the production authority until Meta account-side Event Setup rules
+    // and browser/server deduplication are verified in Test Events.
+    if (!dependencies.browserPurchaseEnabled) {
+      return { shouldSend: false, reason: 'browser_purchase_disabled', tracking: browserPurchaseState(order) };
+    }
+
     const eligibility = metaPurchaseEligibility(order);
     if (!eligibility.eligible) {
       return { shouldSend: false, reason: eligibility.reason, tracking: browserPurchaseState(order) };
     }
     if (order.metaBrowserPurchaseSentAt) {
       return { shouldSend: false, reason: 'already_sent', tracking: browserPurchaseState(order) };
+    }
+
+    const existingDispatch = await dependencies.findDispatch(client, {
+      orderNumber,
+      source: 'browser'
+    });
+    if (existingDispatch) {
+      const retryableBrowserState = ['failed', 'skipped'].includes(existingDispatch.status);
+      if (retryableBrowserState) {
+        // Continue to a new atomic claim. A previous false result means fbq was
+        // never invoked, so retrying cannot create a duplicate Purchase.
+      } else {
+      return {
+        shouldSend: false,
+        reason: existingDispatch.status === 'sent' ? 'already_sent' : 'browser_dispatch_already_attempted',
+        tracking: browserPurchaseState(order)
+      };
+      }
+    }
+
+    const snapshot = await dependencies.findServerSnapshot(client, order.metaPurchaseEventId);
+    const event = snapshot?.payload;
+    const immutablePayloadValid = snapshot?.aggregate_id === order.orderNumber &&
+      event?.event_name === 'Purchase' &&
+      event?.event_id === order.metaPurchaseEventId &&
+      event?.custom_data?.order_id === order.orderNumber &&
+      validateMetaPurchaseEvent(event).valid;
+    if (!immutablePayloadValid) {
+      return { shouldSend: false, reason: 'server_snapshot_missing', tracking: browserPurchaseState(order) };
     }
 
     const now = dependencies.now();
@@ -82,10 +131,16 @@ async function claimBrowserMetaPurchase({ orderNumber, confirmationToken }, depe
       };
     }
 
-    const event = buildMetaPurchaseEvent({ order: claimed });
-    if (!event) {
+    const dispatch = await dependencies.claimDispatch(client, {
+      orderNumber: claimed.orderNumber,
+      eventId: event.event_id,
+      value: event.custom_data.value,
+      currency: event.custom_data.currency,
+      claimId
+    });
+    if (!dispatch) {
       await dependencies.completeClaim(orderNumber, { claimId, sent: false, completedAt: now }, { client });
-      return { shouldSend: false, reason: 'invalid_purchase_data', tracking: browserPurchaseState(claimed) };
+      return { shouldSend: false, reason: 'browser_dispatch_already_attempted', tracking: browserPurchaseState(claimed) };
     }
     dependencies.logger?.info?.('Meta browser Purchase claimed.', {
       eventName: 'Purchase',
@@ -112,6 +167,15 @@ async function completeBrowserMetaPurchase({ orderNumber, confirmationToken, cla
     if (order.metaBrowserPurchaseSentAt) {
       return { completed: true, reason: 'already_sent', tracking: browserPurchaseState(order) };
     }
+    const dispatch = await dependencies.completeDispatch(client, {
+      orderNumber,
+      claimId,
+      sent: Boolean(sent),
+      completedAt: dependencies.now()
+    });
+    if (!dispatch) {
+      return { completed: false, reason: 'dispatch_not_owned', tracking: browserPurchaseState(order) };
+    }
     const updated = await dependencies.completeClaim(orderNumber, {
       claimId,
       sent: Boolean(sent),
@@ -132,6 +196,9 @@ async function completeBrowserMetaPurchase({ orderNumber, confirmationToken, cla
 
 async function queueMetaPurchase({ client, order, requestContext = {}, enabled = false }, options = {}) {
   if (!enabled) return { status: 'disabled', event: null, outbox: null };
+  if (requestContext.metaConsentGranted === false) {
+    return { status: 'consent_not_granted', event: null, outbox: null };
+  }
   const eligibility = metaPurchaseEligibility(order, { allowLegacyServer: true });
   const candidate = eligibility.eligible
     ? (options.buildEvent || buildMetaPurchaseEvent)({ order, requestContext })
@@ -175,11 +242,17 @@ function defaultBrowserPurchaseDependencies(overrides = {}) {
   const orderRepository = require('../orders/orderRepository');
   const { transaction } = require('../db/postgres');
   const { verifyConfirmationToken } = require('../checkout/confirmationToken');
+  const { env } = require('../config/env');
   return {
+    browserPurchaseEnabled: Boolean(env.meta?.enabled && env.meta?.browserPurchaseEnabled),
     transaction,
     findOrder: orderRepository.findOrderByNumber,
     claimOrder: orderRepository.claimOrderMetaBrowserPurchase,
     completeClaim: orderRepository.completeOrderMetaBrowserPurchase,
+    claimDispatch: claimBrowserMetaPurchaseDispatch,
+    completeDispatch: completeBrowserMetaPurchaseDispatch,
+    findDispatch: findMetaPurchaseDispatch,
+    findServerSnapshot: findMetaPurchaseOutboxSnapshot,
     verifyToken: verifyConfirmationToken,
     now: () => new Date(),
     randomId: () => crypto.randomUUID(),

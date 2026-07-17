@@ -9,6 +9,11 @@ function metaConfig(source = process.env) {
   const enabled = source.META_CONVERSIONS_API_ENABLED === 'true';
   if (!enabled) return { enabled: false };
 
+  const browserPurchaseSetting = String(source.META_BROWSER_PURCHASE_ENABLED || 'false').trim().toLowerCase();
+  if (!['true', 'false'].includes(browserPurchaseSetting)) {
+    throw new Error('META_BROWSER_PURCHASE_ENABLED must be true or false');
+  }
+
   const required = [
     'META_PIXEL_ID',
     'META_CONVERSIONS_API_ACCESS_TOKEN',
@@ -27,6 +32,7 @@ function metaConfig(source = process.env) {
     accessToken: String(source.META_CONVERSIONS_API_ACCESS_TOKEN),
     graphApiVersion: String(source.META_GRAPH_API_VERSION).trim(),
     testEventCode: String(source.META_CONVERSIONS_API_TEST_EVENT_CODE || '').trim(),
+    browserPurchaseEnabled: browserPurchaseSetting === 'true',
     currency: resolveMetaCurrency(source)
   };
 }
@@ -75,22 +81,25 @@ function notificationConfig(source = process.env) {
     siteUrl: String(source.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/$/, '')
   };
   sms.configured = enabled && Boolean(sms.apiKey);
-  adminOrderEmail.configured = Boolean(
-    adminOrderEmail.recipient
-      && adminOrderEmail.host
+  adminOrderEmail.transportConfigured = Boolean(
+    adminOrderEmail.host
       && adminOrderEmail.user
       && adminOrderEmail.pass
       && adminOrderEmail.from
   );
+  // Recipient addresses are editable store settings. Keep the environment
+  // recipient as a migration fallback, but do not make SMTP readiness depend on
+  // it or require an owner address to be hard-coded in source.
+  adminOrderEmail.configured = adminOrderEmail.transportConfigured;
   email.provider = enabled && email.apiKey && email.from
     ? 'resend'
-    : enabled && adminOrderEmail.configured
+    : enabled && adminOrderEmail.transportConfigured
       ? 'smtp'
       : '';
   email.configured = Boolean(email.provider);
   return {
     enabled,
-    workerEnabled: enabled || adminOrderEmail.configured,
+    workerEnabled: enabled || adminOrderEmail.transportConfigured,
     sms,
     email,
     adminOrderEmail

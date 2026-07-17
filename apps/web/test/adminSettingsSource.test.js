@@ -51,5 +51,7 @@ test('settings page includes configurable Meta Pixel controls', async () => {
   assert.match(settings, /Meta Pixel ID/);
   assert.match(settings, /Enable Meta Pixel/);
   assert.match(settings, /Require consent before Meta Pixel events/);
+  assert.match(settings, /Purchase authority:/);
+  assert.match(settings, /Meta Test Events code:/);
   assert.match(settings, /\/api\/admin\/settings\/marketing/);
 });

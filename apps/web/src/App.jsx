@@ -41,6 +41,8 @@ const IssueReports = lazy(() => import('./admin/IssueReports.jsx'));
 const Payments = lazy(() => import('./admin/Payments.jsx'));
 const Reviews = lazy(() => import('./admin/Reviews.jsx'));
 const Analytics = lazy(() => import('./admin/Analytics.jsx'));
+const MetaReconciliation = lazy(() => import('./admin/MetaReconciliation.jsx'));
+const SeoDashboard = lazy(() => import('./admin/SeoDashboard.jsx'));
 const Guide = lazy(() => import('./pages/Guide.jsx'));
 const ProductCountdown = lazy(() => import('./admin/ProductCountdown.jsx'));
 const PancakePos = lazy(() => import('./admin/PancakePos.jsx'));
@@ -84,6 +86,8 @@ export default function App() {
         <Route path="reviews/import" element={<Reviews />} />
         <Route path="reviews/settings" element={<Reviews />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="analytics/meta-reconciliation" element={<MetaReconciliation />} />
+        <Route path="marketing/seo" element={<SeoDashboard />} />
         <Route path="products" element={<Products />} />
         <Route path="products/countdown" element={<ProductCountdown />} />
         <Route path="products/:slug" element={<ProductEditor />} />

@@ -20,6 +20,12 @@ function normalizePhoneForMeta(phone) {
   return normalizePhilippinePhone(phone).replace(/^\+/, '');
 }
 
+function normalizeTextForMeta(value, { compact = false } = {}) {
+  const normalized = String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, compact ? '' : ' ');
+  return normalized.slice(0, 100);
+}
+
 function contentId(item = {}) {
   return String(item.externalPosVariantId || item.variantId || item.sku || item.id || item.productId || '').trim();
 }
@@ -87,6 +93,19 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
   const userData = {};
   if (email) userData.em = [sha256(email)];
   if (phone) userData.ph = [sha256(phone)];
+  const firstName = normalizeTextForMeta(order?.customer?.firstName, { compact: true });
+  const lastName = normalizeTextForMeta(order?.customer?.lastName, { compact: true });
+  const city = normalizeTextForMeta(order?.address?.cityName || order?.address?.city || order?.address?.municipality, { compact: true });
+  const province = normalizeTextForMeta(order?.address?.provinceName || order?.address?.province, { compact: true });
+  const postalCode = normalizeTextForMeta(order?.address?.postalCode || order?.address?.zipCode, { compact: true });
+  const externalId = normalizeTextForMeta(order?.customerAccountId, { compact: true });
+  if (firstName) userData.fn = [sha256(firstName)];
+  if (lastName) userData.ln = [sha256(lastName)];
+  if (city) userData.ct = [sha256(city)];
+  if (province) userData.st = [sha256(province)];
+  if (postalCode) userData.zp = [sha256(postalCode)];
+  if (city || province || postalCode) userData.country = [sha256('ph')];
+  if (externalId) userData.external_id = [sha256(externalId)];
 
   const clientIp = optionalText(requestContext.clientIp, 64);
   const clientUserAgent = optionalText(requestContext.clientUserAgent, 512);
@@ -157,6 +176,7 @@ module.exports = {
   normalizeMetaValue,
   normalizeEmailForMeta,
   normalizePhoneForMeta,
+  normalizeTextForMeta,
   parseMetaCookies,
   purchaseValue,
   sha256,

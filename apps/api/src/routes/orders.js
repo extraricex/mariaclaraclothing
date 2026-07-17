@@ -83,7 +83,10 @@ legacyRouter.post('/', async (req, res, next) => {
       metaBrowserPurchaseSentAt: '',
       metaCapiPurchaseQueuedAt: '',
       metaCapiPurchaseSentAt: '',
-      metaPurchaseStatus: 'eligible',
+      metaPurchaseStatus: storeSettings.marketing?.metaPixel?.requireConsent
+        && req.body?.metaTrackingConsent !== 'accepted'
+        ? 'consent_not_granted'
+        : 'eligible',
       metaPurchaseLastError: '',
       metaPurchaseValue: purchaseValue(order.totalCents),
       metaPurchaseCurrency: META_CURRENCY,
@@ -95,6 +98,12 @@ legacyRouter.post('/', async (req, res, next) => {
       trackingNumber: '',
       tags: [],
       notes: '',
+      paymentMetadata: {
+        metaTrackingConsent: storeSettings.marketing?.metaPixel?.requireConsent
+          ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
+            : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')
+          : 'not_required'
+      },
       customerAccountId,
       placedAt: new Date().toISOString()
     };
@@ -129,7 +138,14 @@ legacyRouter.post('/', async (req, res, next) => {
           ...cookies,
           clientIp: req.ip,
           clientUserAgent: req.get('user-agent') || '',
-          sourceUrl: checkoutSourceUrl(req)
+          sourceUrl: checkoutSourceUrl(req),
+          metaConsentGranted: storeSettings.marketing?.metaPixel?.requireConsent
+            ? req.body?.metaTrackingConsent === 'accepted'
+            : true,
+          metaTrackingConsent: storeSettings.marketing?.metaPixel?.requireConsent
+            ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
+              : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')
+            : 'not_required'
         }
       }, {
         transaction,
@@ -503,10 +519,18 @@ const DEFAULT_ROUTE_DEPENDENCIES = {
   findOrderByNumber,
   getStoreSettings,
   logger: console,
-  claimBrowserMetaPurchase: (input) => claimBrowserMetaPurchase(input, defaultBrowserPurchaseDependencies({
-    claimOrder: claimOrderMetaBrowserPurchase,
-    completeClaim: completeOrderMetaBrowserPurchase
-  })),
+  claimBrowserMetaPurchase: async (input) => {
+    const settings = await getStoreSettings();
+    return claimBrowserMetaPurchase(input, defaultBrowserPurchaseDependencies({
+      browserPurchaseEnabled: Boolean(
+        env.meta.enabled
+        && env.meta.browserPurchaseEnabled
+        && settings.marketing.metaPixel.enabled
+      ),
+      claimOrder: claimOrderMetaBrowserPurchase,
+      completeClaim: completeOrderMetaBrowserPurchase
+    }));
+  },
   completeBrowserMetaPurchase: (input) => completeBrowserMetaPurchase(input, defaultBrowserPurchaseDependencies({
     claimOrder: claimOrderMetaBrowserPurchase,
     completeClaim: completeOrderMetaBrowserPurchase
@@ -603,7 +627,14 @@ function createOrderRouter(overrides = {}) {
             ...cookies,
             clientIp: req.ip,
             clientUserAgent: req.get('user-agent') || '',
-            sourceUrl: checkoutSourceUrl(req)
+            sourceUrl: checkoutSourceUrl(req),
+            metaConsentGranted: settings.marketing?.metaPixel?.requireConsent
+              ? req.body?.metaTrackingConsent === 'accepted'
+              : true,
+            metaTrackingConsent: settings.marketing?.metaPixel?.requireConsent
+              ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
+                : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')
+              : 'not_required'
           }
         }, dependencies.authoritativeDependencies(req));
         try {
