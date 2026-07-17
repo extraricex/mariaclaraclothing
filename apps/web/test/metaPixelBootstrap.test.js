@@ -4,12 +4,13 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const bootstrap = readFileSync(new URL('../public/meta-bootstrap.js', import.meta.url), 'utf8');
+const nginx = readFileSync(new URL('../nginx.conf', import.meta.url), 'utf8');
 const routeTracker = readFileSync(new URL('../src/components/MetaRouteTracker.jsx', import.meta.url), 'utf8');
 const webDockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
 const productionCompose = readFileSync(new URL('../../../deploy/docker-compose.production.yml', import.meta.url), 'utf8');
 
 test('initial HTML loads the external settings-backed Meta Pixel bootstrap', () => {
-  assert.match(html, /<script src="\/meta-bootstrap\.js"><\/script>/);
+  assert.match(html, /<script src="\/meta-bootstrap\.js\?v=\d+"><\/script>/);
   assert.match(bootstrap, /connect\.facebook\.net\/en_US\/fbevents\.js/);
   assert.match(bootstrap, /fbq\('init', pixelId\)/);
   assert.match(bootstrap, /fbq\('set', 'autoConfig', false, pixelId\)/);
@@ -17,6 +18,7 @@ test('initial HTML loads the external settings-backed Meta Pixel bootstrap', () 
   assert.match(bootstrap, /\/api\/storefront-settings/);
   assert.doesNotMatch(html, /facebook\.com\/tr\?/);
   assert.doesNotMatch(`${html}\n${bootstrap}`, /595813035761213/);
+  assert.match(nginx, /location = \/meta-bootstrap\.js[\s\S]*no-store, no-cache, must-revalidate/);
 });
 
 test('external bootstrap honors admin enable and consent settings and fails closed', () => {

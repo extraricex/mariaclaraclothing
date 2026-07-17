@@ -129,9 +129,10 @@ test('production web shell uses SSI SEO fragments and external Meta bootstrap', 
   assert.match(index, /id="seo-fallback"/);
   assert.match(index, /id="root"><\/div>/);
   assert.match(index, /href="\/seo-fallback\.css"/);
-  assert.match(index, /src="\/meta-bootstrap\.js"/);
+  assert.match(index, /src="\/meta-bootstrap\.js\?v=\d+"/);
   assert.doesNotMatch(index, /facebook\.com\/tr\?id=/);
   assert.match(nginx, /ssi on/);
   assert.match(nginx, /Content-Security-Policy /);
   assert.doesNotMatch(nginx, /Content-Security-Policy-Report-Only/);
+  assert.match(nginx, /location = \/meta-bootstrap\.js[\s\S]*no-store, no-cache, must-revalidate/);
 });
