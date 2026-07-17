@@ -15,7 +15,7 @@ export default function AccountSettings() {
   const [provinces, setProvinces] = useState([]);
   const [cities, setCities] = useState([]);
   const [barangays, setBarangays] = useState([]);
-  const [draft, setDraft] = useState({ house: '', provinceCode: '', cityCode: '', barangayCode: '' });
+  const [draft, setDraft] = useState({ house: '', provinceCode: '', cityCode: '', barangayCode: '', postalCode: '' });
 
   useEffect(() => {
     if (!loggedIn) {
@@ -47,6 +47,19 @@ export default function AccountSettings() {
     return <div className="mx-auto max-w-7xl px-5 py-16 text-sm text-clay lg:px-8">{message.text || 'Loading settings…'}</div>;
   }
 
+  function toggleAddressEditor() {
+    if (!editAddress && customer.savedAddress) {
+      setDraft({
+        house: customer.savedAddress.houseAddress || '',
+        provinceCode: customer.savedAddress.provinceCode || '',
+        cityCode: customer.savedAddress.cityCode || '',
+        barangayCode: customer.savedAddress.barangayCode || '',
+        postalCode: customer.savedAddress.postalCode || customer.savedAddress.zipCode || ''
+      });
+    }
+    setEditAddress((value) => !value);
+  }
+
   async function save() {
     setMessage({ tone: 'neutral', text: '' });
     try {
@@ -64,6 +77,10 @@ export default function AccountSettings() {
           setMessage({ tone: 'error', text: 'Complete all address fields before saving.' });
           return;
         }
+        if (draft.postalCode && !/^\d{4}$/.test(draft.postalCode)) {
+          setMessage({ tone: 'error', text: 'ZIP Code must contain 4 digits when provided.' });
+          return;
+        }
         changes.savedAddress = {
           houseAddress: draft.house.trim(),
           provinceCode: province.code,
@@ -72,7 +89,7 @@ export default function AccountSettings() {
           barangay: barangay.name,
           city: city.name,
           province: province.name,
-          postalCode: ''
+          postalCode: draft.postalCode
         };
       }
       const body = await customerJson('/api/customer/me', { method: 'PUT', body: JSON.stringify(changes) });
@@ -127,7 +144,7 @@ export default function AccountSettings() {
         <section className="border border-line bg-white p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Saved shipping address</h2>
-            <button type="button" className="text-xs text-accent underline" onClick={() => setEditAddress((value) => !value)}>
+            <button type="button" className="text-xs text-accent underline" onClick={toggleAddressEditor}>
               {editAddress ? 'Cancel' : customer.savedAddress ? 'Change' : 'Add'}
             </button>
           </div>
@@ -152,6 +169,15 @@ export default function AccountSettings() {
                 <option value="">Select barangay</option>
                 {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
               </select>
+              <input
+                className="field"
+                inputMode="numeric"
+                maxLength="4"
+                placeholder="ZIP Code (optional)"
+                value={draft.postalCode}
+                onChange={(e) => setDraft((d) => ({ ...d, postalCode: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                autoComplete="postal-code"
+              />
             </div>
           )}
         </section>

@@ -58,7 +58,7 @@ test('canonical address accepts integration aliases without saving codes as read
   assert.equal(address.barangay, 'Bucandala IV');
   assert.equal(address.city, 'Imus City');
   assert.equal(address.province, 'Cavite');
-  assert.equal(address.formattedFullAddress, '123 Sample Street, Bucandala IV, Imus City, Cavite 4103, Philippines');
+  assert.equal(address.formattedFullAddress, '123 Sample Street, Bucandala IV, Imus City, Cavite, 4103, Philippines');
 });
 
 test('whitespace, null literals, and missing structured address fields are rejected together', () => {
@@ -99,7 +99,7 @@ test('invalid optional email and ZIP are rejected without inventing address text
   assert.equal(formatDeliveryAddress({}), '');
   assert.equal(formatDeliveryAddress({
     houseAddress: '12 Test', barangay: 'Bucandala IV', city: 'Imus', province: 'Cavite', postalCode: '4103'
-  }), '12 Test, Bucandala IV, Imus, Cavite 4103, Philippines');
+  }), '12 Test, Bucandala IV, Imus, Cavite, 4103, Philippines');
 });
 
 test('legacy direct-order normalization rejects an address bypass before cart work', async () => {

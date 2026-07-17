@@ -76,7 +76,7 @@ test('Pancake address backfill audits first and only applies complete readable p
   assert.equal(orders.get('MCC-RECOVER').address.barangay, 'Bucandala IV');
   assert.equal(orders.get('MCC-RECOVER').address.city, 'Imus City');
   assert.equal(orders.get('MCC-RECOVER').address.province, 'Cavite');
-  assert.match(orders.get('MCC-RECOVER').address.formattedFullAddress, /Bucandala IV, Imus City, Cavite 4103/);
+  assert.match(orders.get('MCC-RECOVER').address.formattedFullAddress, /Bucandala IV, Imus City, Cavite, 4103/);
   assert.equal(orders.get('MCC-RECOVER').tags.includes('missing_delivery_information'), false);
   assert.equal(statusEvents.length, 1);
   assert.equal(syncLogs[0].code, 'pancake_delivery_address_backfilled');

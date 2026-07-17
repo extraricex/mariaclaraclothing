@@ -95,15 +95,12 @@ export function normalizedCheckoutDetails(customer = {}, address = {}, options =
 }
 
 export function formatCheckoutAddress(address = {}) {
-  const provinceAndZip = [
-    cleanCheckoutText(address.province || address.provinceName || address.province_name),
-    cleanCheckoutText(address.postalCode || address.zipCode)
-  ].filter(Boolean).join(' ');
   const parts = [
     cleanCheckoutText(address.houseAddress || address.addressLine1 || address.street),
     cleanCheckoutText(address.barangay || address.barangayName || address.barangay_name),
     cleanCheckoutText(address.city || address.cityName || address.city_name || address.municipality),
-    provinceAndZip
+    cleanCheckoutText(address.province || address.provinceName || address.province_name),
+    cleanCheckoutText(address.postalCode || address.zipCode)
   ].filter(Boolean).join(', ');
   return parts ? `${parts}, Philippines` : '';
 }

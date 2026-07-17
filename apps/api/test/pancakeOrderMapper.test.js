@@ -62,7 +62,7 @@ test('normalizes Pancake order payload into local order fields', () => {
   assert.equal(order.address.city, 'Makati');
   assert.equal(order.address.province, 'Metro Manila');
   assert.equal(order.address.postalCode, '1200');
-  assert.equal(order.address.formattedFullAddress, '123 Street, Barangay, Makati, Metro Manila 1200, Philippines');
+  assert.equal(order.address.formattedFullAddress, '123 Street, Barangay, Makati, Metro Manila, 1200, Philippines');
 });
 
 test('normalizes Pancake shipping payment and tracking fields', () => {
@@ -157,7 +157,7 @@ test('builds outbound Pancake order update payload from local order changes', ()
   assert.equal(payload.shipping_address.district_name, 'Makati');
   assert.equal(payload.shipping_address.province_name, 'Metro Manila');
   assert.equal(payload.shipping_address.post_code, '1200');
-  assert.match(payload.shipping_address.full_address, /Barangay One, Makati, Metro Manila 1200/);
+  assert.match(payload.shipping_address.full_address, /Barangay One, Makati, Metro Manila, 1200/);
   assert.doesNotMatch(payload.note_print, /Pack carefully/);
   assert.match(payload.note_print, /website_status=shipped/);
 });

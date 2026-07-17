@@ -148,12 +148,12 @@ function canonicalDeliveryAddress(address = {}) {
 
 function formatDeliveryAddress(address = {}) {
   const normalized = addressFields(address).address;
-  const provinceAndZip = [normalized.province, normalized.postalCode].filter(Boolean).join(' ');
   const parts = [
     normalized.houseAddress,
     normalized.barangay,
     normalized.city,
-    provinceAndZip
+    normalized.province,
+    normalized.postalCode
   ].filter(Boolean).join(', ');
   return parts ? `${parts}, Philippines` : '';
 }
