@@ -67,12 +67,13 @@ Passed in automated and prior controlled COD testing. PostgreSQL is the idempote
 
 Meta previously accepted test-only numeric `729` and `1298` PHP server Purchases. A signed-in Meta Events Manager session was unavailable for the post-release browser/server merged view, so final acceptance is pending.
 
+Production release `30d5db7` is deployed. The migration is applied once, all 66 order records pass persisted Meta value/currency checks, all 7 Purchase outbox rows contain positive JSON-number values and `PHP`, and the public Pixel bootstrap disables automatic event configuration before its single initialization.
+
 ## Remaining Issues
 
-1. Deploy the automatic-event block and database diagnostics.
-2. Delete any automatic Purchase rule from Event Setup Tool.
-3. Complete and observe one COD and one successful PayMongo order in Meta Test Events.
-4. Confirm refresh and webhook replay add no Purchase and Ads reports one result per real order.
+1. Delete any automatic Purchase rule from Event Setup Tool.
+2. Complete and observe one COD and one successful PayMongo order in Meta Test Events.
+3. Confirm refresh and webhook replay add no Purchase and Ads reports one result per real order.
 
 ## Final Status
 

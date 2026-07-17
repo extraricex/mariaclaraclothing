@@ -65,16 +65,17 @@ Exact equality to `PHP` is required. Empty or invalid configuration safely resol
 
 Server Test Events previously accepted numeric PHP test events. The signed-in Events Manager browser was unavailable, so post-release merged browser/server confirmation is pending.
 
+Production release `30d5db7` is deployed. The live bootstrap initializes Pixel once with automatic configuration disabled, the PHP migration is applied, all 66 order records pass the persisted currency/value audit, and all 7 Purchase outbox rows contain numeric values and `PHP`.
+
 ## Historical Events
 
 Old malformed diagnostics cannot be edited and may remain visible until they age out of Meta's diagnostic window. Successfully delivered historical Purchases were not resent.
 
 ## Remaining Issues
 
-- Deploy the release.
 - Remove any account-side automatic Purchase rule.
 - Run one post-release COD and PayMongo Test Events transaction and confirm one deduplicated Purchase each.
 
 ## Final Status
 
-**Not Fixed** — implementation and automated tests pass, but the required live Meta COD/PayMongo proof is still pending.
+**Not Fixed** — implementation, deployment, and automated/production data checks pass, but the required live Meta COD/PayMongo proof is still pending.

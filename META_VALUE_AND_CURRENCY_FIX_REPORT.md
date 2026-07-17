@@ -141,17 +141,21 @@ Already received malformed events cannot be rewritten. The 30% warning can remai
 - PostgreSQL exact amount assertion: stored `72900` centavos produced `meta_purchase_value = 729` and both currency fields `PHP`.
 - Production Vite build: passed.
 - Local Docker API/web/PostgreSQL health: passed.
+- Production release `30d5db7` deployed on 2026-07-17 after backup `20260717T014521Z`; API and PostgreSQL are healthy and the public API returns HTTP 200.
+- Production migration `20260717_meta_purchase_value_currency.sql`: applied exactly once.
+- Production data audit: 66 orders, zero invalid order currencies, zero invalid persisted Meta currencies, and zero invalid persisted Meta values.
+- Production Purchase outbox audit: 7 rows, zero non-numeric/non-positive values, and zero non-PHP currencies.
+- Live Pixel bootstrap: one initialization, external bootstrap loaded once, and automatic configuration disabled before initialization.
 - Lint/type checking: no lint or type-check scripts are configured; JavaScript syntax, tests, and production compilation passed.
 
 ## Remaining Issues
 
-1. Deploy this release so the live Pixel bootstrap disables automatic event configuration.
-2. Remove the old automatic Purchase rule from the Meta account if it appears in Event Setup Tool.
-3. Complete one new live COD and one live PayMongo transaction in Meta Test Events.
-4. Confirm Meta's merged/deduplicated label and final count of one Purchase per order.
+1. Remove the old automatic Purchase rule from the Meta account if it appears in Event Setup Tool.
+2. Complete one new live COD and one live PayMongo transaction in Meta Test Events.
+3. Confirm Meta's merged/deduplicated label and final count of one Purchase per order.
 
 ## Final Status
 
 **Not Fixed**
 
-The code, database constraints, automatic-event block, and automated/PostgreSQL tests are complete. Per the acceptance requirement, status remains Not Fixed until one post-release COD order and one successful PayMongo payment are visibly validated and deduplicated in Meta Test Events.
+The code, database constraints, automatic-event block, production deployment, and automated/PostgreSQL tests are complete. Per the acceptance requirement, status remains Not Fixed until one post-release COD order and one successful PayMongo payment are visibly validated and deduplicated in Meta Test Events.
