@@ -1,3 +1,5 @@
+import { fetchWithRecovery, responseErrorMessage } from './network.js';
+
 const CSRF_COOKIE = 'mc_admin_csrf';
 
 function readCookie(name) {
@@ -14,7 +16,7 @@ function csrfHeaders(options) {
 }
 
 export async function adminFetch(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetchWithRecovery(path, {
     cache: 'no-store',
     credentials: 'same-origin',
     ...options,
@@ -36,7 +38,7 @@ export async function adminJson(path, options = {}) {
   const response = await adminFetch(path, options);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body.error || 'Something went wrong.');
+    const error = new Error(body.error || responseErrorMessage(response));
     error.body = body;
     throw error;
   }
@@ -52,14 +54,14 @@ export function adminSend(method, path, body) {
 }
 
 export async function adminLogin(password) {
-  const response = await fetch('/api/admin/login', {
+  const response = await fetchWithRecovery('/api/admin/login', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password })
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Login failed.');
+  if (!response.ok) throw new Error(body.error || responseErrorMessage(response, 'Login failed.'));
   return body;
 }
 

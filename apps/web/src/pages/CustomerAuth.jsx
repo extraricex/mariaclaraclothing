@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { customerJson, customerLogin, customerRegister } from '../lib/customerAuth.js';
+import { fetchWithRecovery } from '../lib/network.js';
 
 function AuthShell({ title, subtitle, children }) {
   return (
@@ -27,7 +28,7 @@ export function CustomerLogin() {
     : '/account';
 
   useEffect(() => {
-    fetch('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
+    fetchWithRecovery('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('Social login status unavailable')))
       .then((body) => setSocialProviders(body.providers || {}))
       .catch(() => setSocialProviders({ google: false, facebook: false }));
@@ -94,7 +95,7 @@ export function CustomerRegister() {
   const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
 
   useEffect(() => {
-    fetch('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
+    fetchWithRecovery('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
       .then((response) => response.json())
       .then((body) => setSocialProviders(body.providers || { google: false, facebook: false }))
       .catch(() => setSocialProviders({ google: false, facebook: false }));

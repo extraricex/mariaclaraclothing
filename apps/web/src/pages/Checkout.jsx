@@ -11,6 +11,7 @@ import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings, regionEstimate } f
 import { customerNameParts } from '../lib/customerName.js';
 import { normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
 import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
+import { fetchWithRecovery } from '../lib/network.js';
 
 export default function Checkout() {
   const items = useCart();
@@ -64,7 +65,7 @@ export default function Checkout() {
   useEffect(() => {
     loadProvinces().then(setProvinces);
     loadStorefrontSettings().then(setSettings);
-    fetch('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
+    fetchWithRecovery('/api/customer/oauth/status', { credentials: 'same-origin', cache: 'no-store' })
       .then((response) => response.json())
       .then((body) => setSocialProviders(body.providers || { google: false, facebook: false }))
       .catch(() => {});

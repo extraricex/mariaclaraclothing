@@ -1,3 +1,5 @@
+import { fetchWithRecovery } from './network.js';
+
 const JNT_ADDRESS_DATA_URL = '/data/jnt-address-guide.json';
 
 const FALLBACK_PROVINCES = [{ code: 'CAVITE', name: 'CAVITE', islandGroup: 'Luzon' }];
@@ -24,7 +26,7 @@ function normalizeItems(payload) {
 
 function loadGuide() {
   if (!guidePromise) {
-    guidePromise = fetch(JNT_ADDRESS_DATA_URL).then((response) => {
+    guidePromise = fetchWithRecovery(JNT_ADDRESS_DATA_URL).then((response) => {
       if (!response.ok) throw new Error('Could not load J&T checkout address guide.');
       return response.json();
     });

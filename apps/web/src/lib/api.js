@@ -1,8 +1,10 @@
+import { fetchWithRecovery, responseErrorMessage } from './network.js';
+
 async function request(path, options = {}) {
-  const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin', ...options });
+  const response = await fetchWithRecovery(path, { cache: 'no-store', credentials: 'same-origin', ...options });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body.error || 'Something went wrong.');
+    const error = new Error(body.error || responseErrorMessage(response));
     error.code = body.code || '';
     error.details = body.details;
     error.fields = body.fields || body.details?.fields || {};
@@ -111,12 +113,12 @@ export function createPayMongoCheckout(input, quoteId, idempotencyKey) {
 }
 
 export async function fetchOrderConfirmation(orderNumber, token, fetchImpl = fetch) {
-  const response = await fetchImpl(`/api/orders/${encodeURIComponent(orderNumber)}/confirmation`, {
+  const response = await fetchWithRecovery(`/api/orders/${encodeURIComponent(orderNumber)}/confirmation`, {
     cache: 'no-store',
     headers: { 'X-Order-Confirmation': token }
-  });
+  }, { fetchImpl });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Order confirmation not found');
+  if (!response.ok) throw new Error(body.error || responseErrorMessage(response, 'Order confirmation not found'));
   return body;
 }
 

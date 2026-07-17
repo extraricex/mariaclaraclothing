@@ -6,6 +6,7 @@ import { formatMoney } from '../lib/money.js';
 import { trackFacebookAddToCart } from '../lib/metaPixel.js';
 import { productPath } from '../lib/productUrl.js';
 import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
+import { fetchWithRecovery, responseErrorMessage } from '../lib/network.js';
 
 export default function Cart() {
   const items = useCart();
@@ -50,10 +51,10 @@ export default function Cart() {
     if (!token || recoveryStarted.current) return;
     recoveryStarted.current = true;
     setRecoveryNotice('Restoring your saved cart...');
-    fetch(`/api/cart-sessions/recovery/${encodeURIComponent(token)}`, { cache: 'no-store' })
+    fetchWithRecovery(`/api/cart-sessions/recovery/${encodeURIComponent(token)}`, { cache: 'no-store' })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(body.error || 'This saved cart is no longer available.');
+        if (!response.ok) throw new Error(body.error || responseErrorMessage(response, 'This saved cart is no longer available.'));
         replaceCart(body.cart?.items || []);
         setRecoveryNotice(body.cart?.adjusted
           ? 'Your cart was restored with current stock and quantities.'

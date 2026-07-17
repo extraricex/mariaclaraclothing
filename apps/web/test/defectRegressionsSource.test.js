@@ -22,7 +22,7 @@ test('unknown storefront and product routes render a noindex not-found page', as
   assert.match(product, /title="Product not found"/);
   assert.match(nginx, /error_page 404 =404 \/index\.html/);
   assert.match(nginx, /try_files \$uri \$uri\/ =404/);
-  assert.match(nginx, /proxy_pass http:\/\/api:3000\/api\/products\/\$storefront_product_slug\/route/);
+  assert.match(nginx, /proxy_pass \$api_origin\/api\/products\/\$storefront_product_slug\/route/);
   assert.match(nginx, /error_page 404 =404 \/index\.html/);
 });
 

@@ -1,6 +1,6 @@
 # Maria Clara Clothing Deployment Guide
 
-Last repository audit: 2026-07-11
+Last repository audit: 2026-07-17
 
 This runbook deploys the actual Maria Clara Clothing repository to an Ubuntu VPS
 using GitHub, Docker Compose, PostgreSQL, Cloudflare DNS, and Caddy HTTPS. It also
@@ -24,7 +24,7 @@ deployment template.
 | Local Docker | `docker-compose.yml` | For local testing only; it publishes web on `8081` and API on `3000`. |
 | Production Docker | `deploy/docker-compose.production.yml` | Runs PostgreSQL 16, the API, and the web/nginx container. Only web is published, on localhost by default. |
 | Internal proxy | `apps/web/nginx.conf` | `/api`, `/uploads`, `/brand`, and `/data` are proxied to the private API container. |
-| Public proxy | Not stored in the repo | Install Caddy on the VPS for domain routing and automatic HTTPS. |
+| Public proxy | `deploy/Caddyfile.production` | Caddy provides domain routing, automatic HTTPS, and a short retry window during web-container handoff. |
 | Persistent data | Named volumes `maria_clara_postgres_data`, `maria_clara_uploads`, and `maria_clara_issue_uploads` | Back up all three. A Git checkout does not contain customer orders or uploaded images. |
 | Admin | React routes under `/admin`; single-admin cookie/CSRF authentication | Production login must be tested over HTTPS. There are no roles or MFA. |
 | Checkout | Server-authoritative quote and order flow in PostgreSQL | Price, discounts, shipping, payment availability, and stock are rechecked by the API. |
@@ -52,12 +52,16 @@ npm run dev:web
 npm start
 ```
 
-Production Compose command:
+Production release command:
 
 ```bash
-docker compose --env-file deploy/production.env \
-  -f deploy/docker-compose.production.yml up -d --build --remove-orphans
+deploy/release-production.sh deploy/production.env
 ```
+
+The release script builds before changing running services, replaces the API,
+waits for it to become healthy, and replaces the web container last. Do not use
+a full-stack forced recreation for routine releases; that removes the public
+nginx upstream long enough for customers to see a gateway/fetch error.
 
 The API container automatically applies `db/schema.sql` and all unapplied files
 in `apps/api/db/migrations` on every start. It seeds `apps/api/data/products.json`
@@ -683,13 +687,13 @@ cd /var/www/mariaclara
 docker compose --env-file deploy/production.env \
   -f deploy/docker-compose.production.yml config --quiet
 
-docker compose --env-file deploy/production.env \
-  -f deploy/docker-compose.production.yml up -d --build --remove-orphans
+deploy/release-production.sh deploy/production.env
 ```
 
 The first API start applies the schema/migrations and seeds the empty product
 catalog. A migration error causes the API to restart; inspect API logs rather
-than repeatedly restarting it.
+than repeatedly restarting it. The release script keeps the old web container
+serving while images build and while the new API passes health checks.
 
 Check container state:
 
@@ -802,18 +806,16 @@ Reference: [official Caddy installation](https://caddyserver.com/docs/install).
 
 ### 15.2 Configure the reverse proxy
 
+The production Caddyfile is source-controlled at
+`deploy/Caddyfile.production`. Review its domains, then install that exact file:
+
 ```bash
-sudo nano /etc/caddy/Caddyfile
+sudo cp deploy/Caddyfile.production /etc/caddy/Caddyfile
 ```
 
-Replace its contents with:
-
-```caddyfile
-YOUR_DOMAIN, www.YOUR_DOMAIN {
-  encode zstd gzip
-  reverse_proxy 127.0.0.1:8081
-}
-```
+Its reverse proxies retry failed upstream connections for up to five seconds.
+This covers the short web-container handoff without retrying application
+responses or duplicating checkout requests.
 
 Validate and reload without downtime:
 

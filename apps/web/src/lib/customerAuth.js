@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { fetchWithRecovery, responseErrorMessage } from './network.js';
 
 const CSRF_COOKIE = 'mc_customer_csrf';
 const AUTH_EVENT = 'maria-clara-customer-auth-changed';
@@ -35,7 +36,7 @@ function csrfHeaders(options) {
 }
 
 export async function customerJson(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetchWithRecovery(path, {
     cache: 'no-store',
     credentials: 'same-origin',
     ...options,
@@ -47,7 +48,7 @@ export async function customerJson(path, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (response.status === 401) clearReadableSessionCookie();
-  if (!response.ok) throw new Error(body.error || 'Something went wrong.');
+  if (!response.ok) throw new Error(body.error || responseErrorMessage(response));
   return body;
 }
 

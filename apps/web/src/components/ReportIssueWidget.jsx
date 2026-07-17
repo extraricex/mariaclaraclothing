@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import useModalFocus from '../hooks/useModalFocus.js';
+import { fetchWithRecovery, responseErrorMessage } from '../lib/network.js';
 
 const ISSUE_TYPES = [
   ['checkout_problem', 'Checkout problem'],
@@ -96,12 +97,12 @@ export default function ReportIssueWidget({ settings, cartItems, inline = false 
       payload.set('orderNumber', orderNumber);
       payload.set('errorMessage', lastFrontendError);
       if (form.screenshot) payload.set('screenshot', form.screenshot);
-      const response = await fetch('/api/issue-reports', {
+      const response = await fetchWithRecovery('/api/issue-reports', {
         method: 'POST',
         body: payload
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Could not submit issue report.');
+      if (!response.ok) throw new Error(body.error || responseErrorMessage(response, 'Could not submit issue report.'));
       setStatus({ tone: 'ok', message: 'Report submitted. Thank you for helping us improve the site.' });
       setForm({ name: '', email: '', phone: '', issueType: 'website_display_ui_issue', message: '', screenshot: null });
     } catch (error) {

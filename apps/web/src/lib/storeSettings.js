@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { fetchWithRecovery } from './network.js';
 
 export const DEFAULT_INFO_PAGES = {
   faq: [
@@ -133,7 +134,7 @@ export function loadStorefrontSettings() {
       window.__mariaClaraStorefrontSettingsPromise?.then
       ? window.__mariaClaraStorefrontSettingsPromise
       : null;
-    const request = bootstrappedRequest || fetch('/api/storefront-settings', { cache: 'no-store' })
+    const request = bootstrappedRequest || fetchWithRecovery('/api/storefront-settings', { cache: 'no-store' })
       .then((response) => {
         if (!response.ok) throw new Error('Could not load storefront settings.');
         return response.json();
