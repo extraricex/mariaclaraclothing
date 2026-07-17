@@ -112,6 +112,45 @@ test('Pancake status updates preserve authoritative website totals and PayMongo 
   assert.equal(updated.customer.phone, '09171234567');
 });
 
+test('Pancake inbound sync cannot regress a website COD confirmation to pending', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'MCC-CANCELLED-COD',
+    checkoutChannel: 'storefront_checkout',
+    paymentMethod: 'cash_on_delivery',
+    paymentStatus: 'cod_pending',
+    status: 'cancelled',
+    fulfillmentStatus: 'cancelled',
+    codConfirmationStatus: 'cancelled',
+    deliveryStatus: 'cancelled',
+    ...completeDelivery(),
+    items: []
+  });
+  await syncRepo.upsertOrderLink({
+    orderNumber: 'MCC-CANCELLED-COD',
+    pancakeOrderId: 'PK-CANCELLED-COD',
+    syncStatus: 'synced'
+  });
+
+  await service.processInboundPancakeOrder({
+    pancakeOrder: {
+      id: 'PK-CANCELLED-COD',
+      custom_id: 'MCC-CANCELLED-COD',
+      status: 'Cancelled',
+      updated_at: '2026-07-18T00:00:00.000Z'
+    },
+    orderRepository: orders,
+    syncRepository: syncRepo
+  });
+
+  const updated = orders.orders.get('MCC-CANCELLED-COD');
+  assert.equal(updated.status, 'cancelled');
+  assert.equal(updated.codConfirmationStatus, 'cancelled');
+});
+
 test('partial Pancake status updates preserve complete native POS delivery fields', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');

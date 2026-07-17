@@ -145,6 +145,13 @@ function mergeNonBlankFields(existing = {}, incoming = {}) {
   return merged;
 }
 
+function codConfirmationStatusFromOrderStatus(status, fallback = 'pending') {
+  if (['cancelled', 'failed'].includes(status)) return 'cancelled';
+  if (status === 'unreachable') return 'unreachable';
+  if (['confirmed', 'packed', 'shipped', 'delivered'].includes(status)) return 'confirmed';
+  return fallback || 'pending';
+}
+
 function inboundOrderPatch(normalized, existing = {}) {
   const patch = {
     status: normalized.status,
@@ -165,6 +172,13 @@ function inboundOrderPatch(normalized, existing = {}) {
     patch.address = existing.address;
     patch.deliveryNotes = existing.deliveryNotes || '';
     patch.notes = existing.notes || '';
+    // Pancake does not expose the website's COD-confirmation field. Its mapper
+    // therefore supplies a synthetic "pending" value, which must not regress a
+    // confirmed, unreachable, or cancelled website order during inbound sync.
+    patch.codConfirmationStatus = codConfirmationStatusFromOrderStatus(
+      normalized.status,
+      existing.codConfirmationStatus
+    );
     patch.paymentStatus = existing.paymentProvider === 'paymongo'
       ? existing.paymentStatus
       : normalized.paymentStatus;
