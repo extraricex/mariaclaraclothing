@@ -397,7 +397,7 @@ test('AddPaymentInfo includes the selected method and dispatches once per event 
   assert.equal(trackFacebookAddPaymentInfo([item], { totalCents: 89900 }, 'paymongo', 'payment:1', options), false);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][1], 'AddPaymentInfo');
-  assert.deepEqual(calls[0][3], { eventID: 'payment:1' });
+  assert.deepEqual(calls[0][3], { eventID: 'payment_1' });
 });
 
 test('Purchase dispatches once with the server event ID', () => {

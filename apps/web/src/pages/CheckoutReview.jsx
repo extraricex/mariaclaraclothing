@@ -159,7 +159,7 @@ export default function CheckoutReview() {
       quote.items || items,
       quote,
       paymentMethod,
-      `payment:${cartSessionId}:${quote.id}:${paymentMethod}`,
+      `payment:${cartSessionId}:${paymentMethod}`,
       { path: '/checkout/review' }
     );
   }, [cartSessionId, items, paymentMethod, quote, settingsLoaded]);
@@ -198,7 +198,7 @@ export default function CheckoutReview() {
       quote.items || items,
       quote,
       methodId,
-      `payment:${cartSessionId}:${quote.id}:${methodId}`
+      `payment:${cartSessionId}:${methodId}`
     );
   }
 

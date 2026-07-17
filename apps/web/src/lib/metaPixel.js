@@ -1,4 +1,4 @@
-import { createFunnelEventId, trackFunnelEvent } from './funnelAnalytics.js';
+import { createFunnelEventId, normalizeFunnelEventId, trackFunnelEvent } from './funnelAnalytics.js';
 
 export const META_CURRENCY = 'PHP';
 const META_SCRIPT_URL = 'https://connect.facebook.net/en_US/fbevents.js';
@@ -456,7 +456,7 @@ export function trackFacebookViewContent(product, options = {}) {
 export function trackFacebookAddToCart(item, options = {}) {
   const payload = buildFacebookAddToCart(item);
   if (!payload?.content_ids.length) return false;
-  const eventId = String(options.eventId || createFunnelEventId('addtocart'));
+  const eventId = normalizeFunnelEventId(options.eventId || createFunnelEventId('addtocart'), 'addtocart');
   const tracked = trackFacebookEvent('AddToCart', payload, { ...options, eventId });
   trackFunnelEvent('add_to_cart', {
     eventId,
@@ -473,27 +473,28 @@ export function trackFacebookAddToCart(item, options = {}) {
 }
 
 export function trackFacebookInitiateCheckout(items, totals, eventId, options = {}) {
-  if (!eventId || lastCheckoutEventId === eventId) return false;
+  const normalizedEventId = eventId ? normalizeFunnelEventId(eventId, 'checkout') : '';
+  if (!normalizedEventId || lastCheckoutEventId === normalizedEventId) return false;
   const payload = buildFacebookInitiateCheckout(items, totals);
   if (!payload?.content_ids.length) return false;
-  const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId });
+  const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId: normalizedEventId });
   trackFunnelEvent('initiate_checkout', {
-    eventId,
+    eventId: normalizedEventId,
     path: options.path,
     quantity: payload.num_items,
     valueCents: totals.totalCents,
-    dedupeKey: String(eventId),
+    dedupeKey: normalizedEventId,
     dedupeMilliseconds: 60_000,
     metaBrowserSent: tracked,
     metaEventName: 'InitiateCheckout',
     metaCustomData: payload
   });
-  if (tracked) lastCheckoutEventId = eventId;
+  if (tracked) lastCheckoutEventId = normalizedEventId;
   return tracked;
 }
 
 export function trackFacebookAddPaymentInfo(items, totals, paymentMethod, eventId, options = {}) {
-  const normalizedEventId = String(eventId || '').trim();
+  const normalizedEventId = eventId ? normalizeFunnelEventId(eventId, 'payment') : '';
   if (!normalizedEventId) return false;
   const payload = buildFacebookAddPaymentInfo(items, totals, paymentMethod);
   if (!payload?.content_ids.length) return false;

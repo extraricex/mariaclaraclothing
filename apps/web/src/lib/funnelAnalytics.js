@@ -15,6 +15,12 @@ export function createFunnelEventId(prefix = 'event') {
   return randomId(prefix);
 }
 
+export function normalizeFunnelEventId(value, fallbackPrefix = 'event') {
+  return String(value || randomId(fallbackPrefix))
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 100);
+}
+
 function sessionId() {
   const session = storage();
   const existing = session?.getItem(SESSION_KEY) || '';
@@ -65,7 +71,7 @@ export function trackFunnelEvent(eventName, input = {}) {
     ? null
     : Math.round(Number(input.valueCents));
   const payload = {
-    eventId: String(input.eventId || randomId('event')).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100),
+    eventId: normalizeFunnelEventId(input.eventId),
     eventName,
     sessionId: sessionId(),
     path,
@@ -80,7 +86,7 @@ export function trackFunnelEvent(eventName, input = {}) {
     ...campaign(),
     ...(input.metaBrowserSent === true ? {
       metaBrowserSent: true,
-      metaEventId: String(input.eventId || '').slice(0, 100),
+      metaEventId: normalizeFunnelEventId(input.metaEventId || input.eventId),
       metaEventName: String(input.metaEventName || '').slice(0, 40),
       metaCustomData: input.metaCustomData && typeof input.metaCustomData === 'object'
         ? input.metaCustomData

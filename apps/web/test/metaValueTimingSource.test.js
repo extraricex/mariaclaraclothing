@@ -33,3 +33,10 @@ test('COD and PayMongo browser Purchase events only run after their valid comple
   assert.match(thankYou, /order\?\.paymentMethod === 'cash_on_delivery'[\s\S]*order\?\.paymentMethod === 'paymongo' && order\.paymentStatus === 'paid'/);
   assert.match(thankYou, /claimMetaPurchase\(order\.orderNumber, confirmation\.confirmationToken\)[\s\S]*trackFacebookPurchasePayload\(claim\.purchase,[\s\S]*completeMetaPurchase/);
 });
+
+test('AddPaymentInfo identity is stable across checkout quote refreshes', async () => {
+  const review = await source('pages/CheckoutReview.jsx');
+  assert.match(review, /`payment:\$\{cartSessionId\}:\$\{paymentMethod\}`/);
+  assert.match(review, /`payment:\$\{cartSessionId\}:\$\{methodId\}`/);
+  assert.doesNotMatch(review, /payment:\$\{cartSessionId\}:\$\{quote\.id\}/);
+});
