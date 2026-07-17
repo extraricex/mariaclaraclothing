@@ -293,6 +293,7 @@ export function buildFacebookViewContent(product = {}) {
     content_variant: String(product.size || ''),
     contents: [{ id: contentId, quantity: 1, item_price: value }],
     currency: META_CURRENCY,
+    num_items: 1,
     value
   };
 }

@@ -316,6 +316,7 @@ test('ViewContent uses the product ID and PHP price', () => {
     content_variant: '',
     contents: [{ id: 'P-1', quantity: 1, item_price: 799 }],
     currency: 'PHP',
+    num_items: 1,
     value: 799
   });
 });
