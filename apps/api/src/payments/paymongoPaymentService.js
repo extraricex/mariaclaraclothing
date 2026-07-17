@@ -9,6 +9,7 @@ const { buildMetaPurchaseEvent } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 const { queueMetaPurchase } = require('../marketing/metaPurchaseService');
 const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
+const { enqueueOrderConfirmationNotifications } = require('../notifications/orderNotificationService');
 const {
   deliveryInformationIssues,
   requireCompleteDeliveryInformation
@@ -91,7 +92,8 @@ function restockItems(order) {
 
 async function processPaidWebhook(payload, {
   metaEnabled = false,
-  enqueueAdminEmail = enqueueAdminNewOrderEmail
+  enqueueAdminEmail = enqueueAdminNewOrderEmail,
+  enqueueCustomerConfirmation = enqueueOrderConfirmationNotifications
 } = {}) {
   const event = parsePaidEvent(payload);
   if (event.eventType !== 'checkout_session.payment.paid') return { status: 'ignored', eventType: event.eventType };
@@ -101,7 +103,8 @@ async function processPaidWebhook(payload, {
   const result = await transaction((client) => applyPaidWebhookEvent(event, {
     client,
     metaEnabled,
-    enqueueAdminEmail
+    enqueueAdminEmail,
+    enqueueCustomerConfirmation
   }));
   if (result.status === 'paid' || result.status === 'duplicate') {
     await pancakeOrderSyncRepository.backfillSentOrderExportLinks?.({ limit: 100 });
@@ -141,6 +144,7 @@ async function applyPaidWebhookEvent(event, {
   client,
   metaEnabled = false,
   enqueueAdminEmail = enqueueAdminNewOrderEmail,
+  enqueueCustomerConfirmation = enqueueOrderConfirmationNotifications,
   findOrder = findOrderByNumber,
   updateOrderRecord = updateOrder,
   buildMetaEvent = buildMetaPurchaseEvent,
@@ -207,6 +211,7 @@ async function applyPaidWebhookEvent(event, {
   }
   if (!paidAfterCancellation && deliveryComplete) {
     await enqueueAdminEmail(updated, { client });
+    await enqueueCustomerConfirmation(updated, { client });
   }
   return { status: 'paid', orderNumber: updated.orderNumber, order: updated };
 }

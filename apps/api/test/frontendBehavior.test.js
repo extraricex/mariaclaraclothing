@@ -40,6 +40,7 @@ test('legacy storefront exposes pre-purchase events but cannot emit Purchase', (
   assert.match(pixel, /facebook\.com\/tr/);
   assert.match(pixel, /connect\.facebook\.net\/en_US\/fbevents\.js/);
   assert.match(pixel, /fbq\('init', pixelId\)/);
+  assert.match(pixel, /fbq\('set', 'autoConfig', false, pixelId\)/);
   assert.match(pixel, /fbq\('track', 'PageView'\)/);
   assert.match(pixel, /trackMetaPixelEvent/);
   assert.match(pixel, /trackMetaPixelEvent\('ViewContent'/);

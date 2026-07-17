@@ -1,4 +1,6 @@
-const CURRENCY = 'PHP';
+import { trackFunnelEvent } from './funnelAnalytics.js';
+
+export const META_CURRENCY = 'PHP';
 const META_SCRIPT_URL = 'https://connect.facebook.net/en_US/fbevents.js';
 const META_CONSENT_KEY = 'maria-clara-meta-tracking-consent';
 const MONETARY_EVENTS = new Set(['ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase']);
@@ -99,6 +101,10 @@ export function initializeFacebookMetaPixel(options = {}) {
 
   if (!windowRef || !documentRef || !enabled || !pixelId || isFacebookAdminPath(path)) return false;
   const consentGranted = hasMetaTrackingConsent({ ...options, requireConsent });
+  if (requireConsent && !consentGranted) {
+    setFacebookPixelConsent(windowRef, 'revoke');
+    return false;
+  }
   if (windowRef.__mariaClaraFacebookPixelId === pixelId) {
     setFacebookPixelConsent(windowRef, consentGranted ? 'grant' : 'revoke');
     return consentGranted;
@@ -129,6 +135,7 @@ export function initializeFacebookMetaPixel(options = {}) {
   }
 
   if (requireConsent) setFacebookPixelConsent(windowRef, 'revoke');
+  windowRef.fbq('set', 'autoConfig', false, pixelId);
   windowRef.fbq('init', pixelId);
   if (requireConsent) {
     setFacebookPixelConsent(windowRef, consentGranted ? 'grant' : 'revoke');
@@ -142,7 +149,7 @@ export function initializeFacebookMetaPixel(options = {}) {
 export function normalizeMetaValue(amount) {
   const normalized = typeof amount === 'number'
     ? amount
-    : Number(String(amount ?? '').replace(/[₱,\s]/g, ''));
+    : Number(String(amount ?? '').replace(/[₱,\s]/g, '').trim());
   if (!Number.isFinite(normalized) || normalized <= 0) return null;
   return Number(normalized.toFixed(2));
 }
@@ -196,6 +203,20 @@ export function purchaseEventId(orderNumber) {
   return orderId ? `purchase_${orderId}` : '';
 }
 
+export function validateMetaPurchase({ value, currency, eventId } = {}) {
+  const errors = [];
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    errors.push('Purchase value must be a numeric amount greater than 0.');
+  }
+  if (currency !== META_CURRENCY) {
+    errors.push(`Purchase currency must be exactly "${META_CURRENCY}".`);
+  }
+  if (!String(eventId || '').trim()) {
+    errors.push('Meta Purchase event ID is required.');
+  }
+  return { valid: errors.length === 0, errors };
+}
+
 export function buildFacebookPurchase(order = {}, items = [], suppliedEventId = '') {
   const value = facebookPurchaseValue(order.totalCents);
   const eventId = String(suppliedEventId || order.trackingEventId || purchaseEventId(order.orderNumber || order.id)).trim();
@@ -209,7 +230,7 @@ export function buildFacebookPurchase(order = {}, items = [], suppliedEventId = 
       content_ids: contents.map((item) => item.id),
       content_type: 'product',
       contents,
-      currency: CURRENCY,
+      currency: META_CURRENCY,
       num_items: contents.reduce((sum, item) => sum + item.quantity, 0),
       order_id: String(order.orderNumber || ''),
       value
@@ -228,7 +249,7 @@ export function buildFacebookViewContent(product = {}) {
     content_category: String(product.collection || ''),
     content_variant: String(product.size || ''),
     contents: [{ id: contentId, quantity: 1, item_price: value }],
-    currency: CURRENCY,
+    currency: META_CURRENCY,
     value
   };
 }
@@ -248,7 +269,7 @@ export function buildFacebookAddToCart(item = {}) {
     content_type: 'product',
     content_variant: String(item.size || ''),
     contents,
-    currency: CURRENCY,
+    currency: META_CURRENCY,
     num_items: contents.reduce((sum, content) => sum + content.quantity, 0),
     value
   };
@@ -263,7 +284,7 @@ export function buildFacebookInitiateCheckout(items = [], totals = {}) {
     content_ids: contents.map((content) => content.id),
     content_type: 'product',
     contents,
-    currency: CURRENCY,
+    currency: META_CURRENCY,
     num_items: contents.reduce((sum, content) => sum + content.quantity, 0),
     value
   };
@@ -280,7 +301,7 @@ export function buildFacebookAddPaymentInfo(items = [], totals = {}, paymentMeth
 
 function hasValidMonetaryPayload(eventName, payload) {
   if (!MONETARY_EVENTS.has(eventName)) return true;
-  return payload?.currency === CURRENCY &&
+  return payload?.currency === META_CURRENCY &&
     typeof payload?.value === 'number' &&
     Number.isFinite(payload.value) &&
     payload.value > 0;
@@ -335,6 +356,7 @@ export function flushPendingFacebookEvents(options = {}) {
 }
 
 export function trackFacebookPageView(path, options = {}) {
+  trackFunnelEvent('page_view', { path, dedupeKey: path, dedupeMilliseconds: 1200 });
   const windowRef = options.windowRef || (typeof window !== 'undefined' ? window : null);
   const initialPath = String(windowRef?.__mariaClaraInitialMetaPageViewPath || '');
   if (initialPath) {
@@ -355,6 +377,15 @@ export function trackFacebookPageView(path, options = {}) {
 export function trackFacebookViewContent(product, options = {}) {
   const payload = buildFacebookViewContent(product);
   if (!payload?.content_ids.length) return false;
+  trackFunnelEvent('product_view', {
+    path: options.path,
+    productId: String(product.productId || product.id || product.slug || payload.content_ids[0] || ''),
+    variantId: String(product.variantId || payload.content_ids[0] || ''),
+    quantity: 1,
+    valueCents: product.priceCents,
+    dedupeKey: `${options.path || ''}:${payload.content_ids[0]}`,
+    dedupeMilliseconds: 1500
+  });
   const key = `${options.path || ''}:${payload.content_ids.join(',')}`;
   if (key === lastViewContentKey) return false;
   const tracked = trackFacebookEvent('ViewContent', payload, options);
@@ -365,6 +396,13 @@ export function trackFacebookViewContent(product, options = {}) {
 export function trackFacebookAddToCart(item, options = {}) {
   const payload = buildFacebookAddToCart(item);
   if (!payload?.content_ids.length) return false;
+  trackFunnelEvent('add_to_cart', {
+    path: options.path,
+    productId: String(item.productId || item.slug || payload.content_ids[0] || ''),
+    variantId: String(item.variantId || payload.content_ids[0] || ''),
+    quantity: payload.num_items,
+    valueCents: Math.round(payload.value * 100)
+  });
   return trackFacebookEvent('AddToCart', payload, options);
 }
 
@@ -372,6 +410,13 @@ export function trackFacebookInitiateCheckout(items, totals, eventId, options = 
   if (!eventId || lastCheckoutEventId === eventId) return false;
   const payload = buildFacebookInitiateCheckout(items, totals);
   if (!payload?.content_ids.length) return false;
+  trackFunnelEvent('initiate_checkout', {
+    path: options.path,
+    quantity: payload.num_items,
+    valueCents: totals.totalCents,
+    dedupeKey: String(eventId),
+    dedupeMilliseconds: 60_000
+  });
   const tracked = trackFacebookEvent('InitiateCheckout', payload, { ...options, eventId });
   if (tracked) lastCheckoutEventId = eventId;
   return tracked;
@@ -382,6 +427,14 @@ export function trackFacebookAddPaymentInfo(items, totals, paymentMethod, eventI
   if (!normalizedEventId) return false;
   const payload = buildFacebookAddPaymentInfo(items, totals, paymentMethod);
   if (!payload?.content_ids.length) return false;
+  trackFunnelEvent('add_payment_info', {
+    path: options.path,
+    quantity: payload.num_items,
+    valueCents: totals.totalCents,
+    paymentMethod,
+    dedupeKey: normalizedEventId,
+    dedupeMilliseconds: 60_000
+  });
   const storage = options.storage || (typeof sessionStorage !== 'undefined' ? sessionStorage : null);
   const storageKey = `maria-clara-facebook-${normalizedEventId}`;
   if (storage?.getItem(storageKey)) return false;
@@ -415,7 +468,8 @@ export function trackFacebookPurchasePayload(purchase = {}, options = {}) {
     typeof item?.item_price === 'number' && Number.isFinite(item.item_price) && item.item_price > 0
   ));
   const quantity = validContents ? contents.reduce((sum, item) => sum + item.quantity, 0) : 0;
-  if (!eventId || !hasValidMonetaryPayload('Purchase', payload) || !validContents ||
+  const validation = validateMetaPurchase({ value: payload?.value, currency: payload?.currency, eventId });
+  if (!validation.valid || !hasValidMonetaryPayload('Purchase', payload) || !validContents ||
       contentIds.length !== contents.length || payload.num_items !== quantity) return false;
 
   const storage = options.storage || (typeof localStorage !== 'undefined' ? localStorage : null);
@@ -437,7 +491,7 @@ function logFacebookPurchaseDevelopment(order, eventId, items, sent, reason) {
     orderId: String(order?.id || order?.orderNumber || ''),
     eventId,
     purchaseValue: value,
-    currency: CURRENCY,
+    currency: META_CURRENCY,
     paymentMethod: String(order?.paymentMethod || ''),
     numberOfItems: (Array.isArray(items) ? items : []).reduce((total, item) => total + Math.max(0, Number(item.quantity || 0)), 0),
     browserPixelSent: sent,

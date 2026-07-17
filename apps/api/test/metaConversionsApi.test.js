@@ -70,3 +70,15 @@ test('Meta CAPI client never sends malformed monetary values', async () => {
   }
   assert.equal(requests, 0);
 });
+
+test('Meta CAPI client refuses a Purchase without its permanent event ID', async () => {
+  let requests = 0;
+  await assert.rejects(
+    sendMetaConversionsEvent({ ...event, event_id: '' }, {
+      config,
+      fetchImpl: async () => { requests += 1; }
+    }),
+    (error) => error.retryable === false && /event ID is required/.test(error.message)
+  );
+  assert.equal(requests, 0);
+});

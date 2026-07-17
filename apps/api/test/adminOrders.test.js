@@ -574,7 +574,7 @@ test('admin cancellation restores order stock and records restock movement', asy
         ...adminRequest('local-admin-token').headers,
         'content-type': 'application/json'
       },
-      body: JSON.stringify({ status: 'cancelled' })
+      body: JSON.stringify({ status: 'cancelled', cancellationReason: 'customer_requested' })
     });
     const cancelBody = await cancelResponse.json();
     const afterCancelProduct = await findEditableProductBySlug(slug);
@@ -735,9 +735,13 @@ test('admin order status updates reject unsupported statuses', async () => {
   }
 });
 
-test('admin cancellation releases a pending PayMongo reservation without allowing a second restock', () => {
+test('admin cancellation requires a reason and releases a pending PayMongo reservation without allowing a second restock', () => {
   const { normalizeOrderUpdate } = require('../src/routes/admin');
-  const changes = normalizeOrderUpdate({ status: 'cancelled', paymentStatus: 'pending_payment' }, {
+  assert.throws(
+    () => normalizeOrderUpdate({ status: 'cancelled' }, { status: 'pending_payment', paymentMethod: 'paymongo', paymentStatus: 'pending_payment' }),
+    (error) => error.code === 'CANCELLATION_REASON_REQUIRED'
+  );
+  const changes = normalizeOrderUpdate({ status: 'cancelled', paymentStatus: 'pending_payment', cancellationReason: 'payment_failed' }, {
     status: 'pending_payment',
     paymentMethod: 'paymongo',
     paymentStatus: 'pending_payment',
@@ -748,6 +752,7 @@ test('admin cancellation releases a pending PayMongo reservation without allowin
   assert.equal(changes.inventoryReservationStatus, 'released');
   assert.equal(changes.fulfillmentStatus, 'cancelled');
   assert.equal(changes.deliveryStatus, 'cancelled');
+  assert.equal(changes.cancellationReason, 'payment_failed');
 });
 
 test('historical order line snapshots survive product rename, repricing, and archive', async () => {
@@ -798,7 +803,7 @@ test('admin cannot advance an incomplete order but can correct it or cancel it',
       && /before processing/i.test(error.message)
   );
 
-  const cancelled = normalizeOrderUpdate({ status: 'cancelled' }, incomplete);
+  const cancelled = normalizeOrderUpdate({ status: 'cancelled', cancellationReason: 'invalid_address' }, incomplete);
   assert.equal(cancelled.status, 'cancelled');
 
   const corrected = normalizeOrderUpdate({

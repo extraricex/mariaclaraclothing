@@ -20,12 +20,16 @@ test('storefront renders approved opposite-corner offer and Messenger support co
   assert.match(source, /storeInfo\?\.messengerUrl/);
 });
 
-test('privacy dialog opens only from the footer and is not an automatic aside', async () => {
+test('required consent uses a non-blocking choices bar that the footer can reopen', async () => {
   const source = await readFile(shellPath, 'utf8');
+  const choices = source.slice(source.indexOf('function PrivacyChoices'), source.indexOf('function FreeShippingAside'));
   assert.match(source, /privacyDialogOpen/);
+  assert.match(source, /getMetaTrackingConsent\(\) === 'unset'/);
   assert.match(source, /setPrivacyDialogOpen\(true\)/);
   assert.match(source, /setPrivacyDialogOpen\(false\)/);
-  assert.doesNotMatch(source, /trackingConsent === 'unset'/);
+  assert.match(source, /onClick=\{openPrivacyChoices\}>Privacy choices/);
+  assert.match(choices, /role="region" aria-label="Privacy choices"/);
+  assert.doesNotMatch(choices, /fixed inset-0|aria-modal="true"/);
 });
 
 test('storefront loads one dismissible New Arrivals recommendation into a responsive offer dock', async () => {

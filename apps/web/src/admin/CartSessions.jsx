@@ -18,6 +18,7 @@ const PAGE_COPY = {
 export default function CartSessions({ status }) {
   const [sessions, setSessions] = useState([]);
   const [message, setMessage] = useState('');
+  const [sendingSessionId, setSendingSessionId] = useState('');
   const copy = PAGE_COPY[status] || PAGE_COPY.draft;
 
   const load = useCallback(() => {
@@ -37,6 +38,28 @@ export default function CartSessions({ status }) {
       setMessage(`${label[0].toUpperCase()}${label.slice(1)} deleted.`);
     } catch (error) {
       setMessage(error.message);
+    }
+  }
+
+  async function sendRecoveryEmail(session) {
+    setSendingSessionId(session.sessionId);
+    setMessage('');
+    try {
+      const body = await adminSend('POST', `/api/admin/cart-sessions/${encodeURIComponent(session.sessionId)}/recovery-email`, {});
+      setSessions((current) => current.map((item) => item.sessionId === session.sessionId
+        ? {
+            ...item,
+            recoveryStatus: 'sent',
+            recoveryEmailSentAt: body.notification?.sentAt || new Date().toISOString(),
+            recoveryError: ''
+          }
+        : item));
+      setMessage('The one-time cart reminder was sent.');
+    } catch (error) {
+      setMessage(error.message);
+      load();
+    } finally {
+      setSendingSessionId('');
     }
   }
 
@@ -63,6 +86,7 @@ export default function CartSessions({ status }) {
               <th className="p-3">Subtotal</th>
               <th className="p-3">Cart contents</th>
               <th className="p-3">Last activity</th>
+              {status === 'abandoned_checkout' && <th className="p-3">Reminder</th>}
               <th className="p-3">Action</th>
             </tr>
           </thead>
@@ -87,11 +111,32 @@ export default function CartSessions({ status }) {
                   </ul>
                 </td>
                 <td className="p-3 text-xs text-clay">{session.lastActivityAt ? new Date(session.lastActivityAt).toLocaleString('en-PH') : ''}</td>
+                {status === 'abandoned_checkout' && (
+                  <td className="p-3 text-xs">
+                    {session.recoveryStatus === 'sent' ? (
+                      <span className="text-green-700">Sent {session.recoveryEmailSentAt ? new Date(session.recoveryEmailSentAt).toLocaleString('en-PH') : ''}</span>
+                    ) : session.recoveryConsent && session.email ? (
+                      <div>
+                        <button
+                          type="button"
+                          className="font-semibold text-accent underline disabled:opacity-50"
+                          disabled={sendingSessionId === session.sessionId || session.recoveryStatus === 'sending'}
+                          onClick={() => sendRecoveryEmail(session)}
+                        >
+                          {sendingSessionId === session.sessionId || session.recoveryStatus === 'sending'
+                            ? 'Sending...'
+                            : session.recoveryStatus === 'failed' ? 'Retry reminder' : 'Send one-time reminder'}
+                        </button>
+                        {session.recoveryError && <span className="mt-1 block text-red-700">{session.recoveryError}</span>}
+                      </div>
+                    ) : <span className="text-clay">No consent</span>}
+                  </td>
+                )}
                 <td className="p-3"><button type="button" className="text-xs font-semibold text-red-700 underline" onClick={() => deleteSession(session)}>Delete</button></td>
               </tr>
             ))}
             {!sessions.length && (
-              <tr><td colSpan="7" className="p-6 text-center text-sm text-clay">No sessions found.</td></tr>
+              <tr><td colSpan={status === 'abandoned_checkout' ? 8 : 7} className="p-6 text-center text-sm text-clay">No sessions found.</td></tr>
             )}
           </tbody>
         </table>

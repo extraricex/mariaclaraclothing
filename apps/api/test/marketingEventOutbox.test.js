@@ -37,6 +37,7 @@ test('Meta outbox schema enforces unique events and queryable pending state', as
 test('Meta outbox repository inserts and atomically claims due events', async () => {
   const client = recordingClient([{ id: 'meta-1', event_id: 'purchase_MCC-1', payload: {} }]);
   await insertMetaPurchaseOutbox(client, {
+    event_name: 'Purchase',
     event_id: 'purchase_MCC-1',
     custom_data: { order_id: 'MCC-1', currency: 'PHP', value: 1278 }
   });
@@ -58,10 +59,22 @@ test('Meta outbox refuses Purchase events with invalid value or currency', async
     { value: 1278 }
   ]) {
     assert.equal(await insertMetaPurchaseOutbox(client, {
-      event_id: 'purchase_invalid', custom_data: customData
+      event_name: 'Purchase', event_id: 'purchase_invalid', custom_data: customData
     }), null);
   }
   assert.equal(client.calls.length, 0);
+});
+
+test('Meta order schema persists exact Purchase value and PHP currency', async () => {
+  const schema = await fs.readFile(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8');
+  const migration = await fs.readFile(path.join(__dirname, '..', 'db', 'migrations', '20260717_meta_purchase_value_currency.sql'), 'utf8');
+  for (const sql of [schema, migration]) {
+    assert.match(sql, /meta_purchase_value/);
+    assert.match(sql, /meta_purchase_currency/);
+    assert.match(sql, /currency[^\n]*DEFAULT 'PHP'/);
+  }
+  assert.match(migration, /CHECK \(currency = 'PHP'\)/);
+  assert.match(migration, /CHECK \(meta_purchase_value IS NULL OR meta_purchase_value > 0\)/);
 });
 
 test('Meta outbox repository records sent, retry, failed and stale states', async () => {

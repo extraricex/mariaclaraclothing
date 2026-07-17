@@ -80,7 +80,7 @@ Required by the production Compose stack or production validation:
 - `ADMIN_PASSWORD`
 - `CUSTOMER_AUTH_SECRET` with at least 32 characters
 - `ORDER_CONFIRMATION_SECRET` with at least 32 characters
-- `VITE_FACEBOOK_META_PIXEL_ID` because the current production Compose file requires it
+- `CART_RECOVERY_SECRET`, `ANALYTICS_HASH_SALT`, and `PASSWORD_RESET_SECRET` with at least 32 characters each
 
 Production Compose fixes `APP_ENV=production` and API `PORT=3000`. Keep those
 values in the env file for clarity, but changing them there does not override the
@@ -536,13 +536,10 @@ ORDER_NOTIFICATIONS_ENABLED=false
 JNT_INTEGRATION_MODE=dry_run
 ```
 
-The Meta browser pixel ID is not a secret, but the production Compose file
-currently requires it even when the pixel is disabled. Set an intended public ID:
-
-```dotenv
-VITE_FACEBOOK_META_PIXEL_ENABLED=true
-VITE_FACEBOOK_META_PIXEL_ID=595813035761213
-```
+The Meta browser Pixel is configured at runtime in **Admin > Settings > Meta Pixel**.
+When CAPI is enabled, the admin Pixel ID is locked to `META_PIXEL_ID` so browser
+and server Purchase events always use the same data source. No Vite/browser-build
+Pixel setting is required.
 
 Check that no required placeholder remains:
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { customerLogin, customerRegister } from '../lib/customerAuth.js';
+import { customerJson, customerLogin, customerRegister } from '../lib/customerAuth.js';
 
 function AuthShell({ title, subtitle, children }) {
   return (
@@ -19,6 +19,7 @@ export function CustomerLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(() => new URLSearchParams(location.search).get('oauthError') || '');
+  const [notice] = useState(() => location.state?.message || '');
   const [pending, setPending] = useState(false);
   const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
   const redirectTo = typeof location.state?.from === 'string' && location.state.from.startsWith('/')
@@ -72,6 +73,8 @@ export function CustomerLogin() {
       <form onSubmit={handleSubmit} className={`${socialProviders.google || socialProviders.facebook ? '' : 'mt-8'} space-y-4`}>
         <label className="block text-sm font-semibold">Email<input className="field mt-1" type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
         <label className="block text-sm font-semibold">Password<input className="field mt-1" type="password" required placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
+        <p className="text-right text-xs"><Link to="/forgot-password" className="text-accent underline">Forgot password?</Link></p>
+        {notice && <p className="text-sm text-green-700" role="status">{notice}</p>}
         {error && <p className="text-sm text-accent-deep" role="alert">{error}</p>}
         <button type="submit" className="btn-ink w-full" disabled={pending}>{pending ? 'Logging in…' : 'Log in'}</button>
       </form>
@@ -139,4 +142,74 @@ export function CustomerRegister() {
       </p>
     </AuthShell>
   );
+}
+
+export function CustomerForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [pending, setPending] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setPending(true);
+    setMessage('');
+    try {
+      const body = await customerJson('/api/customer/password-reset/request', {
+        method: 'POST', body: JSON.stringify({ email })
+      });
+      setMessage(body.message);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <AuthShell title="Reset password" subtitle="Enter your account email and we’ll send a secure, one-time reset link.">
+    <form className="mt-8 space-y-4" onSubmit={submit}>
+      <label className="block text-sm font-semibold">Email<input className="field mt-1" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label>
+      {message && <p className="text-sm text-ink-soft" role="status">{message}</p>}
+      <button type="submit" className="btn-ink w-full" disabled={pending}>{pending ? 'Sending…' : 'Send reset link'}</button>
+    </form>
+    <p className="mt-6 text-sm"><Link to="/login" className="text-accent underline">Return to login</Link></p>
+  </AuthShell>;
+}
+
+export function CustomerResetPassword() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const token = new URLSearchParams(location.search).get('token') || '';
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [message, setMessage] = useState(token ? '' : 'This password reset link is invalid.');
+  const [pending, setPending] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (password !== confirmation) {
+      setMessage('Passwords do not match.');
+      return;
+    }
+    setPending(true);
+    setMessage('');
+    try {
+      const body = await customerJson('/api/customer/password-reset/complete', {
+        method: 'POST', body: JSON.stringify({ token, password })
+      });
+      navigate('/login', { replace: true, state: { message: body.message } });
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <AuthShell title="Choose a new password" subtitle="Use 8 or more characters and keep your account password private.">
+    <form className="mt-8 space-y-4" onSubmit={submit}>
+      <label className="block text-sm font-semibold">New password<input className="field mt-1" type="password" required minLength="8" maxLength="200" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+      <label className="block text-sm font-semibold">Confirm new password<input className="field mt-1" type="password" required minLength="8" maxLength="200" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
+      {message && <p className="text-sm text-accent-deep" role="alert">{message}</p>}
+      <button type="submit" className="btn-ink w-full" disabled={pending || !token}>{pending ? 'Saving…' : 'Reset password'}</button>
+    </form>
+  </AuthShell>;
 }

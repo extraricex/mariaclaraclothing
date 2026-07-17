@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart, getCart, openCartDrawer } from '../lib/cart.js';
@@ -8,11 +8,16 @@ import { sanitizeRichHtml } from '../lib/richText.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
+import { rememberRecentlyViewed } from '../lib/recentlyViewed.js';
 import CollectionCountdown from '../components/CollectionCountdown.jsx';
-import ProductReviews, { Stars } from '../components/ProductReviews.jsx';
+import Stars from '../components/Stars.jsx';
 import NotFound from './NotFound.jsx';
 import { productPath } from '../lib/productUrl.js';
 import useModalFocus from '../hooks/useModalFocus.js';
+import Breadcrumbs from '../components/Breadcrumbs.jsx';
+import { responsiveImageAttributes } from '../lib/responsiveImage.js';
+
+const ProductReviews = lazy(() => import('../components/ProductReviews.jsx'));
 
 export default function Product() {
   const { slug } = useParams();
@@ -97,14 +102,20 @@ export default function Product() {
     );
     const description = String(descriptionDocument.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300);
     const imageUrl = product.images?.[0]?.url || '';
-    document.title = `${product.name} | Maria Clara Clothing`;
+    const absoluteImageUrl = imageUrl ? new URL(imageUrl, window.location.origin).href : '';
+    const seoTitle = String(product.seo?.title || '').trim() || `${product.name} | Maria Clara Clothing`;
+    document.title = seoTitle;
     canonical.setAttribute('href', canonicalUrl);
     setMeta('name', 'description', description);
     setMeta('property', 'og:type', 'product');
-    setMeta('property', 'og:title', product.name);
+    setMeta('property', 'og:title', seoTitle);
     setMeta('property', 'og:description', description);
     setMeta('property', 'og:url', canonicalUrl);
-    if (imageUrl) setMeta('property', 'og:image', imageUrl);
+    if (absoluteImageUrl) setMeta('property', 'og:image', absoluteImageUrl);
+    setMeta('name', 'twitter:card', absoluteImageUrl ? 'summary_large_image' : 'summary');
+    setMeta('name', 'twitter:title', seoTitle);
+    setMeta('name', 'twitter:description', description);
+    if (absoluteImageUrl) setMeta('name', 'twitter:image', absoluteImageUrl);
     setMeta('property', 'product:price:amount', (Number(product.priceCents || 0) / 100).toFixed(2));
     setMeta('property', 'product:price:currency', 'PHP');
 
@@ -133,11 +144,16 @@ export default function Product() {
         }
       } : {})
     };
-    const schema = document.createElement('script');
-    schema.type = 'application/ld+json';
-    schema.dataset.mariaClaraProductSchema = 'true';
+    const serverSchema = document.head.querySelector('script[data-mcc-schema="Product"]');
+    const schema = serverSchema || document.createElement('script');
+    const createdSchema = !serverSchema;
+    const previousSchema = serverSchema?.textContent || '';
+    if (createdSchema) {
+      schema.type = 'application/ld+json';
+      schema.dataset.mccSchema = 'Product';
+      document.head.appendChild(schema);
+    }
     schema.textContent = JSON.stringify(productSchema);
-    document.head.appendChild(schema);
     return () => {
       document.title = previousTitle;
       if (createdCanonical) canonical.remove();
@@ -146,12 +162,14 @@ export default function Product() {
         if (change.created) change.element.remove();
         else change.element.setAttribute('content', change.previous);
       }
-      schema.remove();
+      if (createdSchema) schema.remove();
+      else schema.textContent = previousSchema;
     };
   }, [product]);
 
   useEffect(() => {
     if (!product) return;
+    rememberRecentlyViewed(product);
     const firstInStock = product.variants?.find((candidate) => Number(candidate.stockQuantity) > 0);
     trackFacebookViewContent({
       ...product,
@@ -215,6 +233,17 @@ export default function Product() {
   const variantSoldOut = soldOut || !variant || variantStock <= 0;
   const image = productImages[activeImage] || productImages[0];
   const productPage = product.productPage || {};
+  const metafieldText = (key) => {
+    const value = product.metafields?.[key];
+    return Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value || '').trim();
+  };
+  const productFacts = [
+    ['Material', metafieldText('material')],
+    ['Fabric weight', metafieldText('fabricWeight')],
+    ['Fit', metafieldText('fit')],
+    ['Color', metafieldText('color')],
+    ['Model', [metafieldText('modelHeight'), metafieldText('modelWearsSize') && `wears ${metafieldText('modelWearsSize')}`].filter(Boolean).join(' · ')]
+  ].filter(([, value]) => value);
   const page = productPage;
   const sizeChartImageUrl = page.sizeChartImageUrl || settings.sizeChart?.imageUrl || '';
   const sizeChartAltText = settings.sizeChart?.altText || `${product.name} size chart`;
@@ -379,9 +408,11 @@ export default function Product() {
 
   return (
     <div className="customer-page mx-auto max-w-7xl px-5 py-10 lg:px-8">
-      <p className="eyebrow">
-        <Link to="/" className="hover:text-accent">Shop</Link> / {product.collection || 'Catalog'}
-      </p>
+      <Breadcrumbs items={[
+        { label: 'Home', to: '/' },
+        { label: 'Shop', to: '/shop' },
+        { label: product.name }
+      ]} />
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
         <div className="min-w-0">
           <div
@@ -402,8 +433,12 @@ export default function Product() {
                 src={image.url}
                 alt={image.altText || `${product.name}, image ${activeImage + 1}`}
                 className={`product-photo-blend h-full w-full object-contain transition-opacity duration-300 ${mainImageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                fetchpriority={activeImage === 0 ? 'high' : 'auto'}
+                fetchPriority={activeImage === 0 ? 'high' : 'auto'}
                 decoding="async"
+                {...responsiveImageAttributes(image.url, {
+                  sizes: '(min-width: 1024px) 55vw, 100vw',
+                  shopifyWidths: [480, 960, 1600]
+                })}
                 onLoad={() => setMainImageLoaded(true)}
                 onError={() => setMainImageFailed(true)}
               />
@@ -456,6 +491,10 @@ export default function Product() {
                     className="product-photo-blend h-full w-full object-cover"
                     loading={index === 0 ? 'eager' : 'lazy'}
                     decoding="async"
+                    {...responsiveImageAttributes(thumb.url, {
+                      sizes: '64px',
+                      shopifyWidths: [128, 256]
+                    })}
                     onError={(event) => { event.currentTarget.hidden = true; }}
                   />
                 </button>
@@ -477,6 +516,17 @@ export default function Product() {
             <p className={`text-xl font-semibold sm:text-2xl ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>
+
+          {productFacts.length > 0 && (
+            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4 text-sm">
+              {productFacts.map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-clay">{label}</dt>
+                  <dd className="mt-1 break-words text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
 
           {countdown && (
             <CollectionCountdown collectionName={countdown.collectionName} config={countdown.config} />
@@ -532,6 +582,17 @@ export default function Product() {
               {variantSoldOut ? (page.soldOutText || 'Sold Out') : added ? 'Added ✓' : 'Add to cart'}
             </button>
           </div>
+          {variantSoldOut && settings.messengerUrl && (
+            <a
+              className="btn-ghost mt-3 inline-flex min-h-11 w-full items-center justify-center text-center"
+              href={settings.messengerUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Ask Maria Clara Clothing about restocking ${product.name}`}
+            >
+              Ask about restock
+            </a>
+          )}
           {stockMessage && <p className="mt-3 text-sm text-accent-deep" role="alert">{stockMessage}</p>}
           {added && (
             <p className="mt-3 text-sm text-accent-deep">
@@ -617,7 +678,9 @@ export default function Product() {
         </div>
       </div>
 
-      <ProductReviews product={product} />
+      <Suspense fallback={<div className="mt-16 min-h-24 border-t border-line" aria-label="Loading customer reviews" />}>
+        <ProductReviews product={product} />
+      </Suspense>
 
       {recommendedProducts.length > 0 && (
         <section className="mt-20 border-t border-line pt-8">

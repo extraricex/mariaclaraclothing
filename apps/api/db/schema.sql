@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_region_label text NOT NULL DEFAULT '',
   free_shipping_unlocked boolean NOT NULL DEFAULT false,
   total_cents integer NOT NULL DEFAULT 0,
+  currency text NOT NULL DEFAULT 'PHP' CHECK (currency = 'PHP'),
+  meta_purchase_value numeric(14,2) CHECK (meta_purchase_value IS NULL OR meta_purchase_value > 0),
+  meta_purchase_currency text NOT NULL DEFAULT 'PHP' CHECK (meta_purchase_currency = 'PHP'),
   cart_snapshot jsonb NOT NULL DEFAULT '[]'::jsonb,
   checkout_channel text NOT NULL DEFAULT 'storefront_checkout',
   payment_method text NOT NULL DEFAULT 'cash_on_delivery',
@@ -124,6 +127,8 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_metadata jsonb NOT NULL DEFA
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_sent_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_status text NOT NULL DEFAULT 'not_queued';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_email_error text NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_reason text NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_test_order boolean NOT NULL DEFAULT false;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_event_id text NOT NULL DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_tracking_version integer NOT NULL DEFAULT 1;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_browser_purchase_claim_id text NOT NULL DEFAULT '';
@@ -133,6 +138,9 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_capi_purchase_queued_at timesta
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_capi_purchase_sent_at timestamptz;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_status text NOT NULL DEFAULT 'legacy';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_last_error text NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'PHP';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_value numeric(14,2);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_purchase_currency text NOT NULL DEFAULT 'PHP';
 
 UPDATE orders
 SET meta_purchase_event_id = 'purchase_' || order_number
@@ -201,6 +209,7 @@ CREATE INDEX IF NOT EXISTS payment_operation_events_order_idx
 
 CREATE INDEX IF NOT EXISTS orders_placed_at_idx ON orders(placed_at DESC);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
+CREATE INDEX IF NOT EXISTS orders_test_order_placed_idx ON orders(is_test_order, placed_at DESC);
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code text NOT NULL DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb;
@@ -313,6 +322,18 @@ CREATE TABLE IF NOT EXISTS customer_auth_identities (
 CREATE INDEX IF NOT EXISTS customer_auth_identities_account_idx
   ON customer_auth_identities(customer_account_id);
 
+CREATE TABLE IF NOT EXISTS customer_password_resets (
+  id text PRIMARY KEY,
+  customer_account_id text NOT NULL REFERENCES customer_accounts(id) ON DELETE CASCADE,
+  token_hash text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS customer_password_resets_active_idx
+  ON customer_password_resets(customer_account_id, expires_at DESC) WHERE used_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash text PRIMARY KEY,
   csrf_token_hash text NOT NULL,
@@ -358,6 +379,49 @@ CREATE TABLE IF NOT EXISTS cart_sessions (
 
 CREATE INDEX IF NOT EXISTS cart_sessions_status_idx ON cart_sessions(status);
 CREATE INDEX IF NOT EXISTS cart_sessions_last_activity_idx ON cart_sessions(last_activity_at DESC);
+ALTER TABLE cart_sessions ADD COLUMN IF NOT EXISTS recovery_consent boolean NOT NULL DEFAULT false;
+ALTER TABLE cart_sessions ADD COLUMN IF NOT EXISTS recovery_status text NOT NULL DEFAULT 'not_requested';
+ALTER TABLE cart_sessions ADD COLUMN IF NOT EXISTS recovery_email_sent_at timestamptz;
+ALTER TABLE cart_sessions ADD COLUMN IF NOT EXISTS recovery_error text NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS cart_sessions_recovery_idx
+  ON cart_sessions(recovery_status, last_activity_at DESC)
+  WHERE recovery_consent = true AND converted_order_number = '';
+
+CREATE TABLE IF NOT EXISTS storefront_analytics_events (
+  event_id text PRIMARY KEY,
+  event_name text NOT NULL CHECK (event_name IN (
+    'page_view', 'product_view', 'add_to_cart', 'initiate_checkout', 'add_payment_info',
+    'payment_failed', 'payment_cancelled', 'web_vital'
+  )),
+  session_hash text NOT NULL,
+  path text NOT NULL DEFAULT '',
+  product_id text NOT NULL DEFAULT '',
+  variant_id text NOT NULL DEFAULT '',
+  quantity integer NOT NULL DEFAULT 0 CHECK (quantity >= 0 AND quantity <= 1000),
+  value_cents integer CHECK (value_cents IS NULL OR (value_cents >= 0 AND value_cents <= 100000000)),
+  currency text NOT NULL DEFAULT 'PHP' CHECK (currency = 'PHP'),
+  payment_method text NOT NULL DEFAULT '',
+  device_type text NOT NULL DEFAULT 'unknown' CHECK (device_type IN ('mobile', 'tablet', 'desktop', 'unknown')),
+  referrer_host text NOT NULL DEFAULT '',
+  utm_source text NOT NULL DEFAULT '',
+  utm_medium text NOT NULL DEFAULT '',
+  utm_campaign text NOT NULL DEFAULT '',
+  metric_name text NOT NULL DEFAULT '',
+  metric_value double precision CHECK (metric_value IS NULL OR (metric_value >= 0 AND metric_value <= 600000)),
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS storefront_analytics_events_time_idx
+  ON storefront_analytics_events(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS storefront_analytics_events_name_time_idx
+  ON storefront_analytics_events(event_name, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS storefront_analytics_events_session_time_idx
+  ON storefront_analytics_events(session_hash, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS storefront_analytics_events_product_time_idx
+  ON storefront_analytics_events(product_id, occurred_at DESC) WHERE product_id <> '';
+CREATE INDEX IF NOT EXISTS storefront_analytics_events_metric_time_idx
+  ON storefront_analytics_events(metric_name, occurred_at DESC) WHERE metric_name <> '';
 
 CREATE TABLE IF NOT EXISTS checkout_quotes (
   id text PRIMARY KEY,

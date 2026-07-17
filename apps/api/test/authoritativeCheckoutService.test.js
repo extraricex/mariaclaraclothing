@@ -89,6 +89,7 @@ function createDependencies({ idempotency, quoteOverrides, refreshOverrides } = 
     insertMeta: async () => calls.push('insertMeta'),
     enqueueOrderExport: async () => calls.push('enqueueOrderExport'),
     enqueueAdminEmail: async () => calls.push('enqueueAdminEmail'),
+    enqueueCustomerConfirmation: async () => calls.push('enqueueCustomerConfirmation'),
     consumeQuote: async () => calls.push('consumeQuote'),
     completeIdempotency: async () => calls.push('completeIdempotency'),
     deriveToken: () => 'derived-confirmation-token',
@@ -107,6 +108,7 @@ test('completed matching retry returns before quote and stock validation', async
   assert.equal(deps.calls.includes('loadQuote'), false);
   assert.equal(deps.calls.includes('deductStock'), false);
   assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+  assert.equal(deps.calls.includes('enqueueCustomerConfirmation'), false);
 });
 
 test('same key with a different normalized request is rejected', async () => {
@@ -126,6 +128,7 @@ test('checkout requires both customer name parts', async () => {
     (error) => error.code === 'CHECKOUT_CUSTOMER_INVALID' && Boolean(error.details.fields.lastName)
   );
   assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+  assert.equal(deps.calls.includes('enqueueCustomerConfirmation'), false);
 });
 
 test('missing or whitespace-only delivery fields stop all checkout side effects', async () => {
@@ -141,7 +144,7 @@ test('missing or whitespace-only delivery fields stop all checkout side effects'
   );
   for (const operation of [
     'refreshQuote', 'deductStock', 'saveOrder', 'appendMovements', 'insertMeta',
-    'enqueueOrderExport', 'enqueueAdminEmail', 'convertCart'
+    'enqueueOrderExport', 'enqueueAdminEmail', 'enqueueCustomerConfirmation', 'convertCart'
   ]) {
     assert.equal(deps.calls.includes(operation), false, `${operation} must not run`);
   }
@@ -152,6 +155,7 @@ test('failed order persistence never queues an admin email', async () => {
   deps.saveOrder = async () => { deps.calls.push('saveOrder'); throw new Error('database write failed'); };
   await assert.rejects(placeAuthoritativeCheckout(requestFixture(), deps), /database write failed/);
   assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+  assert.equal(deps.calls.includes('enqueueCustomerConfirmation'), false);
 });
 
 test('checkout rejects expired, consumed, mismatched, and changed quotes', async () => {
@@ -185,7 +189,8 @@ test('successful checkout performs every commerce write in one transaction', asy
   assert.deepEqual(deps.calls, [
     'transaction', 'claimIdempotency', 'loadQuote', 'refreshQuote', 'deductStock',
     'saveOrder', 'appendMovements', 'convertCart', 'claimPromo', 'insertMeta',
-    'enqueueOrderExport', 'consumeQuote', 'completeIdempotency', 'enqueueAdminEmail'
+    'enqueueOrderExport', 'consumeQuote', 'completeIdempotency', 'enqueueAdminEmail',
+    'enqueueCustomerConfirmation'
   ]);
   assert.equal(result.confirmationToken, 'derived-confirmation-token');
   assert.equal(result.totalCents, 72900);
@@ -198,6 +203,7 @@ test('PayMongo checkout does not queue an admin email until payment is verified'
   assert.equal(result.status, 'pending_payment');
   assert.equal(result.paymentStatus, 'pending_payment');
   assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+  assert.equal(deps.calls.includes('enqueueCustomerConfirmation'), false);
   assert.equal(deps.calls.includes('insertMeta'), false);
 });
 

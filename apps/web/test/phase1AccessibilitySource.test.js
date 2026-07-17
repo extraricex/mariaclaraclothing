@@ -27,8 +27,11 @@ test('homepage carousel swaps one optimized image with dots and mobile swipe sup
   assert.match(home, /showNextHero/);
   assert.match(home, /showPreviousHero/);
   assert.match(home, /const activeBanner = banners\[activeHeroIndex\]/);
+  assert.match(home, /function initialHeroBanners\(\)/);
+  assert.match(home, /useState\(initialHeroBanners\)/);
   assert.match(home, /key=\{activeBanner\.url\}/);
-  assert.match(home, /preload\.src = nextBanner\.url/);
+  assert.match(home, /preloadResponsiveImage\(preload, nextBanner\.url\)/);
+  assert.match(home, /\.\.\.responsiveImageAttributes\(activeBanner\.url\)/);
   assert.match(home, /className="absolute bottom-2 left-1\/2 flex -translate-x-1\/2 items-center justify-center sm:bottom-3"/);
   assert.match(home, /className="carousel-dot"/);
   assert.match(home, /aria-label={`Show banner \$\{index \+ 1\}`}/);
@@ -49,6 +52,21 @@ test('cart drawer exposes modal keyboard behavior', async () => {
   assert.match(shell, /closeCartDrawer/);
 });
 
+test('automatic privacy choices remain visible without blocking storefront controls', async () => {
+  const shell = await source('src/components/Shell.jsx');
+  const privacyChoices = shell.slice(
+    shell.indexOf('function PrivacyChoices'),
+    shell.indexOf('function FreeShippingAside')
+  );
+
+  assert.match(privacyChoices, /function PrivacyChoices/);
+  assert.match(privacyChoices, /role="region" aria-label="Privacy choices"/);
+  assert.match(privacyChoices, />Allow analytics</);
+  assert.match(privacyChoices, />Decline</);
+  assert.doesNotMatch(privacyChoices, /fixed inset-0/);
+  assert.doesNotMatch(privacyChoices, /aria-modal="true"/);
+});
+
 test('mobile menu and checkout actions use accessible compact controls', async () => {
   const [shell, checkout, review] = await Promise.all([
     source('src/components/Shell.jsx'),
@@ -61,6 +79,7 @@ test('mobile menu and checkout actions use accessible compact controls', async (
   assert.match(shell, /aria-controls="storefront-mobile-menu"/);
   assert.match(shell, /aria-label=\{menuOpen \? 'Close navigation menu' : 'Open navigation menu'\}/);
   assert.match(shell, /id="storefront-mobile-menu"/);
+  assert.match(shell, /inert=\{menuOpen \? undefined : ''\}/);
   assert.match(shell, /className="touch-target px-3 py-1\.5" aria-label="Decrease quantity" onClick=\{\(\) => decreaseItem\(item\)\}/);
   assert.match(shell, /disabled=\{Number\(item\.maxStock\) > 0 && Number\(item\.quantity\) >= Number\(item\.maxStock\)\}/);
   assert.match(checkout, /btn-ink customer-compact-button mt-6 w-full/);

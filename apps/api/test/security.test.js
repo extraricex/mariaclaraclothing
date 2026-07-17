@@ -228,7 +228,8 @@ test('API responses include baseline browser security headers', async () => {
     assert.equal(response.headers.get('x-frame-options'), 'DENY');
     assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
     assert.match(response.headers.get('permissions-policy') || '', /camera=\(\)/);
-    assert.match(response.headers.get('content-security-policy-report-only') || '', /default-src 'self'/);
+    assert.match(response.headers.get('content-security-policy') || '', /default-src 'self'/);
+    assert.equal(response.headers.get('content-security-policy-report-only'), null);
     assert.equal(response.headers.get('x-powered-by'), null);
   });
 });

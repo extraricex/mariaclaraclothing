@@ -4,7 +4,11 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 
-const { normalizeProductUploads } = require('../src/images/productImageNormalizer');
+const {
+  PRODUCT_IMAGE_DERIVATIVE_WIDTHS,
+  normalizeProductUploads,
+  productImageDerivativePath
+} = require('../src/images/productImageNormalizer');
 
 test('normalizes real JPEG and PNG uploads to bounded WebP files', async (t) => {
   const uploadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-normalized-images-'));
@@ -47,6 +51,13 @@ test('normalizes real JPEG and PNG uploads to bounded WebP files', async (t) => 
     assert.equal(metadata.format, 'webp');
     assert.ok(metadata.width <= 2400);
     assert.ok(metadata.height <= 2400);
+    for (const width of PRODUCT_IMAGE_DERIVATIVE_WIDTHS) {
+      const derivative = productImageDerivativePath(file.path, width);
+      const derivativeMetadata = await sharp(derivative).metadata();
+      assert.equal(derivativeMetadata.format, 'webp');
+      assert.ok(derivativeMetadata.width <= width);
+      assert.ok(derivativeMetadata.height <= width);
+    }
   }
   await assert.rejects(fs.access(path.join(uploadDir, 'large-photo.jpg')));
   await assert.rejects(fs.access(path.join(uploadDir, 'transparent-photo.png')));

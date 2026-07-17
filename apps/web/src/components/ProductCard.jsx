@@ -3,7 +3,8 @@ import { formatMoney } from '../lib/money.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { CustomerBadge } from './ui/Badge.jsx';
 import { productPath } from '../lib/productUrl.js';
-import { Stars } from './ProductReviews.jsx';
+import Stars from './Stars.jsx';
+import { responsiveImageAttributes } from '../lib/responsiveImage.js';
 
 export function totalStock(product) {
   return product.variants.reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
@@ -36,6 +37,11 @@ export default function ProductCard({ product, index }) {
               src={image.url}
               alt={image.altText || product.name}
               loading="lazy"
+              decoding="async"
+              {...responsiveImageAttributes(image.url, {
+                sizes: '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw',
+                shopifyWidths: [360, 720, 1000]
+              })}
               className="product-photo-blend h-full w-full object-contain group-hover:hidden"
             />
           )}
@@ -45,6 +51,11 @@ export default function ProductCard({ product, index }) {
               alt=""
               aria-hidden="true"
               loading="lazy"
+              decoding="async"
+              {...responsiveImageAttributes(hoverImage.url, {
+                sizes: '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw',
+                shopifyWidths: [360, 720, 1000]
+              })}
               className="product-photo-blend absolute inset-0 hidden h-full w-full object-contain group-hover:block"
             />
           )}

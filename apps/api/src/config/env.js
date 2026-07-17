@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { resolveMetaCurrency } = require('../marketing/metaMoney');
 
 function optional(source, name, fallback = '') {
   return source[name] || fallback;
@@ -25,7 +26,8 @@ function metaConfig(source = process.env) {
     pixelId: String(source.META_PIXEL_ID).trim(),
     accessToken: String(source.META_CONVERSIONS_API_ACCESS_TOKEN),
     graphApiVersion: String(source.META_GRAPH_API_VERSION).trim(),
-    testEventCode: String(source.META_CONVERSIONS_API_TEST_EVENT_CODE || '').trim()
+    testEventCode: String(source.META_CONVERSIONS_API_TEST_EVENT_CODE || '').trim(),
+    currency: resolveMetaCurrency(source)
   };
 }
 
@@ -73,7 +75,6 @@ function notificationConfig(source = process.env) {
     siteUrl: String(source.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/$/, '')
   };
   sms.configured = enabled && Boolean(sms.apiKey);
-  email.configured = enabled && Boolean(email.apiKey && email.from);
   adminOrderEmail.configured = Boolean(
     adminOrderEmail.recipient
       && adminOrderEmail.host
@@ -81,6 +82,12 @@ function notificationConfig(source = process.env) {
       && adminOrderEmail.pass
       && adminOrderEmail.from
   );
+  email.provider = enabled && email.apiKey && email.from
+    ? 'resend'
+    : enabled && adminOrderEmail.configured
+      ? 'smtp'
+      : '';
+  email.configured = Boolean(email.provider);
   return {
     enabled,
     workerEnabled: enabled || adminOrderEmail.configured,
@@ -295,9 +302,19 @@ function validateProductionConfig(source = process.env) {
   if (source.REVIEW_IMPORT_SECRET && String(source.REVIEW_IMPORT_SECRET).length < 32) {
     throw new Error('REVIEW_IMPORT_SECRET must be at least 32 characters in production');
   }
+  if (source.CART_RECOVERY_SECRET && String(source.CART_RECOVERY_SECRET).length < 32) {
+    throw new Error('CART_RECOVERY_SECRET must be at least 32 characters in production');
+  }
+  if (source.ANALYTICS_HASH_SALT && String(source.ANALYTICS_HASH_SALT).length < 32) {
+    throw new Error('ANALYTICS_HASH_SALT must be at least 32 characters in production');
+  }
+  if (source.PASSWORD_RESET_SECRET && String(source.PASSWORD_RESET_SECRET).length < 32) {
+    throw new Error('PASSWORD_RESET_SECRET must be at least 32 characters in production');
+  }
   const jsonPersistenceOverrides = [
     'ORDERS_DATA_FILE',
     'CUSTOMER_ACCOUNTS_DATA_FILE',
+    'PASSWORD_RESETS_DATA_FILE',
     'PRODUCTS_DATA_FILE',
     'CART_SESSIONS_DATA_FILE',
     'DISCOUNTS_DATA_FILE',

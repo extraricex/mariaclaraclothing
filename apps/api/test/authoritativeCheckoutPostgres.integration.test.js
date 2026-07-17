@@ -125,12 +125,16 @@ test('PostgreSQL serializes matching checkout retries into one complete commerce
         (SELECT count(*) FROM inventory_movements WHERE order_number = $1)::int AS movements,
         (SELECT count(*) FROM marketing_event_outbox WHERE event_id = $3)::int AS meta,
         (SELECT consumed_order_number FROM checkout_quotes WHERE id = $4) AS consumed,
-        (SELECT confirmation_token_hash FROM orders WHERE order_number = $1) AS token_hash`,
+        (SELECT confirmation_token_hash FROM orders WHERE order_number = $1) AS token_hash,
+        (SELECT currency FROM orders WHERE order_number = $1) AS currency,
+        (SELECT meta_purchase_value::float8 FROM orders WHERE order_number = $1) AS meta_value,
+        (SELECT meta_purchase_currency FROM orders WHERE order_number = $1) AS meta_currency`,
       [orderNumber, sku, `purchase_${orderNumber}`, quoteId]
     );
     assert.deepEqual(result.rows[0], {
       orders: 1, stock: 1, movements: 1, meta: 1,
-      consumed: orderNumber, token_hash: hashConfirmationToken(first.confirmationToken)
+      consumed: orderNumber, token_hash: hashConfirmationToken(first.confirmationToken),
+      currency: 'PHP', meta_value: 729, meta_currency: 'PHP'
     });
   } finally {
     await pool.query('DELETE FROM marketing_event_outbox WHERE event_id = $1', [`purchase_${orderNumber}`]);

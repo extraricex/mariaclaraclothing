@@ -21,7 +21,7 @@ const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/s
 const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const { env } = require('../config/env');
 const { persistPostgresCheckout } = require('../orders/checkoutService');
-const { metaPurchaseEventId, parseMetaCookies } = require('../marketing/metaEvent');
+const { META_CURRENCY, metaPurchaseEventId, parseMetaCookies, purchaseValue } = require('../marketing/metaEvent');
 const {
   claimBrowserMetaPurchase,
   completeBrowserMetaPurchase,
@@ -42,6 +42,7 @@ const { sha256Object } = require('../checkout/requestHash');
 const { CommerceError } = require('../checkout/commerceError');
 const { customerFullName, normalizeCustomerName } = require('../customers/customerName');
 const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
+const { enqueueOrderConfirmationNotifications } = require('../notifications/orderNotificationService');
 const { requireCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
 
 const { enqueueOrderExport } = pancakeOrderExportRepository;
@@ -84,6 +85,9 @@ legacyRouter.post('/', async (req, res, next) => {
       metaCapiPurchaseSentAt: '',
       metaPurchaseStatus: 'eligible',
       metaPurchaseLastError: '',
+      metaPurchaseValue: purchaseValue(order.totalCents),
+      metaPurchaseCurrency: META_CURRENCY,
+      currency: META_CURRENCY,
       channel: 'Online Store',
       codConfirmationStatus: 'pending',
       deliveryStatus: 'pending',
@@ -137,6 +141,7 @@ legacyRouter.post('/', async (req, res, next) => {
         incrementDiscount: incrementDiscountUsage,
         enqueueOrderExport,
         enqueueAdminEmail: enqueueAdminNewOrderEmail,
+        enqueueCustomerConfirmation: enqueueOrderConfirmationNotifications,
         queueMetaPurchase: (input) => queueMetaPurchase(input, { logger: console }),
         metaEnabled: env.meta.enabled
       });
@@ -158,6 +163,15 @@ legacyRouter.post('/', async (req, res, next) => {
           status: 'queue_failed'
         });
       }
+      try {
+        await enqueueOrderConfirmationNotifications(persistedOrder);
+      } catch (_error) {
+        console.error('Customer order confirmation could not be queued.', {
+          orderNumber: persistedOrder.orderNumber,
+          eventName: 'order_received',
+          status: 'queue_failed'
+        });
+      }
     }
 
     try {
@@ -169,7 +183,7 @@ legacyRouter.post('/', async (req, res, next) => {
     res.status(201).json({
       orderNumber: completedOrder.orderNumber,
       trackingEventId: metaPurchaseEventId(completedOrder),
-      currency: 'PHP',
+      currency: META_CURRENCY,
       totalCents: completedOrder.totalCents,
       items: completedOrder.items.map((item) => ({
         variantId: item.variantId,
@@ -446,6 +460,7 @@ function defaultAuthoritativeDependencies(req) {
     },
     enqueueOrderExport,
     enqueueAdminEmail: enqueueAdminNewOrderEmail,
+    enqueueCustomerConfirmation: enqueueOrderConfirmationNotifications,
     enqueueInventorySync: (slugs, source, options) => pancakeInventoryOutboxRepository.enqueueInventorySync(slugs, source, {
       ...options,
       maxAttempts: env.pancake.syncMaxAttempts

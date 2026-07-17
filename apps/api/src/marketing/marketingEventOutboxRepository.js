@@ -1,7 +1,8 @@
 const crypto = require('node:crypto');
+const { validateMetaPurchaseEvent } = require('./metaMoney');
 
 async function insertMetaPurchaseOutbox(client, event) {
-  if (!event?.event_id || event?.custom_data?.currency !== 'PHP' || !Number.isFinite(event?.custom_data?.value) || event.custom_data.value <= 0) {
+  if (!validateMetaPurchaseEvent(event).valid) {
     return null;
   }
   const id = crypto.randomUUID();
@@ -15,6 +16,8 @@ async function insertMetaPurchaseOutbox(client, event) {
      ), order_state AS (
        UPDATE orders AS order_record
           SET meta_purchase_event_id = inserted.event_id,
+              meta_purchase_value = (inserted.payload->'custom_data'->>'value')::numeric,
+              meta_purchase_currency = inserted.payload->'custom_data'->>'currency',
               meta_capi_purchase_queued_at = COALESCE(order_record.meta_capi_purchase_queued_at, now()),
               meta_purchase_status = CASE
                 WHEN order_record.meta_browser_purchase_sent_at IS NOT NULL THEN 'browser_sent_capi_queued'
@@ -28,6 +31,21 @@ async function insertMetaPurchaseOutbox(client, event) {
      )
      SELECT * FROM inserted`,
     [id, event.event_id, event.custom_data?.order_id || '', JSON.stringify(event)]
+  );
+  return result.rows[0] || null;
+}
+
+async function recordMetaPurchaseValidationFailure(client, orderNumber, error = 'Meta Purchase payload validation failed.') {
+  if (typeof client?.query !== 'function' || !String(orderNumber || '').trim()) return null;
+  const result = await client.query(
+    `UPDATE orders
+        SET meta_purchase_status = 'validation_failed',
+            meta_purchase_last_error = $2,
+            updated_at = now()
+      WHERE order_number = $1
+        AND meta_capi_purchase_sent_at IS NULL
+      RETURNING order_number`,
+    [String(orderNumber).trim(), String(error || 'Meta Purchase payload validation failed.').slice(0, 1000)]
   );
   return result.rows[0] || null;
 }
@@ -133,6 +151,7 @@ module.exports = {
   insertMetaPurchaseOutbox,
   markMetaEventFailed,
   markMetaEventSent,
+  recordMetaPurchaseValidationFailure,
   recoverStaleMetaEventClaims,
   scheduleMetaEventRetry
 };

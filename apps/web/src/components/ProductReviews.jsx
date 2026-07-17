@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchProductReviews, fetchStoreReviews, submitProductReview } from '../lib/api.js';
+import Stars from './Stars.jsx';
 
 const EMPTY_STATS = {
   averageRating: 0,
@@ -8,28 +9,6 @@ const EMPTY_STATS = {
   withPhotos: 0,
   verifiedPurchases: 0
 };
-
-export function Stars({ rating, label = true, interactive = false, onChange }) {
-  const rounded = Math.round(Number(rating || 0));
-  return (
-    <span className="inline-flex items-center gap-0.5" aria-label={label ? `${Number(rating || 0).toFixed(1)} out of 5 stars` : undefined}>
-      {[1, 2, 3, 4, 5].map((star) => interactive ? (
-        <button
-          key={star}
-          type="button"
-          className={`min-h-11 min-w-9 text-2xl leading-none ${star <= rounded ? 'text-accent' : 'text-line'}`}
-          aria-label={`${star} star${star === 1 ? '' : 's'}`}
-          aria-pressed={star === rounded}
-          onClick={() => onChange?.(star)}
-        >
-          ★
-        </button>
-      ) : (
-        <span key={star} aria-hidden="true" className={star <= rounded ? 'text-accent' : 'text-line'}>★</span>
-      ))}
-    </span>
-  );
-}
 
 function ReviewSummary({ statistics, onWrite, canSubmit }) {
   return (
@@ -51,7 +30,14 @@ function ReviewSummary({ statistics, onWrite, canSubmit }) {
           return (
             <div key={rating} className="grid grid-cols-[58px_minmax(0,1fr)_42px] items-center gap-3 text-xs">
               <span className="whitespace-nowrap">{rating} ★</span>
-              <span className="h-2 overflow-hidden rounded-full bg-cream" aria-label={`${rating} stars: ${count} reviews`}>
+              <span
+                className="h-2 overflow-hidden rounded-full bg-cream"
+                role="progressbar"
+                aria-label={`${rating} stars: ${count} reviews`}
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={percentage}
+              >
                 <span className="block h-full rounded-full bg-accent" style={{ width: `${percentage}%` }} />
               </span>
               <span className="text-right text-clay">{count}</span>

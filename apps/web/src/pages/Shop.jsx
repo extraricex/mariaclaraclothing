@@ -80,8 +80,8 @@ export default function Shop() {
     setMinimumPrice(''); setMaximumPrice(''); setSort('featured');
   }
 
-  if (loading) return <div className="mx-auto min-h-[45vh] max-w-7xl px-5 py-16 text-sm text-clay" aria-busy="true">Loading shop...</div>;
-  if (error) return <div className="mx-auto min-h-[45vh] max-w-7xl px-5 py-16 text-sm text-accent-deep" role="alert">{error}</div>;
+  if (loading) return <div className="mx-auto min-h-[70vh] max-w-7xl px-5 py-16 text-sm text-clay" aria-busy="true">Loading shop...</div>;
+  if (error) return <div className="mx-auto min-h-[70vh] max-w-7xl px-5 py-16 text-sm text-accent-deep" role="alert">{error}</div>;
 
   return (
     <div className="customer-page mx-auto max-w-7xl px-5 py-10 sm:py-14 lg:px-8">

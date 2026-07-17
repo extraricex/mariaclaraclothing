@@ -1,5 +1,11 @@
 const crypto = require('node:crypto');
 const { normalizePhilippinePhone } = require('../jnt/jntExport');
+const {
+  META_CURRENCY,
+  centavosToMetaPesos,
+  normalizeMetaValue,
+  validateMetaPurchase
+} = require('./metaMoney');
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
@@ -16,24 +22,6 @@ function normalizePhoneForMeta(phone) {
 
 function contentId(item = {}) {
   return String(item.externalPosVariantId || item.variantId || item.sku || item.id || item.productId || '').trim();
-}
-
-function normalizeMetaValue(amount) {
-  const normalized = typeof amount === 'number'
-    ? amount
-    : Number(String(amount ?? '').replace(/[₱,\s]/g, ''));
-  if (!Number.isFinite(normalized) || normalized <= 0) return null;
-  return Number(normalized.toFixed(2));
-}
-
-function centavosToMetaPesos(amountInCentavos) {
-  const raw = typeof amountInCentavos === 'number'
-    ? amountInCentavos
-    : String(amountInCentavos ?? '').trim();
-  if (typeof raw === 'string' && !/^\d+$/.test(raw)) return null;
-  const cents = Number(raw);
-  if (!Number.isInteger(cents) || cents <= 0) return null;
-  return normalizeMetaValue(cents / 100);
 }
 
 function moneyValue(cents) {
@@ -117,7 +105,7 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
     action_source: 'website',
     user_data: userData,
     custom_data: {
-      currency: 'PHP',
+      currency: META_CURRENCY,
       value,
       order_id: String(order.orderNumber || ''),
       payment_method: String(order.paymentMethod || ''),
@@ -127,6 +115,12 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
       contents: items
     }
   };
+  const validation = validateMetaPurchase({
+    value: event.custom_data.value,
+    currency: event.custom_data.currency,
+    eventId: event.event_id
+  });
+  if (!validation.valid) return null;
   const sourceUrl = optionalText(requestContext.sourceUrl, 2048);
   if (sourceUrl) event.event_source_url = sourceUrl;
   return event;
@@ -137,7 +131,7 @@ function logMetaPurchaseDevelopment(logger, { order, event, browserPixelSent = '
     orderId: String(order?.id || order?.orderNumber || ''),
     eventId: event?.event_id || metaPurchaseEventId(order),
     purchaseValue: event?.custom_data?.value ?? purchaseValue(order?.totalCents),
-    currency: event?.custom_data?.currency || 'PHP',
+    currency: event?.custom_data?.currency || META_CURRENCY,
     paymentMethod: String(order?.paymentMethod || ''),
     numberOfItems: event?.custom_data?.num_items ?? (Array.isArray(order?.items)
       ? order.items.reduce((total, item) => total + Math.max(0, Number(item.quantity || 0)), 0)
@@ -165,5 +159,7 @@ module.exports = {
   normalizePhoneForMeta,
   parseMetaCookies,
   purchaseValue,
-  sha256
+  sha256,
+  META_CURRENCY,
+  validateMetaPurchase
 };

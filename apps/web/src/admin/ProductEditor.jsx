@@ -47,6 +47,8 @@ const EMPTY_PRODUCT = {
   themeTemplate: 'Default product',
   status: 'active',
   featured: false,
+  seo: { title: '', description: '', handle: '' },
+  metafields: { color: [], material: [], fit: [], fabricWeight: [], modelHeight: [], modelWearsSize: [] },
   reviewSettings: { reviewsEnabled: true, showRatingSummary: true },
   collections: [],
   priceCents: 0,
@@ -156,6 +158,28 @@ export default function ProductEditor() {
         ...(previous.productPage || {}),
         [field]: value
       }
+    }));
+  }
+
+  function metafieldText(field) {
+    const value = product.metafields?.[field];
+    return Array.isArray(value) ? value.join(', ') : String(value || '');
+  }
+
+  function updateMetafield(field, value) {
+    setProduct((previous) => ({
+      ...previous,
+      metafields: {
+        ...(previous.metafields || {}),
+        [field]: String(value || '').split(',').map((item) => item.trim()).filter(Boolean)
+      }
+    }));
+  }
+
+  function updateImage(index, changes) {
+    setProduct((previous) => ({
+      ...previous,
+      images: previous.images.map((image, imageIndex) => imageIndex === index ? { ...image, ...changes } : image)
     }));
   }
 
@@ -678,8 +702,9 @@ export default function ProductEditor() {
                 {product.images.map((image, index) => (
                   <figure key={index} className="group relative overflow-hidden border border-line bg-cream">
                     <img src={image.url} alt={image.altText || ''} className="product-photo-blend aspect-[4/5] w-full object-cover" />
-                    <figcaption className="flex items-center justify-between gap-2 border-t border-line bg-white px-2 py-2 text-[11px] text-clay">
-                      <span>Photo {index + 1}</span>
+                    <figcaption className="border-t border-line bg-white px-2 py-2 text-[11px] text-clay">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Photo {index + 1}</span>
                       <button
                         type="button"
                         className="font-bold uppercase text-accent-deep underline disabled:cursor-not-allowed disabled:text-clay disabled:no-underline"
@@ -689,6 +714,11 @@ export default function ProductEditor() {
                       >
                         Remove photo
                       </button>
+                      </div>
+                      <label className="mt-2 block">
+                        <span className="font-semibold text-ink">Alt text</span>
+                        <input className="field mt-1 !px-2 !py-1.5 text-xs" value={image.altText || ''} onChange={(event) => updateImage(index, { altText: event.target.value })} placeholder={`Describe ${product.name}`} />
+                      </label>
                     </figcaption>
                   </figure>
                 ))}
@@ -866,6 +896,39 @@ export default function ProductEditor() {
               <span className="eyebrow">Theme template</span>
               <input className="field mt-1" value={product.themeTemplate || ''} onChange={(e) => update('themeTemplate', e.target.value)} />
             </label>
+          </section>
+
+          <section className="border border-line bg-paper p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Product facts</h2>
+            <p className="mt-2 text-xs leading-relaxed text-clay">Only enter confirmed facts. Leave unavailable model details blank.</p>
+            {[
+              ['color', 'Color', 'Black'],
+              ['material', 'Material', '100% cotton'],
+              ['fit', 'Fit', 'Oversized fit'],
+              ['fabricWeight', 'Fabric weight', '240 GSM'],
+              ['modelHeight', 'Model height', 'Optional, e.g. 5′6″'],
+              ['modelWearsSize', 'Model wears size', 'Optional, e.g. Medium']
+            ].map(([field, label, placeholder]) => (
+              <label key={field} className="mt-4 block">
+                <span className="eyebrow">{label}</span>
+                <input className="field mt-1" value={metafieldText(field)} onChange={(event) => updateMetafield(field, event.target.value)} placeholder={placeholder} />
+              </label>
+            ))}
+          </section>
+
+          <section className="border border-line bg-paper p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Search & sharing</h2>
+            <label className="mt-4 block">
+              <span className="eyebrow">SEO title</span>
+              <input className="field mt-1" maxLength="70" value={product.seo?.title || ''} onChange={(event) => update('seo', { ...(product.seo || {}), title: event.target.value })} placeholder={product.name} />
+              <span className="mt-1 block text-[11px] text-clay">{String(product.seo?.title || '').length}/70 characters</span>
+            </label>
+            <label className="mt-4 block">
+              <span className="eyebrow">Meta description</span>
+              <textarea className="field mt-1 min-h-24" maxLength="180" value={product.seo?.description || ''} onChange={(event) => update('seo', { ...(product.seo || {}), description: event.target.value })} placeholder="Describe the product’s confirmed fabric, fit, and main benefit." />
+              <span className="mt-1 block text-[11px] text-clay">{String(product.seo?.description || '').length}/180 characters</span>
+            </label>
+            <p className="mt-3 text-xs text-clay">The product page, social preview, canonical URL, and Product schema use these saved fields.</p>
           </section>
 
           <section className="border border-line bg-paper p-6">

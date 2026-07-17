@@ -4,8 +4,6 @@ import Shell from './components/Shell.jsx';
 import PageTransition from './components/PageTransition.jsx';
 import MaintenanceGate from './components/MaintenanceGate.jsx';
 import Home from './pages/Home.jsx';
-import ProductCountdown from './admin/ProductCountdown.jsx';
-import PancakePos from './admin/PancakePos.jsx';
 
 const Product = lazy(() => import('./pages/Product.jsx'));
 const Collection = lazy(() => import('./pages/Collection.jsx'));
@@ -20,6 +18,8 @@ const Contact = lazy(() => import('./pages/Contact.jsx'));
 const SizeChart = lazy(() => import('./pages/SizeChart.jsx'));
 const CustomerLogin = lazy(() => import('./pages/CustomerAuth.jsx').then((module) => ({ default: module.CustomerLogin })));
 const CustomerRegister = lazy(() => import('./pages/CustomerAuth.jsx').then((module) => ({ default: module.CustomerRegister })));
+const CustomerForgotPassword = lazy(() => import('./pages/CustomerAuth.jsx').then((module) => ({ default: module.CustomerForgotPassword })));
+const CustomerResetPassword = lazy(() => import('./pages/CustomerAuth.jsx').then((module) => ({ default: module.CustomerResetPassword })));
 const Account = lazy(() => import('./pages/Account.jsx'));
 const AccountSettings = lazy(() => import('./pages/AccountSettings.jsx'));
 const Login = lazy(() => import('./admin/Login.jsx'));
@@ -40,6 +40,10 @@ const Settings = lazy(() => import('./admin/Settings.jsx'));
 const IssueReports = lazy(() => import('./admin/IssueReports.jsx'));
 const Payments = lazy(() => import('./admin/Payments.jsx'));
 const Reviews = lazy(() => import('./admin/Reviews.jsx'));
+const Analytics = lazy(() => import('./admin/Analytics.jsx'));
+const Guide = lazy(() => import('./pages/Guide.jsx'));
+const ProductCountdown = lazy(() => import('./admin/ProductCountdown.jsx'));
+const PancakePos = lazy(() => import('./admin/PancakePos.jsx'));
 
 export default function App() {
   return (
@@ -54,6 +58,8 @@ export default function App() {
         <Route path="/thank-you" element={<ThankYou />} />
         <Route path="/login" element={<CustomerLogin />} />
         <Route path="/register" element={<CustomerRegister />} />
+        <Route path="/forgot-password" element={<CustomerForgotPassword />} />
+        <Route path="/reset-password" element={<CustomerResetPassword />} />
         <Route path="/account" element={<Account />} />
         <Route path="/account/settings" element={<AccountSettings />} />
         <Route path="/faq" element={<InfoPage title="Frequently asked questions" pageKey="faq" />} />
@@ -61,6 +67,7 @@ export default function App() {
         <Route path="/terms" element={<InfoPage title="Terms of service" pageKey="terms" />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/size-chart" element={<SizeChart />} />
+        <Route path="/guides/:slug" element={<Guide />} />
         <Route path="*" element={<NotFound />} />
       </Route>
       <Route path="/checkout" element={<MaintenanceGate><PageTransition><Checkout /></PageTransition></MaintenanceGate>} />
@@ -76,6 +83,7 @@ export default function App() {
         <Route path="reviews" element={<Reviews />} />
         <Route path="reviews/import" element={<Reviews />} />
         <Route path="reviews/settings" element={<Reviews />} />
+        <Route path="analytics" element={<Analytics />} />
         <Route path="products" element={<Products />} />
         <Route path="products/countdown" element={<ProductCountdown />} />
         <Route path="products/:slug" element={<ProductEditor />} />

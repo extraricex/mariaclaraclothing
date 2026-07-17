@@ -17,6 +17,7 @@ const PRODUCT_SUBNAV = [
 ];
 
 const REVIEW_NAV_ITEM = { to: '/admin/reviews', label: 'Reviews', badge: 'reviews' };
+const ANALYTICS_NAV_ITEM = { to: '/admin/analytics', label: 'Sales & SEO' };
 
 // Items below the two collapsible sections, in display order.
 const SECONDARY_NAV = [
@@ -32,6 +33,7 @@ const SECONDARY_NAV = [
 // Flat list for the mobile bar — identical order to the desktop sidebar.
 const MOBILE_NAV = [
   { to: '/admin', label: 'Dashboard', end: true },
+  ANALYTICS_NAV_ITEM,
   REVIEW_NAV_ITEM,
   { to: '/admin/orders', label: 'Orders' },
   { to: '/admin/products', label: 'Products' },
@@ -143,6 +145,10 @@ export default function AdminLayout() {
         <nav className="mt-10 flex flex-col gap-1">
           <NavLink to="/admin" end className={({ isActive }) => topLinkClass(isActive)}>
             Dashboard
+          </NavLink>
+
+          <NavLink to={ANALYTICS_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>
+            {ANALYTICS_NAV_ITEM.label}
           </NavLink>
 
           <NavLink to={REVIEW_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>

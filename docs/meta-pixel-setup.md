@@ -5,14 +5,14 @@ This project is prepared for Facebook Meta Pixel browser tracking and server-sid
 ## Current configuration
 
 - Pixel ID: `595813035761213`
-- Customer tracking: immediate; no consent gate is implemented
+- Customer tracking: controlled by the runtime admin consent setting
 - Admin routes: excluded
 - Browser events: `PageView`, `ViewContent`, `AddToCart`, `InitiateCheckout`, `Purchase`
 - Server events: `Purchase`
-- Browser/server deduplication key: `purchase:<orderNumber>`
+- Browser/server deduplication key: `purchase_<orderNumber>`
 - Currency: `PHP`
 
-The browser Pixel is enabled by default in Docker Compose. CAPI is disabled until its access token and Graph API version are configured.
+The browser Pixel is loaded from the runtime admin setting and fails closed if settings cannot be loaded. CAPI is disabled until its access token and Graph API version are configured.
 
 ## 1. Review privacy requirements
 
@@ -28,21 +28,7 @@ Before production activation, confirm that immediate tracking is appropriate for
 
 ## 3. Configure browser Pixel
 
-Set these build-time variables in the deployment `.env`:
-
-```dotenv
-VITE_FACEBOOK_META_PIXEL_ENABLED=true
-VITE_FACEBOOK_META_PIXEL_ID=595813035761213
-```
-
-These are Vite build arguments. Rebuild the web image whenever either value changes:
-
-```bash
-docker compose build web
-docker compose up -d web
-```
-
-Do not place a CAPI access token in a `VITE_` variable. Every `VITE_` value is public in the browser bundle.
+Open **Admin > Settings > Meta Pixel**, enable the Pixel, enter the intended data-source ID, and choose whether consent is required. When server CAPI is enabled, the browser data-source ID is locked to `META_PIXEL_ID` to preserve Purchase deduplication. The CAPI access token always remains server-side.
 
 ## 4. Create a CAPI access token
 
@@ -57,12 +43,29 @@ Set the server variables:
 ```dotenv
 META_CONVERSIONS_API_ENABLED=true
 META_PIXEL_ID=595813035761213
+META_CURRENCY=PHP
 META_CONVERSIONS_API_ACCESS_TOKEN=replace-with-secret-token
 META_GRAPH_API_VERSION=vXX.X
 META_CONVERSIONS_API_TEST_EVENT_CODE=
 ```
 
 `DATABASE_URL` is also required. CAPI deliberately does not run in JSON fallback mode because durable and atomic Purchase delivery requires PostgreSQL.
+
+The store currency is fixed to the ISO 4217 code `PHP`. Empty, non-PHP, or malformed `META_CURRENCY` values fall back to `PHP`; browser code never reads currency from an order form, locale, or payment-provider response.
+
+## 4.1 Remove automatic Purchase rules
+
+Maria Clara Clothing sends ecommerce events manually so values, quantities, and IDs come from validated product, quote, and order records. The Pixel bootstrap disables Meta automatic event configuration before `init`.
+
+In Events Manager, also remove any old point-and-click rule that labels a checkout, COD, PayMongo, or Thank You button as `Purchase`:
+
+1. Select the Maria Clara Clothing dataset.
+2. Open **Settings** and launch **Open Event Setup Tool** for `https://mariaclaraclothing.com`.
+3. Review configured events and delete every automatic `Purchase` rule.
+4. Review partner integrations and Tag Manager containers; disconnect any integration that also sends `Purchase` to this dataset.
+5. Keep only the application-owned browser Pixel and server Conversions API paths documented here.
+
+An automatic button rule has no authoritative order object and can send `Purchase` without `value`, `currency`, or the permanent order event ID. It can also double-count a manually tracked Purchase.
 
 ## 5. Run the database migration
 
@@ -143,4 +146,4 @@ Treat a growing pending queue or any failed Purchase as an operational alert. Fi
 
 ## Rollback
 
-To stop new browser tracking, rebuild web with `VITE_FACEBOOK_META_PIXEL_ENABLED=false`. To stop server delivery, set `META_CONVERSIONS_API_ENABLED=false` and recreate the API container. Disabling CAPI leaves pending events in PostgreSQL for later recovery; do not delete the outbox during a temporary rollback.
+To stop new browser tracking, disable Meta Pixel in **Admin > Settings > Meta Pixel**. To stop server delivery, set `META_CONVERSIONS_API_ENABLED=false` and recreate the API container. Disabling CAPI leaves pending events in PostgreSQL for later recovery; do not delete the outbox during a temporary rollback.

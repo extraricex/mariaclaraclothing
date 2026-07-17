@@ -1,6 +1,10 @@
 const crypto = require('node:crypto');
-const { buildMetaPurchaseEvent, logMetaPurchaseDevelopment } = require('./metaEvent');
-const { insertMetaPurchaseOutbox } = require('./marketingEventOutboxRepository');
+const { META_CURRENCY, buildMetaPurchaseEvent, logMetaPurchaseDevelopment, purchaseValue } = require('./metaEvent');
+const { validateMetaPurchaseEvent } = require('./metaMoney');
+const {
+  insertMetaPurchaseOutbox,
+  recordMetaPurchaseValidationFailure
+} = require('./marketingEventOutboxRepository');
 
 const BROWSER_CLAIM_LEASE_MS = 2 * 60_000;
 const PURCHASE_SUCCESSFUL_STATUSES = new Set(['received', 'confirmed', 'packed', 'shipped', 'delivered']);
@@ -39,6 +43,8 @@ function metaPurchaseEligibility(order, { allowLegacyServer = false } = {}) {
 function browserPurchaseState(order) {
   return {
     eventId: String(order?.metaPurchaseEventId || ''),
+    value: order?.metaPurchaseValue || purchaseValue(order?.totalCents),
+    currency: order?.metaPurchaseCurrency || order?.currency || META_CURRENCY,
     status: String(order?.metaPurchaseStatus || 'legacy'),
     browserSentAt: order?.metaBrowserPurchaseSentAt || '',
     serverQueuedAt: order?.metaCapiPurchaseQueuedAt || '',
@@ -127,9 +133,27 @@ async function completeBrowserMetaPurchase({ orderNumber, confirmationToken, cla
 async function queueMetaPurchase({ client, order, requestContext = {}, enabled = false }, options = {}) {
   if (!enabled) return { status: 'disabled', event: null, outbox: null };
   const eligibility = metaPurchaseEligibility(order, { allowLegacyServer: true });
-  const event = eligibility.eligible
+  const candidate = eligibility.eligible
     ? (options.buildEvent || buildMetaPurchaseEvent)({ order, requestContext })
     : null;
+  const validation = candidate ? validateMetaPurchaseEvent(candidate) : { valid: false, errors: [] };
+  const event = validation.valid ? candidate : null;
+  const failureReason = eligibility.eligible
+    ? (candidate ? validation.errors.join(' ') : 'invalid_purchase_data')
+    : eligibility.reason;
+  if (!event && eligibility.reason === 'invalid_purchase_data') {
+    await (options.recordValidationFailure || recordMetaPurchaseValidationFailure)(
+      client,
+      order?.orderNumber,
+      'Meta Purchase was blocked because the stored order total or item data is invalid.'
+    );
+  } else if (!event && eligibility.eligible) {
+    await (options.recordValidationFailure || recordMetaPurchaseValidationFailure)(
+      client,
+      order?.orderNumber,
+      failureReason || 'Meta Purchase payload validation failed.'
+    );
+  }
   const outbox = event
     ? await (options.insertEvent || insertMetaPurchaseOutbox)(client, event)
     : null;
@@ -137,9 +161,14 @@ async function queueMetaPurchase({ client, order, requestContext = {}, enabled =
     order,
     event,
     conversionsApiSent: false,
-    reason: !event ? eligibility.reason : outbox ? 'queued' : 'duplicate'
+    reason: !event ? failureReason : outbox ? 'queued' : 'duplicate'
   });
-  return { status: !event ? eligibility.reason : outbox ? 'queued' : 'duplicate', event, outbox };
+  return {
+    status: !event ? (eligibility.eligible ? 'invalid_purchase_data' : eligibility.reason) : outbox ? 'queued' : 'duplicate',
+    reason: !event ? failureReason : outbox ? 'queued' : 'duplicate',
+    event,
+    outbox
+  };
 }
 
 function defaultBrowserPurchaseDependencies(overrides = {}) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { responsiveImageAttributes } from '../lib/responsiveImage.js';
 
 function Destination({ href, openInNewTab, children, ...props }) {
   if (!href) return null;
@@ -43,6 +44,7 @@ export default function CollectionBanner({ banner }) {
           )}
           <img
             src={desktopImage.url}
+            {...responsiveImageAttributes(desktopImage.url)}
             width={desktopImage.width || undefined}
             height={desktopImage.height || undefined}
             alt={banner.altText || 'Maria Clara Clothing collection banner'}

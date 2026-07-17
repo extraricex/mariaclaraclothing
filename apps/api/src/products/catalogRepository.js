@@ -709,6 +709,8 @@ function fromPostgresProduct(row) {
       reviewsEnabled: row.reviews_enabled,
       showRatingSummary: row.show_rating_summary
     }),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : '',
     images: [],
     variants: []
   };

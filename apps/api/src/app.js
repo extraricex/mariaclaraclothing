@@ -14,6 +14,10 @@ const { pancakeWebhookRouter } = require('./routes/pancakeWebhook');
 const { paymongoRouter } = require('./routes/paymongo');
 const { reviewsRouter } = require('./routes/reviews');
 const { sitemapRouter } = require('./routes/sitemap');
+const { storefrontSeoRouter } = require('./routes/storefrontSeo');
+const { merchantFeedRouter } = require('./routes/merchantFeed');
+const { robotsRouter } = require('./routes/robots');
+const { analyticsRouter } = require('./routes/analytics');
 const { methodOnly, postOnly, rateLimit } = require('./middleware/rateLimit');
 
 // Throttle credential-guessing on admin login and checkout abuse. Limits are
@@ -47,6 +51,12 @@ const customerOAuthRateLimit = methodOnly(['GET'], rateLimit({
   keyPrefix: 'customer-oauth', maxEnv: 'CUSTOMER_OAUTH_RATE_LIMIT_MAX',
   windowEnv: 'CUSTOMER_OAUTH_RATE_LIMIT_WINDOW_MS', defaultMax: 60, defaultWindowMs: 15 * 60 * 1000,
   message: 'Too many social login attempts. Please try again later.'
+}));
+
+const passwordResetRateLimit = postOnly(rateLimit({
+  keyPrefix: 'password-reset', maxEnv: 'PASSWORD_RESET_RATE_LIMIT_MAX',
+  windowEnv: 'PASSWORD_RESET_RATE_LIMIT_WINDOW_MS', defaultMax: 8, defaultWindowMs: 60 * 60 * 1000,
+  message: 'Too many password reset attempts. Please try again later.'
 }));
 
 const quoteRateLimit = postOnly(rateLimit({
@@ -83,6 +93,12 @@ const orderLookupRateLimit = methodOnly(['GET'], rateLimit({
   keyPrefix: 'order-lookup', maxEnv: 'ORDER_LOOKUP_RATE_LIMIT_MAX',
   windowEnv: 'ORDER_LOOKUP_RATE_LIMIT_WINDOW_MS', defaultMax: 120, defaultWindowMs: 10 * 60 * 1000,
   message: 'Too many order lookups. Please try again shortly.'
+}));
+
+const analyticsRateLimit = postOnly(rateLimit({
+  keyPrefix: 'storefront-analytics', maxEnv: 'ANALYTICS_RATE_LIMIT_MAX',
+  windowEnv: 'ANALYTICS_RATE_LIMIT_WINDOW_MS', defaultMax: 300, defaultWindowMs: 10 * 60 * 1000,
+  message: 'Too many analytics events. Please try again later.'
 }));
 
 const adminSensitiveRateLimit = postOnly(rateLimit({
@@ -126,7 +142,7 @@ function createApp() {
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy-Report-Only': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https:; img-src 'self' data: blob: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com"
+      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https:; img-src 'self' data: blob: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net; frame-src 'self' https://www.facebook.com; upgrade-insecure-requests"
     });
     next();
   });
@@ -161,6 +177,9 @@ function createApp() {
   });
 
   app.use('/sitemap.xml', sitemapRouter);
+  app.use('/merchant-feed.xml', merchantFeedRouter);
+  app.use('/robots.txt', robotsRouter);
+  app.use('/api/storefront/seo', storefrontSeoRouter);
 
   app.use('/api/admin/login', loginRateLimit);
   app.use('/api/orders', checkoutRateLimit);
@@ -170,8 +189,10 @@ function createApp() {
   app.use('/api/cart-sessions', cartRateLimit);
   app.use('/api/issue-reports', issueReportRateLimit);
   app.use('/api/reviews', reviewSubmissionRateLimit);
+  app.use('/api/analytics/events', analyticsRateLimit);
   app.use('/api/customer/login', customerAuthRateLimit);
   app.use('/api/customer/register', customerAuthRateLimit);
+  app.use('/api/customer/password-reset', passwordResetRateLimit);
   app.use('/api/customer/oauth', customerOAuthRateLimit);
   app.use('/api/admin/settings/security', adminSensitiveRateLimit);
   app.use('/api/admin/integrations/pancake', adminSensitiveRateLimit);
@@ -187,6 +208,7 @@ function createApp() {
   app.use('/api/issue-reports', issueReportsRouter);
   app.use('/api/discounts', discountRouter);
   app.use('/api/reviews', reviewsRouter);
+  app.use('/api/analytics', analyticsRouter);
   app.use('/api/customer', customerRouter);
   app.use('/api/storefront-settings', storeSettingsRouter);
   app.use('/api/integrations/pancake/webhook', pancakeWebhookRouter);

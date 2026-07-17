@@ -2,7 +2,7 @@ const defaultRepository = require('./orderNotificationOutboxRepository');
 const { sendSemaphoreSms } = require('./semaphoreClient');
 const { sendResendEmail } = require('./resendClient');
 const { findOrderByNumber, updateOrderAdminEmailState } = require('../orders/orderRepository');
-const { sendAdminNewOrderEmail } = require('./adminOrderEmail');
+const { sendAdminNewOrderEmail, sendTransactionalSmtpEmail } = require('./adminOrderEmail');
 const {
   ADMIN_NEW_ORDER_EVENT,
   finalizeSuccessfulAdminEmail,
@@ -20,6 +20,7 @@ function createOrderNotificationWorker({
   sendSms = sendSemaphoreSms,
   sendEmail = sendResendEmail,
   sendAdminEmail = sendAdminNewOrderEmail,
+  sendSmtpEmail = sendTransactionalSmtpEmail,
   findOrder = findOrderByNumber,
   updateOrderState = updateOrderAdminEmailState,
   now = () => new Date(),
@@ -64,7 +65,9 @@ function createOrderNotificationWorker({
         } else {
           const response = event.channel === 'sms'
             ? await sendSms(event, { config: config.sms })
-            : await sendEmail(event, { config: config.email });
+            : config.email?.provider === 'smtp'
+              ? await sendSmtpEmail(event, { config: config.adminOrderEmail })
+              : await sendEmail(event, { config: config.email });
           await repository.markSent(client, event.id, response);
         }
         result.sent += 1;

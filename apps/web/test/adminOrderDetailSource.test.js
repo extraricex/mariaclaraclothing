@@ -145,6 +145,10 @@ test('admin order detail shows private Meta Purchase deduplication state', async
   assert.match(source, /metaPurchaseEventId/);
   assert.match(source, /metaBrowserPurchaseSentAt/);
   assert.match(source, /metaCapiPurchaseSentAt/);
+  assert.match(source, /Purchase value/);
+  assert.match(source, /metaPurchaseValue/);
+  assert.match(source, /Currency/);
+  assert.match(source, /metaPurchaseCurrency/);
   assert.match(source, /Deduplication/);
   assert.match(source, /Last Meta error/);
   assert.match(source, /Admin only/);

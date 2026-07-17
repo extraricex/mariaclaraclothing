@@ -12,6 +12,7 @@ process.env.PRODUCTS_DATA_FILE = nodePathForProducts.join(
   nodeFsForProducts.mkdtempSync(nodePathForProducts.join(nodeOsForProducts.tmpdir(), 'mc-products-')),
   'products.json'
 );
+process.env.CART_RECOVERY_SECRET = 'test-cart-recovery-secret-that-is-at-least-32-characters';
 nodeFsForProducts.copyFileSync(
   nodePathForProducts.join(__dirname, '..', 'data', 'products.json'),
   process.env.PRODUCTS_DATA_FILE
@@ -56,6 +57,7 @@ test('admin cart sessions list anonymous drafts and abandoned checkout sessions,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         checkoutStarted: true,
+        recoveryConsent: true,
         customer: { firstName: 'Abandoned', lastName: 'Customer', fullName: 'Abandoned Customer', phone: '09171234567', email: 'buyer@example.com' },
         address: { addressLine: '1 Checkout St, Imus, Cavite' },
         items: [ORDER_ITEM]
@@ -90,6 +92,46 @@ test('admin cart sessions list anonymous drafts and abandoned checkout sessions,
     assert.equal(abandonedListResponse.status, 200);
     assert.deepEqual(abandonedListBody.sessions.map((session) => session.sessionId), ['browser-checkout']);
     assert.equal(abandonedListBody.sessions[0].phone, '09171234567');
+    assert.equal(abandonedListBody.sessions[0].recoveryConsent, true);
+    assert.equal(abandonedListBody.sessions[0].recoveryStatus, 'eligible');
+
+    const unauthorizedReminder = await fetch(
+      `http://127.0.0.1:${port}/api/admin/cart-sessions/browser-checkout/recovery-email`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }
+    );
+    assert.equal(unauthorizedReminder.status, 401);
+
+    const { createCartRecoveryToken } = require('../src/cartSessions/cartRecoveryToken');
+    const recoveryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/cart-sessions/recovery/${encodeURIComponent(createCartRecoveryToken('browser-checkout'))}`
+    );
+    const recoveryBody = await recoveryResponse.json();
+    assert.equal(recoveryResponse.status, 200);
+    assert.equal(recoveryBody.cart.items.length, 1);
+    assert.equal(recoveryBody.cart.items[0].unitPriceCents, 64900);
+    assert.equal(JSON.stringify(recoveryBody).includes('buyer@example.com'), false);
+    assert.equal(JSON.stringify(recoveryBody).includes('1 Checkout St'), false);
+
+    const { sendCartRecoveryEmail } = require('../src/cartSessions/cartRecoveryService');
+    const deliveries = [];
+    const reminder = await sendCartRecoveryEmail('browser-checkout', {
+      config: { configured: true, siteUrl: 'https://mariaclaraclothing.com' },
+      send: async (event) => {
+        deliveries.push(event);
+        return { providerMessageId: 'test-message' };
+      }
+    });
+    assert.equal(reminder.status, 'sent');
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0].recipient, 'buyer@example.com');
+    assert.match(deliveries[0].payload.text, /https:\/\/mariaclaraclothing\.com\/cart\?restore=/);
+    await assert.rejects(
+      sendCartRecoveryEmail('browser-checkout', {
+        config: { configured: true, siteUrl: 'https://mariaclaraclothing.com' },
+        send: async () => ({ providerMessageId: 'duplicate' })
+      }),
+      (error) => error.status === 409
+    );
 
     const orderResponse = await fetch(`http://127.0.0.1:${port}/api/orders`, {
       method: 'POST',

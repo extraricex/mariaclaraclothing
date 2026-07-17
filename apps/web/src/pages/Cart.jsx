@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createCheckoutQuote, fetchProducts } from '../lib/api.js';
-import { addToCart, cartQuantity, getCartSessionId, removeFromCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
+import { addToCart, cartQuantity, getCartSessionId, removeFromCart, replaceCart, subtotalCents, updateQuantity, useCart } from '../lib/cart.js';
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookAddToCart } from '../lib/metaPixel.js';
 import { productPath } from '../lib/productUrl.js';
@@ -10,11 +10,14 @@ import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
 export default function Cart() {
   const items = useCart();
   const location = useLocation();
+  const navigate = useNavigate();
+  const recoveryStarted = useRef(false);
   const [products, setProducts] = useState([]);
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState('');
   const [cartNotice, setCartNotice] = useState('');
   const [upsellVariantIds, setUpsellVariantIds] = useState({});
+  const [recoveryNotice, setRecoveryNotice] = useState('');
   const quantity = cartQuantity(items);
   const subtotal = subtotalCents(items);
   const displaySubtotal = quote?.subtotalCents ?? subtotal;
@@ -41,6 +44,24 @@ export default function Cart() {
       .then((body) => setProducts(body.products || []))
       .catch(() => setProducts([]));
   }, []);
+
+  useEffect(() => {
+    const token = new URLSearchParams(location.search).get('restore');
+    if (!token || recoveryStarted.current) return;
+    recoveryStarted.current = true;
+    setRecoveryNotice('Restoring your saved cart...');
+    fetch(`/api/cart-sessions/recovery/${encodeURIComponent(token)}`, { cache: 'no-store' })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || 'This saved cart is no longer available.');
+        replaceCart(body.cart?.items || []);
+        setRecoveryNotice(body.cart?.adjusted
+          ? 'Your cart was restored with current stock and quantities.'
+          : 'Your cart was restored. Current price and availability will be confirmed at checkout.');
+      })
+      .catch((error) => setRecoveryNotice(error.message))
+      .finally(() => navigate('/cart', { replace: true }));
+  }, [location.search, navigate]);
 
   useEffect(() => {
     if (!items.length) {
@@ -114,6 +135,7 @@ export default function Cart() {
       <div className="customer-page mx-auto max-w-3xl px-5 py-20 text-center sm:py-24">
         <p className="display text-3xl sm:text-4xl">Your cart is empty</p>
         {location.state?.message && <p className="mx-auto mt-3 max-w-sm text-sm text-accent-deep" role="alert">{location.state.message}</p>}
+        {recoveryNotice && <p className="mx-auto mt-3 max-w-sm text-sm text-accent-deep" role="status">{recoveryNotice}</p>}
         <p className="mt-3 text-sm text-ink-soft">The good stuff is one click away.</p>
         <Link to="/#new-arrivals" className="btn-ink customer-compact-button mt-7">Continue shopping</Link>
       </div>
@@ -129,6 +151,7 @@ export default function Cart() {
       </p>
       {quoteError && <p className="mt-3 text-sm text-accent-deep" role="alert">{quoteError}</p>}
       {cartNotice && <p className="mt-3 text-sm text-accent-deep" role="alert">{cartNotice}</p>}
+      {recoveryNotice && <p className="mt-3 text-sm text-accent-deep" role="status">{recoveryNotice}</p>}
 
       <div className="mt-8 divide-y divide-line border-y border-line">
         {items.map((item) => (

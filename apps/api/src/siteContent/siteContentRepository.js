@@ -24,8 +24,8 @@ function defaultSiteContent() {
     menuLogo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing menu logo' },
     footerLogo: { url: '/brand/logo.png', altText: 'Maria Clara Clothing footer logo' },
     homepageBanners: [
-      { url: '/brand/hero1v2-web.jpg', altText: 'Maria Clara Clothing models wearing oversized graphic shirts', sortOrder: 0 },
-      { url: '/brand/hero2-web.jpg', altText: 'Maria Clara Clothing streetwear campaign photographed in Manila', sortOrder: 1 }
+      { url: '/brand/hero1v2-2400.webp', altText: 'Maria Clara Clothing models wearing oversized graphic shirts', sortOrder: 0 },
+      { url: '/brand/hero2-2200.webp', altText: 'Maria Clara Clothing streetwear campaign photographed in Manila', sortOrder: 1 }
     ],
     collectionBanner: defaultCollectionBanner()
   };
@@ -34,7 +34,7 @@ function defaultSiteContent() {
 function defaultCollectionBanner() {
   return {
     visible: true,
-    desktopImage: { url: '/brand/hero1v2-web.jpg', width: 2400, height: 902 },
+    desktopImage: { url: '/brand/hero1v2-2400.webp', width: 2400, height: 902 },
     mobileImage: { url: '', width: 0, height: 0 },
     altText: 'Maria Clara Clothing Freedom of Mind collection campaign',
     link: '/collections/freedom-of-mind',

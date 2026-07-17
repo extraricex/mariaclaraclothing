@@ -37,6 +37,18 @@ const ORDER_ACTION_STATUSES = [
   ['unreachable', 'Unreachable']
 ];
 
+const CANCELLATION_REASONS = [
+  ['', 'Select a reason'],
+  ['customer_requested', 'Customer requested cancellation'],
+  ['unreachable_customer', 'Customer unreachable'],
+  ['duplicate_order', 'Duplicate order'],
+  ['payment_failed', 'Payment failed'],
+  ['out_of_stock', 'Item became unavailable'],
+  ['invalid_address', 'Invalid delivery address'],
+  ['fraud_risk', 'Fraud risk'],
+  ['other', 'Other']
+];
+
 function orderForm(order) {
   const customerName = customerNameParts(order.customer);
   return {
@@ -50,6 +62,8 @@ function orderForm(order) {
     tags: Array.isArray(order.tags) ? order.tags : [],
     deliveryMethod: order.deliveryMethod || 'Standard shipping',
     parcelWeightOverrideGrams: order.parcelWeightOverrideGrams ?? '',
+    cancellationReason: order.cancellationReason || '',
+    isTestOrder: Boolean(order.isTestOrder),
     customer: {
       ...customerName,
       phone: order.customer?.phone || '',
@@ -265,6 +279,10 @@ export default function OrderDetail() {
     setMessage('');
     if (!confirmedCancellation && order.status !== 'cancelled' && form.status === 'cancelled') {
       setCancelConfirmOpen(true);
+      return;
+    }
+    if (confirmedCancellation && !form.cancellationReason) {
+      setMessage('Select a cancellation reason before cancelling this order.');
       return;
     }
     const { items: _immutableItems, ...changes } = form;
@@ -522,6 +540,11 @@ export default function OrderDetail() {
   const adminEmailError = order.adminEmailError || adminEmailNotification?.lastError || '';
   const canResendAdminEmail = adminEmailStatus === 'failed' && !order.adminEmailSentAt;
   const metaTrackingStatus = order.metaPurchaseStatus || 'legacy';
+  const metaPurchaseValue = Number(order.metaPurchaseValue ?? (Number(order.totalCents || 0) / 100));
+  const metaPurchaseCurrency = String(order.metaPurchaseCurrency || order.currency || 'PHP');
+  const metaPurchaseValueLabel = Number.isFinite(metaPurchaseValue) && metaPurchaseValue > 0
+    ? new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(metaPurchaseValue)
+    : 'Invalid or unavailable';
   const metaDeduplicationStatus = order.metaBrowserPurchaseSentAt && order.metaCapiPurchaseSentAt
     ? 'Browser and server share one event ID'
     : order.metaPurchaseTrackingVersion >= 2
@@ -568,6 +591,7 @@ export default function OrderDetail() {
               <span className={orderStatusBadge(form.status, form.status === 'cancelled' ? 'danger' : 'neutral')}>{displayOrderStatus(form.status)}</span>
               <span className={orderStatusBadge(form.paymentStatus, paymentPending ? 'warning' : 'success')}>{paymentPending ? 'Payment pending' : titleCase(form.paymentStatus)}</span>
               <span className={orderStatusBadge(form.fulfillmentStatus, unfulfilled ? 'warning' : 'success')}>{unfulfilled ? 'Unfulfilled' : titleCase(form.fulfillmentStatus)}</span>
+              {form.isTestOrder && <span className={orderStatusBadge('test', 'warning')}>Test order</span>}
             </div>
             <p className="mt-1 text-sm text-[var(--admin-muted)]">
               {order.placedAt ? new Date(order.placedAt).toLocaleString('en-PH') : 'Date unavailable'} from {order.channel || 'Online Store'}
@@ -841,7 +865,18 @@ export default function OrderDetail() {
                 <InfoRow label="Customer care staff" value="Unassigned" />
                 <InfoRow label="Marketer" value="Unassigned" />
                 <InfoRow label="Order status" value={displayOrderStatus(form.status)} strong />
+                <InfoRow label="Cancellation reason" value={form.cancellationReason ? titleCase(form.cancellationReason) : 'Not cancelled'} />
               </dl>
+              <label className="mt-3 flex items-start gap-3 rounded-[var(--radius-admin)] border border-[var(--admin-line)] bg-[var(--admin-panel-soft)] p-3 text-xs text-[var(--admin-text)]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4"
+                  checked={form.isTestOrder}
+                  disabled={!isEditing}
+                  onChange={(event) => { setIsEditing(true); setForm((previous) => ({ ...previous, isTestOrder: event.target.checked })); }}
+                />
+                <span><strong className="block">Exclude as a test order</strong><span className="mt-1 block text-[var(--admin-muted)]">Test orders stay in operations history but are excluded from revenue, conversion, and best-seller reporting.</span></span>
+              </label>
               <label className="mt-3 block">
                 <span className="eyebrow !text-[var(--admin-muted)]">Tags</span>
                 <input
@@ -1056,6 +1091,8 @@ export default function OrderDetail() {
               </div>
               <dl className="mt-3">
                 <InfoRow label="Purchase event ID" value={fallback(order.metaPurchaseEventId, 'Not created')} />
+                <InfoRow label="Purchase value" value={metaPurchaseValueLabel} />
+                <InfoRow label="Currency" value={metaPurchaseCurrency} />
                 <InfoRow label="Browser Purchase sent" value={order.metaBrowserPurchaseSentAt ? 'Yes' : 'No'} />
                 <InfoRow label="Server Purchase sent" value={order.metaCapiPurchaseSentAt ? 'Yes' : 'No'} />
                 <InfoRow label="Browser sent time" value={order.metaBrowserPurchaseSentAt ? new Date(order.metaBrowserPurchaseSentAt).toLocaleString('en-PH') : 'Not sent'} />
@@ -1134,7 +1171,18 @@ export default function OrderDetail() {
         busy={saving}
         onCancel={() => setCancelConfirmOpen(false)}
         onConfirm={() => save(true)}
-      />
+      >
+        <label className="mt-4 block">
+          <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Cancellation reason</span>
+          <select
+            className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]"
+            value={form.cancellationReason}
+            onChange={(event) => setForm((previous) => ({ ...previous, cancellationReason: event.target.value }))}
+          >
+            {CANCELLATION_REASONS.map(([value, label]) => <option key={value || 'blank'} value={value}>{label}</option>)}
+          </select>
+        </label>
+      </AdminConfirmDialog>
     </div>
   );
 }

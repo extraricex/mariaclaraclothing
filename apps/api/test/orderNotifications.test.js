@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { notificationConfig } = require('../src/config/env');
-const { buildDeliveryNotifications, isFirstDeliveredTransition } = require('../src/notifications/orderNotificationService');
+const { buildDeliveryNotifications, buildOrderConfirmationNotifications, isFirstDeliveredTransition } = require('../src/notifications/orderNotificationService');
 const { sendSemaphoreSms } = require('../src/notifications/semaphoreClient');
 const { sendResendEmail } = require('../src/notifications/resendClient');
 const { createOrderNotificationWorker } = require('../src/notifications/orderNotificationWorker');
@@ -28,6 +28,26 @@ test('delivery notification transition is idempotent and builds SMS plus email',
   assert.deepEqual(notifications.map((item) => [item.channel, item.status]), [['sms', 'pending'], ['email', 'pending']]);
   assert.match(notifications[0].payload.message, /MC-1001/);
   assert.match(notifications[1].payload.subject, /MC-1001/);
+});
+
+test('COD and paid PayMongo confirmations use the saved total and do not send while payment is pending', () => {
+  const config = { sms: { configured: true }, email: { configured: true } };
+  const cod = buildOrderConfirmationNotifications({
+    ...deliveredOrder, status: 'confirmed', paymentMethod: 'cash_on_delivery', paymentStatus: 'cod_pending'
+  }, config);
+  assert.deepEqual(cod.map((item) => item.channel), ['sms', 'email']);
+  assert.match(cod[0].payload.message, /Cash on Delivery order MC-1001/);
+  assert.match(cod[1].payload.text, /₱1,299\.00/);
+
+  const pending = buildOrderConfirmationNotifications({
+    ...deliveredOrder, status: 'pending_payment', paymentMethod: 'paymongo', paymentStatus: 'pending_payment'
+  }, config);
+  assert.deepEqual(pending, []);
+
+  const paid = buildOrderConfirmationNotifications({
+    ...deliveredOrder, status: 'confirmed', paymentMethod: 'paymongo', paymentStatus: 'paid'
+  }, config);
+  assert.match(paid[1].payload.subject, /Payment confirmed/);
 });
 
 test('notification config keeps disabled or incomplete providers safe', () => {

@@ -12,6 +12,7 @@ import {
   facebookMoneyValue,
   facebookPurchaseValue,
   initializeFacebookMetaPixel,
+  META_CURRENCY,
   getMetaTrackingConsent,
   metaPixelConfig,
   normalizeMetaValue,
@@ -25,10 +26,12 @@ import {
   trackFacebookPageView,
   trackFacebookPurchase,
   trackFacebookPurchasePayload,
+  validateMetaPurchase,
   wasFacebookPurchaseTracked
 } from '../src/lib/metaPixel.js';
 
 test('Facebook money values convert cents to decimal PHP', () => {
+  assert.equal(META_CURRENCY, 'PHP');
   assert.equal(facebookMoneyValue(79900), 799);
   assert.equal(facebookMoneyValue(171850), 1718.5);
   assert.equal(centavosToMetaPesos(64900), 649);
@@ -41,6 +44,18 @@ test('Facebook money values convert cents to decimal PHP', () => {
   for (const invalid of [undefined, null, '', 0, -1, NaN, 'PHP 649']) {
     assert.equal(normalizeMetaValue(invalid), null);
   }
+});
+
+test('browser Purchase validation rejects empty value, currency, or event ID', () => {
+  assert.equal(validateMetaPurchase({ value: 1298, currency: 'PHP', eventId: 'purchase_MCC-1' }).valid, true);
+  for (const input of [
+    { value: '', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: '1298', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: 0, currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: 1298, currency: '', eventId: 'purchase_MCC-1' },
+    { value: 1298, currency: 'php', eventId: 'purchase_MCC-1' },
+    { value: 1298, currency: 'PHP', eventId: '' }
+  ]) assert.equal(validateMetaPurchase(input).valid, false);
 });
 
 test('Facebook content IDs prefer external variant IDs', () => {
@@ -104,13 +119,14 @@ test('Pixel initializes once on customer paths and never on admin paths', () => 
   assert.equal(initializeFacebookMetaPixel(options), true);
   assert.equal(initializeFacebookMetaPixel(options), true);
   assert.equal(inserted.length, 1);
-  assert.equal(customerWindow.fbq.queue.length, 3);
-  assert.deepEqual(customerWindow.fbq.queue.map((call) => call[0]), ['consent', 'init', 'consent']);
+  assert.equal(customerWindow.fbq.queue.length, 4);
+  assert.deepEqual(customerWindow.fbq.queue.map((call) => call[0]), ['consent', 'set', 'init', 'consent']);
   assert.equal(customerWindow.fbq.queue[0][1], 'revoke');
-  assert.equal(customerWindow.fbq.queue[2][1], 'grant');
+  assert.deepEqual(Array.from(customerWindow.fbq.queue[1]).slice(1), ['autoConfig', false, '595813035761213']);
+  assert.equal(customerWindow.fbq.queue[3][1], 'grant');
 });
 
-test('Pixel initializes detectably with revoked consent and sends no event until accepted', () => {
+test('Pixel script is deferred until required consent is accepted', () => {
   const values = new Map();
   const storage = {
     getItem: (key) => values.get(key) || null,
@@ -127,17 +143,14 @@ test('Pixel initializes detectably with revoked consent and sends no event until
 
   const documentRef = {
     createElement: () => ({}),
-    getElementsByTagName: () => [{ parentNode: { insertBefore: () => {} } }]
+    getElementsByTagName: () => [{ parentNode: { insertBefore: () => assert.fail('Pixel script must not load before consent') } }]
   };
   const noConsentWindow = {};
   assert.equal(initializeFacebookMetaPixel({
     windowRef: noConsentWindow, documentRef, enabled: true, pixelId: '123', path: '/', consent: false, requireConsent: true
   }), false);
-  assert.equal(typeof noConsentWindow.fbq, 'function');
-  assert.equal(noConsentWindow.__mariaClaraFacebookPixelId, '123');
-  assert.deepEqual(noConsentWindow.fbq.queue.map((call) => call[0]), ['consent', 'init']);
-  assert.equal(noConsentWindow.fbq.queue[0][1], 'revoke');
-  assert.doesNotMatch(JSON.stringify(noConsentWindow.fbq.queue), /PageView/);
+  assert.equal(noConsentWindow.fbq, undefined);
+  assert.equal(noConsentWindow.__mariaClaraFacebookPixelId, undefined);
 });
 
 test('admin runtime setting can enable immediate Pixel events without consent', () => {

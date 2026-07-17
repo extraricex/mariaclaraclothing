@@ -7,6 +7,19 @@ import ProductCard from '../components/ProductCard.jsx';
 import CollectionBanner from '../components/CollectionBanner.jsx';
 import { CustomerButton } from '../components/ui/Button.jsx';
 import { CustomerCard } from '../components/ui/Card.jsx';
+import { recentlyViewedProducts } from '../lib/recentlyViewed.js';
+import { preloadResponsiveImage, responsiveImageAttributes } from '../lib/responsiveImage.js';
+
+function initialHeroBanners() {
+  const image = document.querySelector('#seo-fallback .seo-fallback-image');
+  const url = image?.getAttribute('src') || '';
+  if (!url) return [];
+  return [{
+    url,
+    altText: image.getAttribute('alt') || 'Maria Clara Clothing',
+    sortOrder: 0
+  }];
+}
 
 function CollectionSection({ id, index, title, blurb, slug, products, compactTop = false }) {
   if (!products.length) return null;
@@ -33,32 +46,51 @@ function CollectionSection({ id, index, title, blurb, slug, products, compactTop
   );
 }
 
+function CollectionLoadingSkeleton() {
+  return (
+    <section className="mx-auto min-h-[95vh] max-w-7xl px-5 pt-8 lg:px-8" aria-busy="true" aria-label="Loading collections">
+      <div className="border-t border-[var(--customer-border)] pt-6">
+        <div className="h-3 w-24 rounded bg-line" />
+        <div className="mt-3 h-9 w-56 max-w-full rounded bg-line" />
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => <div key={item} className="aspect-[4/5] rounded bg-line/70" />)}
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const location = useLocation();
   const [products, setProducts] = useState([]);
-  const [banners, setBanners] = useState([]);
+  const [banners, setBanners] = useState(initialHeroBanners);
   const [collectionBanner, setCollectionBanner] = useState(null);
   const [collections, setCollections] = useState(DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
   const [storefrontSettings, setStorefrontSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
+  const [recentProducts, setRecentProducts] = useState([]);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [error, setError] = useState('');
   const heroTouchStartX = useRef(null);
 
   useEffect(() => {
-    fetchProducts()
-      .then((body) => setProducts(body.products))
-      .catch((err) => setError(err.message));
-    fetchSiteContent()
-      .then((body) => {
-        setBanners(body.siteContent?.homepageBanners || []);
-        setCollectionBanner(body.siteContent?.collectionBanner || null);
-      })
-      .catch(() => {});
-    loadStorefrontSettings()
-      .then((settings) => {
-        setStorefrontSettings(settings);
-        setCollections(settings.collectionDefinitions || DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
+    let active = true;
+    Promise.allSettled([fetchProducts(), fetchSiteContent(), loadStorefrontSettings()])
+      .then(([catalogResult, contentResult, settingsResult]) => {
+        if (!active) return;
+        if (catalogResult.status === 'fulfilled') setProducts(catalogResult.value.products || []);
+        else setError(catalogResult.reason?.message || 'Could not load products.');
+        if (contentResult.status === 'fulfilled') {
+          setBanners(contentResult.value.siteContent?.homepageBanners || []);
+          setCollectionBanner(contentResult.value.siteContent?.collectionBanner || null);
+        }
+        if (settingsResult.status === 'fulfilled') {
+          setStorefrontSettings(settingsResult.value);
+          setCollections(settingsResult.value.collectionDefinitions || DEFAULT_STOREFRONT_SETTINGS.collectionDefinitions);
+        }
+        setCatalogLoaded(true);
       });
+    return () => { active = false; };
   }, []);
 
   const collectionSections = buildStorefrontCollectionSections(products, collections);
@@ -67,6 +99,10 @@ export default function Home() {
   const onlinePaymentEnabled = storefrontSettings.paymentMethods?.some((method) => method.id === 'paymongo');
   const freeShippingEnabled = Boolean(storefrontSettings.shipping?.freeShippingEnabled);
   const freeShippingMinimumItems = Math.max(1, Number(storefrontSettings.shipping?.freeShippingMinimumItems || 2));
+
+  useEffect(() => {
+    setRecentProducts(recentlyViewedProducts(products, { limit: 4 }));
+  }, [products]);
 
   useEffect(() => {
     if (!location.hash || !collectionSections.length) return undefined;
@@ -99,7 +135,7 @@ export default function Home() {
     const nextBanner = banners[(activeHeroIndex + 1) % banners.length];
     const timer = window.setTimeout(() => {
       const preload = new Image();
-      preload.src = nextBanner.url;
+      preloadResponsiveImage(preload, nextBanner.url);
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [activeHeroIndex, banners]);
@@ -144,6 +180,7 @@ export default function Home() {
               alt={activeBanner.altText || 'Maria Clara Clothing'}
               fetchPriority="high"
               loading="eager"
+              {...responsiveImageAttributes(activeBanner.url)}
               className="hero-slide absolute inset-0 h-full w-full object-cover object-center opacity-100 contrast-[1.05] saturate-[1.04]"
             />
           )}
@@ -179,11 +216,12 @@ export default function Home() {
         </div>
       </section>
 
-      {error && (
-        <p className="mx-auto mt-16 max-w-7xl px-5 text-sm text-accent-deep lg:px-8">{error}</p>
+      {!catalogLoaded && <CollectionLoadingSkeleton />}
+      {catalogLoaded && error && (
+        <div className="mx-auto min-h-[70vh] max-w-7xl px-5 pt-16 text-sm text-accent-deep lg:px-8" role="alert">{error}</div>
       )}
 
-      {collectionSections.map((section) => {
+      {catalogLoaded && !error && collectionSections.map((section) => {
         const isFreedomOfMind = String(section.slug || '').trim().toLowerCase() === 'freedom-of-mind';
         const hasCollectionBanner = Boolean(isFreedomOfMind && collectionBanner?.visible && collectionBanner?.desktopImage?.url);
         return (
@@ -193,6 +231,21 @@ export default function Home() {
           </Fragment>
         );
       })}
+
+      {recentProducts.length > 0 && (
+        <section className="mx-auto mt-16 max-w-7xl px-5 lg:px-8" aria-labelledby="recently-viewed-heading">
+          <div className="flex items-end justify-between gap-4 border-t border-[var(--customer-border)] pt-6">
+            <div>
+              <p className="eyebrow">Continue browsing</p>
+              <h2 id="recently-viewed-heading" className="display mt-2 text-3xl sm:text-5xl">Recently viewed</h2>
+            </div>
+            <Link to="/shop" className="text-action text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-deep">View all</Link>
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
+            {recentProducts.map((product, index) => <ProductCard key={product.id} product={product} index={index} />)}
+          </div>
+        </section>
+      )}
 
       <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

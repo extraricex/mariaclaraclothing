@@ -20,4 +20,9 @@ if [ -n "$DATABASE_URL" ]; then
   fi
 fi
 
+# Existing uploads live in a persistent volume. Create missing bounded card and
+# thumbnail files idempotently so older catalog media benefits from responsive
+# delivery after deployment as well as newly uploaded images.
+node scripts/generate-product-image-derivatives.js
+
 exec node src/server.js

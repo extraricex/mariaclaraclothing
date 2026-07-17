@@ -45,6 +45,10 @@ function saveCart(items) {
   syncCartSession({ items });
 }
 
+export function replaceCart(items) {
+  saveCart(Array.isArray(items) ? items : []);
+}
+
 function normalizeMaxStock(value) {
   const maxStock = Math.trunc(Number(value));
   return Number.isInteger(maxStock) && maxStock >= 0 ? maxStock : null;

@@ -165,7 +165,7 @@ test('failed, pending, cancelled, and unrelated PayMongo events cannot create a 
   ]) {
     const result = await require('../src/payments/paymongoPaymentService').processPaidWebhook({
       data: { id: `evt-${eventType}`, type: 'event', attributes: { type: eventType, data: {} } }
-    }, { metaEnabled: true, enqueueAdminEmail: async () => { emailCalls += 1; } });
+    }, { metaEnabled: true, enqueueAdminEmail: async () => { emailCalls += 1; }, enqueueCustomerConfirmation: async () => { emailCalls += 1; } });
     assert.deepEqual(result, { status: 'ignored', eventType });
   }
   assert.equal(emailCalls, 0);
@@ -181,6 +181,7 @@ test('verified PayMongo payment queues one admin email after the paid order upda
     paymentMetadata: {}, items: []
   };
   const emailCalls = [];
+  const customerCalls = [];
   const result = await applyPaidWebhookEvent({
     eventId: 'evt-paid', eventType: 'checkout_session.payment.paid', digest: 'digest',
     orderNumber: pendingOrder.orderNumber, checkoutSessionId: 'cs-paid', paymentId: 'pay-paid',
@@ -190,7 +191,8 @@ test('verified PayMongo payment queues one admin email after the paid order upda
     client,
     findOrder: async () => pendingOrder,
     updateOrderRecord: async (_orderNumber, changes) => ({ ...pendingOrder, ...changes }),
-    enqueueAdminEmail: async (order, options) => emailCalls.push({ order, client: options.client })
+    enqueueAdminEmail: async (order, options) => emailCalls.push({ order, client: options.client }),
+    enqueueCustomerConfirmation: async (order, options) => customerCalls.push({ order, client: options.client })
   });
   assert.equal(result.status, 'paid');
   assert.equal(result.order.paymentStatus, 'paid');
@@ -198,6 +200,8 @@ test('verified PayMongo payment queues one admin email after the paid order upda
   assert.equal(emailCalls.length, 1);
   assert.equal(emailCalls[0].order.totalCents, 72900);
   assert.equal(emailCalls[0].client, client);
+  assert.equal(customerCalls.length, 1);
+  assert.equal(customerCalls[0].order.paymentStatus, 'paid');
 
   const duplicateCalls = [];
   const duplicate = await applyPaidWebhookEvent({
@@ -206,7 +210,8 @@ test('verified PayMongo payment queues one admin email after the paid order upda
     amountCents: 72900, currency: 'PHP'
   }, {
     client: { query: async () => ({ rowCount: 0, rows: [] }) },
-    enqueueAdminEmail: async () => duplicateCalls.push('email')
+    enqueueAdminEmail: async () => duplicateCalls.push('email'),
+    enqueueCustomerConfirmation: async () => duplicateCalls.push('customer')
   });
   assert.equal(duplicate.status, 'duplicate');
   assert.equal(duplicateCalls.length, 0);
@@ -231,7 +236,8 @@ test('a historical incomplete PayMongo order records payment but is not confirme
     client,
     findOrder: async () => order,
     updateOrderRecord: async (_orderNumber, changes) => ({ ...order, ...changes }),
-    enqueueAdminEmail: async () => { emailCalls += 1; }
+    enqueueAdminEmail: async () => { emailCalls += 1; },
+    enqueueCustomerConfirmation: async () => { emailCalls += 1; }
   });
   assert.equal(result.order.paymentStatus, 'paid');
   assert.equal(result.order.status, 'received');

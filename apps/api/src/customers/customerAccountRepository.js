@@ -28,6 +28,26 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   return { passwordHash: hash, passwordSalt: salt };
 }
 
+async function updateAccountPassword(id, password, options = {}) {
+  const credentials = hashPassword(password);
+  if (usePostgresAccounts()) {
+    const executor = options.client || { query };
+    const result = await executor.query(
+      `UPDATE customer_accounts
+          SET password_hash=$2, password_salt=$3, updated_at=now()
+        WHERE id=$1 RETURNING id`,
+      [id, credentials.passwordHash, credentials.passwordSalt]
+    );
+    return Boolean(result.rows[0]);
+  }
+  const accounts = readAccountsFile();
+  const index = accounts.findIndex((account) => account.id === id);
+  if (index < 0) return false;
+  Object.assign(accounts[index], credentials, { updatedAt: new Date().toISOString() });
+  writeAccountsFile(accounts);
+  return true;
+}
+
 function verifyPassword(password, account) {
   if (!account?.passwordHash || !account?.passwordSalt) return false;
   const { passwordHash } = hashPassword(password, account.passwordSalt);
@@ -334,6 +354,7 @@ module.exports = {
   publicCustomer,
   signCustomerToken,
   updateAccount,
+  updateAccountPassword,
   withLoginProviders,
   verifyCustomerToken,
   verifyPassword

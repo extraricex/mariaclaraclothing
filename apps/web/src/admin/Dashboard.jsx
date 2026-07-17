@@ -35,6 +35,19 @@ function filterByRange(orders, range) {
   return orders.filter((order) => order.placedAt && new Date(order.placedAt).getTime() >= cutoff);
 }
 
+function operationalOrder(order) {
+  if (order.isTestOrder) return false;
+  return !['cancelled', 'canceled', 'failed', 'expired', 'unreachable', 'returned']
+    .includes(String(order.status || '').toLowerCase());
+}
+
+function revenueOrder(order) {
+  if (!operationalOrder(order)) return false;
+  if (['failed', 'expired', 'cancelled', 'canceled', 'refunded'].includes(String(order.paymentStatus || '').toLowerCase())) return false;
+  if (order.paymentMethod === 'paymongo') return ['paid', 'partially_refunded'].includes(String(order.paymentStatus || ''));
+  return Number(order.totalCents || 0) > 0;
+}
+
 function HorizontalBars({ rows }) {
   const max = Math.max(1, ...rows.map(([, value]) => Number(value || 0)));
   return (
@@ -70,7 +83,7 @@ export default function Dashboard() {
         ));
         const tally = new Map();
         details.forEach((detail) => {
-          if (!detail?.order || detail.order.status === 'cancelled') return;
+          if (!detail?.order || !revenueOrder(detail.order)) return;
           (detail.order.items || []).forEach((item) => {
             const key = `${item.productName} · ${item.size}`;
             const entry = tally.get(key) || { quantity: 0, revenueCents: 0 };
@@ -91,28 +104,30 @@ export default function Dashboard() {
   }, []);
 
   const orders = useMemo(() => filterByRange(allOrders, range), [allOrders, range]);
+  const activeOrders = useMemo(() => orders.filter(operationalOrder), [orders]);
+  const salesOrders = useMemo(() => orders.filter(revenueOrder), [orders]);
 
   // ---- summary metrics (legacy parity) ----
   const today = new Date().toDateString();
-  const todayOrders = allOrders.filter((order) => order.placedAt && new Date(order.placedAt).toDateString() === today);
-  const todaySales = todayOrders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0);
-  const pendingCod = orders.filter((order) => order.paymentStatus === 'cod_pending' || order.codConfirmationStatus === 'pending').length;
-  const unfulfilled = orders.filter((order) => order.fulfillmentStatus === 'unfulfilled').length;
-  const shippingCollected = orders.reduce((sum, order) => sum + Number(order.shippingFeeCents || 0), 0);
+  const todayOrders = allOrders.filter((order) => operationalOrder(order) && order.placedAt && new Date(order.placedAt).toDateString() === today);
+  const todaySales = todayOrders.filter(revenueOrder).reduce((sum, order) => sum + Number(order.totalCents || 0), 0);
+  const pendingCod = activeOrders.filter((order) => order.paymentStatus === 'cod_pending' || order.codConfirmationStatus === 'pending').length;
+  const unfulfilled = activeOrders.filter((order) => order.fulfillmentStatus === 'unfulfilled').length;
+  const shippingCollected = salesOrders.reduce((sum, order) => sum + Number(order.shippingFeeCents || 0), 0);
   const lowStockProducts = products.filter((product) => product.stockStatus === 'low_stock');
   const soldOutProducts = products.filter((product) => product.stockStatus === 'sold_out' || Number(product.inventoryQuantity || 0) <= 0);
 
   // ---- sales overview ----
-  const lastSevenSales = filterByRange(allOrders, 'last_7_days').reduce((sum, order) => sum + Number(order.totalCents || 0), 0);
-  const itemCount = orders.reduce((sum, order) => sum + Number(order.itemCount || 0), 0);
-  const freeShippingOrders = orders.filter((order) => Number(order.shippingFeeCents || 0) === 0).length;
-  const averageOrderValue = orders.length
-    ? Math.round(orders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0) / orders.length)
+  const lastSevenSales = filterByRange(allOrders, 'last_7_days').filter(revenueOrder).reduce((sum, order) => sum + Number(order.totalCents || 0), 0);
+  const itemCount = salesOrders.reduce((sum, order) => sum + Number(order.itemCount || 0), 0);
+  const freeShippingOrders = salesOrders.filter((order) => Number(order.shippingFeeCents || 0) === 0).length;
+  const averageOrderValue = salesOrders.length
+    ? Math.round(salesOrders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0) / salesOrders.length)
     : 0;
 
   // ---- today's work ----
-  const toPack = orders.filter((order) => order.fulfillmentStatus === 'unfulfilled').length;
-  const readyToShip = orders.filter((order) => order.fulfillmentStatus === 'packed' || order.status === 'packed').length;
+  const toPack = activeOrders.filter((order) => order.fulfillmentStatus === 'unfulfilled').length;
+  const readyToShip = activeOrders.filter((order) => order.fulfillmentStatus === 'packed' || order.status === 'packed').length;
   const draftProducts = products.filter((product) => product.status && product.status !== 'active').length;
 
   // ---- sales trend (7 days) ----
@@ -128,7 +143,7 @@ export default function Dashboard() {
       };
     });
     const byDay = new Map(days.map((day) => [day.key, day]));
-    allOrders.forEach((order) => {
+    allOrders.filter(revenueOrder).forEach((order) => {
       if (!order.placedAt) return;
       const key = new Date(order.placedAt).toISOString().slice(0, 10);
       if (byDay.has(key)) byDay.get(key).total += Number(order.totalCents || 0);
@@ -143,16 +158,16 @@ export default function Dashboard() {
     ['Pending COD', pendingCod, '#b8860b'],
     ['Unfulfilled', unfulfilled, '#8a7d70'],
     ['Packed', readyToShip, '#5794f2'],
-    ['Shipped', orders.filter((order) => order.fulfillmentStatus === 'shipped' || order.deliveryStatus === 'shipped' || order.status === 'shipped').length, '#7048a8'],
-    ['Delivered', orders.filter((order) => order.fulfillmentStatus === 'delivered' || order.deliveryStatus === 'delivered' || order.status === 'delivered').length, '#2f7d32'],
-    ['Cancelled', orders.filter((order) => order.status === 'cancelled' || order.fulfillmentStatus === 'cancelled').length, '#c01818']
+    ['Shipped', activeOrders.filter((order) => order.fulfillmentStatus === 'shipped' || order.deliveryStatus === 'shipped' || order.status === 'shipped').length, '#7048a8'],
+    ['Delivered', activeOrders.filter((order) => order.fulfillmentStatus === 'delivered' || order.deliveryStatus === 'delivered' || order.status === 'delivered').length, '#2f7d32'],
+    ['Cancelled', orders.filter((order) => !order.isTestOrder && (order.status === 'cancelled' || order.fulfillmentStatus === 'cancelled')).length, '#c01818']
   ];
   const shippingRows = [
     ['Free shipping', freeShippingOrders, '#2f7d32'],
-    ['MM / Cavite', orders.filter((order) => Number(order.shippingFeeCents || 0) === 8000).length, '#e8590c'],
-    ['Luzon province', orders.filter((order) => Number(order.shippingFeeCents || 0) === 12000).length, '#b8860b'],
-    ['Vis / Mindanao', orders.filter((order) => Number(order.shippingFeeCents || 0) === 18000).length, '#5794f2'],
-    ['Other fee', orders.filter((order) => ![0, 8000, 12000, 18000].includes(Number(order.shippingFeeCents || 0))).length, '#8a7d70']
+    ['MM / Cavite', salesOrders.filter((order) => Number(order.shippingFeeCents || 0) === 8000).length, '#e8590c'],
+    ['Luzon province', salesOrders.filter((order) => Number(order.shippingFeeCents || 0) === 12000).length, '#b8860b'],
+    ['Vis / Mindanao', salesOrders.filter((order) => Number(order.shippingFeeCents || 0) === 18000).length, '#5794f2'],
+    ['Other fee', salesOrders.filter((order) => ![0, 8000, 12000, 18000].includes(Number(order.shippingFeeCents || 0))).length, '#8a7d70']
   ];
 
   // ---- inventory health donut ----

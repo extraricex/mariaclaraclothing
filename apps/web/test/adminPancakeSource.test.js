@@ -8,7 +8,7 @@ const sourceRoot = path.join(import.meta.dirname, '..', 'src');
 test('admin routes and navigation expose the Pancake POS foundation page', async () => {
   const app = await readFile(path.join(sourceRoot, 'App.jsx'), 'utf8');
   const layout = await readFile(path.join(sourceRoot, 'admin', 'AdminLayout.jsx'), 'utf8');
-  assert.match(app, /import PancakePos from '\.\/admin\/PancakePos\.jsx'/);
+  assert.match(app, /const PancakePos = lazy\(\(\) => import\('\.\/admin\/PancakePos\.jsx'\)\)/);
   assert.match(app, /path="pancake" element=\{<PancakePos \/>\}/);
   assert.match(layout, /to: '\/admin\/pancake', label: 'Pancake POS'/);
 });

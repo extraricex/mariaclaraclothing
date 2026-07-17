@@ -23,6 +23,7 @@ import {
 } from '../lib/checkoutDraft.js';
 import { formatMoney } from '../lib/money.js';
 import { trackFacebookAddPaymentInfo, trackFacebookAddToCart } from '../lib/metaPixel.js';
+import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 import { DEFAULT_STOREFRONT_SETTINGS, freeShippingHint, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { customerNameParts } from '../lib/customerName.js';
 import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
@@ -300,6 +301,7 @@ export default function CheckoutReview() {
     placingOrderRef.current = true;
     setPending(true);
     setStatus({ tone: 'neutral', message: paymentMethod === 'paymongo' ? 'Preparing secure payment...' : 'Placing your order...' });
+    let paymentProviderAttempted = false;
     try {
       const latestQuote = await createCheckoutQuote(quotePayload(draft.discountCode || '')).then((body) => body.quote);
       if (totalsChanged(quote, latestQuote)) {
@@ -315,6 +317,7 @@ export default function CheckoutReview() {
         paymentMethod
       };
       const idempotencyKey = getCheckoutIdempotencyKey(latestQuote.id);
+      if (paymentMethod === 'paymongo') paymentProviderAttempted = true;
       const result = paymentMethod === 'paymongo'
         ? await createPayMongoCheckout(payload, latestQuote.id, idempotencyKey)
         : await createQuoteBackedOrder(payload, latestQuote.id, idempotencyKey);
@@ -337,6 +340,15 @@ export default function CheckoutReview() {
       navigate(`/thank-you?order=${encodeURIComponent(result.orderNumber)}`);
     } catch (error) {
       placingOrderRef.current = false;
+      if (paymentProviderAttempted) {
+        trackFunnelEvent('payment_failed', {
+          paymentMethod: 'paymongo',
+          metricName: error.code || 'CHECKOUT_SESSION_FAILED',
+          valueCents: quote?.totalCents,
+          dedupeKey: `paymongo-failed:${cartSessionId}:${error.code || 'unknown'}`,
+          dedupeMilliseconds: 10_000
+        });
+      }
       if (['address_invalid', 'INCOMPLETE_DELIVERY_ADDRESS', 'CHECKOUT_CUSTOMER_INVALID'].includes(error.code)) {
         navigate('/checkout', {
           replace: true,

@@ -18,6 +18,7 @@ const { normalizePhilippinePhone } = require('../jnt/jntExport');
 const {
   createAuthSession,
   findAuthSession,
+  revokeActorSessions,
   revokeAuthSession,
   verifySessionCsrf
 } = require('../auth/sessionRepository');
@@ -40,6 +41,10 @@ const {
   safeStateEqual,
   sanitizeReturnPath
 } = require('../customers/customerOAuthService');
+const {
+  completeCustomerPasswordReset,
+  requestCustomerPasswordReset
+} = require('../customers/customerPasswordResetService');
 
 const router = express.Router();
 const CUSTOMER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -235,6 +240,30 @@ router.post('/login', async (req, res, next) => {
       customer: publicCustomer(accountWithProviders),
       ...(!isProduction() ? { token: signCustomerToken(account.id) } : {})
     });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/password-reset/request', async (req, res, next) => {
+  try {
+    await requestCustomerPasswordReset(req.body?.email, {
+      config: env.notifications.adminOrderEmail
+    });
+    return res.status(202).json({
+      message: 'If an account exists for that email, a password reset link has been sent.'
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/password-reset/complete', async (req, res, next) => {
+  try {
+    const result = await completeCustomerPasswordReset(req.body?.token, req.body?.password);
+    await revokeActorSessions('customer', result.customerAccountId);
+    clearSessionCookies(res, 'customer');
+    return res.json({ message: 'Your password has been reset. You can now log in.' });
   } catch (error) {
     return next(error);
   }

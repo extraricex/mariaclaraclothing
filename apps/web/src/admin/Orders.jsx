@@ -18,6 +18,12 @@ const DATE_RANGE_OPTIONS = [
 const ORDER_SORT_OPTIONS = [['placed_desc', 'Newest first'], ['placed_asc', 'Oldest first'], ['total_desc', 'Total high-low'], ['total_asc', 'Total low-high'], ['customer_asc', 'Customer A-Z']];
 const PAYMENT_STATUS_OPTIONS = ['', 'cod_pending', 'pending_payment', 'paid', 'failed', 'expired', 'cancelled', 'partially_refunded', 'refunded'];
 const FULFILLMENT_STATUS_OPTIONS = ['', 'unfulfilled', 'packed', 'shipped', 'delivered', 'cancelled'];
+const CANCELLATION_REASONS = [
+  ['', 'Select a reason'], ['customer_requested', 'Customer requested cancellation'],
+  ['unreachable_customer', 'Customer unreachable'], ['duplicate_order', 'Duplicate order'],
+  ['payment_failed', 'Payment failed'], ['out_of_stock', 'Item became unavailable'],
+  ['invalid_address', 'Invalid delivery address'], ['fraud_risk', 'Fraud risk'], ['other', 'Other']
+];
 
 export function statusBadge(status) {
   const tones = {
@@ -71,11 +77,13 @@ export default function Orders() {
   const [paymentStatus, setPaymentStatus] = useState('');
   const [fulfillmentStatus, setFulfillmentStatus] = useState('');
   const [missingDelivery, setMissingDelivery] = useState(false);
+  const [testOrderFilter, setTestOrderFilter] = useState('');
   const [sort, setSort] = useState('placed_desc');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, hasPrevious: false, hasNext: false });
   const [listSummary, setListSummary] = useState(null);
   const [cancelRequest, setCancelRequest] = useState(null);
+  const [cancellationReason, setCancellationReason] = useState('');
   const selectAllRef = useRef(null);
 
   const load = useCallback(() => {
@@ -88,6 +96,7 @@ export default function Orders() {
     if (paymentStatus) params.set('paymentStatus', paymentStatus);
     if (fulfillmentStatus) params.set('fulfillmentStatus', fulfillmentStatus);
     if (missingDelivery) params.set('missingDelivery', 'true');
+    if (testOrderFilter) params.set('isTestOrder', testOrderFilter);
     params.set('sort', sort);
     params.set('page', String(page));
     params.set('pageSize', '25');
@@ -101,7 +110,7 @@ export default function Orders() {
         setSelected((previous) => new Set([...previous].filter((orderNumber) => visible.has(orderNumber))));
       })
       .catch((err) => setMessage(err.message));
-  }, [status, dateRange, dateFrom, dateTo, query, paymentStatus, fulfillmentStatus, missingDelivery, sort, page]);
+  }, [status, dateRange, dateFrom, dateTo, query, paymentStatus, fulfillmentStatus, missingDelivery, testOrderFilter, sort, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -170,7 +179,8 @@ export default function Orders() {
     try {
       await adminDownload('/api/admin/orders/export', {
         orderNumbers: selectedOrderNumbers,
-        status, dateRange, dateFrom, dateTo, q: query, paymentStatus, fulfillmentStatus, missingDelivery, sort
+        status, dateRange, dateFrom, dateTo, q: query, paymentStatus, fulfillmentStatus,
+        missingDelivery, isTestOrder: testOrderFilter, sort
       }, `maria-clara-orders-${new Date().toISOString().slice(0, 10)}.csv`);
       setMessage(`${selectedOrderNumbers.length ? `${selectedOrderNumbers.length} selected` : 'Filtered'} orders exported.`);
     } catch (error) {
@@ -181,17 +191,18 @@ export default function Orders() {
   async function updateOrderStatus(order, nextStatus) {
     if (!nextStatus || nextStatus === order.status) return;
     if (nextStatus === 'cancelled') {
+      setCancellationReason(order.cancellationReason || '');
       setCancelRequest({ order, nextStatus });
       return;
     }
     await persistOrderStatus(order, nextStatus);
   }
 
-  async function persistOrderStatus(order, nextStatus) {
+  async function persistOrderStatus(order, nextStatus, extra = {}) {
     setMessage('');
     setUpdatingStatus((previous) => ({ ...previous, [order.orderNumber]: true }));
     try {
-      const body = await adminSend('PATCH', `/api/admin/orders/${encodeURIComponent(order.orderNumber)}`, { status: nextStatus });
+      const body = await adminSend('PATCH', `/api/admin/orders/${encodeURIComponent(order.orderNumber)}`, { status: nextStatus, ...extra });
       setOrders((previous) => previous.map((item) => item.orderNumber === order.orderNumber ? { ...item, ...body.order } : item));
       setMessage(`${order.orderNumber} status updated to ${humanize(nextStatus)}.`);
     } catch (error) {
@@ -208,8 +219,13 @@ export default function Orders() {
   async function confirmCancellation() {
     const request = cancelRequest;
     if (!request) return;
-    await persistOrderStatus(request.order, request.nextStatus);
+    if (!cancellationReason) {
+      setMessage('Select a cancellation reason before cancelling this order.');
+      return;
+    }
+    await persistOrderStatus(request.order, request.nextStatus, { cancellationReason });
     setCancelRequest(null);
+    setCancellationReason('');
   }
 
   return (
@@ -279,6 +295,11 @@ export default function Orders() {
           <input type="checkbox" checked={missingDelivery} onChange={(event) => { setMissingDelivery(event.target.checked); setPage(1); }} />
           Missing Delivery Information
         </label>
+        <select className="field max-w-44" value={testOrderFilter} onChange={(event) => { setTestOrderFilter(event.target.value); setPage(1); }} aria-label="Test order filter">
+          <option value="">All real and test orders</option>
+          <option value="false">Real orders only</option>
+          <option value="true">Test orders only</option>
+        </select>
         <select className="field max-w-44" value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} aria-label="Sort orders">
           {ORDER_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
@@ -327,6 +348,7 @@ export default function Orders() {
                     {order.orderNumber}
                   </Link>
                   {order.missingDeliveryInformation && <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.08em] text-[#ff8b98]">Missing delivery info</span>}
+                  {order.isTestOrder && <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.08em] text-[#ffd166]">Test order · excluded from sales</span>}
                 </td>
                 <td className="p-3">{order.customerName}<br /><span className="text-xs text-[var(--admin-muted)]">{order.phone}</span></td>
                 <td className="p-3">{formatMoney(order.totalCents)}</td>
@@ -386,9 +408,16 @@ export default function Orders() {
         confirmLabel="Cancel order"
         danger
         busy={Boolean(cancelRequest && updatingStatus[cancelRequest.order.orderNumber])}
-        onCancel={() => setCancelRequest(null)}
+        onCancel={() => { setCancelRequest(null); setCancellationReason(''); }}
         onConfirm={confirmCancellation}
-      />
+      >
+        <label className="mt-4 block">
+          <span className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Cancellation reason</span>
+          <select className="field mt-1 !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-[var(--admin-text)]" value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)}>
+            {CANCELLATION_REASONS.map(([value, label]) => <option key={value || 'blank'} value={value}>{label}</option>)}
+          </select>
+        </label>
+      </AdminConfirmDialog>
     </div>
   );
 }

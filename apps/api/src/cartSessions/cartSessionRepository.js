@@ -32,11 +32,12 @@ async function writeStore(store) {
 async function upsertCartSession(sessionId, payload) {
   const record = normalizeCartSession(sessionId, payload);
   if (usePostgresCartSessions()) {
-    await query(
+    const persisted = await query(
       `INSERT INTO cart_sessions (
         session_id, status, customer, address, items, item_count, subtotal_cents,
-        checkout_started_at, converted_order_number, last_activity_at, updated_at
-      ) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10, $11)
+        checkout_started_at, converted_order_number, last_activity_at, updated_at,
+        recovery_consent, recovery_status, recovery_email_sent_at, recovery_error
+      ) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       ON CONFLICT (session_id) DO UPDATE SET
         status = CASE WHEN cart_sessions.converted_order_number <> '' THEN cart_sessions.status ELSE EXCLUDED.status END,
         customer = CASE WHEN cart_sessions.converted_order_number <> '' THEN cart_sessions.customer ELSE EXCLUDED.customer END,
@@ -46,8 +47,19 @@ async function upsertCartSession(sessionId, payload) {
         subtotal_cents = CASE WHEN cart_sessions.converted_order_number <> '' THEN cart_sessions.subtotal_cents ELSE EXCLUDED.subtotal_cents END,
         checkout_started_at = COALESCE(cart_sessions.checkout_started_at, EXCLUDED.checkout_started_at),
         converted_order_number = cart_sessions.converted_order_number,
+        recovery_consent = CASE WHEN cart_sessions.converted_order_number <> '' THEN cart_sessions.recovery_consent ELSE EXCLUDED.recovery_consent END,
+        recovery_status = CASE
+          WHEN cart_sessions.recovery_status IN ('sending', 'sent') THEN cart_sessions.recovery_status
+          ELSE EXCLUDED.recovery_status
+        END,
+        recovery_email_sent_at = cart_sessions.recovery_email_sent_at,
+        recovery_error = CASE
+          WHEN cart_sessions.recovery_status IN ('sending', 'sent') THEN cart_sessions.recovery_error
+          ELSE EXCLUDED.recovery_error
+        END,
         last_activity_at = EXCLUDED.last_activity_at,
-        updated_at = EXCLUDED.updated_at`,
+        updated_at = EXCLUDED.updated_at
+      RETURNING *`,
       [
         record.sessionId,
         record.status,
@@ -59,10 +71,14 @@ async function upsertCartSession(sessionId, payload) {
         record.checkoutStartedAt || null,
         record.convertedOrderNumber,
         record.lastActivityAt,
-        record.updatedAt
+        record.updatedAt,
+        record.recoveryConsent,
+        record.recoveryStatus,
+        record.recoveryEmailSentAt || null,
+        record.recoveryError
       ]
     );
-    return record;
+    return persisted.rows[0] ? fromPostgresCartSession(persisted.rows[0]) : record;
   }
 
   const store = await readStore();
@@ -76,13 +92,20 @@ async function upsertCartSession(sessionId, payload) {
     } : {
       ...existing,
       ...record,
-      checkoutStartedAt: existing.checkoutStartedAt || record.checkoutStartedAt
+      checkoutStartedAt: existing.checkoutStartedAt || record.checkoutStartedAt,
+      recoveryStatus: ['sending', 'sent'].includes(existing.recoveryStatus)
+        ? existing.recoveryStatus
+        : record.recoveryStatus,
+      recoveryEmailSentAt: existing.recoveryEmailSentAt || '',
+      recoveryError: ['sending', 'sent'].includes(existing.recoveryStatus)
+        ? existing.recoveryError || ''
+        : record.recoveryError
     };
   } else {
     store.sessions.push(record);
   }
   await writeStore(store);
-  return record;
+  return index >= 0 ? store.sessions[index] : record;
 }
 
 async function listCartSessions(status) {
@@ -161,6 +184,68 @@ async function deleteCartSession(sessionId, allowedStatuses = ['draft', 'abandon
   return { sessionId: session.sessionId, status: session.status };
 }
 
+async function findCartSession(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  if (usePostgresCartSessions()) {
+    const result = await query('SELECT * FROM cart_sessions WHERE session_id = $1', [id]);
+    return result.rows[0] ? fromPostgresCartSession(result.rows[0]) : null;
+  }
+  return (await readStore()).sessions.find((session) => session.sessionId === id) || null;
+}
+
+async function claimCartRecoveryEmail(sessionId) {
+  const id = String(sessionId || '').trim();
+  if (usePostgresCartSessions()) {
+    const result = await query(
+      `UPDATE cart_sessions
+          SET recovery_status='sending', recovery_error='', updated_at=now()
+        WHERE session_id=$1 AND status='abandoned_checkout' AND converted_order_number=''
+          AND recovery_consent=true AND recovery_email_sent_at IS NULL
+          AND recovery_status IN ('eligible','failed')
+        RETURNING *`,
+      [id]
+    );
+    return result.rows[0] ? fromPostgresCartSession(result.rows[0]) : null;
+  }
+  const store = await readStore();
+  const index = store.sessions.findIndex((session) => session.sessionId === id);
+  if (index < 0) return null;
+  const session = store.sessions[index];
+  if (session.status !== 'abandoned_checkout' || session.convertedOrderNumber || !session.recoveryConsent
+      || session.recoveryEmailSentAt || !['eligible', 'failed'].includes(session.recoveryStatus)) return null;
+  store.sessions[index] = { ...session, recoveryStatus: 'sending', recoveryError: '', updatedAt: new Date().toISOString() };
+  await writeStore(store);
+  return store.sessions[index];
+}
+
+async function completeCartRecoveryEmail(sessionId, { sent, error = '' } = {}) {
+  const id = String(sessionId || '').trim();
+  const sentAt = sent ? new Date().toISOString() : null;
+  const safeError = String(error || '').trim().slice(0, 500);
+  if (usePostgresCartSessions()) {
+    const result = await query(
+      `UPDATE cart_sessions
+          SET recovery_status=$2, recovery_email_sent_at=COALESCE($3,recovery_email_sent_at),
+              recovery_error=$4, updated_at=now()
+        WHERE session_id=$1 AND recovery_status='sending'
+        RETURNING *`,
+      [id, sent ? 'sent' : 'failed', sentAt, safeError]
+    );
+    return result.rows[0] ? fromPostgresCartSession(result.rows[0]) : null;
+  }
+  const store = await readStore();
+  const index = store.sessions.findIndex((session) => session.sessionId === id && session.recoveryStatus === 'sending');
+  if (index < 0) return null;
+  store.sessions[index] = {
+    ...store.sessions[index], recoveryStatus: sent ? 'sent' : 'failed',
+    recoveryEmailSentAt: sentAt || store.sessions[index].recoveryEmailSentAt || '',
+    recoveryError: safeError, updatedAt: new Date().toISOString()
+  };
+  await writeStore(store);
+  return store.sessions[index];
+}
+
 function cartDeletionError(existing) {
   const error = new Error(existing ? 'Converted or active cart sessions cannot be deleted' : 'Cart session not found');
   error.status = existing ? 409 : 404;
@@ -181,17 +266,23 @@ function normalizeCartSession(sessionId, payload = {}) {
   const checkoutStarted = Boolean(payload.checkoutStarted);
   const now = new Date().toISOString();
   const status = itemCount <= 0 ? 'empty' : checkoutStarted ? 'abandoned_checkout' : 'draft';
+  const customer = normalizeCustomer(payload.customer);
+  const recoveryConsent = Boolean(checkoutStarted && payload.recoveryConsent && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email));
 
   return {
     sessionId: id,
     status,
-    customer: normalizeCustomer(payload.customer),
+    customer,
     address: normalizeAddress(payload.address),
     items,
     itemCount,
     subtotalCents,
     checkoutStartedAt: checkoutStarted ? now : '',
     convertedOrderNumber: '',
+    recoveryConsent,
+    recoveryStatus: recoveryConsent ? 'eligible' : 'not_requested',
+    recoveryEmailSentAt: '',
+    recoveryError: '',
     lastActivityAt: now,
     updatedAt: now
   };
@@ -240,7 +331,11 @@ function cartSessionSummary(session) {
     items: Array.isArray(session.items) ? session.items : [],
     checkoutStartedAt: session.checkoutStartedAt || '',
     lastActivityAt: session.lastActivityAt || '',
-    convertedOrderNumber: session.convertedOrderNumber || ''
+    convertedOrderNumber: session.convertedOrderNumber || '',
+    recoveryConsent: Boolean(session.recoveryConsent),
+    recoveryStatus: session.recoveryStatus || 'not_requested',
+    recoveryEmailSentAt: session.recoveryEmailSentAt || '',
+    recoveryError: session.recoveryError || ''
   };
 }
 
@@ -255,14 +350,21 @@ function fromPostgresCartSession(row) {
     subtotalCents: row.subtotal_cents,
     checkoutStartedAt: row.checkout_started_at ? new Date(row.checkout_started_at).toISOString() : '',
     convertedOrderNumber: row.converted_order_number || '',
+    recoveryConsent: Boolean(row.recovery_consent),
+    recoveryStatus: row.recovery_status || 'not_requested',
+    recoveryEmailSentAt: row.recovery_email_sent_at ? new Date(row.recovery_email_sent_at).toISOString() : '',
+    recoveryError: row.recovery_error || '',
     lastActivityAt: row.last_activity_at ? new Date(row.last_activity_at).toISOString() : '',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ''
   };
 }
 
 module.exports = {
+  claimCartRecoveryEmail,
   cartSessionSummary,
+  completeCartRecoveryEmail,
   deleteCartSession,
+  findCartSession,
   listCartSessions,
   markCartSessionConverted,
   upsertCartSession

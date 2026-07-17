@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { hasDatabaseUrl, query } = require('../db/postgres');
 const { resolveRuntimeDataFile } = require('../db/runtimeDataFile');
+const { META_CURRENCY, centavosToMetaPesos } = require('../marketing/metaMoney');
 
 const DEFAULT_ORDERS_FILE = path.join(__dirname, '..', '..', 'data', 'orders.json');
 
@@ -96,6 +97,7 @@ async function productSalesCounts() {
          CROSS JOIN LATERAL jsonb_array_elements(items) AS item
         WHERE lower(status) NOT IN ('cancelled','canceled','returned','failed','expired','unreachable','draft','pending_payment','abandoned_checkout')
           AND lower(payment_status) NOT IN ('unpaid','failed','expired','pending_payment','cancelled','canceled','refunded')
+          AND is_test_order = false
           AND COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', '')) IS NOT NULL
         GROUP BY COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', ''))`
     );
@@ -106,7 +108,7 @@ async function productSalesCounts() {
   const excludedStatuses = new Set(['cancelled', 'canceled', 'returned', 'failed', 'expired', 'unreachable', 'draft', 'pending_payment', 'abandoned_checkout']);
   const excludedPayments = new Set(['unpaid', 'failed', 'expired', 'pending_payment', 'cancelled', 'canceled', 'refunded']);
   for (const order of store.orders) {
-    if (excludedStatuses.has(String(order.status || '').toLowerCase()) || excludedPayments.has(String(order.paymentStatus || '').toLowerCase())) continue;
+    if (order.isTestOrder || excludedStatuses.has(String(order.status || '').toLowerCase()) || excludedPayments.has(String(order.paymentStatus || '').toLowerCase())) continue;
     for (const item of order.items || []) {
       const productId = String(item.productId || item.slug || '').trim();
       if (!productId) continue;
@@ -435,12 +437,13 @@ async function upsertPostgresOrder(order, transactionClient) {
       provider_payment_id,paid_amount_cents,paid_at,payment_expires_at,inventory_reservation_status,payment_metadata,
       meta_purchase_event_id,meta_purchase_tracking_version,meta_browser_purchase_claim_id,
       meta_browser_purchase_claimed_at,meta_browser_purchase_sent_at,meta_capi_purchase_queued_at,
-      meta_capi_purchase_sent_at,meta_purchase_status,meta_purchase_last_error
+      meta_capi_purchase_sent_at,meta_purchase_status,meta_purchase_last_error,
+      cancellation_reason,is_test_order,currency,meta_purchase_value,meta_purchase_currency
     ) VALUES (
       $1, $2::jsonb, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10,
       $11, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20,
       $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28, $29, $30, $31, $32::jsonb, $33, $34, $35, $36, $37,
-      $38,$39,$40,$41,$42,$43,$44,$45::jsonb,$46,$47,$48,$49,$50,$51,$52,$53,$54
+      $38,$39,$40,$41,$42,$43,$44,$45::jsonb,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59
     )
     ON CONFLICT (order_number) DO UPDATE SET
       customer = EXCLUDED.customer,
@@ -485,6 +488,9 @@ async function upsertPostgresOrder(order, transactionClient) {
       payment_expires_at = EXCLUDED.payment_expires_at,
       inventory_reservation_status = EXCLUDED.inventory_reservation_status,
       payment_metadata = EXCLUDED.payment_metadata,
+      currency = EXCLUDED.currency,
+      cancellation_reason = EXCLUDED.cancellation_reason,
+      is_test_order = EXCLUDED.is_test_order,
       placed_at = EXCLUDED.placed_at,
       updated_at = now()`,
     [
@@ -543,7 +549,14 @@ async function upsertPostgresOrder(order, transactionClient) {
       order.metaCapiPurchaseQueuedAt || null,
       order.metaCapiPurchaseSentAt || null,
       order.metaPurchaseStatus || 'legacy',
-      String(order.metaPurchaseLastError || '').slice(0, 1000)
+      String(order.metaPurchaseLastError || '').slice(0, 1000),
+      String(order.cancellationReason || '').slice(0, 80),
+      Boolean(order.isTestOrder),
+      META_CURRENCY,
+      Number.isFinite(Number(order.metaPurchaseValue)) && Number(order.metaPurchaseValue) > 0
+        ? Number(Number(order.metaPurchaseValue).toFixed(2))
+        : centavosToMetaPesos(order.totalCents),
+      META_CURRENCY
     ]
   );
 }
@@ -573,6 +586,11 @@ function fromPostgresOrder(row) {
     shippingRegionLabel: row.shipping_region_label,
     freeShippingUnlocked: row.free_shipping_unlocked,
     totalCents: row.total_cents,
+    currency: row.currency || META_CURRENCY,
+    metaPurchaseValue: row.meta_purchase_value === null || row.meta_purchase_value === undefined
+      ? centavosToMetaPesos(row.total_cents)
+      : Number(row.meta_purchase_value),
+    metaPurchaseCurrency: row.meta_purchase_currency || META_CURRENCY,
     cartSnapshot: row.cart_snapshot || [],
     checkoutChannel: row.checkout_channel,
     paymentMethod: row.payment_method,
@@ -608,6 +626,8 @@ function fromPostgresOrder(row) {
       : '',
     metaPurchaseStatus: row.meta_purchase_status || 'legacy',
     metaPurchaseLastError: row.meta_purchase_last_error || '',
+    cancellationReason: row.cancellation_reason || '',
+    isTestOrder: Boolean(row.is_test_order),
     codConfirmationStatus: row.cod_confirmation_status,
     deliveryStatus: row.delivery_status,
     deliveryMethod: row.delivery_method,

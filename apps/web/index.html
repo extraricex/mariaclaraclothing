@@ -3,90 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Maria Clara Clothing — Premium Philippine Streetwear</title>
-    <meta name="description" content="Oversized and crop-box 240 GSM cotton shirts. Cash on delivery nationwide. Free shipping on 2+ items." />
+    <!-- Production nginx replaces this include with database-backed metadata and JSON-LD. -->
+    <!--# include virtual="/api/storefront/seo/head?path=$arg_seo_path&nonce=$request_id" -->
     <meta name="theme-color" content="#222426" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+    <link rel="stylesheet" href="/seo-fallback.css" />
     <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
     <link href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&f[]=switzer@400,500,600,700&display=swap" rel="stylesheet" />
-    <!-- Meta Pixel is bootstrapped before React so browser tools and Meta's URL checker can detect it. -->
-    <script>
-      (function () {
-        var defaultPixel = {
-          enabled: true,
-          pixelId: '595813035761213',
-          requireConsent: false
-        };
-        var settingsRequest = fetch('/api/storefront-settings', {
-          cache: 'no-store',
-          credentials: 'same-origin'
-        }).then(function (response) {
-          if (!response.ok) throw new Error('Could not load storefront settings.');
-          return response.json();
-        }).then(function (body) {
-          return body.settings || {};
-        });
-
-        window.__mariaClaraStorefrontSettingsPromise = settingsRequest;
-
-        function startMetaPixel(pixel) {
-          var config = pixel || defaultPixel;
-          var pixelId = String(config.pixelId || '').trim();
-          var enabled = Boolean(config.enabled && /^\d{5,30}$/.test(pixelId));
-          var requireConsent = Boolean(config.requireConsent);
-          var customerPath = !window.location.pathname.startsWith('/admin');
-
-          window.__mariaClaraFacebookPixelConfig = {
-            enabled: enabled,
-            pixelId: enabled ? pixelId : '',
-            requireConsent: requireConsent
-          };
-          if (!enabled || !customerPath) return;
-
-          !function(f,b,e,v,n,t,s)
-          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-          n.queue=[];t=b.createElement(e);t.async=!0;
-          t.src=v;s=b.getElementsByTagName(e)[0];
-          s.parentNode.insertBefore(t,s)}(window, document,'script',
-          'https://connect.facebook.net/en_US/fbevents.js');
-
-          var consent = !requireConsent ||
-            localStorage.getItem('maria-clara-meta-tracking-consent') === 'accepted';
-          if (requireConsent) fbq('consent', 'revoke');
-          if (pixelId === '595813035761213') {
-            fbq('init', '595813035761213');
-          } else {
-            fbq('init', pixelId);
-          }
-
-          if (!consent) {
-            window.__mariaClaraFacebookConsent = 'revoke';
-            window.__mariaClaraFacebookPixelId = pixelId;
-            return;
-          }
-
-          if (requireConsent) fbq('consent', 'grant');
-          fbq('track', 'PageView');
-          window.__mariaClaraFacebookConsent = 'grant';
-          window.__mariaClaraFacebookPixelId = pixelId;
-          window.__mariaClaraInitialMetaPageViewPath =
-            window.location.pathname + window.location.search;
-        }
-
-        settingsRequest
-          .then(function (settings) { startMetaPixel(settings.metaPixel || defaultPixel); })
-          .catch(function () { startMetaPixel(defaultPixel); });
-      })();
-    </script>
+    <!-- External bootstrap keeps the security policy strict and loads the configured dataset only. -->
+    <script src="/meta-bootstrap.js"></script>
   </head>
   <body>
-    <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=595813035761213&amp;ev=PageView&amp;noscript=1" /></noscript>
+    <div id="seo-fallback"><!--# include virtual="/api/storefront/seo/body?path=$arg_seo_path" --></div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

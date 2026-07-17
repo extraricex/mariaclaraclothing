@@ -8,8 +8,11 @@ const {
   normalizeMetaValue,
   parseMetaCookies,
   purchaseValue,
-  sha256
+  sha256,
+  META_CURRENCY,
+  validateMetaPurchase
 } = require('../src/marketing/metaEvent');
+const { resolveMetaCurrency } = require('../src/marketing/metaMoney');
 
 test('Meta CAPI is disabled by default', () => {
   assert.deepEqual(metaConfig({}), { enabled: false });
@@ -32,8 +35,33 @@ test('Meta CAPI validates enabled configuration', () => {
     pixelId: '595813035761213',
     accessToken: 'test-token',
     graphApiVersion: 'v-test',
-    testEventCode: ''
+    testEventCode: '',
+    currency: 'PHP'
   });
+});
+
+test('Meta currency always resolves to the store ISO currency', () => {
+  assert.equal(META_CURRENCY, 'PHP');
+  assert.equal(resolveMetaCurrency({}), 'PHP');
+  assert.equal(resolveMetaCurrency({ META_CURRENCY: ' php ' }), 'PHP');
+  for (const invalid of ['', 'USD', 'Peso', '₱', 'PHP 649']) {
+    assert.equal(resolveMetaCurrency({ META_CURRENCY: invalid }), 'PHP');
+  }
+});
+
+test('Meta Purchase validation requires numeric value, PHP, and an event ID', () => {
+  assert.deepEqual(validateMetaPurchase({ value: 1298, currency: 'PHP', eventId: 'purchase_MCC-1' }), {
+    valid: true,
+    errors: []
+  });
+  for (const input of [
+    { value: '', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: '1298', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: 0, currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: 1298, currency: '', eventId: 'purchase_MCC-1' },
+    { value: 1298, currency: 'php', eventId: 'purchase_MCC-1' },
+    { value: 1298, currency: 'PHP', eventId: '' }
+  ]) assert.equal(validateMetaPurchase(input).valid, false);
 });
 
 test('Meta Purchase uses persisted totals and hashed matching data', () => {

@@ -101,7 +101,7 @@ test('admin settings expose defaults and save sections', async () => {
     assert.deepEqual(defaults.settings.marketing.metaPixel, {
       enabled: true,
       pixelId: '595813035761213',
-      requireConsent: false
+      requireConsent: true
     });
     assert.equal(JSON.stringify(defaults).includes('passwordHash'), false);
 
@@ -290,7 +290,7 @@ test('public storefront settings expose only the safe subset', async () => {
     assert.deepEqual(body.settings.metaPixel, {
       enabled: true,
       pixelId: '595813035761213',
-      requireConsent: false
+      requireConsent: true
     });
 
     const raw = JSON.stringify(body);

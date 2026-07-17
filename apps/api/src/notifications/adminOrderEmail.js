@@ -218,6 +218,46 @@ async function sendAdminNewOrderEmail(order, { config, transport } = {}) {
   }
 }
 
+async function sendTransactionalSmtpEmail(event, { config, transport } = {}) {
+  if (!config?.configured) {
+    const error = new Error('Transactional SMTP email is not configured.');
+    error.code = 'SMTP_NOT_CONFIGURED';
+    error.retryable = false;
+    throw error;
+  }
+  const recipient = cleanHeader(event?.recipient);
+  const subject = cleanHeader(event?.payload?.subject);
+  if (!recipient || !subject) {
+    const error = new Error('Transactional email recipient or subject is missing.');
+    error.retryable = false;
+    throw error;
+  }
+  const mailer = transport || nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    requireTLS: !config.secure,
+    connectionTimeout: 15_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    auth: { user: config.user, pass: config.pass }
+  });
+  try {
+    const result = await mailer.sendMail({
+      from: cleanHeader(config.from),
+      to: recipient,
+      subject,
+      text: String(event.payload?.text || ''),
+      html: String(event.payload?.html || ''),
+      messageId: `<customer-${crypto.createHash('sha256').update(String(event.id || `${recipient}:${subject}`)).digest('hex').slice(0, 32)}@mariaclaraclothing.com>`
+    });
+    return { providerMessageId: String(result?.messageId || '') };
+  } catch (error) {
+    error.retryable = smtpRetryable(error);
+    throw error;
+  }
+}
+
 module.exports = {
   buildAdminNewOrderEmail,
   completeAddress,
@@ -225,5 +265,6 @@ module.exports = {
   formatMoney,
   safeImageUrl,
   sendAdminNewOrderEmail,
+  sendTransactionalSmtpEmail,
   smtpRetryable
 };

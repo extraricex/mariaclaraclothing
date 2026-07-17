@@ -5,6 +5,7 @@ import { CustomerButton } from '../components/ui/Button.jsx';
 import { fetchProducts } from '../lib/api.js';
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { collectionMembers, normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
+import Breadcrumbs from '../components/Breadcrumbs.jsx';
 
 export default function Collection() {
   const { slug } = useParams();
@@ -81,6 +82,7 @@ export default function Collection() {
       <section className="border-b border-line bg-ink text-paper">
         <div className={`mx-auto grid max-w-7xl items-center ${collection.imageUrl ? 'gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]' : ''} px-5 py-12 sm:py-16 lg:px-8`}>
           <div>
+            <Breadcrumbs className="mb-6 [&_ol]:text-paper/60" items={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/shop' }, { label: collection.name }]} />
             <p className="eyebrow text-paper/60">Collection</p>
             <h1 className="display mt-3 text-4xl sm:text-6xl">{collection.name}</h1>
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-paper/75">{collection.description}</p>

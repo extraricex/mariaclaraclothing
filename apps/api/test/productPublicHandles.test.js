@@ -81,7 +81,7 @@ test('public product handles keep internal slugs stable and retain previous URLs
 
     const route = await fetch(`http://127.0.0.1:${server.address().port}/api/products/clean-product-name-2026/route`);
     assert.equal(route.status, 200);
-    assert.equal(route.headers.get('x-accel-redirect'), '/index.html');
+    assert.equal(route.headers.get('x-accel-redirect'), '/index.html?seo_path=%2Fproduct%2Fclean-product-name-2026');
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     if (previousDataFile === undefined) delete process.env.PRODUCTS_DATA_FILE;

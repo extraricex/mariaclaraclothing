@@ -11,7 +11,10 @@ const STATIC_STOREFRONT_PATHS = [
   '/shipping-returns',
   '/terms',
   '/contact',
-  '/size-chart'
+  '/size-chart',
+  '/guides/240-gsm-shirts',
+  '/guides/t-shirt-fit-guide',
+  '/guides/payment-and-shipping'
 ];
 
 function xmlEscape(value) {
@@ -35,30 +38,53 @@ function storefrontOrigin(value) {
 
 function buildSitemapXml({ products = [], collectionDefinitions = [], siteUrl = '' } = {}) {
   const origin = storefrontOrigin(siteUrl);
-  const paths = new Set(STATIC_STOREFRONT_PATHS);
+  const urls = new Map(STATIC_STOREFRONT_PATHS.map((pathname) => [pathname, { pathname }]));
 
   for (const collection of collectionDefinitions || []) {
     if (collection?.visible === false || !collection?.slug) continue;
-    paths.add(`/collections/${encodeURIComponent(collection.slug)}`);
+    const pathname = `/collections/${encodeURIComponent(collection.slug)}`;
+    urls.set(pathname, { pathname, images: collection.imageUrl ? [{ url: collection.imageUrl, title: `${collection.name} collection` }] : [] });
   }
 
   for (const product of products || []) {
     const handle = String(product?.publicHandle || product?.slug || '').trim();
     if (!handle) continue;
-    paths.add(`/product/${encodeURIComponent(handle)}`);
+    const pathname = `/product/${encodeURIComponent(handle)}`;
+    urls.set(pathname, {
+      pathname,
+      lastmod: validLastModified(product.updatedAt || product.createdAt),
+      images: (product.images || []).map((image) => ({ url: image.url, title: image.altText || product.name })).filter((image) => image.url)
+    });
   }
 
-  const urls = [...paths]
-    .map((pathname) => `${origin}${pathname}`)
-    .sort((left, right) => left.localeCompare(right));
+  const entries = [...urls.values()].sort((left, right) => left.pathname.localeCompare(right.pathname));
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...urls.map((url) => `  <url><loc>${xmlEscape(url)}</loc></url>`),
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
+    ...entries.map((entry) => sitemapEntry(origin, entry)),
     '</urlset>',
     ''
   ].join('\n');
+}
+
+function validLastModified(value) {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toISOString() : '';
+}
+
+function sitemapEntry(origin, entry) {
+  const lines = ['  <url>', `    <loc>${xmlEscape(`${origin}${entry.pathname}`)}</loc>`];
+  if (entry.lastmod) lines.push(`    <lastmod>${xmlEscape(entry.lastmod)}</lastmod>`);
+  for (const image of entry.images || []) {
+    const imageUrl = new URL(String(image.url), `${origin}/`).toString();
+    lines.push('    <image:image>');
+    lines.push(`      <image:loc>${xmlEscape(imageUrl)}</image:loc>`);
+    if (image.title) lines.push(`      <image:title>${xmlEscape(image.title)}</image:title>`);
+    lines.push('    </image:image>');
+  }
+  lines.push('  </url>');
+  return lines.join('\n');
 }
 
 router.get('/', async (_req, res, next) => {
@@ -82,4 +108,4 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
-module.exports = { sitemapRouter: router, buildSitemapXml, storefrontOrigin };
+module.exports = { sitemapRouter: router, buildSitemapXml, storefrontOrigin, validLastModified };

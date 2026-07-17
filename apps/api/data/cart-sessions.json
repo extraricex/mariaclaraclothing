@@ -19,8 +19,12 @@
       "subtotalCents": 0,
       "checkoutStartedAt": "",
       "convertedOrderNumber": "",
-      "lastActivityAt": "2026-07-09T01:46:10.993Z",
-      "updatedAt": "2026-07-09T01:46:10.993Z"
+      "lastActivityAt": "2026-07-17T01:38:07.666Z",
+      "updatedAt": "2026-07-17T01:38:07.666Z",
+      "recoveryConsent": false,
+      "recoveryStatus": "not_requested",
+      "recoveryEmailSentAt": "",
+      "recoveryError": ""
     }
   ]
 }

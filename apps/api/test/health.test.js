@@ -64,7 +64,9 @@ test('GET /sitemap.xml lists real public product and collection URLs only', asyn
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') || '', /application\/xml/);
     assert.match(response.headers.get('cache-control') || '', /max-age=3600/);
-    assert.match(xml, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+    assert.match(xml, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9" xmlns:image="http:\/\/www\.google\.com\/schemas\/sitemap-image\/1\.1">/);
+    assert.match(xml, /<image:image>/);
+    assert.match(xml, /\/guides\/240-gsm-shirts/);
     assert.match(xml, /\/shop<\/loc>/);
     assert.doesNotMatch(xml, /\/collections\/all<\/loc>/);
     assert.match(xml, /\/collections\/freedom-of-mind<\/loc>/);

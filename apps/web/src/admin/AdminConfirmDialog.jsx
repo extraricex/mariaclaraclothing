@@ -10,6 +10,7 @@ export default function AdminConfirmDialog({
   cancelLabel = 'Cancel',
   danger = false,
   busy = false,
+  children = null,
   onConfirm,
   onCancel
 }) {
@@ -43,6 +44,7 @@ export default function AdminConfirmDialog({
       >
         <h2 id="admin-confirm-title" className="text-lg font-semibold">{title}</h2>
         <p id="admin-confirm-description" className="mt-2 text-sm leading-6 text-[var(--admin-muted)]">{description}</p>
+        {children}
         {warning && <p className="mt-3 rounded-[var(--radius-admin)] border border-[var(--admin-yellow)]/40 bg-[var(--admin-yellow)]/10 p-3 text-xs leading-5 text-[#ffd166]">{warning}</p>}
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button ref={cancelRef} type="button" className="btn-secondary" disabled={busy} onClick={onCancel}>{cancelLabel}</button>

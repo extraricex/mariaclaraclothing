@@ -10,6 +10,7 @@ import { loadBarangays, loadCities, loadProvinces, regionForProvince } from '../
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings, regionEstimate } from '../lib/storeSettings.js';
 import { customerNameParts } from '../lib/customerName.js';
 import { normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
+import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 
 export default function Checkout() {
   const items = useCart();
@@ -35,6 +36,7 @@ export default function Checkout() {
   const [lastName, setLastName] = useState(initialCustomerName.lastName);
   const [phone, setPhone] = useState(initialDraft?.customer?.phone || '');
   const [email, setEmail] = useState(initialDraft?.customer?.email || '');
+  const [recoveryConsent, setRecoveryConsent] = useState(Boolean(initialDraft?.recoveryConsent));
   const [prefillAddress, setPrefillAddress] = useState(initialDraft?.address || null);
   const [saveAddress, setSaveAddress] = useState(initialDraft?.saveAddress ?? true);
   const [settings, setSettings] = useState(DEFAULT_STOREFRONT_SETTINGS);
@@ -67,6 +69,16 @@ export default function Checkout() {
       .then((body) => setSocialProviders(body.providers || { google: false, facebook: false }))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!paymentWasCancelled) return;
+    trackFunnelEvent('payment_cancelled', {
+      paymentMethod: 'paymongo',
+      metricName: 'CUSTOMER_RETURN',
+      dedupeKey: `paymongo-cancelled:${getCartSessionId()}`,
+      dedupeMilliseconds: 60_000
+    });
+  }, [paymentWasCancelled]);
 
   useEffect(() => {
     if (!items.length) {
@@ -146,6 +158,7 @@ export default function Checkout() {
         phone,
         email
       },
+      recoveryConsent,
       address: {
         addressLine: [house, barangay?.name, city?.name, province?.name, postalCode].filter(Boolean).join(', '),
         province: province?.name || '',
@@ -155,7 +168,11 @@ export default function Checkout() {
       },
       items
     });
-  }, [items, firstName, lastName, phone, email, house, province, city, barangay, postalCode]);
+  }, [items, firstName, lastName, phone, email, recoveryConsent, house, province, city, barangay, postalCode]);
+
+  useEffect(() => {
+    if (!String(email || '').trim()) setRecoveryConsent(false);
+  }, [email]);
 
   function fieldClass(fieldName) {
     return `field customer-input ${missingFields[fieldName] ? 'checkout-field-error' : ''}`;
@@ -237,6 +254,7 @@ export default function Checkout() {
         customer: details.customer,
         address,
         saveAddress,
+        recoveryConsent,
         discountCode: initialDraft?.discountCode || '',
         quote
       });
@@ -294,6 +312,16 @@ export default function Checkout() {
               <span className="mb-1 block text-xs font-semibold">Email <span className="font-normal text-clay">(optional)</span></span>
               <input ref={checkoutFieldRefs.email} className={fieldClass('email')} type="email" aria-invalid={Boolean(missingFields.email)} aria-describedby={missingFields.email ? 'checkout-email-error' : undefined} placeholder="you@example.com" value={email} onChange={(event) => { setEmail(event.target.value); clearMissingField('email'); }} autoComplete="email" />
               {missingFields.email && <span id="checkout-email-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.email}</span>}
+            </label>
+            <label className="flex items-start gap-3 text-sm text-ink-soft sm:col-span-2">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0"
+                checked={recoveryConsent}
+                disabled={!String(email || '').trim()}
+                onChange={(event) => setRecoveryConsent(event.target.checked)}
+              />
+              <span>Email me one reminder if I do not finish checkout. Optional, and sent only once.</span>
             </label>
           </fieldset>
 

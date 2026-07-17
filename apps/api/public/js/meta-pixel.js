@@ -88,6 +88,7 @@
     s.parentNode.insertBefore(t, s);
   }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
 
+  window.fbq('set', 'autoConfig', false, pixelId);
   window.fbq('init', pixelId);
   window.fbq('track', 'PageView');
 

@@ -78,7 +78,7 @@ test('active product saves to admin and customer catalogs with reordered photos'
   let slug = '';
   try {
     await page.goto('/admin/products/new');
-    await page.getByLabel('Title').fill(productName);
+    await page.getByLabel('Title', { exact: true }).fill(productName);
     await page.getByLabel('Price (₱)').fill('699');
     await page.locator('input[type="number"][min="0"]').fill('4');
     await page.getByLabel('Add photos').setInputFiles([LARGE_JPEG, TRANSPARENT_PNG]);

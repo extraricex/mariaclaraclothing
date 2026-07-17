@@ -5,7 +5,7 @@ import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { createCheckoutQuote, fetchProducts, fetchSiteContent } from '../lib/api.js';
 import { formatMoney } from '../lib/money.js';
 import { productPath } from '../lib/productUrl.js';
-import { setMetaTrackingConsent } from '../lib/metaPixel.js';
+import { getMetaTrackingConsent, setMetaTrackingConsent } from '../lib/metaPixel.js';
 import { applySeoTags, loadStorefrontSettings } from '../lib/storeSettings.js';
 import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
 import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storefrontSupport.js';
@@ -55,31 +55,31 @@ function Ticker({ items }) {
   );
 }
 
-function PrivacyDialog({ onChoice, onClose, requireConsent }) {
+function PrivacyChoices({ panelRef, onChoice, onClose, requireConsent }) {
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/35 p-4 sm:items-center" role="presentation">
-      <div className="w-full max-w-lg border border-line bg-paper p-5 shadow-2xl" role="dialog" aria-modal="true" aria-label="Privacy choices">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold">Privacy choices</p>
-            <p className="mt-1 text-sm text-ink-soft">
-              {requireConsent
-                ? 'Allow optional Meta analytics to help us measure store visits and purchases. The store works without it.'
-                : 'Maria Clara Clothing uses Meta Pixel to measure store visits, shopping activity, and completed orders. You can review this disclosure in our Privacy terms.'}
-            </p>
-          </div>
-          <button type="button" className="text-action text-xs uppercase tracking-[0.12em] text-clay hover:text-ink" onClick={onClose}>Close</button>
+    <section ref={panelRef} className="relative z-30 border-b border-line bg-paper" role="region" aria-label="Privacy choices">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 lg:px-8">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em]">Privacy choices</p>
+          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-ink-soft sm:text-sm">
+            {requireConsent
+              ? 'Optional Meta analytics helps us measure store visits and purchases. Shopping and checkout work without it.'
+              : 'Maria Clara Clothing uses Meta Pixel to measure store visits, shopping activity, and completed orders. You can review this disclosure in our Privacy terms.'}
+          </p>
         </div>
-        {requireConsent ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className="btn-ink !px-5 !py-2 text-xs" onClick={() => onChoice('accepted')}>Allow analytics</button>
-            <button type="button" className="btn-ghost !px-5 !py-2 text-xs" onClick={() => onChoice('declined')}>Decline</button>
-          </div>
-        ) : (
-          <button type="button" className="btn-ink mt-4 !px-5 !py-2 text-xs" onClick={onClose}>Close</button>
-        )}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {requireConsent ? (
+            <>
+              <button type="button" className="btn-ink !min-h-10 !px-4 !py-2 text-xs" onClick={() => onChoice('accepted')}>Allow analytics</button>
+              <button type="button" className="btn-ghost !min-h-10 !px-4 !py-2 text-xs" onClick={() => onChoice('declined')}>Decline</button>
+              <button type="button" className="touch-target text-action text-xs uppercase tracking-[0.12em] text-clay hover:text-ink" onClick={onClose} aria-label="Close privacy choices">Close</button>
+            </>
+          ) : (
+            <button type="button" className="btn-ink !min-h-10 !px-4 !py-2 text-xs" onClick={onClose}>Close</button>
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -332,6 +332,7 @@ export default function Shell() {
   });
   const menuButtonRef = useRef(null);
   const offerDockRef = useRef(null);
+  const privacyPanelRef = useRef(null);
   const closeCartDrawer = useCallback(() => setCartDrawerOpen(false), []);
 
   useEffect(() => {
@@ -382,6 +383,11 @@ export default function Shell() {
   useEffect(() => {
     loadStorefrontSettings().then(setStoreInfo);
   }, []);
+
+  useEffect(() => {
+    if (!storeInfo?.metaPixel?.requireConsent) return;
+    if (getMetaTrackingConsent() === 'unset') setPrivacyDialogOpen(true);
+  }, [storeInfo?.metaPixel?.requireConsent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -449,7 +455,13 @@ export default function Shell() {
   const headerSolid = !isHomePage || headerScrolled || menuOpen;
   const activeHeaderLogo = headerSolid ? (blackLogo || headerLogo) : headerLogo;
   const logoMarkup = activeHeaderLogo?.url ? (
-    <img src={activeHeaderLogo.url} alt={activeHeaderLogo.altText || 'Maria Clara Clothing'} className={`h-[65px] max-w-[205px] object-contain transition-[filter,opacity] duration-300 lg:h-[73px] lg:max-w-[230px] ${headerSolid ? '' : 'drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]'}`} />
+    <img
+      src={activeHeaderLogo.url}
+      alt={activeHeaderLogo.altText || 'Maria Clara Clothing'}
+      width={Number(activeHeaderLogo.width) || 1999}
+      height={Number(activeHeaderLogo.height) || 1999}
+      className={`h-[65px] max-w-[205px] object-contain transition-[filter,opacity] duration-300 lg:h-[73px] lg:max-w-[230px] ${headerSolid ? '' : 'drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]'}`}
+    />
   ) : (
     <span className="display truncate text-[32px] tracking-tight sm:text-[40px] lg:text-[49px]">
       Maria<span className="text-accent">Clara</span>
@@ -459,6 +471,11 @@ export default function Shell() {
   function chooseTrackingConsent(value) {
     setMetaTrackingConsent(value);
     setPrivacyDialogOpen(false);
+  }
+
+  function openPrivacyChoices() {
+    setPrivacyDialogOpen(true);
+    window.requestAnimationFrame(() => privacyPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
   function dismissFreeShippingOffer() {
@@ -555,7 +572,11 @@ export default function Shell() {
         </nav>
       </header>
 
-      <div className={`fixed inset-0 z-[60] lg:hidden ${menuOpen ? '' : 'pointer-events-none'}`} aria-hidden={!menuOpen}>
+      <div
+        className={`fixed inset-0 z-[60] lg:hidden ${menuOpen ? '' : 'pointer-events-none'}`}
+        aria-hidden={!menuOpen}
+        inert={menuOpen ? undefined : ''}
+      >
         <button
           type="button"
           className={`absolute inset-0 bg-ink/45 backdrop-blur-[2px] transition-opacity duration-300 ${menuOpen ? 'opacity-100' : 'opacity-0'}`}
@@ -626,7 +647,14 @@ export default function Shell() {
           <ReportIssueWidget settings={storeInfo} cartItems={items} />
         </>
       )}
-      {privacyDialogOpen && <PrivacyDialog onChoice={chooseTrackingConsent} onClose={() => setPrivacyDialogOpen(false)} requireConsent={Boolean(storeInfo?.metaPixel?.requireConsent)} />}
+      {privacyDialogOpen && (
+        <PrivacyChoices
+          panelRef={privacyPanelRef}
+          onChoice={chooseTrackingConsent}
+          onClose={() => setPrivacyDialogOpen(false)}
+          requireConsent={Boolean(storeInfo?.metaPixel?.requireConsent)}
+        />
+      )}
 
       <main className="flex-1">
         <PageTransition>
@@ -638,7 +666,13 @@ export default function Shell() {
         <div className="mx-auto max-w-7xl px-5 py-14 lg:px-8">
           {footerLogo?.url ? (
             <div className="inline-flex">
-              <img src={footerLogo.url} alt={footerLogo.altText || 'Maria Clara Clothing'} className="max-h-20 max-w-64 object-contain brightness-0 invert" />
+              <img
+                src={footerLogo.url}
+                alt={footerLogo.altText || 'Maria Clara Clothing'}
+                width={Number(footerLogo.width) || 1999}
+                height={Number(footerLogo.height) || 1999}
+                className="max-h-20 max-w-64 object-contain brightness-0 invert"
+              />
             </div>
           ) : (
             <p className="display text-4xl leading-none sm:text-6xl lg:text-7xl">
@@ -662,6 +696,9 @@ export default function Shell() {
                 <li><Link to="/faq" className="text-action hover:text-accent">FAQ</Link></li>
                 <li><Link to="/shipping-returns" className="text-action hover:text-accent">Shipping & returns</Link></li>
                 <li><Link to="/terms" className="text-action hover:text-accent">Terms of service</Link></li>
+                <li><Link to="/guides/240-gsm-shirts" className="text-action hover:text-accent">240 GSM fabric guide</Link></li>
+                <li><Link to="/guides/t-shirt-fit-guide" className="text-action hover:text-accent">T-shirt fit guide</Link></li>
+                <li><Link to="/guides/payment-and-shipping" className="text-action hover:text-accent">Payment & shipping guide</Link></li>
                 <li><ReportIssueWidget settings={storeInfo} cartItems={items} inline /></li>
               </ul>
             </div>
@@ -696,7 +733,7 @@ export default function Shell() {
           </div>
           <div className="mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-paper/20 pt-6 text-xs uppercase tracking-[0.18em] text-paper/50">
             <p>© {new Date().getFullYear()} Maria Clara Clothing · Philippine streetwear</p>
-            <button type="button" className="text-action hover:text-accent" onClick={() => setPrivacyDialogOpen(true)}>Privacy choices</button>
+            <button type="button" className="text-action hover:text-accent" onClick={openPrivacyChoices}>Privacy choices</button>
           </div>
         </div>
       </footer>

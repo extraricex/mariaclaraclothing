@@ -12,6 +12,9 @@ test('homepage renders registered non-empty collections dynamically', async () =
   assert.match(home, /loadStorefrontSettings/);
   assert.match(home, /buildStorefrontCollectionSections/);
   assert.match(home, /collectionSections\.map/);
+  assert.match(home, /Promise\.allSettled\(\[fetchProducts\(\), fetchSiteContent\(\), loadStorefrontSettings\(\)\]\)/);
+  assert.match(home, /!catalogLoaded && <CollectionLoadingSkeleton/);
+  assert.match(home, /min-h-\[95vh\]/);
   assert.doesNotMatch(home, /const newArrivals =/);
   assert.doesNotMatch(home, /const freedom =/);
   assert.match(settings, /name: 'Freedom of Mind'/);
@@ -27,7 +30,7 @@ test('collection sections preserve existing copy and hide empty registered colle
   const sections = buildStorefrontCollectionSections(
     products,
     [
-      { name: 'New Arrivals', slug: 'new-arrivals', description: 'Oversized premium shirt.' },
+      { name: 'New Arrivals', slug: 'new-arrivals', description: 'Explore the latest Maria Clara Clothing releases.' },
       { name: 'Freedom of Mind', slug: 'freedom-of-mind', description: 'The statement line - graphics for loud thoughts and quiet days.' },
       { name: 'Summer Drop', slug: 'summer-drop', description: 'Explore the latest pieces in Summer Drop.' },
       { name: 'Empty Collection', slug: 'empty-collection' }
@@ -39,7 +42,7 @@ test('collection sections preserve existing copy and hide empty registered colle
     { id: 'freedom-of-mind', index: '02', title: 'Freedom of Mind' },
     { id: 'summer-drop', index: '03', title: 'Summer Drop' }
   ]);
-  assert.equal(sections[0].blurb, 'Oversized premium shirt.');
+  assert.equal(sections[0].blurb, 'Explore the latest Maria Clara Clothing releases.');
   assert.match(sections[1].blurb, /statement line/);
   assert.equal(sections[2].blurb, 'Explore the latest pieces in Summer Drop.');
   assert.deepEqual(sections[2].products.map((product) => product.id), ['one']);

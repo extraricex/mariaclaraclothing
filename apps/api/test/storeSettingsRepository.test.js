@@ -37,7 +37,7 @@ test('store settings expose defaults, save sections, and validate input', async 
     assert.deepEqual(defaults.marketing.metaPixel, {
       enabled: true,
       pixelId: '595813035761213',
-      requireConsent: false
+      requireConsent: true
     });
 
     const updated = repository.updateSettingsSection('shipping', {

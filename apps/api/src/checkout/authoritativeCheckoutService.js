@@ -1,5 +1,5 @@
 const { CommerceError } = require('./commerceError');
-const { metaPurchaseEventId } = require('../marketing/metaEvent');
+const { metaPurchaseEventId, purchaseValue, META_CURRENCY } = require('../marketing/metaEvent');
 const {
   normalizeCheckoutCustomer,
   requireCompleteDeliveryInformation
@@ -46,6 +46,9 @@ function buildOrder(input, request, quote, orderNumber, tokenHash, now) {
     metaCapiPurchaseSentAt: '',
     metaPurchaseStatus: paymentMethod === 'paymongo' ? 'pending_payment' : 'eligible',
     metaPurchaseLastError: '',
+    metaPurchaseValue: purchaseValue(snapshot.totalCents),
+    metaPurchaseCurrency: META_CURRENCY,
+    currency: META_CURRENCY,
     customer: request.customer,
     address: snapshot.address,
     items: snapshot.items,
@@ -93,7 +96,7 @@ function checkoutResponse(order) {
   return {
     orderNumber: order.orderNumber,
     trackingEventId: order.metaPurchaseEventId || metaPurchaseEventId(order),
-    currency: 'PHP',
+    currency: META_CURRENCY,
     totalCents: order.totalCents,
     items: order.items.map((item) => ({
       variantId: item.variantId,
@@ -205,6 +208,9 @@ async function placeAuthoritativeCheckout(input = {}, deps) {
     await deps.completeIdempotency(client, { keyHash, orderNumber, response });
     if (order.paymentMethod !== 'paymongo' && deps.enqueueAdminEmail) {
       await deps.enqueueAdminEmail(order, { client });
+    }
+    if (order.paymentMethod !== 'paymongo' && deps.enqueueCustomerConfirmation) {
+      await deps.enqueueCustomerConfirmation(order, { client });
     }
     return { ...response, confirmationToken };
   });

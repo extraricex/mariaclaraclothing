@@ -40,7 +40,7 @@ test('Products dropdown links to the dedicated product countdown route', async (
   assert.match(layout, /to: '\/admin\/products\/countdown', label: 'Product page countdown'/);
   assert.ok(layout.indexOf("label: 'Collections'") < layout.indexOf("label: 'Product page countdown'"));
   assert.ok(layout.indexOf("label: 'Product page countdown'") < layout.indexOf("label: 'Inventory'"));
-  assert.match(app, /import ProductCountdown from '\.\/admin\/ProductCountdown\.jsx'/);
+  assert.match(app, /const ProductCountdown = lazy\(\(\) => import\('\.\/admin\/ProductCountdown\.jsx'\)\)/);
   assert.match(app, /path="products\/countdown" element=\{<ProductCountdown \/>\}/);
   assert.ok(app.indexOf('path="products/countdown"') < app.indexOf('path="products/:slug"'));
 });

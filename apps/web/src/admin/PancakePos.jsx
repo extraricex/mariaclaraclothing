@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { adminJson, adminSend } from '../lib/adminApi.js';
 
 const base = '/api/admin/integrations/pancake';
@@ -195,20 +196,24 @@ export default function PancakePos() {
         </div>
 
         <div className="admin-table-shell mt-4 overflow-x-auto">
-          <table className="w-full min-w-[680px] text-left text-xs">
+          <table className="w-full min-w-[820px] text-left text-xs">
             <thead>
               <tr className="border-b border-[var(--admin-line)] uppercase tracking-[0.1em] text-[var(--admin-muted)]">
                 <th className="p-3">Order</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Pancake ID</th>
+                <th className="p-3">Reason</th>
                 <th className="p-3">Updated</th>
               </tr>
             </thead>
             <tbody>
               {(orderExports?.recent || []).map((item) => <tr key={item.id || item.orderNumber} className="border-b border-[var(--admin-line)] last:border-0">
-                <td className="p-3 font-mono">{item.orderNumber}</td>
+                <td className="p-3 font-mono"><Link className="underline" to={`/admin/orders/${encodeURIComponent(item.orderNumber)}`}>{item.orderNumber}</Link></td>
                 <td className="p-3">{display(item.status)?.replaceAll('_', ' ')}</td>
                 <td className="p-3 font-mono">{display(item.pancakeOrderId)}</td>
+                <td className="p-3 text-[var(--admin-muted)]">{item.safeErrorCode === 'pancake_order_delivery_incomplete'
+                  ? 'Complete the delivery address in the order, then retry.'
+                  : display(item.safeErrorCode)?.replaceAll('_', ' ')}</td>
                 <td className="p-3">{display(item.updatedAt || item.builtAt || item.queuedAt)}</td>
               </tr>)}
             </tbody>

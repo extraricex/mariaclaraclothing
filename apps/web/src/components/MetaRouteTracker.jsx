@@ -26,9 +26,9 @@ export default function MetaRouteTracker() {
     const path = `${location.pathname}${location.search}`;
     if (!pixelSettings) return;
     configureFacebookMetaPixel(pixelSettings);
-    if (!initializeFacebookMetaPixel({ path, ...pixelSettings })) return;
+    const initialized = initializeFacebookMetaPixel({ path, ...pixelSettings });
     trackFacebookPageView(path);
-    flushPendingFacebookEvents({ path });
+    if (initialized) flushPendingFacebookEvents({ path });
   }, [location.pathname, location.search, consentVersion, pixelSettings]);
 
   return null;

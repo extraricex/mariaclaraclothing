@@ -15,7 +15,7 @@ const DEFAULT_COLLECTION_DEFINITIONS = [
   {
     name: 'New Arrivals',
     slug: 'new-arrivals',
-    description: 'Oversized premium shirt.',
+    description: 'Explore the latest Maria Clara Clothing releases in oversized, regular-fit, and crop-box cuts. Each product page shows current size availability, measurements, price, and delivery information.',
     imageUrl: '',
     visible: true,
     showOnHomepage: true,
@@ -26,7 +26,7 @@ const DEFAULT_COLLECTION_DEFINITIONS = [
   {
     name: 'Tees',
     slug: 'tees',
-    description: 'Regular Fit Tees with premium quality shirt.',
+    description: 'Shop Maria Clara Clothing tees in oversized, regular-fit, and crop-box cuts made for everyday streetwear. Compare real garment measurements and available sizes before ordering.',
     imageUrl: '',
     visible: true,
     showOnHomepage: true,
@@ -234,7 +234,7 @@ function defaultStoreSettings() {
       metaPixel: {
         enabled: true,
         pixelId: '595813035761213',
-        requireConsent: false
+        requireConsent: true
       }
     },
     reviews: {

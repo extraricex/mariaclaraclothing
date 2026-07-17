@@ -82,7 +82,7 @@ router.get('/:slug/route', async (req, res, next) => {
       return;
     }
 
-    res.set('X-Accel-Redirect', '/index.html');
+    res.set('X-Accel-Redirect', `/index.html?seo_path=${encodeURIComponent(`/product/${product.publicHandle}`)}`);
     res.status(200).end();
   } catch (error) {
     next(error);

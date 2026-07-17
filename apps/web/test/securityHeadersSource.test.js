@@ -10,6 +10,9 @@ test('nginx applies security headers to the SPA and proxied assets', async () =>
   assert.match(source, /Referrer-Policy\s+"strict-origin-when-cross-origin"\s+always/);
   assert.match(source, /Permissions-Policy/);
   assert.match(source, /Strict-Transport-Security\s+"max-age=15552000"\s+always/);
-  assert.match(source, /Content-Security-Policy-Report-Only/);
+  assert.match(source, /add_header Content-Security-Policy /);
+  assert.doesNotMatch(source, /Content-Security-Policy-Report-Only/);
+  assert.match(source, /script-src 'self' 'nonce-\$request_id' https:\/\/connect\.facebook\.net/);
   assert.match(source, /location \^~ \/assets\/[\s\S]*expires 1y/);
+  assert.match(source, /location = \/ \{\s*rewrite \^ \/index\.html\?seo_path=\/ last;/);
 });

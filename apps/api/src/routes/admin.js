@@ -19,6 +19,7 @@ const { resendAdminNewOrderEmail } = require('../notifications/adminOrderEmailNo
 const { aggregateCustomers, findCustomerOrders } = require('../customers/customerAggregator');
 const { normalizeCustomerName } = require('../customers/customerName');
 const { cartSessionSummary, deleteCartSession, listCartSessions } = require('../cartSessions/cartSessionRepository');
+const { sendCartRecoveryEmail } = require('../cartSessions/cartRecoveryService');
 const {
   deleteDiscount,
   findDiscountByCode,
@@ -68,7 +69,9 @@ const {
 } = require('../inventory/inventoryMovementRepository');
 const {
   MAX_PRODUCT_IMAGE_BYTES,
+  PRODUCT_IMAGE_DERIVATIVE_WIDTHS,
   normalizeProductUploads,
+  productImageDerivativePath,
   productImageFileAllowed
 } = require('../images/productImageNormalizer');
 const {
@@ -119,6 +122,10 @@ const {
   normalizeCheckoutCustomer,
   normalizeDeliveryAddress
 } = require('../checkout/deliveryDetails');
+const {
+  contentReadinessSummary,
+  storefrontAnalyticsSummary
+} = require('../analytics/storefrontAnalyticsService');
 
 const router = express.Router();
 
@@ -130,7 +137,11 @@ const VALID_PAYMENT_STATUSES = new Set(['cod_pending', 'pending_payment', 'paid'
 const VALID_COD_CONFIRMATION_STATUSES = new Set(['pending', 'confirmed', 'unreachable', 'cancelled']);
 const VALID_DELIVERY_STATUSES = new Set(['pending', 'ready', 'out_for_delivery', 'delivered', 'returned', 'cancelled']);
 const VALID_PRODUCT_STATUSES = new Set(['active', 'draft', 'archived']);
-const ORDER_STATUS_EVENT_FIELDS = ['status', 'fulfillmentStatus', 'paymentStatus', 'codConfirmationStatus', 'deliveryStatus'];
+const ORDER_STATUS_EVENT_FIELDS = ['status', 'fulfillmentStatus', 'paymentStatus', 'codConfirmationStatus', 'deliveryStatus', 'cancellationReason', 'isTestOrder'];
+const VALID_CANCELLATION_REASONS = new Set([
+  'customer_requested', 'unreachable_customer', 'duplicate_order', 'payment_failed',
+  'out_of_stock', 'invalid_address', 'fraud_risk', 'other'
+]);
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 async function replaceAdminSessions(res, legacyToken) {
@@ -256,6 +267,22 @@ router.use('/reviews', createAdminReviewsRouter());
 
 router.get('/session', (req, res) => res.json({ authenticated: true }));
 
+router.get('/analytics', async (req, res, next) => {
+  try {
+    return res.json({ analytics: await storefrontAnalyticsSummary({ days: req.query.days }) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/content-readiness', async (_req, res, next) => {
+  try {
+    return res.json({ readiness: await contentReadinessSummary() });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post('/logout', async (req, res, next) => {
   try {
     if (req.authSessionToken) await revokeAuthSession(req.authSessionToken);
@@ -316,11 +343,7 @@ router.post('/collections/:identifier/image', bannerUpload.single('image'), asyn
     const collection = settings.collectionDefinitions.find((item) => item.slug === String(req.params.identifier).toLowerCase());
     return res.status(201).json({ collection, collectionDefinitions: settings.collectionDefinitions });
   } catch (error) {
-    if (req.file?.path) {
-      try { fs.unlinkSync(req.file.path); } catch (unlinkError) {
-        if (unlinkError.code !== 'ENOENT') return next(unlinkError);
-      }
-    }
+    if (req.file?.path) removeUploadedProductFiles([req.file]);
     return next(error);
   }
 });
@@ -448,6 +471,8 @@ router.post('/site-content/homepage-banners/images', bannerUpload.array('images'
       return res.status(400).json({ error: 'At least one banner image is required' });
     }
 
+    await normalizeProductUploads(files);
+
     const { homepageBanners: currentBanners } = await getSiteContent();
     const uploadedBanners = files.map((file, index) => ({
       url: bannerUploadUrl(file.filename),
@@ -458,6 +483,7 @@ router.post('/site-content/homepage-banners/images', bannerUpload.array('images'
 
     return res.status(201).json({ siteContent, banners: siteContent.homepageBanners, uploadedBanners });
   } catch (error) {
+    removeUploadedProductFiles(Array.isArray(req.files) ? req.files : []);
     return next(error);
   }
 });
@@ -509,6 +535,8 @@ router.post('/site-content/logo/image', logoUpload.single('image'), async (req, 
       return res.status(400).json({ error: 'A logo image is required' });
     }
 
+    await normalizeProductUploads([req.file]);
+
     const siteContent = await updateLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing logo'
@@ -516,6 +544,7 @@ router.post('/site-content/logo/image', logoUpload.single('image'), async (req, 
 
     return res.status(201).json({ siteContent, logo: siteContent.logo });
   } catch (error) {
+    removeUploadedProductFiles(req.file ? [req.file] : []);
     return next(error);
   }
 });
@@ -526,6 +555,8 @@ router.post('/site-content/black-logo/image', logoUpload.single('image'), async 
       return res.status(400).json({ error: 'A black logo image is required' });
     }
 
+    await normalizeProductUploads([req.file]);
+
     const siteContent = await updateBlackLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing black logo'
@@ -533,6 +564,7 @@ router.post('/site-content/black-logo/image', logoUpload.single('image'), async 
 
     return res.status(201).json({ siteContent, blackLogo: siteContent.blackLogo });
   } catch (error) {
+    removeUploadedProductFiles(req.file ? [req.file] : []);
     return next(error);
   }
 });
@@ -543,6 +575,8 @@ router.post('/site-content/menu-logo/image', logoUpload.single('image'), async (
       return res.status(400).json({ error: 'A menu logo image is required' });
     }
 
+    await normalizeProductUploads([req.file]);
+
     const siteContent = await updateMenuLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing menu logo'
@@ -550,6 +584,7 @@ router.post('/site-content/menu-logo/image', logoUpload.single('image'), async (
 
     return res.status(201).json({ siteContent, menuLogo: siteContent.menuLogo });
   } catch (error) {
+    removeUploadedProductFiles(req.file ? [req.file] : []);
     return next(error);
   }
 });
@@ -560,6 +595,8 @@ router.post('/site-content/footer-logo/image', logoUpload.single('image'), async
       return res.status(400).json({ error: 'A footer logo image is required' });
     }
 
+    await normalizeProductUploads([req.file]);
+
     const siteContent = await updateFooterLogo({
       url: logoUploadUrl(req.file.filename),
       altText: 'Maria Clara Clothing footer logo'
@@ -567,6 +604,7 @@ router.post('/site-content/footer-logo/image', logoUpload.single('image'), async
 
     return res.status(201).json({ siteContent, footerLogo: siteContent.footerLogo });
   } catch (error) {
+    removeUploadedProductFiles(req.file ? [req.file] : []);
     return next(error);
   }
 });
@@ -1137,6 +1175,21 @@ router.get('/cart-sessions', async (req, res, next) => {
   }
 });
 
+router.post('/cart-sessions/:sessionId/recovery-email', async (req, res, next) => {
+  try {
+    const result = await sendCartRecoveryEmail(req.params.sessionId, {
+      config: env.notifications.adminOrderEmail
+    });
+    console.info(JSON.stringify({
+      level: 'info', event: 'admin_cart_recovery_email_sent', sessionId: req.params.sessionId,
+      sentAt: result.sentAt
+    }));
+    return res.json({ notification: { status: result.status, sentAt: result.sentAt } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.delete('/cart-sessions/:sessionId', async (req, res, next) => {
   try {
     const deleted = await deleteCartSession(req.params.sessionId);
@@ -1693,10 +1746,16 @@ function uploadedProductImages(files, productName) {
 
 function removeUploadedProductFiles(files) {
   (Array.isArray(files) ? files : []).forEach((file) => {
-    try {
-      fs.unlinkSync(file.path);
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+    const paths = [
+      file.path,
+      ...PRODUCT_IMAGE_DERIVATIVE_WIDTHS.map((width) => productImageDerivativePath(file.path, width))
+    ];
+    for (const filePath of new Set(paths.filter(Boolean))) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
     }
   });
 }
@@ -2124,6 +2183,12 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
     changes.status = validateEnum(body.status, VALID_ORDER_STATUSES, 'Order status is invalid');
     Object.assign(changes, derivedOrderStatuses(changes.status, existingOrder));
   }
+  if (body.cancellationReason !== undefined) {
+    changes.cancellationReason = validateEnum(body.cancellationReason, VALID_CANCELLATION_REASONS, 'Select a valid cancellation reason.');
+  }
+  if (body.isTestOrder !== undefined) {
+    changes.isTestOrder = Boolean(body.isTestOrder);
+  }
   if (body.fulfillmentStatus !== undefined) {
     changes.fulfillmentStatus = validateEnum(body.fulfillmentStatus, VALID_FULFILLMENT_STATUSES, 'Fulfillment status is invalid');
   }
@@ -2195,6 +2260,12 @@ function normalizeOrderUpdate(body, existingOrder = {}) {
   }
 
   const candidate = { ...existingOrder, ...changes };
+  if (candidate.status === 'cancelled' && !String(candidate.cancellationReason || '').trim()) {
+    const error = new Error('Select a cancellation reason before cancelling this order.');
+    error.status = 400;
+    error.code = 'CANCELLATION_REASON_REQUIRED';
+    throw error;
+  }
   const requestedProcessing = (
     (body.status !== undefined && ['confirmed', 'packed', 'shipped', 'delivered'].includes(candidate.status))
     || (body.fulfillmentStatus !== undefined && ['packed', 'shipped', 'delivered'].includes(candidate.fulfillmentStatus))
@@ -2433,6 +2504,8 @@ function orderSummary(order) {
     missingDeliveryInformation: !hasCompleteDeliveryInformation(order),
     missingDeliveryFields: Object.keys(deliveryInformationIssues(order)),
     tags: Array.isArray(order.tags) ? order.tags : [],
+    cancellationReason: order.cancellationReason || '',
+    isTestOrder: Boolean(order.isTestOrder),
     placedAt: order.placedAt
   };
 }
@@ -2445,11 +2518,13 @@ function filterAndSortOrders(orders, input = {}) {
   const dateFilter = orderDateFilter(input);
   const sort = String(input.sort || 'placed_desc').trim();
   const missingDelivery = String(input.missingDelivery || input.missingDeliveryInformation || '').trim() === 'true';
+  const isTestOrder = String(input.isTestOrder || '').trim();
   return orders
     .filter((order) => !status || order.status === status)
     .filter((order) => !fulfillmentStatus || order.fulfillmentStatus === fulfillmentStatus)
     .filter((order) => !paymentStatus || order.paymentStatus === paymentStatus)
     .filter((order) => !missingDelivery || !hasCompleteDeliveryInformation(order))
+    .filter((order) => !isTestOrder || Boolean(order.isTestOrder) === (isTestOrder === 'true'))
     .filter((order) => !search || orderSearchText(order).includes(search))
     .filter((order) => matchesOrderDateFilter(order, dateFilter))
     .sort((a, b) => {
@@ -2462,15 +2537,24 @@ function filterAndSortOrders(orders, input = {}) {
 }
 
 function orderListSummary(orders) {
+  const revenueOrders = orders.filter((order) => orderCountsAsRevenue(order));
   return {
     total: orders.length,
     codPending: orders.filter((order) => order.codConfirmationStatus === 'pending' && order.status !== 'cancelled').length,
     jntReady: orders.filter((order) => jntExportSummary(order).status === 'ready').length,
-    totalSalesCents: orders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0),
+    totalSalesCents: revenueOrders.reduce((sum, order) => sum + Number(order.totalCents || 0), 0),
     totalItems: orders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0), 0),
     delivered: orders.filter((order) => order.status === 'delivered' || order.fulfillmentStatus === 'delivered' || order.deliveryStatus === 'delivered').length,
     missingDeliveryInformation: orders.filter((order) => !hasCompleteDeliveryInformation(order)).length
   };
+}
+
+function orderCountsAsRevenue(order) {
+  if (order.isTestOrder) return false;
+  if (['cancelled', 'canceled', 'failed', 'expired', 'unreachable', 'returned'].includes(String(order.status || '').toLowerCase())) return false;
+  if (['failed', 'expired', 'cancelled', 'canceled', 'refunded'].includes(String(order.paymentStatus || '').toLowerCase())) return false;
+  if (order.paymentMethod === 'paymongo') return ['paid', 'partially_refunded'].includes(String(order.paymentStatus || ''));
+  return Number(order.totalCents || 0) > 0;
 }
 
 function ordersCsv(orders, syncDetails = new Map()) {
@@ -2481,7 +2565,8 @@ function ordersCsv(orders, syncDetails = new Map()) {
     'Unit Price PHP', 'Line Total PHP', 'Subtotal PHP', 'Discount PHP', 'Shipping PHP',
     'Total PHP', 'Payment Method', 'Payment Status', 'COD Status', 'PayMongo Checkout Session ID',
     'PayMongo Payment ID', 'Paid Amount PHP', 'Paid At', 'Courier', 'Tracking Number',
-    'Pancake Order ID', 'Pancake Sync Status', 'Pancake Last Synced At', 'Pancake Last Error'
+    'Pancake Order ID', 'Pancake Sync Status', 'Pancake Last Synced At', 'Pancake Last Error',
+    'Cancellation Reason', 'Test Order'
   ];
   const rows = [];
   for (const order of orders) {
@@ -2500,7 +2585,8 @@ function ordersCsv(orders, syncDetails = new Map()) {
         order.paymentMethod, order.paymentStatus, order.codConfirmationStatus, order.providerCheckoutSessionId || '',
         order.providerPaymentId || '', moneyCsv(order.paidAmountCents), order.paidAt || '',
         order.deliveryMethod || '', order.trackingNumber || '', sync.pancakeOrderId || '',
-        sync.syncStatus || 'not_linked', sync.lastSyncedAt || '', sync.safeErrorCode || ''
+        sync.syncStatus || 'not_linked', sync.lastSyncedAt || '', sync.safeErrorCode || '',
+        order.cancellationReason || '', order.isTestOrder ? 'Yes' : 'No'
       ]);
     }
   }

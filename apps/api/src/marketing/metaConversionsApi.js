@@ -1,3 +1,5 @@
+const { META_CURRENCY, validateMetaPurchaseEvent } = require('./metaMoney');
+
 class MetaConversionsApiError extends Error {
   constructor(message, { retryable, status, cause } = {}) {
     super(message, { cause });
@@ -25,7 +27,7 @@ function hasValidMetaMonetaryValue(event) {
   if (!['ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase'].includes(event?.event_name)) {
     return true;
   }
-  return event?.custom_data?.currency === 'PHP' &&
+  return event?.custom_data?.currency === META_CURRENCY &&
     typeof event?.custom_data?.value === 'number' &&
     Number.isFinite(event.custom_data.value) &&
     event.custom_data.value > 0;
@@ -45,6 +47,14 @@ async function sendMetaConversionsEvent(event, {
     throw new MetaConversionsApiError('Meta monetary event has an invalid value or currency', {
       retryable: false
     });
+  }
+  if (event?.event_name === 'Purchase') {
+    const validation = validateMetaPurchaseEvent(event);
+    if (!validation.valid) {
+      throw new MetaConversionsApiError(`Meta Purchase payload validation failed: ${validation.errors.join(' ')}`, {
+        retryable: false
+      });
+    }
   }
 
   const controller = new AbortController();

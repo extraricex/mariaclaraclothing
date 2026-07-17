@@ -171,6 +171,19 @@ test('centralized CAPI queue sends one authoritative stored-ID event and reports
   assert.equal(duplicate.status, 'duplicate');
 });
 
+test('centralized CAPI queue stores a safe validation failure instead of dispatching bad money data', async () => {
+  const failures = [];
+  const result = await queueMetaPurchase({ client: {}, order: order({ totalCents: 0 }), enabled: true }, {
+    insertEvent: async () => assert.fail('invalid Purchase must not enter the outbox'),
+    recordValidationFailure: async (_client, orderNumber, error) => failures.push({ orderNumber, error }),
+    logger: { info() {}, warn() {} }
+  });
+  assert.equal(result.status, 'invalid_purchase_data');
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].orderNumber, 'MCC-DEDUP-1');
+  assert.match(failures[0].error, /stored order total or item data is invalid/);
+});
+
 test('Meta order migration stores permanent IDs, browser/server timestamps, and unique protection', async () => {
   const migration = await fs.readFile(path.join(__dirname, '..', 'db', 'migrations', '20260715_meta_purchase_deduplication.sql'), 'utf8');
   for (const field of [
@@ -178,4 +191,8 @@ test('Meta order migration stores permanent IDs, browser/server timestamps, and 
     'meta_capi_purchase_queued_at', 'meta_capi_purchase_sent_at', 'meta_purchase_status'
   ]) assert.match(migration, new RegExp(field));
   assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS orders_meta_purchase_event_id_idx/);
+  const moneyMigration = await fs.readFile(path.join(__dirname, '..', 'db', 'migrations', '20260717_meta_purchase_value_currency.sql'), 'utf8');
+  assert.match(moneyMigration, /meta_purchase_value/);
+  assert.match(moneyMigration, /meta_purchase_currency/);
+  assert.match(moneyMigration, /orders_currency_php_check/);
 });

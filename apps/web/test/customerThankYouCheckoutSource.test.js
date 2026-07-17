@@ -109,7 +109,7 @@ test('homepage banner height is responsive without excessive mobile black space'
   assert.match(home, /h-full w-full object-cover/);
   assert.match(home, /bg-ink\/35 sm:bg-ink\/40/);
   assert.match(home, /heroCopy\.title[\s\S]*heroCopy\.highlight/);
-  assert.match(settings, /Regular Fit Tees with premium quality shirt\./);
+  assert.match(settings, /Shop Maria Clara Clothing tees in oversized, regular-fit, and crop-box cuts/);
   assert.match(settings, /eyebrow:\s*''/);
   assert.match(home, /reveal reveal-3 mt-3 max-w-xs/);
   assert.match(home, /reveal reveal-4 mt-3 flex flex-wrap justify-start/);

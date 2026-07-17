@@ -31,11 +31,11 @@ export const DEFAULT_SIZE_CHART = {
 
 export const DEFAULT_COLLECTION_DEFINITIONS = [
   {
-    name: 'New Arrivals', slug: 'new-arrivals', description: 'Oversized premium shirt.', imageUrl: '',
+    name: 'New Arrivals', slug: 'new-arrivals', description: 'Explore the latest Maria Clara Clothing releases in oversized, regular-fit, and crop-box cuts. Each product page shows current size availability, measurements, price, and delivery information.', imageUrl: '',
     visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 0, aliases: []
   },
   {
-    name: 'Tees', slug: 'tees', description: 'Regular Fit Tees with premium quality shirt.', imageUrl: '',
+    name: 'Tees', slug: 'tees', description: 'Shop Maria Clara Clothing tees in oversized, regular-fit, and crop-box cuts made for everyday streetwear. Compare real garment measurements and available sizes before ordering.', imageUrl: '',
     visible: true, showOnHomepage: true, showOnShop: true, sortOrder: 1, aliases: ['Catalog']
   },
   {
@@ -56,9 +56,9 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     tiktok: ''
   },
   metaPixel: {
-    enabled: true,
-    pixelId: '595813035761213',
-    requireConsent: false
+    enabled: false,
+    pixelId: '',
+    requireConsent: true
   },
   reviews: {
     enabled: true,
