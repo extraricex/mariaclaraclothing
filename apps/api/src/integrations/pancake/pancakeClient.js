@@ -172,7 +172,8 @@ function createPancakeClient(config, fetchImpl = fetch) {
     const normalized = String(customId || '').trim();
     if (!normalized) throw new PancakeApiError('pancake_invalid_request');
     const body = await listOrders(shopId, { pageNumber: 1, pageSize: 100, search: normalized });
-    return body.data.filter((item) => String(item?.custom_id ?? item?.customId ?? '').trim() === normalized);
+    return body.data.filter((item) => [item?.custom_id, item?.customId, item?.id]
+      .some((value) => String(value ?? '').trim() === normalized));
   }
 
   async function getOrder(shopId, orderId) {

@@ -81,6 +81,7 @@ test('Pancake client searches by website order number and keeps only an exact cu
     return new Response(JSON.stringify({
       data: [
         { id: 'PK-EXACT', custom_id: 'MCC-1001' },
+        { id: 'MCC-1001' },
         { id: 'PK-NOT-EXACT', custom_id: 'MCC-10010' }
       ],
       page_number: 1,
@@ -92,7 +93,7 @@ test('Pancake client searches by website order number and keeps only an exact cu
 
   const matches = await client.findOrdersByCustomId('shop-1', 'MCC-1001');
 
-  assert.deepEqual(matches.map((item) => item.id), ['PK-EXACT']);
+  assert.deepEqual(matches.map((item) => item.id), ['PK-EXACT', 'MCC-1001']);
   assert.match(calls[0], /search=MCC-1001/);
 });
 
