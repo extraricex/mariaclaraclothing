@@ -83,6 +83,21 @@ test('order export repository blocks rows and returns queued work with local ord
   const status = await repository.getOrderExportStatus();
   assert.equal(status.summary.blockedCount, 1);
   assert.equal(status.recent[0].safeErrorCode, 'pancake_catalog_not_ready');
+  assert.deepEqual(await repository.listQueuedOrderExports({ limit: 10 }), []);
+  assert.equal((await repository.loadOrderExportWorkItem('MCC-2')).orderNumber, 'MCC-2');
+});
+
+test('Pancake-origin orders are never queued for outbound website export', async () => {
+  const repository = loadRepositoryWithoutDatabase();
+  repository.resetMemoryForTests();
+
+  const result = await repository.enqueueOrderExport({
+    orderNumber: 'PNK-EXISTING', checkoutChannel: 'pancake_pos',
+    status: 'received', customer: {}, items: []
+  });
+
+  assert.equal(result, null);
+  assert.equal((await repository.getOrderExportStatus()).recent.length, 0);
 });
 
 test('order export repository marks rows sent or failed and excludes sent rows from queued work', async () => {
@@ -193,6 +208,8 @@ test('order export repository prioritizes newest unsent website orders', async (
 
   assert.match(calls[0].sql, /ORDER BY o\.placed_at DESC, e\.queued_at DESC/);
   assert.match(calls[0].sql, /o\.status <> 'cancelled'/);
+  assert.match(calls[0].sql, /checkout_channel/);
+  assert.doesNotMatch(calls[0].sql, /'blocked'/);
 });
 
 test('order export repository skips cancelled and pre-cutover orders', async () => {

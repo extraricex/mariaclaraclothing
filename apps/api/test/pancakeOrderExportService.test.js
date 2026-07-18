@@ -287,7 +287,7 @@ test('live retry verifies an already-created Pancake order without creating a du
     loadOrderExportReadiness: async () => readiness(),
     loadOrderExportWorkItem: async () => ({
       orderNumber: 'MCC-RETRY',
-      pancakeOrderId: 'existing-987654',
+      pancakeOrderId: '',
       order: order({ orderNumber: 'MCC-RETRY' })
     }),
     saveOrderAddressMapping: async () => {},
@@ -305,6 +305,7 @@ test('live retry verifies an already-created Pancake order without creating a du
     }
   };
   const syncRepository = {
+    getOrderSyncDetail: async () => ({ pancakeOrderId: 'existing-987654' }),
     upsertOrderLink: async (record) => calls.push(['link', record.syncStatus])
   };
 

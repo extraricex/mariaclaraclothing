@@ -42,6 +42,7 @@ async function enqueueOrderExport(order, options = {}) {
   const orderNumber = String(order?.orderNumber || '').trim();
   if (!orderNumber) return null;
   if (String(order?.status || '').toLowerCase() === 'cancelled') return null;
+  if (String(order?.checkoutChannel || '').trim().toLowerCase() === 'pancake_pos') return null;
   const desiredStatus = exportStatusForOrder(order);
   if (!hasDatabaseUrl()) {
     const existing = memory.exports.find((item) => item.orderNumber === orderNumber);
@@ -94,6 +95,7 @@ async function enqueueMissingOrderExports({ limit = 100, placedAfter = '' } = {}
      LEFT JOIN pancake_order_exports e ON e.order_number=o.order_number
      WHERE e.order_number IS NULL
        AND o.status <> 'cancelled'
+       AND lower(COALESCE(o.checkout_channel,'')) <> 'pancake_pos'
        AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)
      ORDER BY o.placed_at DESC
      LIMIT $1`,
@@ -194,8 +196,9 @@ async function listQueuedOrderExports({ limit = 50, placedAfter = '' } = {}) {
   if (!hasDatabaseUrl()) {
     const cutoff = placedAfter ? new Date(placedAfter).getTime() : 0;
     return memory.exports
-      .filter((item) => ['queued', 'created_unverified', 'blocked', 'failed'].includes(item.status)
+      .filter((item) => ['queued', 'created_unverified', 'failed'].includes(item.status)
         && String(item.order?.status || '') !== 'cancelled'
+        && String(item.order?.checkoutChannel || '').trim().toLowerCase() !== 'pancake_pos'
         && exportStatusForOrder(item.order) !== 'waiting_payment'
         && (!cutoff || new Date(item.order?.placedAt || 0).getTime() >= cutoff))
       .slice(0, safeLimit)
@@ -210,8 +213,9 @@ async function listQueuedOrderExports({ limit = 50, placedAfter = '' } = {}) {
     `SELECT e.order_number,e.status AS export_status,e.pancake_order_id,o.*
      FROM pancake_order_exports e
      JOIN orders o ON o.order_number=e.order_number
-     WHERE e.status IN ('queued','created_unverified','blocked','failed')
+     WHERE e.status IN ('queued','created_unverified','failed')
        AND o.status <> 'cancelled'
+       AND lower(COALESCE(o.checkout_channel,'')) <> 'pancake_pos'
        AND (lower(COALESCE(o.payment_method,'')) <> 'paymongo' OR o.payment_status='paid')
        AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)
      ORDER BY o.placed_at DESC, e.queued_at DESC
@@ -234,6 +238,7 @@ async function loadOrderExportWorkItem(orderNumber, { placedAfter = '' } = {}) {
     const item = memory.exports.find((candidate) => candidate.orderNumber === normalized
       && ['queued', 'created_unverified', 'blocked', 'failed'].includes(candidate.status)
       && String(candidate.order?.status || '') !== 'cancelled'
+      && String(candidate.order?.checkoutChannel || '').trim().toLowerCase() !== 'pancake_pos'
       && exportStatusForOrder(candidate.order) !== 'waiting_payment'
       && (!cutoff || new Date(candidate.order?.placedAt || 0).getTime() >= cutoff));
     return item ? {
@@ -246,6 +251,7 @@ async function loadOrderExportWorkItem(orderNumber, { placedAfter = '' } = {}) {
      FROM pancake_order_exports e
      JOIN orders o ON o.order_number=e.order_number
      WHERE e.order_number=$1 AND e.status IN ('queued','created_unverified','blocked','failed') AND o.status <> 'cancelled'
+       AND lower(COALESCE(o.checkout_channel,'')) <> 'pancake_pos'
        AND (lower(COALESCE(o.payment_method,'')) <> 'paymongo' OR o.payment_status='paid')
        AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)
      LIMIT 1`,

@@ -261,6 +261,10 @@ async function runOrderLiveExport({
     let pancakeOrderId = String(item.pancakeOrderId || '').trim();
     try {
       if (!pancakeOrderId) {
+        const existingLink = await syncRepository.getOrderSyncDetail?.(item.orderNumber);
+        pancakeOrderId = String(existingLink?.pancakeOrderId || '').trim();
+      }
+      if (!pancakeOrderId) {
         const response = await client.createOrder(readiness.shopId, request);
         pancakeOrderId = response.pancakeOrderId;
         await repository.markOrderExportCreated?.({
