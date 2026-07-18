@@ -151,3 +151,38 @@ test('checkout validation has no horizontal overflow at supported mobile and tab
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 });
+
+test('structured address names and codes survive every supported mobile width and Review navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openPage(page, '/');
+  await page.evaluate(() => {
+    localStorage.removeItem('maria-clara-cart');
+    localStorage.removeItem('maria-clara-cart-session-id');
+    sessionStorage.clear();
+  });
+  await openPage(page, `/product/${PRODUCT_SLUG}`);
+  await page.getByRole('button', { name: /add to cart/i }).click();
+  await page.getByRole('dialog', { name: /your cart/i }).getByRole('link', { name: /^checkout$/i }).click();
+
+  await page.getByPlaceholder('First name').fill('Mobile');
+  await page.getByPlaceholder('Last name').fill('Address Test');
+  await page.getByPlaceholder('09XXXXXXXXX').fill('09171234567');
+  await page.getByPlaceholder(/House no/).fill('123 Sample Street');
+  const selects = page.getByRole('combobox');
+  await selects.nth(0).selectOption({ label: 'CAVITE' });
+  await selects.nth(1).selectOption({ label: 'IMUS' });
+  await selects.nth(2).selectOption({ label: 'BUCANDALA IV' });
+
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(selects.nth(0)).toHaveValue('CAVITE');
+    await expect(selects.nth(1)).toHaveValue('CAVITE|IMUS');
+    await expect(selects.nth(2)).toHaveValue('CAVITE|IMUS|BUCANDALA IV');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+
+  await page.getByRole('button', { name: 'Review order', exact: true }).click();
+  await expect(page).toHaveURL(/\/checkout\/review$/);
+  await expect(page.getByText('123 Sample Street, BUCANDALA IV, IMUS, CAVITE, Philippines')).toBeVisible();
+  await expect(page.getByText('09171234567', { exact: true })).toBeVisible();
+});
