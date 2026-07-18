@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const {
   claimDueMetaEvents,
+  insertMetaEventOutbox,
   insertMetaPurchaseOutbox,
   markMetaEventFailed,
   markMetaEventSent,
@@ -52,7 +53,12 @@ test('Meta outbox repository inserts and atomically claims due events', async ()
 test('Meta outbox refuses Purchase events with invalid value or currency', async () => {
   const client = recordingClient();
   for (const customData of [
+    { currency: 'PHP', value: '' },
+    { currency: 'PHP', value: null },
+    { currency: 'PHP', value: undefined },
     { currency: 'PHP', value: 0 },
+    { currency: 'PHP', value: '₱0' },
+    { currency: 'PHP', value: 'invalid' },
     { currency: 'PHP', value: '1278' },
     { currency: 'PHP', value: Number.NaN },
     { currency: 'PHP 1278', value: 1278 },
@@ -62,6 +68,18 @@ test('Meta outbox refuses Purchase events with invalid value or currency', async
       event_name: 'Purchase', event_id: 'purchase_invalid', custom_data: customData
     }), null);
   }
+  assert.equal(client.calls.length, 0);
+});
+
+test('generic funnel outbox cannot enqueue Purchase', async () => {
+  const client = recordingClient([{ id: 'must-not-be-created' }]);
+  const inserted = await insertMetaEventOutbox(client, {
+    event_name: 'Purchase',
+    event_id: 'purchase_MCC-GENERIC',
+    custom_data: { order_id: 'MCC-GENERIC', currency: 'PHP', value: 649 }
+  });
+
+  assert.equal(inserted, null);
   assert.equal(client.calls.length, 0);
 });
 

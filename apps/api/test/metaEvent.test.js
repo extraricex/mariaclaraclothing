@@ -69,6 +69,10 @@ test('Meta Purchase validation requires numeric value, PHP, and an event ID', ()
   });
   for (const input of [
     { value: '', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: null, currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: undefined, currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: '₱0', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: 'invalid', currency: 'PHP', eventId: 'purchase_MCC-1' },
     { value: '1298', currency: 'PHP', eventId: 'purchase_MCC-1' },
     { value: 0, currency: 'PHP', eventId: 'purchase_MCC-1' },
     { value: 1298, currency: '', eventId: 'purchase_MCC-1' },

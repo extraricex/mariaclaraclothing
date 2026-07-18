@@ -52,6 +52,10 @@ test('browser Purchase validation rejects empty value, currency, or event ID', (
   assert.equal(validateMetaPurchase({ value: 1298, currency: 'PHP', eventId: 'purchase_MCC-1' }).valid, true);
   for (const input of [
     { value: '', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: null, currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: undefined, currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: '₱0', currency: 'PHP', eventId: 'purchase_MCC-1' },
+    { value: 'invalid', currency: 'PHP', eventId: 'purchase_MCC-1' },
     { value: '1298', currency: 'PHP', eventId: 'purchase_MCC-1' },
     { value: 0, currency: 'PHP', eventId: 'purchase_MCC-1' },
     { value: 1298, currency: '', eventId: 'purchase_MCC-1' },

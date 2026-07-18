@@ -1,7 +1,9 @@
 const crypto = require('node:crypto');
 const { validateMetaPurchaseEvent } = require('./metaMoney');
 
-const META_EVENT_NAMES = new Set(['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase']);
+// Purchase must only enter the durable queue through insertMetaPurchaseOutbox,
+// where its value, currency, permanent order ID and order row are validated.
+const META_EVENT_NAMES = new Set(['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo']);
 
 async function insertMetaEventOutbox(client, event, {
   aggregateId = '',
