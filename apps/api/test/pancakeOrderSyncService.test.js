@@ -460,10 +460,36 @@ test('processOutboundOrderEvents preserves authoritative totals during an addres
     payload: { changedFields: ['address'] }
   });
   const calls = [];
+  const addressMapping = {
+    countryCode: '63',
+    province: { id: '63_826', name: 'Cavite' },
+    district: { id: '63_8261588', name: 'Imus' },
+    commune: { id: '63_82615881238', name: 'Bucandala iv' }
+  };
 
   const result = await service.processOutboundOrderEvents({
     config: { shopId: 'shop-1', syncMaxAttempts: 3 },
-    client: { updateOrder: async (shopId, pancakeOrderId, payload) => calls.push({ shopId, pancakeOrderId, payload }) },
+    client: {
+      updateOrder: async (shopId, pancakeOrderId, payload) => calls.push({ shopId, pancakeOrderId, payload }),
+      getOrder: async () => ({
+        bill_full_name: 'Maria Buyer',
+        bill_phone_number: '09171234567',
+        shipping_address: {
+          full_name: 'Maria Buyer',
+          phone_number: '09171234567',
+          address: '12 Test Street',
+          full_address: '12 Test Street, Bucandala iv, Imus, Cavite, Philippines',
+          province_id: '63_826',
+          province_name: 'Cavite',
+          district_id: '63_8261588',
+          district_name: 'Imus',
+          commune_id: '63_82615881238',
+          commnue_name: 'Bucandala iv',
+          country_code: '63'
+        }
+      })
+    },
+    geoResolver: async () => addressMapping,
     orderRepository: orders,
     syncRepository: syncRepo,
     now: () => new Date('2026-07-17T00:00:00.000Z')

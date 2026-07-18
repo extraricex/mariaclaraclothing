@@ -197,15 +197,36 @@ export default function OrderDetail() {
   const [refundForm, setRefundForm] = useState({ amount: '', reason: 'others', notes: '' });
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [adminEmailSending, setAdminEmailSending] = useState(false);
+  const [pancakeAddressBusy, setPancakeAddressBusy] = useState('');
+  const [pancakeGeoOptions, setPancakeGeoOptions] = useState({ provinces: [], districts: [], communes: [] });
+  const [pancakeGeoSelection, setPancakeGeoSelection] = useState({ provinceId: '', districtId: '', communeId: '' });
+
+  async function refreshOrder() {
+    const body = await adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}`);
+    setOrder(body.order);
+    setForm(orderForm(body.order));
+    const mapping = body.order?.pancakeSyncDetail?.addressMapping || {};
+    setPancakeGeoSelection({
+      provinceId: mapping.province?.id || '',
+      districtId: mapping.district?.id || '',
+      communeId: mapping.commune?.id || ''
+    });
+    return body.order;
+  }
 
   useEffect(() => {
-    adminJson(`/api/admin/orders/${encodeURIComponent(orderNumber)}`)
-      .then((body) => {
-        setOrder(body.order);
-        setForm(orderForm(body.order));
-      })
+    refreshOrder()
       .catch((err) => setMessage(err.message));
   }, [orderNumber]);
+
+  useEffect(() => {
+    const query = new URLSearchParams();
+    if (pancakeGeoSelection.provinceId) query.set('provinceId', pancakeGeoSelection.provinceId);
+    if (pancakeGeoSelection.districtId) query.set('districtId', pancakeGeoSelection.districtId);
+    adminJson(`/api/admin/integrations/pancake/geo/options?${query}`)
+      .then((body) => setPancakeGeoOptions(body.options || { provinces: [], districts: [], communes: [] }))
+      .catch(() => setPancakeGeoOptions({ provinces: [], districts: [], communes: [] }));
+  }, [pancakeGeoSelection.provinceId, pancakeGeoSelection.districtId]);
 
   useEffect(() => {
     const phone = order?.customer?.phone;
@@ -440,6 +461,43 @@ export default function OrderDetail() {
     }
   }
 
+  async function resolvePancakeAddress() {
+    if (pancakeAddressBusy) return;
+    setPancakeAddressBusy('resolve');
+    setMessage('Resolving and verifying the structured Pancake address...');
+    try {
+      await adminSend('POST', `/api/admin/integrations/pancake/orders/${encodeURIComponent(orderNumber)}/address-mapping/resolve`, {});
+      await refreshOrder();
+      setMessage('Pancake Province, City / District, Barangay / Commune, phone, and full address were retrieved and verified.');
+    } catch (error) {
+      await refreshOrder().catch(() => {});
+      setMessage(error.message);
+    } finally {
+      setPancakeAddressBusy('');
+    }
+  }
+
+  async function savePancakeMapping() {
+    if (!pancakeGeoSelection.provinceId || !pancakeGeoSelection.districtId || !pancakeGeoSelection.communeId) {
+      setMessage('Select a Pancake Province, City / District, and Barangay / Commune first.');
+      return;
+    }
+    if (!window.confirm('Save this exact Pancake geographic mapping and update the linked order?')) return;
+    setPancakeAddressBusy('save');
+    setMessage('Saving the verified Pancake location mapping...');
+    try {
+      await adminSend('PUT', `/api/admin/integrations/pancake/orders/${encodeURIComponent(orderNumber)}/address-mapping`, pancakeGeoSelection);
+      setPancakeAddressBusy('resolve');
+      await adminSend('POST', `/api/admin/integrations/pancake/orders/${encodeURIComponent(orderNumber)}/address-mapping/resolve`, {});
+      await refreshOrder();
+      setMessage('Verified Pancake mapping saved and the linked order was retrieved successfully.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setPancakeAddressBusy('');
+    }
+  }
+
   async function previewJnt() {
     setMessage('');
     try {
@@ -577,6 +635,10 @@ export default function OrderDetail() {
   const pancakeInventorySyncStatus = pancakeSyncDetail.inventorySyncStatus || (pancakeSyncStatus === 'synced' ? 'Synced with order' : pancakeSyncLabel);
   const pancakePaymentSyncLabel = titleCase(pancakeSyncDetail.paymentSyncStatus || 'not_synced');
   const pancakeStatusSyncLabel = titleCase(pancakeSyncDetail.statusSyncStatus || 'not_synced');
+  const pancakeAddressMapping = pancakeSyncDetail.addressMapping || {};
+  const pancakeAddressVerification = pancakeSyncDetail.addressVerification || {};
+  const pancakeAddressSnapshot = pancakeSyncDetail.pancakeAddressSnapshot || {};
+  const pancakeAddressVerified = pancakeAddressVerification.valid === true;
   const orderMetricCards = [
     ['Order status', displayOrderStatus(form.status), form.status === 'cancelled' ? 'danger' : form.status === 'delivered' ? 'success' : 'info'],
     ['Amount due', formatMoney(balanceCents), balanceCents > 0 ? 'warning' : 'success'],
@@ -912,7 +974,62 @@ export default function OrderDetail() {
                 <InfoRow label="Status sync error" value={fallback(pancakeSyncDetail.statusSyncError, 'No status sync error')} />
                 <InfoRow label="Product mapping status" value={pancakeProductMappingStatus} />
                 <InfoRow label="Inventory sync status" value={pancakeInventorySyncStatus} />
+                <InfoRow label="Address export status" value={titleCase(pancakeSyncDetail.exportStatus || 'not_queued')} />
+                <InfoRow label="Address mapping status" value={pancakeAddressMapping.mappingStatus === 'resolved' ? 'Resolved' : 'Needs review'} strong={pancakeAddressMapping.mappingStatus === 'resolved'} />
+                <InfoRow label="Pancake Province ID" value={fallback(pancakeAddressMapping.province?.id || pancakeAddressSnapshot.provinceId, 'Not resolved')} />
+                <InfoRow label="Pancake Province" value={fallback(pancakeAddressSnapshot.provinceName || pancakeAddressMapping.province?.name, 'Not persisted')} />
+                <InfoRow label="Pancake District ID" value={fallback(pancakeAddressMapping.district?.id || pancakeAddressSnapshot.districtId, 'Not resolved')} />
+                <InfoRow label="Pancake City / District" value={fallback(pancakeAddressSnapshot.districtName || pancakeAddressMapping.district?.name, 'Not persisted')} />
+                <InfoRow label="Pancake Commune ID" value={fallback(pancakeAddressMapping.commune?.id || pancakeAddressSnapshot.communeId, 'Not resolved')} />
+                <InfoRow label="Pancake Barangay / Commune" value={fallback(pancakeAddressSnapshot.communeName || pancakeAddressMapping.commune?.name, 'Not persisted')} />
+                <InfoRow label="Pancake phone" value={fallback(pancakeAddressSnapshot.phoneNumber, 'Not verified')} />
+                <InfoRow label="Pancake full address" value={fallback(pancakeAddressSnapshot.fullAddress, 'Not verified')} />
+                <InfoRow label="Persisted structured address" value={pancakeAddressVerified ? 'Verified after Pancake retrieval' : 'Not verified'} strong={pancakeAddressVerified} />
+                <InfoRow label="Address verification issues" value={pancakeAddressVerification.issues?.length ? pancakeAddressVerification.issues.join(', ') : 'None'} />
+                <InfoRow label="Last address verification" value={pancakeSyncDetail.addressVerifiedAt ? new Date(pancakeSyncDetail.addressVerifiedAt).toLocaleString('en-PH') : 'Never verified'} />
+                <InfoRow label="Address mapping error" value={fallback(pancakeSyncDetail.addressMappingError, 'No mapping error')} />
               </dl>
+              <div className="mt-4 border-t border-[var(--admin-line)] pt-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Select Pancake location mapping</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  <select
+                    className="field !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-xs !text-[var(--admin-text)]"
+                    value={pancakeGeoSelection.provinceId}
+                    onChange={(event) => setPancakeGeoSelection({ provinceId: event.target.value, districtId: '', communeId: '' })}
+                  >
+                    <option value="">Province</option>
+                    {pancakeGeoOptions.provinces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                  <select
+                    className="field !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-xs !text-[var(--admin-text)]"
+                    value={pancakeGeoSelection.districtId}
+                    disabled={!pancakeGeoSelection.provinceId}
+                    onChange={(event) => setPancakeGeoSelection((value) => ({ ...value, districtId: event.target.value, communeId: '' }))}
+                  >
+                    <option value="">City / District</option>
+                    {pancakeGeoOptions.districts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                  <select
+                    className="field !border-[var(--admin-line)] !bg-[var(--admin-panel-soft)] !text-xs !text-[var(--admin-text)]"
+                    value={pancakeGeoSelection.communeId}
+                    disabled={!pancakeGeoSelection.districtId}
+                    onChange={(event) => setPancakeGeoSelection((value) => ({ ...value, communeId: event.target.value }))}
+                  >
+                    <option value="">Barangay / Commune</option>
+                    {pancakeGeoOptions.communes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" className="btn-outline !py-2 !text-xs" disabled={Boolean(pancakeAddressBusy)} onClick={resolvePancakeAddress}>
+                    {pancakeAddressBusy === 'resolve' ? 'Resolving...' : 'Resolve Address Again'}
+                  </button>
+                  <button type="button" className="btn-outline !py-2 !text-xs" disabled={Boolean(pancakeAddressBusy)} onClick={savePancakeMapping}>
+                    {pancakeAddressBusy === 'save' ? 'Saving...' : 'Save Verified Mapping'}
+                  </button>
+                  <button type="button" className="btn-outline !py-2 !text-xs" disabled={Boolean(pancakeAddressBusy)} onClick={startAddressEdit}>Edit Website Address</button>
+                  <button type="button" className="btn-ink !py-2 !text-xs" disabled={Boolean(pancakeAddressBusy)} onClick={resolvePancakeAddress}>Retry Pancake Sync</button>
+                </div>
+              </div>
               {Array.isArray(pancakeSyncDetail.recentLogs) && pancakeSyncDetail.recentLogs.length > 0 && (
                 <div className="mt-3 space-y-2 border-t border-[var(--admin-line)] pt-3">
                   {pancakeSyncDetail.recentLogs.slice(0, 2).map((log) => (

@@ -117,6 +117,50 @@ test('order export repository marks rows sent or failed and excludes sent rows f
   assert.equal(status.recent[0].safeErrorCode, 'pancake_http_error');
 });
 
+test('PayMongo exports wait for verified payment and then become eligible without a duplicate row', async () => {
+  const repository = loadRepositoryWithoutDatabase();
+  repository.resetMemoryForTests();
+  const pending = {
+    orderNumber: 'MCC-PAY-WAIT', status: 'pending_payment',
+    paymentMethod: 'paymongo', paymentStatus: 'pending_payment', items: []
+  };
+  await repository.enqueueOrderExport(pending);
+  let status = await repository.getOrderExportStatus();
+  assert.equal(status.summary.waitingPaymentCount, 1);
+  assert.deepEqual(await repository.listQueuedOrderExports({ limit: 10 }), []);
+
+  await repository.enqueueOrderExport({
+    ...pending,
+    status: 'confirmed',
+    paymentStatus: 'paid',
+    providerPaymentId: 'pay_verified',
+    totalCents: 64900,
+    paidAmountCents: 64900
+  });
+  status = await repository.getOrderExportStatus();
+  assert.equal(status.summary.waitingPaymentCount, 0);
+  assert.equal(status.summary.queuedCount, 1);
+  assert.equal(status.recent.length, 1);
+});
+
+test('a created but unverified Pancake order retains its external ID for retry', async () => {
+  const repository = loadRepositoryWithoutDatabase();
+  repository.resetMemoryForTests();
+  await repository.enqueueOrderExport({ orderNumber: 'MCC-CREATED', status: 'confirmed', items: [] });
+  await repository.markOrderExportCreated({
+    orderNumber: 'MCC-CREATED', pancakeOrderId: 'PK-EXISTING', createdAt: '2026-07-18T00:00:00Z'
+  });
+  await repository.markOrderExportVerificationFailed({
+    orderNumber: 'MCC-CREATED', pancakeOrderId: 'PK-EXISTING',
+    safeErrorCode: 'pancake_timeout', providerVerification: { valid: false }
+  });
+  const work = await repository.loadOrderExportWorkItem('MCC-CREATED');
+  assert.equal(work.status, 'created_unverified');
+  assert.equal(work.pancakeOrderId, 'PK-EXISTING');
+  const status = await repository.getOrderExportStatus();
+  assert.equal(status.summary.createdUnverifiedCount, 1);
+});
+
 test('order export repository loads one unsent export work item by order number', async () => {
   const repository = loadRepositoryWithoutDatabase();
   repository.resetMemoryForTests();

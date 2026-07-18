@@ -101,6 +101,7 @@ function createPancakeAutoSyncWorker({
         }))
         : await guardedStep('order shadow build', () => orderService.runOrderShadowBuild({
           config,
+          client,
           repository: orderRepository
         }));
       result.orderInbound = await guardedStep('inbound order sync', () => orderSyncService.pollInboundPancakeOrders({

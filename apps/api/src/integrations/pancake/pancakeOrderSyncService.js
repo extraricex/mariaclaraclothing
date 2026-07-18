@@ -4,8 +4,11 @@ const orderRepositoryDefault = require('../../orders/orderRepository');
 const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
 const {
   buildPancakeOrderUpdatePayload,
-  normalizePancakeOrder
+  normalizePancakeOrder,
+  verifyPancakeStructuredAddress
 } = require('./pancakeOrderMapper');
+const geoRepositoryDefault = require('./pancakeGeoRepository');
+const { resolvePancakeAddress } = require('./pancakeGeoService');
 const { hasCompleteDeliveryInformation } = require('../../checkout/deliveryDetails');
 
 function hashObject(value) {
@@ -25,6 +28,12 @@ function inboundEventKey(normalized, payloadHash) {
 function safeProviderCode(error) {
   const code = String(error?.code || '');
   return /^pancake_[a-z_]+$/.test(code) ? code : 'pancake_order_sync_failed';
+}
+
+function addressMappingError(error) {
+  const code = String(error?.code || '');
+  return /^pancake_(province|district|commune)_/.test(code)
+    || ['pancake_order_address_mapping_missing', 'pancake_geo_client_unavailable'].includes(code);
 }
 
 function retryDelayMs(attempt) {
@@ -368,6 +377,8 @@ async function processOutboundOrderEvents({
   client,
   syncRepository = syncRepositoryDefault,
   orderRepository = orderRepositoryDefault,
+  geoRepository = geoRepositoryDefault,
+  geoResolver = resolvePancakeAddress,
   now = () => new Date(),
   limit = 25
 }) {
@@ -399,17 +410,50 @@ async function processOutboundOrderEvents({
         summary.updatedCount += 1;
         continue;
       }
-      const payload = buildPancakeOrderUpdatePayload({ order, changedFields: event.payload.changedFields || [] });
+      const changedFields = event.payload.changedFields || [];
+      const addressMapping = changedFields.includes('address')
+        ? await geoResolver(order.address, { client, repository: geoRepository })
+        : {};
+      const payload = buildPancakeOrderUpdatePayload({ order, changedFields, addressMapping });
       if (!Object.keys(payload).length) {
         await syncRepository.markSyncEventBlocked(event.id, 'pancake_order_update_not_supported');
         summary.blockedCount += 1;
         continue;
       }
       await client.updateOrder(config.shopId, pancakeOrderId, payload);
+      if (changedFields.includes('address')) {
+        const providerOrder = await client.getOrder(config.shopId, pancakeOrderId);
+        const verification = verifyPancakeStructuredAddress({ providerOrder, order, mapping: addressMapping });
+        if (!verification.valid) {
+          const error = new Error('Pancake did not persist the complete structured address.');
+          error.code = 'pancake_address_verification_failed';
+          error.status = 409;
+          throw error;
+        }
+      }
       await completeOutboundEvent({ syncRepository, event, order, pancakeOrderId, config, now });
       summary.updatedCount += 1;
     } catch (error) {
       const code = safeProviderCode(error);
+      if (addressMappingError(error)) {
+        await syncRepository.markSyncEventBlocked(event.id, code);
+        await syncRepository.upsertOrderLink?.({
+          orderNumber: event.orderNumber,
+          pancakeOrderId,
+          shopId: config.shopId,
+          syncStatus: 'blocked',
+          lastLocalUpdatedAt: order?.updatedAt || now().toISOString(),
+          safeErrorCode: code
+        });
+        await syncRepository.appendSyncLog({
+          direction: 'outbound', entityType: 'order', entityId: event.orderNumber,
+          orderNumber: event.orderNumber, pancakeOrderId,
+          level: 'error', code,
+          message: `Pancake synchronization is blocked because ${error?.field || 'the address'} could not be mapped.`
+        });
+        summary.blockedCount += 1;
+        continue;
+      }
       const nextAttemptAt = new Date(now().getTime() + retryDelayMs(Number(event.attemptCount || 0) + 1)).toISOString();
       await syncRepository.markSyncEventRetryable(event.id, { safeErrorCode: code, nextAttemptAt });
       if (pancakeOrderId) {

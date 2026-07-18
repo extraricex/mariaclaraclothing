@@ -13,6 +13,14 @@ const orderExportServiceDefault = require('../integrations/pancake/pancakeOrderE
 const orderSyncRepositoryDefault = require('../integrations/pancake/pancakeOrderSyncRepository');
 const productSyncRepositoryDefault = require('../integrations/pancake/pancakeProductSyncRepository');
 const productSyncServiceDefault = require('../integrations/pancake/pancakeProductSyncService');
+const websiteOrderRepositoryDefault = require('../orders/orderRepository');
+const geoRepositoryDefault = require('../integrations/pancake/pancakeGeoRepository');
+const {
+  listPancakeAddressOptions,
+  resolvePancakeAddress,
+  saveManualPancakeAddressMapping
+} = require('../integrations/pancake/pancakeGeoService');
+const addressReconciliationServiceDefault = require('../integrations/pancake/pancakeAddressReconciliationService');
 const {
   getPancakeConnectionStatus,
   testPancakeConnection
@@ -32,6 +40,14 @@ function createAdminPancakeRouter(dependencies = {}) {
   const orderRepository = dependencies.orderRepository || orderExportRepositoryDefault;
   const orderService = dependencies.orderService || orderExportServiceDefault;
   const orderSyncRepository = dependencies.orderSyncRepository || orderSyncRepositoryDefault;
+  const websiteOrderRepository = dependencies.websiteOrderRepository || websiteOrderRepositoryDefault;
+  const geoRepository = dependencies.geoRepository || geoRepositoryDefault;
+  const geoService = dependencies.geoService || {
+    listPancakeAddressOptions,
+    resolvePancakeAddress,
+    saveManualPancakeAddressMapping
+  };
+  const addressReconciliationService = dependencies.addressReconciliationService || addressReconciliationServiceDefault;
   const productSyncRepository = dependencies.productSyncRepository || productSyncRepositoryDefault;
   const productSyncService = dependencies.productSyncService || productSyncServiceDefault;
 
@@ -103,8 +119,91 @@ function createAdminPancakeRouter(dependencies = {}) {
 
   router.post('/orders/shadow-build', async (_req, res, next) => {
     try {
-      const orders = await orderService.runOrderShadowBuild({ config, repository: orderRepository });
+      const orders = await orderService.runOrderShadowBuild({ config, client, repository: orderRepository });
       return res.status(orders.status === 'concurrent' ? 409 : 200).json({ orders });
+    } catch (error) { return next(error); }
+  });
+
+  router.get('/geo/options', async (req, res, next) => {
+    try {
+      const options = await geoService.listPancakeAddressOptions({
+        provinceId: String(req.query.provinceId || '').trim(),
+        districtId: String(req.query.districtId || '').trim()
+      }, { client });
+      return res.json({ options });
+    } catch (error) { return next(error); }
+  });
+
+  router.put('/orders/:orderNumber/address-mapping', async (req, res, next) => {
+    try {
+      const orderNumber = String(req.params.orderNumber || '').trim();
+      const order = await websiteOrderRepository.findOrderByNumber(orderNumber, { includeRelated: false });
+      if (!order) return res.status(404).json({ error: 'Order not found.' });
+      const mapping = await geoService.saveManualPancakeAddressMapping(order.address, {
+        provinceId: req.body?.provinceId,
+        districtId: req.body?.districtId,
+        communeId: req.body?.communeId
+      }, { client, repository: geoRepository });
+      await orderRepository.saveOrderAddressMapping?.(orderNumber, mapping);
+      return res.json({ mapping });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/orders/:orderNumber/address-mapping/resolve', async (req, res, next) => {
+    try {
+      const orderNumber = String(req.params.orderNumber || '').trim();
+      const order = await websiteOrderRepository.findOrderByNumber(orderNumber, { includeRelated: false });
+      if (!order) return res.status(404).json({ error: 'Order not found.' });
+      const detail = await orderSyncRepository.getOrderSyncDetail(orderNumber);
+      if (detail?.pancakeOrderId) {
+        const result = await addressReconciliationService.reconcileOneAddress({
+          orderNumber, client, config,
+          orderRepository: websiteOrderRepository,
+          exportRepository: orderRepository,
+          syncRepository: orderSyncRepository,
+          geoRepository
+        });
+        return res.status(result.status === 'verified' ? 200 : 409).json({ result });
+      }
+      const mapping = await geoService.resolvePancakeAddress(order.address, {
+        client, repository: geoRepository, forceRefresh: true
+      });
+      await orderRepository.saveOrderAddressMapping?.(orderNumber, mapping);
+      const orders = await orderService.runOrderLiveExport({
+        config, client, repository: orderRepository, orderNumber,
+        syncRepository: orderSyncRepository, geoRepository
+      });
+      return res.json({ mapping, orders });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/address-reconciliation/preview', async (req, res, next) => {
+    try {
+      const preview = await addressReconciliationService.previewAddressReconciliation({
+        from: String(req.body?.from || '').trim(),
+        to: String(req.body?.to || '').trim(),
+        limit: req.body?.limit,
+        client, config,
+        orderRepository: websiteOrderRepository,
+        syncRepository: orderSyncRepository,
+        geoRepository
+      });
+      return res.json({ preview });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/address-reconciliation/apply', async (req, res, next) => {
+    try {
+      const reconciliation = await addressReconciliationService.applyAddressReconciliation({
+        orderNumbers: Array.isArray(req.body?.orderNumbers) ? req.body.orderNumbers : [],
+        confirmed: req.body?.confirmed === true,
+        client, config,
+        orderRepository: websiteOrderRepository,
+        exportRepository: orderRepository,
+        syncRepository: orderSyncRepository,
+        geoRepository
+      });
+      return res.json({ reconciliation });
     } catch (error) { return next(error); }
   });
 

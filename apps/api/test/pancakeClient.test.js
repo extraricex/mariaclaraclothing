@@ -73,6 +73,27 @@ test('Pancake client lists orders with updated cursor pagination', async () => {
   assert.doesNotMatch(calls[0].url, /updated_since/);
 });
 
+test('Pancake client uses the official Philippine geographic hierarchy endpoints', async () => {
+  const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
+  const calls = [];
+  const client = createPancakeClient(CONFIG, async (url) => {
+    calls.push(url);
+    const record = url.includes('/provinces')
+      ? { id: '63_826', name: 'Cavite', name_en: 'Cavite', new_id: null }
+      : url.includes('/districts')
+        ? { id: '63_8261588', name: 'Imus', province_id: '63_826' }
+        : { id: '63_82615881238', name: 'Bucandala iv', province_id: '63_826', district_id: '63_8261588' };
+    return new Response(JSON.stringify({ success: true, data: [record] }), { status: 200 });
+  });
+
+  assert.equal((await client.listProvinces('63'))[0].id, '63_826');
+  assert.equal((await client.listDistricts('63_826'))[0].provinceId, '63_826');
+  assert.equal((await client.listCommunes('63_826', '63_8261588'))[0].districtId, '63_8261588');
+  assert.match(calls[0], /\/geo\/provinces\?.*country_code=63/);
+  assert.match(calls[1], /\/geo\/districts\?.*province_id=63_826/);
+  assert.match(calls[2], /\/geo\/communes\?.*province_id=63_826.*district_id=63_8261588/);
+});
+
 test('Pancake client updates an order with JSON body', async () => {
   const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
   const calls = [];

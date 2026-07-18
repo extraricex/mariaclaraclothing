@@ -22,6 +22,7 @@ function createPayMongoRouter(dependencies = {}) {
   const router = express.Router();
   const config = dependencies.config || env.paymongo;
   const client = dependencies.client || createPayMongoClient(config);
+  const exportPaidPancakeOrder = dependencies.exportPancakeOrderNow || exportPancakeOrderNow;
   const processPancakeOrderUpdates = dependencies.processPancakeOrderUpdates || (async () => {
     if (env.pancake.mode !== 'live' || !env.pancake.apiKeyConfigured) return { status: 'skipped' };
     return processOutboundOrderEvents({
@@ -63,12 +64,6 @@ function createPayMongoRouter(dependencies = {}) {
       const checkout = await (dependencies.ensureCheckoutSession || ensureCheckoutSession)(result.orderNumber, { client, config });
       const order = checkout.order;
       const checkoutUrl = checkout.checkoutUrl;
-      try {
-        const pancakeExport = await exportPancakeOrderNow(order.orderNumber);
-        if (Number(pancakeExport?.summary?.sentCount || 0) > 0) await syncOrderInventoryNow(order.orderNumber);
-      } catch (error) {
-        console.error('PayMongo order/inventory sync to Pancake failed:', error?.message || error);
-      }
       return res.status(201).json({ ...result, paymentStatus: order.paymentStatus, checkoutUrl, checkoutSessionId: order.providerCheckoutSessionId });
     } catch (error) { return next(error); }
   });
@@ -90,8 +85,15 @@ function createPayMongoRouter(dependencies = {}) {
         orderNumber: result.orderNumber || '',
         status: result.status
       });
-      if (result.status === 'paid' || (['payment.refunded', 'payment.refund.updated'].includes(eventType) && result.status === 'succeeded')) {
+      if (['paid', 'duplicate'].includes(result.status)
+        || (['payment.refunded', 'payment.refund.updated'].includes(eventType) && result.status === 'succeeded')) {
         try {
+          if (result.status === 'paid' || result.status === 'duplicate') {
+            const pancakeExport = await exportPaidPancakeOrder(result.orderNumber);
+            if (Number(pancakeExport?.summary?.sentCount || 0) > 0) {
+              await syncOrderInventoryNow(result.orderNumber);
+            }
+          }
           const pancakeResult = await processPancakeOrderUpdates();
           if (pancakeResult?.status === 'failed') {
             console.error('Pancake payment update failed and remains queued for retry.');

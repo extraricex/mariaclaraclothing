@@ -11,7 +11,10 @@ function websiteOrder(overrides = {}) {
     orderNumber: 'MCC-RECON-1',
     customer: { firstName: 'Private', lastName: 'Customer', phone: '09171234567' },
     address: {
-      houseAddress: '123 Private Street', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE'
+      houseAddress: '123 Private Street',
+      provinceCode: 'CAVITE', province: 'CAVITE',
+      cityCode: 'CAVITE|IMUS', city: 'IMUS',
+      barangayCode: 'CAVITE|IMUS|BUCANDALA IV', barangay: 'BUCANDALA IV'
     },
     items: [{ quantity: 1, unitPriceCents: 64900 }],
     subtotalCents: 64900,
@@ -54,6 +57,12 @@ function memoryDependencies(order = websiteOrder(), provider = codProvider()) {
       else process.env.DATABASE_URL = previous;
     },
     syncRepository,
+    geoResolver: async () => ({
+      countryCode: '63',
+      province: { id: '63_826', name: 'Cavite' },
+      district: { id: '63_8261588', name: 'Imus' },
+      commune: { id: '63_82615881238', name: 'Bucandala iv' }
+    }),
     orderRepository: { findOrderByNumber: async (number) => number === order.orderNumber ? order : null },
     client: {
       getOrder: async () => ({ ...providerOrder }),
@@ -146,6 +155,7 @@ test('apply requires explicit order scope and repairs only the selected linked o
       client: dependencies.client,
       orderRepository: dependencies.orderRepository,
       syncRepository: dependencies.syncRepository,
+      geoResolver: dependencies.geoResolver,
       now: () => new Date('2026-07-17T00:03:00.000Z')
     });
 
@@ -179,6 +189,7 @@ test('apply records a safe retryable failure when Pancake rejects the repair', a
       client: dependencies.client,
       orderRepository: dependencies.orderRepository,
       syncRepository: dependencies.syncRepository,
+      geoResolver: dependencies.geoResolver,
       now: () => new Date('2026-07-17T00:03:00.000Z')
     });
 

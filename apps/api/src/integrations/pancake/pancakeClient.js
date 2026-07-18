@@ -96,6 +96,39 @@ function createPancakeClient(config, fetchImpl = fetch) {
     return body;
   }
 
+  async function listGeo(pathname, query) {
+    const body = await request(pathname, query);
+    if (!Array.isArray(body.data)) throw new PancakeApiError('pancake_invalid_response');
+    return body.data.map((item) => ({
+      id: String(item?.id ?? '').trim(),
+      code: String(item?.new_id ?? item?.code ?? '').trim(),
+      name: String(item?.name ?? '').trim(),
+      nameEn: String(item?.name_en ?? '').trim(),
+      provinceId: String(item?.province_id ?? '').trim(),
+      districtId: String(item?.district_id ?? '').trim(),
+      postcode: String(item?.postcode ?? '').trim()
+    })).filter((item) => item.id && item.name);
+  }
+
+  async function listProvinces(countryCode = '63') {
+    const normalized = String(countryCode || '').trim();
+    if (!normalized) throw new PancakeApiError('pancake_invalid_request');
+    return listGeo('/geo/provinces', { country_code: normalized });
+  }
+
+  async function listDistricts(provinceId) {
+    const normalized = String(provinceId || '').trim();
+    if (!normalized) throw new PancakeApiError('pancake_invalid_request');
+    return listGeo('/geo/districts', { province_id: normalized });
+  }
+
+  async function listCommunes(provinceId, districtId) {
+    const province = String(provinceId || '').trim();
+    const district = String(districtId || '').trim();
+    if (!province || !district) throw new PancakeApiError('pancake_invalid_request');
+    return listGeo('/geo/communes', { province_id: province, district_id: district });
+  }
+
   async function createOrder(shopId, payload) {
     const body = await request(shopPath(shopId, '/orders'), {}, {
       method: 'POST',
@@ -174,7 +207,10 @@ function createPancakeClient(config, fetchImpl = fetch) {
   return {
     createOrder,
     getOrder,
+    listCommunes,
+    listDistricts,
     listOrders,
+    listProvinces,
     listShops: () => request('/shops'),
     listWarehouses: (shopId) => listData(shopId, '/warehouses'),
     listOrderSources: (shopId) => listData(shopId, '/order_source'),

@@ -1,6 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+function structuredAddress({ province = 'CAVITE', district = 'IMUS', commune = 'BUCANDALA IV' } = {}) {
+  return {
+    countryCode: '63',
+    province: { id: '63-province', name: province },
+    district: { id: '63-district', name: district },
+    commune: { id: '63-commune', name: commune }
+  };
+}
+
 test('maps known Pancake status names to local status fields', () => {
   const { mapPancakeStatus } = require('../src/integrations/pancake/pancakeOrderMapper');
   assert.deepEqual(mapPancakeStatus('New'), { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' });
@@ -153,14 +162,16 @@ test('builds outbound Pancake order update payload from local order changes', ()
       },
       notes: 'Pack carefully'
     },
-    changedFields: ['status', 'trackingNumber', 'deliveryMethod', 'customer', 'address', 'notes']
+    changedFields: ['status', 'trackingNumber', 'deliveryMethod', 'customer', 'address', 'notes'],
+    addressMapping: structuredAddress({ province: 'Metro Manila', district: 'Makati', commune: 'Barangay One' })
   });
   assert.equal(payload.status, 2);
   assert.equal(payload.partner.extend_code, 'JNT123');
   assert.equal(payload.shipping_partner, 'J&T Express');
   assert.equal(payload.bill_full_name, 'Maria Customer');
   assert.equal(payload.shipping_address.address, '123 Street');
-  assert.equal(payload.shipping_address.commune_name, 'Barangay One');
+  assert.equal(payload.shipping_address.commnue_name, 'Barangay One');
+  assert.equal(payload.shipping_address.commune_id, '63-commune');
   assert.equal(payload.shipping_address.district_name, 'Makati');
   assert.equal(payload.shipping_address.province_name, 'Metro Manila');
   assert.equal(payload.shipping_address.post_code, '1200');
@@ -195,7 +206,8 @@ test('address resync preserves discounted and free-shipping website totals', () 
         province: 'CAVITE', postalCode: '4103'
       }
     },
-    changedFields: ['address']
+    changedFields: ['address'],
+    addressMapping: structuredAddress()
   });
 
   assert.equal(payload.shipping_fee, 0);
@@ -218,7 +230,8 @@ test('address resync preserves the verified PayMongo paid amount', () => {
       customer: { firstName: 'Maria', lastName: 'Buyer', phone: '09171234567' },
       address: { houseAddress: '12 Test', barangay: 'BUCANDALA IV', city: 'IMUS', province: 'CAVITE' }
     },
-    changedFields: ['address']
+    changedFields: ['address'],
+    addressMapping: structuredAddress()
   });
 
   assert.equal(payload.shipping_fee, 120);
@@ -264,4 +277,39 @@ test('normalizes Pancake transfer payments and website status markers safely', (
   });
   assert.equal(unreachable.status, 'unreachable');
   assert.equal(mapPancakeStatus(17).status, 'received');
+});
+
+test('verifies the retrieved Pancake structured address and rejects an empty dropdown ID', () => {
+  const { verifyPancakeStructuredAddress } = require('../src/integrations/pancake/pancakeOrderMapper');
+  const localOrder = {
+    customer: { firstName: 'Juan', lastName: 'Dela Cruz', phone: '+639171234567', email: 'juan@example.com' },
+    address: {
+      houseAddress: '123 Sample Street', barangay: 'Bucandala IV', city: 'Imus City',
+      province: 'Cavite', postalCode: '4103'
+    }
+  };
+  const providerOrder = {
+    bill_full_name: 'Juan Dela Cruz', bill_phone_number: '09171234567', bill_email: 'juan@example.com',
+    shipping_address: {
+      full_name: 'Juan Dela Cruz', phone_number: '09171234567', address: '123 Sample Street',
+      full_address: '123 Sample Street, Bucandala iv, Imus, Cavite, 4103, Philippines',
+      province_id: '63-province', province_name: 'Cavite',
+      district_id: '63-district', district_name: 'Imus',
+      commune_id: '63-commune', commnue_name: 'Bucandala iv',
+      country_code: '63', post_code: '4103'
+    }
+  };
+  const verified = verifyPancakeStructuredAddress({
+    providerOrder, order: localOrder, mapping: structuredAddress()
+  });
+  assert.equal(verified.valid, true);
+  assert.deepEqual(verified.issues, []);
+  assert.equal(verified.persisted.communeId, '63-commune');
+
+  providerOrder.shipping_address.commune_id = '';
+  const invalid = verifyPancakeStructuredAddress({
+    providerOrder, order: localOrder, mapping: structuredAddress()
+  });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.issues.includes('commune_id'));
 });

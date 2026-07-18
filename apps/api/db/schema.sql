@@ -759,19 +759,22 @@ CREATE TABLE IF NOT EXISTS pancake_order_exports (
   id text PRIMARY KEY,
   order_number text NOT NULL REFERENCES orders(order_number) ON DELETE CASCADE,
   mode text NOT NULL DEFAULT 'shadow' CHECK (mode IN ('read_only','shadow','live')),
-  status text NOT NULL CHECK (status IN ('queued','shadow_built','blocked','failed','sent','skipped')),
+  status text NOT NULL CHECK (status IN ('queued','waiting_payment','shadow_built','created_unverified','blocked','failed','sent','skipped')),
   shop_id text NOT NULL DEFAULT '',
   warehouse_id text NOT NULL DEFAULT '',
   order_source_id text NOT NULL DEFAULT '',
   pancake_order_id text NOT NULL DEFAULT '',
   request_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
   response_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  address_mapping jsonb NOT NULL DEFAULT '{}'::jsonb,
+  provider_verification jsonb NOT NULL DEFAULT '{}'::jsonb,
   safe_error_code text NOT NULL DEFAULT '',
   attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
   duration_ms integer NOT NULL DEFAULT 0 CHECK (duration_ms >= 0),
   queued_at timestamptz NOT NULL DEFAULT now(),
   built_at timestamptz,
   sent_at timestamptz,
+  verified_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT pancake_order_exports_order_number_key UNIQUE (order_number)
@@ -779,6 +782,31 @@ CREATE TABLE IF NOT EXISTS pancake_order_exports (
 
 CREATE INDEX IF NOT EXISTS pancake_order_exports_status_idx
   ON pancake_order_exports(status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS pancake_geo_mappings (
+  id text PRIMARY KEY,
+  website_location_type text NOT NULL CHECK (website_location_type IN ('province','city','municipality','barangay')),
+  website_code text NOT NULL,
+  website_name text NOT NULL,
+  website_name_normalized text NOT NULL,
+  website_parent_code text NOT NULL DEFAULT '',
+  pancake_location_type text NOT NULL CHECK (pancake_location_type IN ('province','district','commune')),
+  pancake_id text NOT NULL,
+  pancake_code text NOT NULL DEFAULT '',
+  pancake_name text NOT NULL,
+  pancake_parent_id text NOT NULL DEFAULT '',
+  match_method text NOT NULL CHECK (match_method IN ('stored_id','exact_code','exact_name','approved_alias','manual')),
+  verification_status text NOT NULL CHECK (verification_status IN ('auto_matched','manually_verified','needs_review','not_found','ambiguous')),
+  verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (website_location_type, website_code, website_parent_code)
+);
+
+CREATE INDEX IF NOT EXISTS pancake_geo_mappings_lookup_idx
+  ON pancake_geo_mappings(website_location_type,website_name_normalized,website_parent_code,verification_status);
+CREATE INDEX IF NOT EXISTS pancake_geo_mappings_provider_idx
+  ON pancake_geo_mappings(pancake_location_type,pancake_id,pancake_parent_id);
 
 CREATE TABLE IF NOT EXISTS pancake_order_links (
   id text PRIMARY KEY,

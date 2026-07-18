@@ -2,8 +2,10 @@ const { customerFullName, normalizeCustomerName } = require('../../customers/cus
 const {
   canonicalDeliveryAddress,
   formatDeliveryAddress,
-  hasCompleteDeliveryInformation
+  hasCompleteDeliveryInformation,
+  normalizePhilippineMobile
 } = require('../../checkout/deliveryDetails');
+const { normalizeLocationName } = require('./pancakeGeoService');
 
 const STATUS_MAP = new Map([
   ['new', { status: 'received', fulfillmentStatus: 'unfulfilled', deliveryStatus: 'pending' }],
@@ -150,18 +152,109 @@ function buildPancakeOrderFinancialPayload(order = {}) {
   };
 }
 
-function buildPancakeShippingAddress(order = {}) {
+function resolvedGeoField(address, mapping, level, field) {
+  const title = level[0].toUpperCase() + level.slice(1);
+  return String(
+    mapping?.[level]?.[field]
+      || address[`pancake${title}${field === 'id' ? 'Id' : field === 'name' ? 'Name' : 'Code'}`]
+      || ''
+  ).trim();
+}
+
+function buildPancakeShippingAddress(order = {}, mapping = {}) {
   const address = canonicalDeliveryAddress(order.address || {});
   const customer = order.customer || {};
+  const provinceId = resolvedGeoField(address, mapping, 'province', 'id');
+  const districtId = resolvedGeoField(address, mapping, 'district', 'id');
+  const communeId = resolvedGeoField(address, mapping, 'commune', 'id');
+  if (!provinceId || !districtId || !communeId) {
+    const error = new Error('Pancake structured address mapping is incomplete.');
+    error.code = 'pancake_order_address_mapping_missing';
+    error.status = 409;
+    throw error;
+  }
   return {
     full_name: customerFullName(customer),
-    phone_number: String(customer.phone || '').trim(),
+    phone_number: normalizePhilippineMobile(customer.phone),
     address: String(address.houseAddress || '').trim(),
     full_address: formatDeliveryAddress(address),
-    commune_name: String(address.barangay || '').trim(),
-    district_name: String(address.city || '').trim(),
-    province_name: String(address.province || '').trim(),
+    province_id: provinceId,
+    province_name: resolvedGeoField(address, mapping, 'province', 'name') || String(address.province || '').trim(),
+    district_id: districtId,
+    district_name: resolvedGeoField(address, mapping, 'district', 'name') || String(address.city || '').trim(),
+    commune_id: communeId,
+    // Pancake's current OpenAPI schema intentionally spells this key
+    // "commnue_name". Sending "commune_name" does not bind the Ant Select.
+    commnue_name: resolvedGeoField(address, mapping, 'commune', 'name') || String(address.barangay || '').trim(),
+    country_code: String(mapping.countryCode || address.pancakeCountryCode || '63'),
     post_code: String(address.postalCode || '').trim() || null
+  };
+}
+
+function providerShippingAddress(providerOrder = {}) {
+  return providerOrder.shipping_address || providerOrder.shippingAddress || {};
+}
+
+function verifyPancakeStructuredAddress({ providerOrder = {}, order = {}, mapping = {} } = {}) {
+  const shipping = providerShippingAddress(providerOrder);
+  const expected = buildPancakeShippingAddress(order, mapping);
+  const issues = [];
+  const compare = (field, expectedValue, actualValue) => {
+    if (String(actualValue ?? '').trim() !== String(expectedValue ?? '').trim()) issues.push(field);
+  };
+  compare('province_id', expected.province_id, shipping.province_id);
+  compare('district_id', expected.district_id, shipping.district_id);
+  compare('commune_id', expected.commune_id, shipping.commune_id);
+  compare('country_code', expected.country_code, shipping.country_code);
+
+  const nameChecks = [
+    ['province_name', expected.province_name, shipping.province_name],
+    ['district_name', expected.district_name, shipping.district_name],
+    ['commnue_name', expected.commnue_name, shipping.commnue_name || shipping.commune_name]
+  ];
+  for (const [field, expectedName, actualName] of nameChecks) {
+    if (normalizeLocationName(expectedName) !== normalizeLocationName(actualName)) issues.push(field);
+  }
+
+  const expectedPhone = normalizePhilippineMobile(order.customer?.phone);
+  const actualPhone = normalizePhilippineMobile(shipping.phone_number || providerOrder.bill_phone_number);
+  if (!expectedPhone || actualPhone !== expectedPhone) issues.push('phone_number');
+  if (String(order.customer?.email || '').trim()
+    && String(providerOrder.bill_email || '').trim().toLowerCase() !== String(order.customer.email).trim().toLowerCase()) {
+    issues.push('bill_email');
+  }
+  if (customerFullName(order.customer)
+    && normalizeLocationName(providerOrder.bill_full_name || shipping.full_name) !== normalizeLocationName(customerFullName(order.customer))) {
+    issues.push('full_name');
+  }
+
+  const fullAddress = String(shipping.full_address || shipping.new_full_address || '').trim();
+  const requiredAddressParts = [
+    expected.address, expected.commnue_name, expected.district_name, expected.province_name
+  ].map(normalizeLocationName).filter(Boolean);
+  const normalizedFullAddress = normalizeLocationName(fullAddress);
+  if (!fullAddress || requiredAddressParts.some((part) => !normalizedFullAddress.includes(part))) {
+    issues.push('full_address');
+  }
+  if (expected.post_code && String(shipping.post_code || '').trim() !== expected.post_code) issues.push('post_code');
+
+  return {
+    valid: issues.length === 0,
+    issues: [...new Set(issues)],
+    verifiedAt: new Date().toISOString(),
+    persisted: {
+      provinceId: String(shipping.province_id || ''),
+      provinceName: String(shipping.province_name || ''),
+      districtId: String(shipping.district_id || ''),
+      districtName: String(shipping.district_name || ''),
+      communeId: String(shipping.commune_id || ''),
+      communeName: String(shipping.commnue_name || shipping.commune_name || ''),
+      countryCode: String(shipping.country_code || ''),
+      postCode: String(shipping.post_code || ''),
+      phoneNumber: actualPhone,
+      fullAddress,
+      email: String(providerOrder.bill_email || '').trim().toLowerCase()
+    }
   };
 }
 
@@ -379,7 +472,7 @@ function normalizePancakeOrder(payload = {}) {
   };
 }
 
-function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {}) {
+function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [], addressMapping = {} } = {}) {
   if (!hasCompleteDeliveryInformation(order)) {
     const error = new Error('Order cannot sync because the delivery address is incomplete.');
     error.code = 'pancake_order_delivery_incomplete';
@@ -399,11 +492,11 @@ function buildPancakeOrderUpdatePayload({ order = {}, changedFields = [] } = {})
   }
   if (fields.has('customer')) {
     payload.bill_full_name = customerFullName(order.customer);
-    payload.bill_phone_number = String(order.customer?.phone || '').trim();
+    payload.bill_phone_number = normalizePhilippineMobile(order.customer?.phone);
     payload.bill_email = String(order.customer?.email || '').trim().toLowerCase();
   }
   if (fields.has('address')) {
-    payload.shipping_address = buildPancakeShippingAddress(order);
+    payload.shipping_address = buildPancakeShippingAddress(order, addressMapping);
     // Pancake can recalculate shipping when an address is changed. Always
     // resend the website-owned financial snapshot with an address update so
     // a provider default cannot replace the committed order totals.
@@ -425,5 +518,6 @@ module.exports = {
   buildPancakeOrderUpdatePayload,
   buildPancakePaymentPayload,
   mapPancakeStatus,
-  normalizePancakeOrder
+  normalizePancakeOrder,
+  verifyPancakeStructuredAddress
 };

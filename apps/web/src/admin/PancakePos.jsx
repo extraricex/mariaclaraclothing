@@ -6,6 +6,7 @@ const base = '/api/admin/integrations/pancake';
 const connectionStatusEndpoint = '/api/admin/integrations/pancake/status';
 const testConnectionEndpoint = '/api/admin/integrations/pancake/test-connection';
 const display = (value) => value === true ? 'Configured' : value === false ? 'Not configured' : (value === null || value === undefined || value === '' ? 'Not set' : value);
+const dateInput = (date) => new Date(date).toISOString().slice(0, 10);
 
 function Metric({ label, value, tone = 'text-[var(--admin-text)]' }) {
   return <div className="admin-metric-card">
@@ -53,6 +54,12 @@ export default function PancakePos() {
   const [conflictOnly, setConflictOnly] = useState(false);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
+  const [addressRange, setAddressRange] = useState({
+    from: dateInput(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    to: dateInput(Date.now())
+  });
+  const [addressPreview, setAddressPreview] = useState(null);
+  const [selectedAddressOrders, setSelectedAddressOrders] = useState([]);
 
   const loadMappings = useCallback(async (nextSearch = '', nextConflict = false) => {
     const query = new URLSearchParams({ page: '1', pageSize: '50', search: nextSearch, conflictOnly: String(nextConflict) });
@@ -143,6 +150,28 @@ export default function PancakePos() {
 
   const refreshStatus = () => run('refresh', loadAll);
 
+  const previewAddressReconciliation = () => run('address-preview', async () => {
+    const body = await adminSend('POST', `${base}/address-reconciliation/preview`, {
+      from: addressRange.from ? `${addressRange.from}T00:00:00+08:00` : '',
+      to: addressRange.to ? `${addressRange.to}T23:59:59+08:00` : '',
+      limit: 100
+    });
+    setAddressPreview(body.preview);
+    setSelectedAddressOrders((body.preview.items || []).filter((item) => item.canApply).map((item) => item.orderNumber));
+    setMessage(`Preview complete: ${body.preview.incompleteCount} incomplete linked Pancake order(s), ${body.preview.applicableCount} safe to update.`);
+  });
+
+  const applyAddressReconciliation = () => run('address-apply', async () => {
+    if (!selectedAddressOrders.length) throw new Error('Select at least one mapped Pancake order.');
+    if (!window.confirm(`Update and retrieve ${selectedAddressOrders.length} existing Pancake order(s)? No orders will be recreated.`)) return;
+    const body = await adminSend('POST', `${base}/address-reconciliation/apply`, {
+      orderNumbers: selectedAddressOrders,
+      confirmed: true
+    });
+    setMessage(`Address reconciliation finished: ${body.reconciliation.verifiedCount} verified, ${body.reconciliation.blockedCount} blocked.`);
+    await previewAddressReconciliation();
+  });
+
   const summary = catalog?.summary || {};
   const inventorySummary = inventory?.summary || {};
   const orderSummary = orderExports?.summary || {};
@@ -183,13 +212,15 @@ export default function PancakePos() {
               <h2 className="text-base font-bold text-[var(--admin-text)]">Order sync</h2>
               <StatusPill tone={healthTone}>{healthTone === 'good' ? 'Healthy' : 'Needs review'}</StatusPill>
             </div>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">New website orders are sent to Pancake immediately in live mode. Sent means live Pancake order created.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">COD orders are sent immediately; PayMongo orders wait for verified payment. Sent means the live Pancake order was retrieved and its structured address passed verification.</p>
           </div>
           <button type="button" className="btn-outline" disabled={syncBusy} onClick={buildShadowOrders}>{busy === 'orders' ? 'Checking...' : 'Check orders'}</button>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <MiniMetric label="Queued" value={orderSummary.queuedCount ?? 0} />
+          <MiniMetric label="Waiting payment" value={orderSummary.waitingPaymentCount ?? 0} />
+          <MiniMetric label="Created / unverified" value={orderSummary.createdUnverifiedCount ?? 0} tone={Number(orderSummary.createdUnverifiedCount || 0) > 0 ? 'text-[var(--admin-red)]' : 'text-[var(--admin-text)]'} />
           <MiniMetric label="Sent" value={orderSummary.sentCount ?? 0} tone="text-[var(--admin-green)]" />
           <MiniMetric label="Failed" value={orderSummary.failedCount ?? 0} tone={Number(orderSummary.failedCount || 0) > 0 ? 'text-[var(--admin-red)]' : 'text-[var(--admin-text)]'} />
           <MiniMetric label="Blocked" value={orderSummary.blockedCount ?? 0} tone={Number(orderSummary.blockedCount || 0) > 0 ? 'text-[var(--admin-red)]' : 'text-[var(--admin-text)]'} />
@@ -220,6 +251,50 @@ export default function PancakePos() {
           </table>
           {!orderExports?.recent?.length && <p className="p-4 text-sm text-[var(--admin-muted)]">No order sync records yet.</p>}
         </div>
+      </section>
+
+      <section className="admin-panel mt-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-[var(--admin-text)]">Existing order address reconciliation</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--admin-muted)]">Preview linked orders whose Pancake Province, District, Commune, phone, or full address is incomplete. Updates require explicit selection and are verified by retrieving the same Pancake order afterward.</p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-[var(--admin-muted)]">From<input className="input mt-1 block" type="date" value={addressRange.from} onChange={(event) => setAddressRange((value) => ({ ...value, from: event.target.value }))} /></label>
+            <label className="text-xs text-[var(--admin-muted)]">To<input className="input mt-1 block" type="date" value={addressRange.to} onChange={(event) => setAddressRange((value) => ({ ...value, to: event.target.value }))} /></label>
+            <button type="button" className="btn-outline" disabled={syncBusy} onClick={previewAddressReconciliation}>{busy === 'address-preview' ? 'Checking...' : 'Preview affected orders'}</button>
+          </div>
+        </div>
+
+        {addressPreview && <>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <MiniMetric label="Orders scanned" value={addressPreview.scannedCount} />
+            <MiniMetric label="Incomplete in Pancake" value={addressPreview.incompleteCount} tone={addressPreview.incompleteCount ? 'text-[var(--admin-red)]' : 'text-[var(--admin-green)]'} />
+            <MiniMetric label="Resolved and safe" value={addressPreview.applicableCount} tone="text-[var(--admin-green)]" />
+          </div>
+          <div className="admin-table-shell mt-4 overflow-x-auto">
+            <table className="w-full min-w-[1120px] text-left text-xs">
+              <thead><tr className="border-b border-[var(--admin-line)] uppercase tracking-[0.1em] text-[var(--admin-muted)]">
+                <th className="p-3">Update</th><th className="p-3">Order</th><th className="p-3">Website address</th><th className="p-3">Current Pancake address</th><th className="p-3">Proposed mapping</th><th className="p-3">Status</th>
+              </tr></thead>
+              <tbody>{(addressPreview.items || []).map((item) => {
+                const checked = selectedAddressOrders.includes(item.orderNumber);
+                return <tr key={item.orderNumber} className="border-b border-[var(--admin-line)] last:border-0">
+                  <td className="p-3"><input type="checkbox" disabled={!item.canApply} checked={checked} onChange={(event) => setSelectedAddressOrders((values) => event.target.checked ? [...new Set([...values, item.orderNumber])] : values.filter((value) => value !== item.orderNumber))} /></td>
+                  <td className="p-3 font-mono"><Link className="underline" to={`/admin/orders/${encodeURIComponent(item.orderNumber)}`}>{item.orderNumber}</Link><span className="mt-1 block text-[10px] text-[var(--admin-muted)]">{item.pancakeOrderId}</span></td>
+                  <td className="p-3">{[item.websiteAddress.street, item.websiteAddress.barangay, item.websiteAddress.city, item.websiteAddress.province, item.websiteAddress.postalCode].filter(Boolean).join(', ')}</td>
+                  <td className="p-3">{[item.currentPancakeAddress.communeName, item.currentPancakeAddress.districtName, item.currentPancakeAddress.provinceName].filter(Boolean).join(', ') || 'Structured fields missing'}</td>
+                  <td className="p-3">{item.proposedMapping ? `${item.proposedMapping.commune.name}, ${item.proposedMapping.district.name}, ${item.proposedMapping.province.name}` : 'No safe mapping'}</td>
+                  <td className="p-3">{item.mappingStatus.replaceAll('_', ' ')}{item.safeErrorCode && <span className="mt-1 block text-[var(--admin-red)]">{item.safeErrorCode.replaceAll('_', ' ')}</span>}</td>
+                </tr>;
+              })}</tbody>
+            </table>
+            {!addressPreview.items?.length && <p className="p-4 text-sm text-[var(--admin-muted)]">No incomplete linked Pancake addresses were found in this date range.</p>}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button type="button" className="btn-ink" disabled={syncBusy || !selectedAddressOrders.length} onClick={applyAddressReconciliation}>{busy === 'address-apply' ? 'Updating...' : `Confirm Update (${selectedAddressOrders.length})`}</button>
+          </div>
+        </>}
       </section>
 
       <section className="admin-panel mt-5">

@@ -147,15 +147,26 @@ async function getOrderSyncDetail(orderNumber) {
     };
   }
   const link = await query('SELECT * FROM pancake_order_links WHERE order_number=$1', [normalized]);
-  const [logs, events] = await Promise.all([
+  const [logs, events, exportResult] = await Promise.all([
     query('SELECT * FROM pancake_sync_logs WHERE order_number=$1 ORDER BY created_at DESC LIMIT 10', [normalized]),
     query(`SELECT * FROM pancake_sync_events
       WHERE order_number=$1 AND direction='outbound'
-      ORDER BY created_at DESC LIMIT 50`, [normalized])
+      ORDER BY created_at DESC LIMIT 50`, [normalized]),
+    query(`SELECT status,pancake_order_id,address_mapping,provider_verification,
+             response_payload,safe_error_code,updated_at,verified_at
+           FROM pancake_order_exports WHERE order_number=$1`, [normalized])
   ]);
+  const exportRow = exportResult.rows[0] || {};
   return {
     ...(rowLink(link.rows[0]) || { orderNumber: normalized, syncStatus: 'not_linked' }),
     ...syncBreakdown(events.rows.map(rowEvent)),
+    exportStatus: exportRow.status || 'not_queued',
+    addressMapping: exportRow.address_mapping || {},
+    addressVerification: exportRow.provider_verification || {},
+    pancakeAddressSnapshot: exportRow.response_payload || {},
+    addressMappingError: exportRow.safe_error_code || '',
+    addressVerifiedAt: iso(exportRow.verified_at),
+    exportUpdatedAt: iso(exportRow.updated_at),
     recentLogs: logs.rows.map((row) => ({
       id: row.id,
       level: row.level,

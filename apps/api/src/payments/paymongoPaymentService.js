@@ -5,6 +5,7 @@ const { restockVariantStock } = require('../products/catalogRepository');
 const { appendInventoryMovements } = require('../inventory/inventoryMovementRepository');
 const pancakeInventoryOutboxRepository = require('../integrations/pancake/pancakeInventoryOutboxRepository');
 const pancakeOrderSyncRepository = require('../integrations/pancake/pancakeOrderSyncRepository');
+const pancakeOrderExportRepository = require('../integrations/pancake/pancakeOrderExportRepository');
 const { buildMetaPurchaseEvent } = require('../marketing/metaEvent');
 const { insertMetaPurchaseOutbox } = require('../marketing/marketingEventOutboxRepository');
 const { queueMetaPurchase } = require('../marketing/metaPurchaseService');
@@ -188,6 +189,8 @@ async function processPaidWebhook(payload, {
     enqueueCustomerConfirmation
   }));
   if (result.status === 'paid' || result.status === 'duplicate') {
+    const paidOrder = result.order || await findOrderByNumber(result.orderNumber, { includeRelated: false });
+    if (paidOrder) await pancakeOrderExportRepository.enqueueOrderExport(paidOrder);
     await pancakeOrderSyncRepository.backfillSentOrderExportLinks?.({ limit: 100 });
     const link = await pancakeOrderSyncRepository.getOrderSyncDetail(result.orderNumber);
     const syncEvent = await pancakeOrderSyncRepository.enqueueSyncEvent({

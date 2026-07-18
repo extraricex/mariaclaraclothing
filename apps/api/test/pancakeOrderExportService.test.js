@@ -53,9 +53,44 @@ function readiness(overrides = {}) {
   };
 }
 
+function addressMapping() {
+  return {
+    countryCode: '63',
+    province: { id: '63_826', code: '', name: 'Cavite' },
+    district: { id: '63_8261588', code: '', name: 'Imus' },
+    commune: { id: '63_82615881238', code: '', name: 'Bucandala iv' },
+    mappingStatus: 'resolved'
+  };
+}
+
+function verifiedProviderOrder(input = order()) {
+  return {
+    id: '987654',
+    bill_full_name: input.customer.fullName,
+    bill_phone_number: input.customer.phone,
+    bill_email: input.customer.email,
+    shipping_address: {
+      full_name: input.customer.fullName,
+      phone_number: input.customer.phone,
+      address: input.address.houseAddress,
+      full_address: `${input.address.houseAddress}, Bucandala iv, Imus, Cavite, 4103, Philippines`,
+      province_id: '63_826',
+      province_name: 'Cavite',
+      district_id: '63_8261588',
+      district_name: 'Imus',
+      commune_id: '63_82615881238',
+      commnue_name: 'Bucandala iv',
+      country_code: '63',
+      post_code: '4103'
+    }
+  };
+}
+
+const resolveAddress = async () => addressMapping();
+
 test('builds a Pancake shadow order payload from a mapped COD order', () => {
   const { buildPancakeOrderPayload } = require('../src/integrations/pancake/pancakeOrderExportService');
-  const payload = buildPancakeOrderPayload(order(), readiness());
+  const payload = buildPancakeOrderPayload(order(), readiness(), addressMapping());
 
   assert.equal(payload.shop_id, 123);
   assert.equal(payload.warehouse_id, 'wh-1');
@@ -67,11 +102,14 @@ test('builds a Pancake shadow order payload from a mapped COD order', () => {
   assert.equal(payload.shipping_address.phone_number, '09171234567');
   assert.equal(payload.shipping_address.address, '12 Test St');
   assert.match(payload.shipping_address.full_address, /BUCANDALA IV/);
-  assert.equal(payload.shipping_address.commune_name, 'BUCANDALA IV');
-  assert.equal(payload.shipping_address.district_name, 'IMUS');
-  assert.equal(payload.shipping_address.province_name, 'CAVITE');
+  assert.equal(payload.shipping_address.commnue_name, 'Bucandala iv');
+  assert.equal(payload.shipping_address.commune_id, '63_82615881238');
+  assert.equal(payload.shipping_address.district_name, 'Imus');
+  assert.equal(payload.shipping_address.district_id, '63_8261588');
+  assert.equal(payload.shipping_address.province_name, 'Cavite');
+  assert.equal(payload.shipping_address.province_id, '63_826');
   assert.equal(payload.shipping_address.post_code, '4103');
-  assert.equal(Object.hasOwn(payload.shipping_address, 'country_code'), false);
+  assert.equal(payload.shipping_address.country_code, '63');
   assert.equal(payload.items[0].product_id, 'pp-1');
   assert.equal(payload.items[0].variation_id, 'pv-1');
   assert.equal(payload.items[0].quantity, 2);
@@ -90,27 +128,20 @@ test('builds a Pancake shadow order payload from a mapped COD order', () => {
   assert.match(payload.note_print, /cod_amount=1380/);
 });
 
-test('builds PayMongo orders as non-COD and exports a verified paid amount only after payment', () => {
+test('blocks pending PayMongo and exports only after a verified paid amount', () => {
   const { buildPancakeOrderPayload } = require('../src/integrations/pancake/pancakeOrderExportService');
-  const pending = buildPancakeOrderPayload(order({
+  assert.throws(() => buildPancakeOrderPayload(order({
     paymentMethod: 'paymongo', paymentStatus: 'pending_payment', totalCents: 148000,
     providerCheckoutSessionId: 'cs_test_1'
-  }), readiness());
-  assert.equal(pending.cod, 0);
-  assert.equal(pending.transfer_money, 0);
-  assert.equal(pending.shipping_address.commune_name, 'BUCANDALA IV');
-  assert.equal(pending.shipping_address.district_name, 'IMUS');
-  assert.equal(pending.shipping_address.province_name, 'CAVITE');
-  assert.match(pending.note_print, /payment_method=paymongo/);
-  assert.match(pending.note_print, /paymongo_checkout_session_id=cs_test_1/);
+  }), readiness(), addressMapping()), (error) => error.code === 'pancake_order_waiting_payment');
 
   const paid = buildPancakeOrderPayload(order({
     paymentMethod: 'paymongo', paymentStatus: 'paid', totalCents: 148000,
     paidAmountCents: 148000, providerCheckoutSessionId: 'cs_test_1', providerPaymentId: 'pay_test_1'
-  }), readiness());
+  }), readiness(), addressMapping());
   assert.equal(paid.cod, 0);
   assert.equal(paid.transfer_money, 1480);
-  assert.equal(paid.shipping_address.full_address, pending.shipping_address.full_address);
+  assert.match(paid.shipping_address.full_address, /BUCANDALA IV/);
   assert.match(paid.note_print, /payment_status=paid/);
   assert.match(paid.note_print, /paymongo_payment_id=pay_test_1/);
 });
@@ -166,6 +197,7 @@ test('shadow build completes mapped exports and blocks invalid orders', async ()
   const result = await runOrderShadowBuild({
     config: { mode: 'shadow' },
     repository,
+    geoResolver: resolveAddress,
     now: () => new Date('2026-07-07T00:00:00Z')
   });
 
@@ -188,7 +220,7 @@ test('shadow build asks the repository to queue existing local orders before pro
     blockOrderExport: async () => {}
   };
 
-  await runOrderShadowBuild({ config: { mode: 'shadow' }, repository });
+  await runOrderShadowBuild({ config: { mode: 'shadow' }, repository, geoResolver: resolveAddress });
   assert.deepEqual(calls, ['enqueueMissing']);
 });
 
@@ -213,7 +245,8 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
     createOrder: async (shopId, payload) => {
       calls.push(['createOrder', shopId, payload.custom_id]);
       return { pancakeOrderId: '987654' };
-    }
+    },
+    getOrder: async () => verifiedProviderOrder()
   };
 
   const result = await runOrderLiveExport({
@@ -222,6 +255,7 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
     repository,
     syncRepository,
     inventoryOutboxRepository,
+    geoResolver: resolveAddress,
     now: () => new Date('2026-07-08T00:00:00Z')
   });
 
@@ -229,18 +263,64 @@ test('live export sends mapped queued orders to Pancake and marks them sent', as
   assert.deepEqual(result.summary, { checkedCount: 1, sentCount: 1, blockedCount: 0, failedCount: 0 });
   assert.deepEqual(calls[0], ['enqueueMissing']);
   assert.deepEqual(calls[1], ['createOrder', '123', 'MCC-1001']);
-  assert.equal(calls[2][0], 'sent');
-  assert.equal(calls[2][1].mode, 'live');
-  assert.equal(calls[2][1].pancakeOrderId, '987654');
-  assert.equal(calls[2][1].requestPayload.bill_phone_number, '0917****567');
-  assert.deepEqual(calls[3], ['link', {
+  assert.equal(calls[2][0], 'link');
+  assert.equal(calls[2][1].syncStatus, 'pending_sync');
+  assert.equal(calls[3][0], 'sent');
+  assert.equal(calls[3][1].mode, 'live');
+  assert.equal(calls[3][1].pancakeOrderId, '987654');
+  assert.equal(calls[3][1].requestPayload.bill_phone_number, '0917****567');
+  assert.equal(calls[3][1].providerVerification.valid, true);
+  assert.deepEqual(calls[4], ['link', {
     orderNumber: 'MCC-1001',
     pancakeOrderId: '987654',
     shopId: '123',
     syncStatus: 'synced',
     lastSyncedAt: '2026-07-08T00:00:00.000Z'
   }]);
-  assert.deepEqual(calls[4], ['inventory', ['shirt'], 'website_order', { maxAttempts: 10 }]);
+  assert.deepEqual(calls[5], ['inventory', ['shirt'], 'website_order', { maxAttempts: 10 }]);
+});
+
+test('live retry verifies an already-created Pancake order without creating a duplicate', async () => {
+  const { runOrderLiveExport } = require('../src/integrations/pancake/pancakeOrderExportService');
+  const calls = [];
+  const repository = {
+    loadOrderExportReadiness: async () => readiness(),
+    loadOrderExportWorkItem: async () => ({
+      orderNumber: 'MCC-RETRY',
+      pancakeOrderId: 'existing-987654',
+      order: order({ orderNumber: 'MCC-RETRY' })
+    }),
+    saveOrderAddressMapping: async () => {},
+    markOrderExportSent: async (record) => calls.push(['sent', record.pancakeOrderId]),
+    markOrderExportFailed: async () => {},
+    blockOrderExport: async () => {}
+  };
+  const client = {
+    createOrder: async () => {
+      throw new Error('retry must not create a second Pancake order');
+    },
+    getOrder: async (shopId, pancakeOrderId) => {
+      calls.push(['getOrder', shopId, pancakeOrderId]);
+      return verifiedProviderOrder(order({ orderNumber: 'MCC-RETRY' }));
+    }
+  };
+  const syncRepository = {
+    upsertOrderLink: async (record) => calls.push(['link', record.syncStatus])
+  };
+
+  const result = await runOrderLiveExport({
+    config: { mode: 'live' }, client, repository, syncRepository,
+    inventoryOutboxRepository: { enqueueInventorySync: async () => {} },
+    geoResolver: resolveAddress,
+    orderNumber: 'MCC-RETRY'
+  });
+
+  assert.deepEqual(result.summary, { checkedCount: 1, sentCount: 1, blockedCount: 0, failedCount: 0 });
+  assert.deepEqual(calls, [
+    ['getOrder', '123', 'existing-987654'],
+    ['sent', 'existing-987654'],
+    ['link', 'synced']
+  ]);
 });
 
 test('live export backfills missing links for already sent Pancake exports', async () => {
@@ -259,6 +339,7 @@ test('live export backfills missing links for already sent Pancake exports', asy
     config: { mode: 'live' },
     client: { createOrder: async () => { throw new Error('should not create'); } },
     repository,
+    geoResolver: resolveAddress,
     syncRepository,
     limit: 25
   });
@@ -300,7 +381,9 @@ test('live export blocks mapping errors and fails provider errors safely', async
   };
   const client = { createOrder: async () => { throw clientError; } };
 
-  const result = await runOrderLiveExport({ config: { mode: 'live' }, client, repository });
+  const result = await runOrderLiveExport({
+    config: { mode: 'live' }, client, repository, geoResolver: resolveAddress
+  });
 
   assert.deepEqual(result.summary, { checkedCount: 2, sentCount: 0, blockedCount: 1, failedCount: 1 });
   assert.deepEqual(calls, [
@@ -332,16 +415,21 @@ test('live export can send one specific queued order for realtime checkout', asy
   const inventoryOutboxRepository = {
     enqueueInventorySync: async (slugs, source) => calls.push(['inventory', slugs, source])
   };
-  const client = { createOrder: async () => ({ pancakeOrderId: '12345' }) };
+  const client = {
+    createOrder: async () => ({ pancakeOrderId: '12345' }),
+    getOrder: async () => verifiedProviderOrder(order({ orderNumber: 'MCC-REALTIME' }))
+  };
 
   const result = await runOrderLiveExport({
     config: { mode: 'live' }, client, repository, syncRepository, inventoryOutboxRepository,
+    geoResolver: resolveAddress,
     orderNumber: 'MCC-REALTIME'
   });
 
   assert.deepEqual(result.summary, { checkedCount: 1, sentCount: 1, blockedCount: 0, failedCount: 0 });
   assert.deepEqual(calls, [
-    ['loadOne', 'MCC-REALTIME'], ['sent', 'MCC-REALTIME'], ['link', 'MCC-REALTIME', '12345'],
+    ['loadOne', 'MCC-REALTIME'], ['link', 'MCC-REALTIME', '12345'],
+    ['sent', 'MCC-REALTIME'], ['link', 'MCC-REALTIME', '12345'],
     ['inventory', ['shirt'], 'website_order']
   ]);
 });
@@ -363,5 +451,5 @@ test('live export skips a specific order when no unsent export row exists', asyn
 
 function buildFixturePayload() {
   const { buildPancakeOrderPayload } = require('../src/integrations/pancake/pancakeOrderExportService');
-  return buildPancakeOrderPayload(order(), readiness());
+  return buildPancakeOrderPayload(order(), readiness(), addressMapping());
 }

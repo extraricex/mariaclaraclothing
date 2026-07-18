@@ -2,6 +2,8 @@ const crypto = require('node:crypto');
 
 const orderRepositoryDefault = require('../../orders/orderRepository');
 const syncRepositoryDefault = require('./pancakeOrderSyncRepository');
+const geoRepositoryDefault = require('./pancakeGeoRepository');
+const { resolvePancakeAddress } = require('./pancakeGeoService');
 const {
   buildPancakeOrderFinancialPayload,
   buildPancakeOrderUpdatePayload,
@@ -164,6 +166,8 @@ async function repairMismatch({
   config,
   client,
   syncRepository,
+  geoRepository,
+  geoResolver,
   now
 }) {
   const identity = {
@@ -195,9 +199,11 @@ async function repairMismatch({
   }
 
   try {
+    const addressMapping = await geoResolver(order.address, { client, repository: geoRepository });
     const payload = buildPancakeOrderUpdatePayload({
       order,
-      changedFields: ['address', 'paymentMethod', 'paymentStatus']
+      changedFields: ['address', 'paymentMethod', 'paymentStatus'],
+      addressMapping
     });
     await client.updateOrder(config.shopId, link.pancakeOrderId, payload);
     const providerOrder = await client.getOrder(config.shopId, link.pancakeOrderId);
@@ -244,6 +250,8 @@ async function reconcilePancakeOrderFinancials({
   client,
   orderRepository = orderRepositoryDefault,
   syncRepository = syncRepositoryDefault,
+  geoRepository = geoRepositoryDefault,
+  geoResolver = resolvePancakeAddress,
   now = () => new Date()
 }) {
   const scope = uniqueOrderNumbers(orderNumbers);
@@ -308,7 +316,8 @@ async function reconcilePancakeOrderFinancials({
     }
 
     const repaired = await repairMismatch({
-      order, link, initialAudit: audit, config, client, syncRepository, now: now()
+      order, link, initialAudit: audit, config, client, syncRepository,
+      geoRepository, geoResolver, now: now()
     });
     const result = publicAuditResult(orderNumber, link.pancakeOrderId, repaired.audit, repaired.status);
     if (repaired.safeErrorCode) result.safeErrorCode = repaired.safeErrorCode;
