@@ -23,7 +23,8 @@ function createPancakeClient(config, fetchImpl = fetch) {
     url.searchParams.set('api_key', config.apiKey);
     Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, String(value)));
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+    const timeoutMs = Number(options.timeoutMs || config.timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let response;
     try {
       response = await fetchImpl(url.toString(), {
@@ -133,7 +134,8 @@ function createPancakeClient(config, fetchImpl = fetch) {
     const body = await request(shopPath(shopId, '/orders'), {}, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload || {})
+      body: JSON.stringify(payload || {}),
+      timeoutMs: config.orderCreateTimeoutMs || config.timeoutMs
     });
     const id = body.id ?? body.data?.id ?? body.order?.id;
     if (id === undefined || id === null || String(id).trim() === '') {
@@ -149,6 +151,7 @@ function createPancakeClient(config, fetchImpl = fetch) {
       throw new PancakeApiError('pancake_invalid_request');
     }
     const params = { page_number: pageNumber, page_size: pageSize };
+    if (options.search) params.search = String(options.search).trim();
     if (options.updatedSince || options.updatedUntil) {
       const start = options.updatedSince ? new Date(options.updatedSince) : null;
       const end = options.updatedUntil ? new Date(options.updatedUntil) : null;
@@ -163,6 +166,13 @@ function createPancakeClient(config, fetchImpl = fetch) {
     const body = await request(shopPath(shopId, '/orders'), params);
     if (!Array.isArray(body.data)) throw new PancakeApiError('pancake_invalid_response');
     return body;
+  }
+
+  async function findOrdersByCustomId(shopId, customId) {
+    const normalized = String(customId || '').trim();
+    if (!normalized) throw new PancakeApiError('pancake_invalid_request');
+    const body = await listOrders(shopId, { pageNumber: 1, pageSize: 100, search: normalized });
+    return body.data.filter((item) => String(item?.custom_id ?? item?.customId ?? '').trim() === normalized);
   }
 
   async function getOrder(shopId, orderId) {
@@ -206,6 +216,7 @@ function createPancakeClient(config, fetchImpl = fetch) {
 
   return {
     createOrder,
+    findOrdersByCustomId,
     getOrder,
     listCommunes,
     listDistricts,

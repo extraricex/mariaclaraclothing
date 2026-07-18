@@ -264,6 +264,41 @@ async function runOrderLiveExport({
         const existingLink = await syncRepository.getOrderSyncDetail?.(item.orderNumber);
         pancakeOrderId = String(existingLink?.pancakeOrderId || '').trim();
       }
+      if (!pancakeOrderId && client.findOrdersByCustomId) {
+        const providerMatches = await client.findOrdersByCustomId(readiness.shopId, item.orderNumber);
+        if (providerMatches.length > 1) {
+          await repository.blockOrderExport(item.orderNumber, 'pancake_order_duplicate_ambiguous');
+          await syncRepository.appendSyncLog?.({
+            direction: 'outbound', entityType: 'order', entityId: item.orderNumber,
+            orderNumber: item.orderNumber, level: 'error', code: 'pancake_order_duplicate_ambiguous',
+            message: 'More than one Pancake order has this exact website order number; no additional order was created.'
+          });
+          summary.blockedCount += 1;
+          continue;
+        }
+        pancakeOrderId = String(providerMatches[0]?.id || '').trim();
+        if (pancakeOrderId) {
+          await repository.markOrderExportCreated?.({
+            orderNumber: item.orderNumber,
+            mode: 'live',
+            shopId: String(readiness.shopId || ''),
+            warehouseId: String(readiness.warehouseId || ''),
+            orderSourceId: String(readiness.orderSourceId || ''),
+            pancakeOrderId,
+            requestPayload: redactPancakeOrderPayload(request),
+            responsePayload: { pancakeOrderId, recoveredByCustomId: true },
+            addressMapping,
+            createdAt: now().toISOString()
+          });
+          await syncRepository.upsertOrderLink?.({
+            orderNumber: item.orderNumber,
+            pancakeOrderId,
+            shopId: String(readiness.shopId || ''),
+            syncStatus: 'pending_sync',
+            lastLocalUpdatedAt: item.order?.updatedAt || now().toISOString()
+          });
+        }
+      }
       if (!pancakeOrderId) {
         const response = await client.createOrder(readiness.shopId, request);
         pancakeOrderId = response.pancakeOrderId;

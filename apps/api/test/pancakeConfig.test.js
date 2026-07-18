@@ -15,6 +15,7 @@ test('Pancake defaults to disabled without credentials', () => {
     orderSourceId: '',
     webhookSecret: '',
     timeoutMs: 20000,
+    orderCreateTimeoutMs: 60000,
     catalogPageSize: 100,
     catalogMaxPages: 100,
     autoSyncEnabled: false,
@@ -41,6 +42,21 @@ test('Pancake read-only configuration keeps credentials on the server config', (
   assert.equal(value.shopId, '1234');
   assert.equal(value.apiKey, 'secret-key');
   assert.equal(value.webhookSecret, 'webhook-secret-with-more-than-32-characters');
+  assert.equal(value.orderCreateTimeoutMs, 60000);
+});
+
+test('Pancake order creation gets a longer bounded timeout than read operations', () => {
+  assert.equal(pancakeConfig({
+    PANCAKE_REQUEST_TIMEOUT_MS: '30000',
+    PANCAKE_ORDER_CREATE_TIMEOUT_MS: '90000'
+  }).orderCreateTimeoutMs, 90000);
+  assert.throws(() => pancakeConfig({
+    PANCAKE_REQUEST_TIMEOUT_MS: '30000',
+    PANCAKE_ORDER_CREATE_TIMEOUT_MS: '20000'
+  }), /PANCAKE_ORDER_CREATE_TIMEOUT_MS/);
+  assert.throws(() => pancakeConfig({
+    PANCAKE_ORDER_CREATE_TIMEOUT_MS: '120001'
+  }), /PANCAKE_ORDER_CREATE_TIMEOUT_MS/);
 });
 
 test('Pancake catalog discovery can start with an API key before shop selection', () => {

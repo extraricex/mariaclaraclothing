@@ -73,6 +73,29 @@ test('Pancake client lists orders with updated cursor pagination', async () => {
   assert.doesNotMatch(calls[0].url, /updated_since/);
 });
 
+test('Pancake client searches by website order number and keeps only an exact custom ID', async () => {
+  const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
+  const calls = [];
+  const client = createPancakeClient(CONFIG, async (url) => {
+    calls.push(url);
+    return new Response(JSON.stringify({
+      data: [
+        { id: 'PK-EXACT', custom_id: 'MCC-1001' },
+        { id: 'PK-NOT-EXACT', custom_id: 'MCC-10010' }
+      ],
+      page_number: 1,
+      page_size: 100,
+      total_pages: 1,
+      total_entries: 2
+    }), { status: 200 });
+  });
+
+  const matches = await client.findOrdersByCustomId('shop-1', 'MCC-1001');
+
+  assert.deepEqual(matches.map((item) => item.id), ['PK-EXACT']);
+  assert.match(calls[0], /search=MCC-1001/);
+});
+
 test('Pancake client uses the official Philippine geographic hierarchy endpoints', async () => {
   const { createPancakeClient } = require('../src/integrations/pancake/pancakeClient');
   const calls = [];

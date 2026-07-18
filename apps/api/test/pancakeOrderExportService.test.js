@@ -324,6 +324,49 @@ test('live retry verifies an already-created Pancake order without creating a du
   ]);
 });
 
+test('live retry recovers an exact Pancake custom ID after an ambiguous POST result', async () => {
+  const { runOrderLiveExport } = require('../src/integrations/pancake/pancakeOrderExportService');
+  const calls = [];
+  const repository = {
+    loadOrderExportReadiness: async () => readiness(),
+    loadOrderExportWorkItem: async () => ({
+      orderNumber: 'MCC-TIMEOUT-RECOVERY',
+      status: 'failed',
+      pancakeOrderId: '',
+      order: order({ orderNumber: 'MCC-TIMEOUT-RECOVERY' })
+    }),
+    saveOrderAddressMapping: async () => {},
+    markOrderExportCreated: async (record) => calls.push(['created', record.pancakeOrderId, record.responsePayload.recoveredByCustomId]),
+    markOrderExportSent: async (record) => calls.push(['sent', record.pancakeOrderId]),
+    markOrderExportFailed: async () => {},
+    blockOrderExport: async () => {}
+  };
+  const client = {
+    findOrdersByCustomId: async () => [{ id: 'PK-RECOVERED', custom_id: 'MCC-TIMEOUT-RECOVERY' }],
+    createOrder: async () => { throw new Error('recovery must not POST again'); },
+    getOrder: async () => verifiedProviderOrder(order({ orderNumber: 'MCC-TIMEOUT-RECOVERY' }))
+  };
+  const syncRepository = {
+    getOrderSyncDetail: async () => null,
+    upsertOrderLink: async (record) => calls.push(['link', record.syncStatus, record.pancakeOrderId])
+  };
+
+  const result = await runOrderLiveExport({
+    config: { mode: 'live' }, client, repository, syncRepository,
+    inventoryOutboxRepository: { enqueueInventorySync: async () => {} },
+    geoResolver: resolveAddress,
+    orderNumber: 'MCC-TIMEOUT-RECOVERY'
+  });
+
+  assert.equal(result.summary.sentCount, 1);
+  assert.deepEqual(calls, [
+    ['created', 'PK-RECOVERED', true],
+    ['link', 'pending_sync', 'PK-RECOVERED'],
+    ['sent', 'PK-RECOVERED'],
+    ['link', 'synced', 'PK-RECOVERED']
+  ]);
+});
+
 test('live export backfills missing links for already sent Pancake exports', async () => {
   const { runOrderLiveExport } = require('../src/integrations/pancake/pancakeOrderExportService');
   const calls = [];

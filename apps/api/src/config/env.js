@@ -203,6 +203,11 @@ function pancakeConfig(source = process.env) {
     throw new Error('PANCAKE_API_BASE_URL must use the official Pancake API host in production');
   }
   const timeout = Number(source.PANCAKE_REQUEST_TIMEOUT_MS || 20000);
+  const normalizedTimeout = Number.isFinite(timeout) && timeout > 0 ? timeout : 20000;
+  const orderCreateTimeout = Number(source.PANCAKE_ORDER_CREATE_TIMEOUT_MS || Math.max(normalizedTimeout, 60000));
+  if (!Number.isFinite(orderCreateTimeout) || orderCreateTimeout < normalizedTimeout || orderCreateTimeout > 120000) {
+    throw new Error('PANCAKE_ORDER_CREATE_TIMEOUT_MS must be at least the request timeout and no more than 120000');
+  }
   const apiKey = String(source.PANCAKE_API_KEY || '');
   const catalogInteger = (name, fallback, maximum) => {
     const raw = source[name];
@@ -271,7 +276,8 @@ function pancakeConfig(source = process.env) {
     warehouseId: String(source.PANCAKE_WAREHOUSE_ID || '').trim(),
     orderSourceId: String(source.PANCAKE_ORDER_SOURCE_ID || '').trim(),
     webhookSecret,
-    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 20000,
+    timeoutMs: normalizedTimeout,
+    orderCreateTimeoutMs: orderCreateTimeout,
     catalogPageSize: catalogInteger('PANCAKE_CATALOG_PAGE_SIZE', 100, 100),
     catalogMaxPages: catalogInteger('PANCAKE_CATALOG_MAX_PAGES', 100, 500),
     autoSyncEnabled: source.PANCAKE_AUTO_SYNC_ENABLED === undefined || source.PANCAKE_AUTO_SYNC_ENABLED === ''
