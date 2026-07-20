@@ -2,10 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  addHashedCustomerData,
   buildMetaFunnelEvent,
   isLikelyBot,
   safeSourceUrl
 } = require('../src/marketing/metaFunnelEvent');
+const { sha256 } = require('../src/marketing/metaEvent');
 
 function analyticsEvent(overrides = {}) {
   return {
@@ -48,6 +50,38 @@ test('PageView CAPI is one real browser navigation and strips private query data
   assert.equal(event.event_id, 'pageview_route_1');
   assert.equal(event.event_source_url, 'https://mariaclaraclothing.com/shop');
   assert.equal(event.custom_data, undefined);
+});
+
+test('funnel CAPI hashes authenticated customer matching data without storing raw PII', () => {
+  const event = buildMetaFunnelEvent({
+    eventId: 'viewcontent_customer_1', metaEventId: 'viewcontent_customer_1',
+    metaEventName: 'ViewContent', metaBrowserSent: true, metaCustomData: customData
+  }, analyticsEvent({ eventId: 'viewcontent_customer_1', eventName: 'product_view' }), {
+    userAgent: 'Mozilla/5.0', siteUrl: 'https://mariaclaraclothing.com',
+    customer: {
+      id: 'Customer-ABC-123', email: ' Buyer@Example.COM ', phone: '0917 123 4567',
+      firstName: 'María', lastName: 'Dela Cruz',
+      savedAddress: { cityName: 'Imus City', provinceName: 'Cavite', postalCode: '4103' }
+    }
+  });
+
+  assert.deepEqual(event.user_data.em, [sha256('buyer@example.com')]);
+  assert.deepEqual(event.user_data.ph, [sha256('639171234567')]);
+  assert.deepEqual(event.user_data.external_id, [sha256('customerabc123')]);
+  assert.deepEqual(event.user_data.fn, [sha256('maria')]);
+  assert.deepEqual(event.user_data.ln, [sha256('delacruz')]);
+  assert.deepEqual(event.user_data.ct, [sha256('imuscity')]);
+  assert.deepEqual(event.user_data.st, [sha256('cavite')]);
+  assert.deepEqual(event.user_data.zp, [sha256('4103')]);
+  assert.deepEqual(event.user_data.country, [sha256('ph')]);
+  const serialized = JSON.stringify(event);
+  for (const raw of ['buyer@example.com', '0917 123 4567', 'María', 'Dela Cruz']) {
+    assert.equal(serialized.toLowerCase().includes(raw.toLowerCase()), false);
+  }
+});
+
+test('empty customer matching values are omitted instead of sent as empty strings', () => {
+  assert.deepEqual(addHashedCustomerData({}, { email: '', phone: '', id: '' }), {});
 });
 
 test('funnel CAPI rejects ID mismatches, malformed values, unpaired browser events, and bots', () => {

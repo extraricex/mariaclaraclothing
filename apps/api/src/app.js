@@ -143,7 +143,7 @@ function createApp() {
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https:; img-src 'self' data: blob: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net; frame-src 'self' https://www.facebook.com; upgrade-insecure-requests"
+      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://connect.facebook.net https://www.facebook.com/signals/iwl.js; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https:; img-src 'self' data: blob: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net; frame-src 'self' https://www.facebook.com; upgrade-insecure-requests"
     });
     next();
   });

@@ -1,5 +1,11 @@
 const { META_CURRENCY, centavosToMetaPesos } = require('./metaMoney');
-const { parseMetaCookies } = require('./metaEvent');
+const {
+  normalizeEmailForMeta,
+  normalizePhoneForMeta,
+  normalizeTextForMeta,
+  parseMetaCookies,
+  sha256
+} = require('./metaEvent');
 
 const ANALYTICS_TO_META = Object.freeze({
   page_view: 'PageView',
@@ -70,6 +76,31 @@ function safeSourceUrl(path, baseUrl) {
   }
 }
 
+function addHashedCustomerData(userData, customer = {}) {
+  const email = normalizeEmailForMeta(customer.email);
+  const phone = normalizePhoneForMeta(customer.phone);
+  const firstName = normalizeTextForMeta(customer.firstName, { compact: true });
+  const lastName = normalizeTextForMeta(customer.lastName, { compact: true });
+  const externalId = normalizeTextForMeta(customer.id || customer.externalId, { compact: true });
+  const address = customer.savedAddress && typeof customer.savedAddress === 'object'
+    ? customer.savedAddress
+    : {};
+  const city = normalizeTextForMeta(address.cityName || address.city || address.municipality, { compact: true });
+  const province = normalizeTextForMeta(address.provinceName || address.province, { compact: true });
+  const postalCode = normalizeTextForMeta(address.postalCode || address.zipCode, { compact: true });
+
+  if (email) userData.em = [sha256(email)];
+  if (phone) userData.ph = [sha256(phone)];
+  if (firstName) userData.fn = [sha256(firstName)];
+  if (lastName) userData.ln = [sha256(lastName)];
+  if (externalId) userData.external_id = [sha256(externalId)];
+  if (city) userData.ct = [sha256(city)];
+  if (province) userData.st = [sha256(province)];
+  if (postalCode) userData.zp = [sha256(postalCode)];
+  if (city || province || postalCode) userData.country = [sha256('ph')];
+  return userData;
+}
+
 function buildMetaFunnelEvent(input, analyticsEvent, request = {}) {
   const eventName = ANALYTICS_TO_META[analyticsEvent?.eventName];
   const eventId = text(input?.metaEventId || input?.eventId, 100);
@@ -87,6 +118,7 @@ function buildMetaFunnelEvent(input, analyticsEvent, request = {}) {
   if (clientUserAgent) userData.client_user_agent = clientUserAgent;
   if (cookies.fbp) userData.fbp = cookies.fbp;
   if (cookies.fbc) userData.fbc = cookies.fbc;
+  addHashedCustomerData(userData, request.customer);
   const event = {
     event_name: eventName,
     event_time: Math.floor(Date.now() / 1000),
@@ -102,6 +134,7 @@ function buildMetaFunnelEvent(input, analyticsEvent, request = {}) {
 
 module.exports = {
   ANALYTICS_TO_META,
+  addHashedCustomerData,
   buildMetaFunnelEvent,
   isLikelyBot,
   safeSourceUrl,
