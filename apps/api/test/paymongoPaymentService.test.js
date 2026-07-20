@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  applyPaidWebhookEvent, checkoutSessionPayload, closeCheckoutSessionForExpiry, ensureCheckoutSession, paidSessionPayload, parsePaidEvent, restockItems, withOrderParam
+  applyPaidWebhookEvent, checkoutSessionPayload, closeCheckoutSessionForExpiry, ensureCheckoutSession, paidSessionPayload,
+  parsePaidEvent, queueExpiredPancakeCancellation, restockItems, withOrderParam
 } = require('../src/payments/paymongoPaymentService');
 
 function completeDelivery() {
@@ -272,6 +273,49 @@ test('reservation expiry preserves a payment that completed before expiration', 
   assert.equal(outcome.status, 'paid');
   assert.equal(expireCalls, 0);
   assert.equal(parsePaidEvent(outcome.paidPayload).paymentId, 'pay_paid_1');
+});
+
+test('expired unpaid PayMongo checkout does not queue a Pancake update without a provider order', async () => {
+  const events = [];
+  const logs = [];
+  const result = await queueExpiredPancakeCancellation({
+    orderNumber: 'MCC-PAYMONGO-EXPIRED', paymentStatus: 'expired', status: 'cancelled'
+  }, {
+    syncRepository: {
+      getOrderSyncDetail: async () => ({ pancakeOrderId: '' }),
+      enqueueSyncEvent: async (event) => events.push(event),
+      appendSyncLog: async (log) => logs.push(log)
+    }
+  });
+  assert.deepEqual(result, { status: 'skipped', reason: 'pancake_order_not_exported_unpaid' });
+  assert.equal(events.length, 0);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].level, 'info');
+  assert.equal(logs[0].code, 'pancake_order_not_exported_unpaid');
+});
+
+test('expired PayMongo checkout queues cancellation when a Pancake order already exists', async () => {
+  const events = [];
+  const links = [];
+  const logs = [];
+  const result = await queueExpiredPancakeCancellation({
+    orderNumber: 'MCC-PAYMONGO-LINKED', paymentStatus: 'expired', status: 'cancelled',
+    updatedAt: '2026-07-20T03:00:00.000Z'
+  }, {
+    syncRepository: {
+      getOrderSyncDetail: async () => ({ pancakeOrderId: 'PNK-LINKED', shopId: 'shop-1' }),
+      enqueueSyncEvent: async (event) => { events.push(event); return { status: 'pending' }; },
+      upsertOrderLink: async (link) => links.push(link),
+      appendSyncLog: async (log) => logs.push(log)
+    }
+  });
+  assert.equal(result.status, 'pending');
+  assert.equal(result.pancakeOrderId, 'PNK-LINKED');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].pancakeOrderId, 'PNK-LINKED');
+  assert.equal(events[0].eventKey, 'paymongo-expired:MCC-PAYMONGO-LINKED');
+  assert.equal(links[0].syncStatus, 'pending_sync');
+  assert.equal(logs[0].code, 'pancake_order_expiration_queued');
 });
 
 test('failed, pending, cancelled, and unrelated PayMongo events cannot create a Purchase', async () => {

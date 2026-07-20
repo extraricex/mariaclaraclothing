@@ -834,7 +834,7 @@ CREATE TABLE IF NOT EXISTS pancake_sync_events (
   order_number text NOT NULL DEFAULT '',
   pancake_order_id text NOT NULL DEFAULT '',
   event_key text NOT NULL,
-  status text NOT NULL CHECK (status IN ('pending','processing','succeeded','failed_retryable','blocked','duplicate')),
+  status text NOT NULL CHECK (status IN ('pending','processing','succeeded','failed_retryable','blocked','duplicate','skipped')),
   payload_hash text NOT NULL DEFAULT '',
   payload jsonb NOT NULL DEFAULT '{}'::jsonb,
   safe_error_code text NOT NULL DEFAULT '',

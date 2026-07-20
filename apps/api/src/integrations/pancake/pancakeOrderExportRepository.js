@@ -533,7 +533,7 @@ async function markOrderExportFailed(orderNumber, safeErrorCode) {
   return result.rows[0] ? toPublicRow(result.rows[0]) : null;
 }
 
-async function markOrderExportSkipped(orderNumber, safeErrorCode = 'pancake_order_cancelled_before_export') {
+async function markOrderExportSkipped(orderNumber, safeErrorCode = 'pancake_order_cancelled_before_export', options = {}) {
   const normalized = String(orderNumber || '').trim();
   if (!normalized) return null;
   if (!hasDatabaseUrl()) {
@@ -543,7 +543,8 @@ async function markOrderExportSkipped(orderNumber, safeErrorCode = 'pancake_orde
     });
     return existing || null;
   }
-  const result = await query(
+  const executor = options.client || { query };
+  const result = await executor.query(
     `UPDATE pancake_order_exports
      SET status='skipped',safe_error_code=$2,updated_at=now()
      WHERE order_number=$1 AND status <> 'sent'
