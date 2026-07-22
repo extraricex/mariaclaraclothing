@@ -77,6 +77,9 @@ function assertPaymentEligible(order = {}) {
 }
 
 function buildPancakeOrderPayload(order, readiness, addressMapping = {}) {
+  if (order?.isTestOrder || order?.paymentMetadata?.metaControlledTest) {
+    block('pancake_test_order_blocked');
+  }
   if (!hasCompleteDeliveryInformation(order)) block('pancake_order_delivery_incomplete');
   assertPaymentEligible(order);
   assertReady(readiness);

@@ -38,9 +38,14 @@ function exportStatusForOrder(order = {}) {
     : 'queued';
 }
 
+function isControlledTestOrder(order = {}) {
+  return Boolean(order?.isTestOrder || order?.paymentMetadata?.metaControlledTest);
+}
+
 async function enqueueOrderExport(order, options = {}) {
   const orderNumber = String(order?.orderNumber || '').trim();
   if (!orderNumber) return null;
+  if (isControlledTestOrder(order)) return null;
   if (String(order?.status || '').toLowerCase() === 'cancelled') return null;
   if (String(order?.checkoutChannel || '').trim().toLowerCase() === 'pancake_pos') return null;
   const desiredStatus = exportStatusForOrder(order);
@@ -90,10 +95,13 @@ async function enqueueMissingOrderExports({ limit = 100, placedAfter = '' } = {}
   const safeLimit = Math.max(1, Math.min(500, Number(limit) || 100));
   if (!hasDatabaseUrl()) return 0;
   const missing = await query(
-    `SELECT o.order_number,o.payment_method,o.payment_provider,o.payment_status,o.status
+    `SELECT o.order_number,o.payment_method,o.payment_provider,o.payment_status,o.status,
+            o.is_test_order,o.payment_metadata
      FROM orders o
      LEFT JOIN pancake_order_exports e ON e.order_number=o.order_number
      WHERE e.order_number IS NULL
+       AND o.is_test_order IS NOT TRUE
+       AND COALESCE(o.payment_metadata->>'metaControlledTest','false') <> 'true'
        AND o.status <> 'cancelled'
        AND lower(COALESCE(o.checkout_channel,'')) <> 'pancake_pos'
        AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)
@@ -107,7 +115,9 @@ async function enqueueMissingOrderExports({ limit = 100, placedAfter = '' } = {}
       paymentMethod: row.payment_method,
       paymentProvider: row.payment_provider,
       paymentStatus: row.payment_status,
-      status: row.status
+      status: row.status,
+      isTestOrder: Boolean(row.is_test_order),
+      paymentMetadata: row.payment_metadata || {}
     });
   }
   return missing.rows.length;
@@ -134,6 +144,8 @@ function rowToExportOrder(row = {}) {
       ? null : Number(row.paid_amount_cents),
     status: row.status || '',
     checkoutChannel: row.checkout_channel || '',
+    isTestOrder: Boolean(row.is_test_order),
+    paymentMetadata: row.payment_metadata || {},
     notes: row.notes || '',
     placedAt: row.placed_at ? new Date(row.placed_at).toISOString() : '',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ''
@@ -197,6 +209,7 @@ async function listQueuedOrderExports({ limit = 50, placedAfter = '' } = {}) {
     const cutoff = placedAfter ? new Date(placedAfter).getTime() : 0;
     return memory.exports
       .filter((item) => ['queued', 'created_unverified', 'failed'].includes(item.status)
+        && !isControlledTestOrder(item.order)
         && String(item.order?.status || '') !== 'cancelled'
         && String(item.order?.checkoutChannel || '').trim().toLowerCase() !== 'pancake_pos'
         && exportStatusForOrder(item.order) !== 'waiting_payment'
@@ -214,6 +227,8 @@ async function listQueuedOrderExports({ limit = 50, placedAfter = '' } = {}) {
      FROM pancake_order_exports e
      JOIN orders o ON o.order_number=e.order_number
      WHERE e.status IN ('queued','created_unverified','failed')
+       AND o.is_test_order IS NOT TRUE
+       AND COALESCE(o.payment_metadata->>'metaControlledTest','false') <> 'true'
        AND o.status <> 'cancelled'
        AND lower(COALESCE(o.checkout_channel,'')) <> 'pancake_pos'
        AND (lower(COALESCE(o.payment_method,'')) <> 'paymongo' OR o.payment_status='paid')
@@ -237,6 +252,7 @@ async function loadOrderExportWorkItem(orderNumber, { placedAfter = '' } = {}) {
     const cutoff = placedAfter ? new Date(placedAfter).getTime() : 0;
     const item = memory.exports.find((candidate) => candidate.orderNumber === normalized
       && ['queued', 'created_unverified', 'blocked', 'failed'].includes(candidate.status)
+      && !isControlledTestOrder(candidate.order)
       && String(candidate.order?.status || '') !== 'cancelled'
       && String(candidate.order?.checkoutChannel || '').trim().toLowerCase() !== 'pancake_pos'
       && exportStatusForOrder(candidate.order) !== 'waiting_payment'
@@ -251,6 +267,8 @@ async function loadOrderExportWorkItem(orderNumber, { placedAfter = '' } = {}) {
      FROM pancake_order_exports e
      JOIN orders o ON o.order_number=e.order_number
      WHERE e.order_number=$1 AND e.status IN ('queued','created_unverified','blocked','failed') AND o.status <> 'cancelled'
+       AND o.is_test_order IS NOT TRUE
+       AND COALESCE(o.payment_metadata->>'metaControlledTest','false') <> 'true'
        AND lower(COALESCE(o.checkout_channel,'')) <> 'pancake_pos'
        AND (lower(COALESCE(o.payment_method,'')) <> 'paymongo' OR o.payment_status='paid')
        AND ($2::timestamptz IS NULL OR o.placed_at >= $2::timestamptz)

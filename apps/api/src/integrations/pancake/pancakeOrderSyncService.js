@@ -278,6 +278,20 @@ async function processInboundPancakeOrder({
   if (event?.status === 'duplicate') return { status: 'duplicate' };
 
   const existing = await orderRepository.findOrderByNumber(normalized.orderNumber);
+  if (existing?.isTestOrder || existing?.paymentMetadata?.metaControlledTest) {
+    await syncRepository.markSyncEventSucceeded(event.id);
+    await syncRepository.appendSyncLog({
+      direction: 'inbound',
+      entityType: 'order',
+      entityId: normalized.pancakeOrderId,
+      orderNumber: normalized.orderNumber,
+      pancakeOrderId: normalized.pancakeOrderId,
+      level: 'warning',
+      code: 'pancake_test_order_inbound_ignored',
+      message: 'Ignored Pancake status import for a controlled test order.'
+    });
+    return { status: 'ignored_test', orderNumber: normalized.orderNumber };
+  }
   if (!existing) {
     await orderRepository.saveOrder(importedOrder(normalized, now));
     await syncRepository.upsertOrderLink({

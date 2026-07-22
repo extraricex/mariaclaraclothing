@@ -369,6 +369,39 @@ test('processInboundPancakeOrder matches linked orders by Pancake order ID when 
   assert.equal(orders.orders.get('MCC-4').trackingNumber, 'TRACK-4');
 });
 
+test('processInboundPancakeOrder never overwrites a controlled test order', async () => {
+  const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
+  const service = require('../src/integrations/pancake/pancakeOrderSyncService');
+  syncRepo.resetMemoryForTests();
+  const orders = memoryOrderRepo();
+  await orders.saveOrder({
+    orderNumber: 'MCC-META-TEST',
+    isTestOrder: true,
+    paymentMetadata: { metaControlledTest: true },
+    status: 'cancelled',
+    fulfillmentStatus: 'cancelled',
+    deliveryStatus: 'cancelled',
+    customer: {}, address: {}, items: []
+  });
+  await syncRepo.upsertOrderLink({
+    orderNumber: 'MCC-META-TEST', pancakeOrderId: 'PK-META-TEST', syncStatus: 'synced'
+  });
+
+  const result = await service.processInboundPancakeOrder({
+    pancakeOrder: {
+      id: 'PK-META-TEST', custom_id: 'MCC-META-TEST', status: 'Confirmed',
+      updated_at: '2026-07-22T04:30:00.000Z'
+    },
+    orderRepository: orders,
+    syncRepository: syncRepo
+  });
+
+  assert.equal(result.status, 'ignored_test');
+  assert.equal(orders.orders.get('MCC-META-TEST').status, 'cancelled');
+  const detail = await syncRepo.getOrderSyncDetail('MCC-META-TEST');
+  assert.ok(detail.recentLogs.some((log) => log.code === 'pancake_test_order_inbound_ignored'));
+});
+
 test('pollInboundPancakeOrders fetches every updated order page', async () => {
   const syncRepo = require('../src/integrations/pancake/pancakeOrderSyncRepository');
   const service = require('../src/integrations/pancake/pancakeOrderSyncService');

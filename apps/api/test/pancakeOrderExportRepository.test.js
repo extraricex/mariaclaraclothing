@@ -100,6 +100,41 @@ test('Pancake-origin orders are never queued for outbound website export', async
   assert.equal((await repository.getOrderExportStatus()).recent.length, 0);
 });
 
+test('controlled Meta test orders are never queued for Pancake export', async () => {
+  const repository = loadRepositoryWithoutDatabase();
+  repository.resetMemoryForTests();
+
+  const explicitTest = await repository.enqueueOrderExport({
+    orderNumber: 'MCC-META-TEST-1', isTestOrder: true,
+    status: 'confirmed', customer: {}, items: []
+  });
+  const metadataTest = await repository.enqueueOrderExport({
+    orderNumber: 'MCC-META-TEST-2',
+    paymentMetadata: { metaControlledTest: true },
+    status: 'confirmed', customer: {}, items: []
+  });
+
+  assert.equal(explicitTest, null);
+  assert.equal(metadataTest, null);
+  assert.equal((await repository.getOrderExportStatus()).recent.length, 0);
+});
+
+test('automatic Pancake backfill excludes controlled test orders in SQL', async () => {
+  const calls = [];
+  const { repository, restore } = loadRepositoryWithMockDatabase(async (sql, values) => {
+    calls.push({ sql, values });
+    return { rows: [] };
+  });
+  try {
+    assert.equal(await repository.enqueueMissingOrderExports({ limit: 10 }), 0);
+  } finally {
+    restore();
+  }
+
+  assert.match(calls[0].sql, /o\.is_test_order IS NOT TRUE/);
+  assert.match(calls[0].sql, /metaControlledTest/);
+});
+
 test('order export repository marks rows sent or failed and excludes sent rows from queued work', async () => {
   const repository = loadRepositoryWithoutDatabase();
   repository.resetMemoryForTests();
@@ -209,6 +244,8 @@ test('order export repository prioritizes newest unsent website orders', async (
   assert.match(calls[0].sql, /ORDER BY o\.placed_at DESC, e\.queued_at DESC/);
   assert.match(calls[0].sql, /o\.status <> 'cancelled'/);
   assert.match(calls[0].sql, /checkout_channel/);
+  assert.match(calls[0].sql, /o\.is_test_order IS NOT TRUE/);
+  assert.match(calls[0].sql, /metaControlledTest/);
   assert.doesNotMatch(calls[0].sql, /'blocked'/);
 });
 

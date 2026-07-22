@@ -137,6 +137,50 @@ jobs:
                 const notifications = orderNumber
                   ? Number((await query('SELECT count(*)::int AS count FROM order_notification_outbox WHERE order_number=$1', [orderNumber])).rows[0]?.count || 0)
                   : 0;
+                const pancakeExport = orderNumber ? (await query(`
+                  SELECT status,safe_error_code,attempt_count,sent_at,verified_at,
+                         pancake_order_id <> '' AS has_pancake_order_id
+                    FROM pancake_order_exports WHERE order_number=$1
+                `, [orderNumber])).rows[0] || null : null;
+                const pancakeLink = orderNumber ? (await query(`
+                  SELECT sync_status,safe_error_code,last_synced_at,
+                         pancake_order_id <> '' AS has_pancake_order_id
+                    FROM pancake_order_links WHERE order_number=$1
+                `, [orderNumber])).rows[0] || null : null;
+                const pancakeSyncEvents = orderNumber ? (await query(`
+                  SELECT direction,status,safe_error_code,attempt_count,
+                         payload->'changedFields' AS changed_fields
+                    FROM pancake_sync_events WHERE order_number=$1
+                   ORDER BY created_at
+                `, [orderNumber])).rows : [];
+                const pancakeSyncLogs = orderNumber ? (await query(`
+                  SELECT direction,level,code,message
+                    FROM pancake_sync_logs WHERE order_number=$1
+                   ORDER BY created_at DESC LIMIT 10
+                `, [orderNumber])).rows : [];
+                let pancakeProvider = { checked: false, status: '', errorCode: '' };
+                if (pancakeLink?.has_pancake_order_id) {
+                  try {
+                    const { env } = require('./src/config/env');
+                    const { createPancakeClient } = require('./src/integrations/pancake/pancakeClient');
+                    const { normalizePancakeOrder } = require('./src/integrations/pancake/pancakeOrderMapper');
+                    const providerOrder = await createPancakeClient(env.pancake).getOrder(
+                      env.pancake.shopId,
+                      (await query('SELECT pancake_order_id FROM pancake_order_links WHERE order_number=$1', [orderNumber])).rows[0].pancake_order_id
+                    );
+                    pancakeProvider = {
+                      checked: true,
+                      status: normalizePancakeOrder(providerOrder).status || '',
+                      errorCode: ''
+                    };
+                  } catch (error) {
+                    pancakeProvider = {
+                      checked: true,
+                      status: '',
+                      errorCode: String(error?.code || 'pancake_provider_audit_failed').slice(0, 100)
+                    };
+                  }
+                }
                 const order = orders[0] ? {
                   orderNumber: orders[0].order_number,
                   status: orders[0].status,
@@ -170,7 +214,14 @@ jobs:
                   movements,
                   pancakeExports,
                   pancakeLinks,
-                  notifications
+                  notifications,
+                  pancakeAudit: {
+                    export: pancakeExport,
+                    link: pancakeLink,
+                    events: pancakeSyncEvents,
+                    logs: pancakeSyncLogs,
+                    provider: pancakeProvider
+                  }
                 })}`);
               }
 

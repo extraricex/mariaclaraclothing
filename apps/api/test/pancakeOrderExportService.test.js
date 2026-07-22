@@ -179,6 +179,10 @@ test('blocks shadow payloads until price unit and mappings are ready', () => {
     () => buildPancakeOrderPayload(order({ address: { houseAddress: '', barangay: '', city: '', province: '' } }), readiness()),
     (error) => error.code === 'pancake_order_delivery_incomplete'
   );
+  assert.throws(
+    () => buildPancakeOrderPayload(order({ isTestOrder: true }), readiness(), addressMapping()),
+    (error) => error.code === 'pancake_test_order_blocked'
+  );
 });
 
 test('shadow build completes mapped exports and blocks invalid orders', async () => {
