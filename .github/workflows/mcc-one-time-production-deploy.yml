@@ -21,7 +21,11 @@ jobs:
           printf '%s\n' '[72.61.127.119]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKyMtetbwR+bGGVbcLESD6mn2Z5TnG+D3L1PgrsTE5FH' > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Back up, deploy, and audit production
+      - name: Back up production
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=20 -p 2222 root@72.61.127.119 /usr/local/bin/mariaclara-backup
+
+      - name: Deploy and audit production
         run: |
           ssh -o BatchMode=yes -o ConnectTimeout=20 -p 2222 root@72.61.127.119 'bash -s' <<'REMOTE'
           set -euo pipefail
@@ -34,7 +38,11 @@ jobs:
             done
           fi
 
-          /usr/local/bin/mariaclara-backup
+          if command -v iptables >/dev/null 2>&1; then
+            iptables -C INPUT -s 111.90.220.87/32 -p tcp --dport 2222 -j ACCEPT >/dev/null 2>&1 \
+              || iptables -I INPUT 1 -s 111.90.220.87/32 -p tcp --dport 2222 -j ACCEPT
+          fi
+
           cd /var/www/mariaclara
           git fetch origin main
           git checkout main
