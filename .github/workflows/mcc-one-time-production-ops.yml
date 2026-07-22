@@ -1,0 +1,292 @@
+name: MCC one-time production operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: One-time controlled operation
+        required: true
+        type: choice
+        options:
+          - issue_grant
+          - audit_order
+          - record_audit
+          - cancel_test
+          - remove_access
+      test_reference:
+        description: Controlled Meta test reference
+        required: false
+        type: string
+      test_event_code:
+        description: Meta Test Events code
+        required: false
+        type: string
+      order_number:
+        description: Controlled test order number
+        required: false
+        type: string
+      encryption_public_key_base64:
+        description: One-time RSA public key
+        required: false
+        type: string
+      audit_payload_base64:
+        description: Sanitized admin audit JSON
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  operate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Configure one-time SSH access
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.MCC_TEMP_DEPLOY_SSH_KEY }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' '[72.61.127.119]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKyMtetbwR+bGGVbcLESD6mn2Z5TnG+D3L1PgrsTE5FH' > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Run controlled production operation
+        env:
+          OPERATION: ${{ inputs.operation }}
+          TEST_REFERENCE: ${{ inputs.test_reference }}
+          TEST_EVENT_CODE: ${{ inputs.test_event_code }}
+          ORDER_NUMBER: ${{ inputs.order_number }}
+          ENCRYPTION_PUBLIC_KEY_BASE64: ${{ inputs.encryption_public_key_base64 }}
+          AUDIT_PAYLOAD_BASE64: ${{ inputs.audit_payload_base64 }}
+        run: |
+          set -euo pipefail
+
+          case "$OPERATION" in
+            issue_grant)
+              [[ "$TEST_REFERENCE" =~ ^META-TEST-[A-Z0-9-]{8,80}$ ]]
+              [[ "$TEST_EVENT_CODE" =~ ^TEST[0-9]{4,12}$ ]]
+              test -n "$ENCRYPTION_PUBLIC_KEY_BASE64"
+
+              grant_json="$(ssh -o BatchMode=yes -o ConnectTimeout=20 -p 2222 root@72.61.127.119 \
+                "cd /var/www/mariaclara && docker compose --env-file deploy/production.env -f deploy/docker-compose.production.yml exec -T api node scripts/create-meta-controlled-test-grant.js '$TEST_REFERENCE' '$TEST_EVENT_CODE'")"
+              grant="$(printf '%s' "$grant_json" | jq -er '.grant')"
+              echo "::add-mask::$grant"
+              printf '%s' "$ENCRYPTION_PUBLIC_KEY_BASE64" | base64 --decode > /tmp/mcc-meta-public.pem
+              encrypted_grant="$(printf '%s' "$grant" | openssl pkeyutl -encrypt -pubin \
+                -inkey /tmp/mcc-meta-public.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+                | base64 -w 0)"
+              printf 'CONTROLLED_TEST_REFERENCE=%s\n' "$(printf '%s' "$grant_json" | jq -r '.reference')"
+              printf 'DATASET_ID=%s\n' "$(printf '%s' "$grant_json" | jq -r '.datasetId')"
+              printf 'EXPIRES_AT=%s\n' "$(printf '%s' "$grant_json" | jq -r '.expiresAt')"
+              printf 'ENCRYPTED_GRANT_BASE64=%s\n' "$encrypted_grant"
+              ;;
+
+            audit_order)
+              [[ "$TEST_REFERENCE" =~ ^META-TEST-[A-Z0-9-]{8,80}$ ]]
+              ssh -o BatchMode=yes -o ConnectTimeout=20 -p 2222 root@72.61.127.119 \
+                "META_TEST_REFERENCE='$TEST_REFERENCE' bash -s" <<'REMOTE'
+              set -euo pipefail
+              cd /var/www/mariaclara
+              docker compose --env-file deploy/production.env -f deploy/docker-compose.production.yml \
+                exec -T -e META_TEST_REFERENCE="$META_TEST_REFERENCE" api node <<'NODE'
+              const { closePool, query } = require('./src/db/postgres');
+
+              async function main() {
+                const reference = String(process.env.META_TEST_REFERENCE || '');
+                const orders = (await query(`
+                  SELECT order_number,status,fulfillment_status,payment_status,cod_confirmation_status,
+                         delivery_status,total_cents,currency,is_test_order,placed_at,items,
+                         meta_purchase_event_id,meta_purchase_value,meta_purchase_currency,
+                         meta_browser_purchase_sent_at,meta_capi_purchase_queued_at,meta_capi_purchase_sent_at,
+                         meta_purchase_status,meta_purchase_last_error,payment_metadata
+                    FROM orders
+                   WHERE payment_metadata->>'metaTestReference'=$1
+                   ORDER BY placed_at
+                `, [reference])).rows;
+                const orderNumber = String(orders[0]?.order_number || '');
+                const outbox = orderNumber ? (await query(`
+                  SELECT event_name,event_id,status,attempt_count,sent_at,provider_trace_id,last_error,
+                         payload->'custom_data'->>'value' AS value,
+                         jsonb_typeof(payload->'custom_data'->'value') AS value_type,
+                         payload->'custom_data'->>'currency' AS currency,
+                         payload ? '_meta_test_event_code' AS retains_test_code
+                    FROM marketing_event_outbox
+                   WHERE aggregate_id=$1 AND event_name='Purchase'
+                   ORDER BY created_at
+                `, [orderNumber])).rows : [];
+                const dispatches = orderNumber ? (await query(`
+                  SELECT event_id,source,value,currency,status,attempt_count,sent_at,
+                         provider_response_id,error_code,error_message
+                    FROM meta_event_dispatches
+                   WHERE order_number=$1 AND event_name='Purchase'
+                   ORDER BY source
+                `, [orderNumber])).rows : [];
+                const movements = orderNumber ? (await query(`
+                  SELECT reason,count(*)::int AS movement_count,
+                         COALESCE(sum(quantity_change),0)::int AS quantity_change
+                    FROM inventory_movements WHERE order_number=$1 GROUP BY reason ORDER BY reason
+                `, [orderNumber])).rows : [];
+                const pancakeExports = orderNumber
+                  ? Number((await query('SELECT count(*)::int AS count FROM pancake_order_exports WHERE order_number=$1', [orderNumber])).rows[0]?.count || 0)
+                  : 0;
+                const pancakeLinks = orderNumber
+                  ? Number((await query('SELECT count(*)::int AS count FROM pancake_order_links WHERE order_number=$1', [orderNumber])).rows[0]?.count || 0)
+                  : 0;
+                const notifications = orderNumber
+                  ? Number((await query('SELECT count(*)::int AS count FROM order_notification_outbox WHERE order_number=$1', [orderNumber])).rows[0]?.count || 0)
+                  : 0;
+                const order = orders[0] ? {
+                  orderNumber: orders[0].order_number,
+                  status: orders[0].status,
+                  fulfillmentStatus: orders[0].fulfillment_status,
+                  paymentStatus: orders[0].payment_status,
+                  codConfirmationStatus: orders[0].cod_confirmation_status,
+                  deliveryStatus: orders[0].delivery_status,
+                  totalCents: Number(orders[0].total_cents),
+                  currency: orders[0].currency,
+                  isTestOrder: orders[0].is_test_order,
+                  placedAt: orders[0].placed_at,
+                  itemCount: Array.isArray(orders[0].items)
+                    ? orders[0].items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+                    : 0,
+                  metaPurchaseEventId: orders[0].meta_purchase_event_id,
+                  metaPurchaseValue: Number(orders[0].meta_purchase_value),
+                  metaPurchaseCurrency: orders[0].meta_purchase_currency,
+                  metaBrowserPurchaseSentAt: orders[0].meta_browser_purchase_sent_at,
+                  metaCapiPurchaseQueuedAt: orders[0].meta_capi_purchase_queued_at,
+                  metaCapiPurchaseSentAt: orders[0].meta_capi_purchase_sent_at,
+                  metaPurchaseStatus: orders[0].meta_purchase_status,
+                  metaPurchaseLastError: orders[0].meta_purchase_last_error,
+                  metaTestAudit: orders[0].payment_metadata?.metaTestAudit || {}
+                } : null;
+                console.log(`ORDER_AUDIT ${JSON.stringify({
+                  reference,
+                  orderCount: orders.length,
+                  order,
+                  outbox,
+                  dispatches,
+                  movements,
+                  pancakeExports,
+                  pancakeLinks,
+                  notifications
+                })}`);
+              }
+
+              main().catch((error) => {
+                console.error(`ORDER_AUDIT_ERROR ${String(error?.message || error).slice(0, 200)}`);
+                process.exitCode = 1;
+              }).finally(closePool);
+              NODE
+              REMOTE
+              ;;
+
+            record_audit)
+              [[ "$TEST_REFERENCE" =~ ^META-TEST-[A-Z0-9-]{8,80}$ ]]
+              audit_json="$(printf '%s' "$AUDIT_PAYLOAD_BASE64" | base64 --decode)"
+              printf '%s' "$audit_json" | jq -e '
+                type == "object" and
+                ((keys - ["deduplicationStatus","refreshTestResult","secondaryDatasetResult",
+                  "lastMetaResponse","finalResult","pixelDispatchCount","capiDispatchCount"]) | length == 0)
+              ' >/dev/null
+              ssh -o BatchMode=yes -o ConnectTimeout=20 -p 2222 root@72.61.127.119 \
+                "META_TEST_REFERENCE='$TEST_REFERENCE' AUDIT_PAYLOAD_BASE64='$AUDIT_PAYLOAD_BASE64' bash -s" <<'REMOTE'
+              set -euo pipefail
+              cd /var/www/mariaclara
+              docker compose --env-file deploy/production.env -f deploy/docker-compose.production.yml \
+                exec -T -e META_TEST_REFERENCE="$META_TEST_REFERENCE" -e AUDIT_PAYLOAD_BASE64="$AUDIT_PAYLOAD_BASE64" api node <<'NODE'
+              const { closePool, query } = require('./src/db/postgres');
+
+              async function main() {
+                const reference = String(process.env.META_TEST_REFERENCE || '');
+                const supplied = JSON.parse(Buffer.from(process.env.AUDIT_PAYLOAD_BASE64 || '', 'base64').toString('utf8'));
+                const allowed = ['deduplicationStatus','refreshTestResult','secondaryDatasetResult',
+                  'lastMetaResponse','finalResult','pixelDispatchCount','capiDispatchCount'];
+                const audit = {};
+                for (const key of allowed) {
+                  if (typeof supplied[key] === 'string') audit[key] = supplied[key].slice(0, 500);
+                  if (['pixelDispatchCount','capiDispatchCount'].includes(key) && Number.isInteger(supplied[key])) {
+                    audit[key] = supplied[key];
+                  }
+                }
+                const result = await query(`
+                  UPDATE orders
+                     SET payment_metadata = jsonb_set(
+                       payment_metadata,
+                       '{metaTestAudit}',
+                       COALESCE(payment_metadata->'metaTestAudit','{}'::jsonb) || $2::jsonb,
+                       true
+                     ), updated_at=now()
+                   WHERE payment_metadata->>'metaTestReference'=$1
+                     AND payment_metadata->>'metaControlledTest'='true'
+                   RETURNING order_number
+                `, [reference, JSON.stringify(audit)]);
+                console.log(`AUDIT_RECORD ${JSON.stringify({updated: result.rowCount, orderNumber: result.rows[0]?.order_number || ''})}`);
+              }
+
+              main().catch((error) => {
+                console.error(`AUDIT_RECORD_ERROR ${String(error?.message || error).slice(0, 200)}`);
+                process.exitCode = 1;
+              }).finally(closePool);
+              NODE
+              REMOTE
+              ;;
+
+            cancel_test)
+              [[ "$TEST_REFERENCE" =~ ^META-TEST-[A-Z0-9-]{8,80}$ ]]
+              [[ "$ORDER_NUMBER" =~ ^MCC-[A-Z0-9-]{4,80}$ ]]
+              ssh -o BatchMode=yes -o ConnectTimeout=20 -p 2222 root@72.61.127.119 \
+                "META_TEST_REFERENCE='$TEST_REFERENCE' ORDER_NUMBER='$ORDER_NUMBER' bash -s" <<'REMOTE'
+              set -euo pipefail
+              cd /var/www/mariaclara
+              compose=(docker compose --env-file deploy/production.env -f deploy/docker-compose.production.yml)
+              controlled="$(${compose[@]} exec -T -e META_TEST_REFERENCE="$META_TEST_REFERENCE" -e ORDER_NUMBER="$ORDER_NUMBER" api node <<'NODE'
+              const { closePool, query } = require('./src/db/postgres');
+              query(`SELECT count(*)::int AS count FROM orders
+                     WHERE order_number=$1 AND is_test_order=true
+                       AND payment_metadata->>'metaControlledTest'='true'
+                       AND payment_metadata->>'metaTestReference'=$2`,
+                [process.env.ORDER_NUMBER, process.env.META_TEST_REFERENCE])
+                .then((result) => console.log(Number(result.rows[0]?.count || 0) === 1 ? 'CONTROLLED' : 'DENIED'))
+                .catch(() => { process.exitCode = 1; })
+                .finally(closePool);
+              NODE
+              )"
+              test "$controlled" = CONTROLLED
+
+              cookie_file="$(mktemp)"
+              trap 'shred -u "$cookie_file" 2>/dev/null || rm -f "$cookie_file"' EXIT
+              admin_password="$(${compose[@]} exec -T api printenv ADMIN_PASSWORD | tr -d '\r\n')"
+              login_response="$(jq -n --arg password "$admin_password" '{password:$password}' \
+                | curl -fsS -c "$cookie_file" -H 'content-type: application/json' \
+                    --data-binary @- http://127.0.0.1/api/admin/login)"
+              unset admin_password
+              csrf_token="$(printf '%s' "$login_response" | jq -er '.csrfToken')"
+              update_response="$(curl -fsS -b "$cookie_file" -X PATCH \
+                -H 'content-type: application/json' -H "X-CSRF-Token: $csrf_token" \
+                --data '{"status":"cancelled","cancellationReason":"other","isTestOrder":true}' \
+                "http://127.0.0.1/api/admin/orders/$ORDER_NUMBER")"
+              printf 'CANCEL_RESULT %s\n' "$(printf '%s' "$update_response" | jq -c '.order | {
+                orderNumber,status,fulfillmentStatus,paymentStatus,codConfirmationStatus,
+                deliveryStatus,cancellationReason,isTestOrder
+              }')"
+              REMOTE
+              ;;
+
+            remove_access)
+              ssh -o BatchMode=yes -o ConnectTimeout=20 -p 2222 root@72.61.127.119 'bash -s' <<'REMOTE'
+              set -euo pipefail
+              if command -v iptables >/dev/null 2>&1 \
+                && iptables -C INPUT -s 111.90.220.87/32 -p tcp --dport 2222 -j ACCEPT >/dev/null 2>&1; then
+                iptables -D INPUT -s 111.90.220.87/32 -p tcp --dport 2222 -j ACCEPT
+              fi
+              echo 'TEMP_SSH_ACCESS_REMOVED=true'
+              REMOTE
+              ;;
+
+            *)
+              echo 'Unsupported operation.' >&2
+              exit 1
+              ;;
+          esac
