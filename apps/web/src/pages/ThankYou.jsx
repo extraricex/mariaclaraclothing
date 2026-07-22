@@ -9,7 +9,17 @@ import { isFacebookBrowserPurchaseReady, trackFacebookPurchasePayload, wasFacebo
 
 function storedConfirmation() {
   try {
-    return JSON.parse(sessionStorage.getItem('maria-clara-last-order') || 'null');
+    const stored = JSON.parse(sessionStorage.getItem('maria-clara-last-order') || 'null');
+    if (stored?.confirmationToken) return stored;
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const fragment = new URLSearchParams(String(window.location.hash || '').replace(/^#/, ''));
+    const orderNumber = String(params.get('order') || '').trim();
+    const confirmationToken = String(fragment.get('confirmation') || '').trim();
+    if (params.get('meta_test') !== '1' || !orderNumber || !confirmationToken) return null;
+    const controlled = { orderNumber, confirmationToken };
+    sessionStorage.setItem('maria-clara-last-order', JSON.stringify(controlled));
+    return controlled;
   } catch (_error) {
     return null;
   }
@@ -55,7 +65,7 @@ export default function ThankYou() {
 
     clearCheckoutReviewDraft(); clearCart(); clearCheckoutIdempotencyKey(); resetCartSessionId();
     if (!storefrontSettingsLoaded || !isFacebookBrowserPurchaseReady({
-      browserPurchaseEnabled: settings.metaPixel?.browserPurchaseEnabled,
+      browserPurchaseEnabled: Boolean(settings.metaPixel?.browserPurchaseEnabled || order?.metaControlledTest),
       requireConsent: Boolean(settings.metaPixel?.requireConsent)
     })) return;
 

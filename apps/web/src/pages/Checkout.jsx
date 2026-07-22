@@ -23,6 +23,18 @@ export default function Checkout() {
   );
   const loggedIn = useCustomerLoggedIn();
   const initialDraft = useMemo(() => loadCheckoutReviewDraft(), []);
+  const metaTestAuthorization = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const reference = String(params.get('meta_test_reference') || '').trim().toUpperCase();
+    const grant = String(params.get('meta_test_grant') || '').trim();
+    if (/^META-TEST-[A-Z0-9-]{8,80}$/.test(reference) && grant.length >= 80) {
+      return { metaTestReference: reference, metaTestGrant: grant };
+    }
+    return {
+      metaTestReference: initialDraft?.metaTestReference || '',
+      metaTestGrant: initialDraft?.metaTestGrant || ''
+    };
+  }, [initialDraft, location.search]);
   const initialCustomerName = useMemo(() => customerNameParts(initialDraft?.customer), [initialDraft]);
 
   const [provinces, setProvinces] = useState([]);
@@ -257,7 +269,8 @@ export default function Checkout() {
         saveAddress,
         recoveryConsent,
         discountCode: initialDraft?.discountCode || '',
-        quote
+        quote,
+        ...metaTestAuthorization
       });
       navigate('/checkout/review');
     } catch (error) {

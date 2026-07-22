@@ -614,6 +614,8 @@ export default function OrderDetail() {
     : order.metaPurchaseTrackingVersion >= 2
       ? 'Waiting for both eligible sources'
       : 'Legacy order browser replay locked';
+  const metaTestAudit = order.paymentMetadata?.metaTestAudit || {};
+  const metaTestReference = order.paymentMetadata?.metaTestReference || metaTestAudit.testReference || '';
   const searchNeedle = orderProductFilter.trim().toLowerCase();
   const visibleItems = searchNeedle
     ? form.items.filter((item) => [item.productName, item.sku, item.size, item.slug].join(' ').toLowerCase().includes(searchNeedle))
@@ -1234,6 +1236,9 @@ export default function OrderDetail() {
                 <span className="text-xs text-[var(--admin-muted)]">Admin only</span>
               </div>
               <dl className="mt-3">
+                {metaTestReference && <InfoRow label="Controlled test reference" value={metaTestReference} />}
+                {metaTestReference && <InfoRow label="Primary dataset" value={fallback(metaTestAudit.primaryDatasetId || order.paymentMetadata?.metaPrimaryDatasetId, 'Not recorded')} />}
+                {metaTestReference && <InfoRow label="Transaction event time" value={metaTestAudit.eventTime ? new Date(Number(metaTestAudit.eventTime) * 1000).toLocaleString('en-PH') : 'Not recorded'} />}
                 <InfoRow label="Purchase event ID" value={fallback(order.metaPurchaseEventId, 'Not created')} />
                 <InfoRow label="Purchase value" value={metaPurchaseValueLabel} />
                 <InfoRow label="Currency" value={metaPurchaseCurrency} />
@@ -1242,7 +1247,12 @@ export default function OrderDetail() {
                 <InfoRow label="Browser sent time" value={order.metaBrowserPurchaseSentAt ? new Date(order.metaBrowserPurchaseSentAt).toLocaleString('en-PH') : 'Not sent'} />
                 <InfoRow label="Server sent time" value={order.metaCapiPurchaseSentAt ? new Date(order.metaCapiPurchaseSentAt).toLocaleString('en-PH') : 'Not sent'} />
                 <InfoRow label="Deduplication" value={metaDeduplicationStatus} />
+                {metaTestReference && <InfoRow label="Meta test result" value={fallback(metaTestAudit.deduplicationStatus, 'Awaiting Meta verification')} />}
+                {metaTestReference && <InfoRow label="Thank You refresh test" value={fallback(metaTestAudit.refreshTestResult, 'Not recorded')} />}
+                {metaTestReference && <InfoRow label="Secondary dataset" value={fallback(metaTestAudit.secondaryDatasetResult, 'Not checked')} />}
+                {metaTestReference && <InfoRow label="Expected counted Purchase" value={String(metaTestAudit.expectedPurchaseCount || 1)} />}
               </dl>
+              {metaTestAudit.lastMetaResponse && <p className="mt-3 break-words text-xs text-[var(--admin-muted)]">Last Meta response: {metaTestAudit.lastMetaResponse}</p>}
               {order.metaPurchaseLastError && <p className="mt-3 break-words text-xs text-[#ff8b98]">Last Meta error: {order.metaPurchaseLastError}</p>}
             </DetailCard>
 

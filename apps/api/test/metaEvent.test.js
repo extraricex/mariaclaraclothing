@@ -122,6 +122,29 @@ test('Meta Purchase uses persisted totals and hashed matching data', () => {
   assert.equal(JSON.stringify(event).includes('must not be sent'), false);
 });
 
+test('only an authorized controlled Purchase carries a valid server Test Events code', () => {
+  const order = {
+    orderNumber: 'MCC-CONTROLLED',
+    placedAt: '2026-07-22T04:00:00.000Z',
+    totalCents: 64900,
+    customer: {},
+    items: [{ sku: 'SKU-1', quantity: 1, unitPriceCents: 64900 }]
+  };
+  const controlled = buildMetaPurchaseEvent({
+    order,
+    requestContext: { metaControlledTestAuthorized: true, metaTestEventCode: 'TEST12345' }
+  });
+  assert.equal(controlled._meta_test_event_code, 'TEST12345');
+  assert.equal(buildMetaPurchaseEvent({
+    order,
+    requestContext: { metaControlledTestAuthorized: false, metaTestEventCode: 'TEST12345' }
+  })._meta_test_event_code, undefined);
+  assert.equal(buildMetaPurchaseEvent({
+    order,
+    requestContext: { metaControlledTestAuthorized: true, metaTestEventCode: 'INVALID' }
+  })._meta_test_event_code, undefined);
+});
+
 test('Meta Purchase rejects invalid stored totals without constructing an event', () => {
   const base = {
     orderNumber: 'MCC-invalid', placedAt: '2026-06-20T12:00:00.000Z', customer: {},

@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { META_CURRENCY, buildMetaPurchaseEvent, logMetaPurchaseDevelopment, purchaseValue } = require('./metaEvent');
 const { validateMetaPurchaseEvent } = require('./metaMoney');
 const { hasCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
+const { isControlledMetaTestOrder } = require('./metaControlledTest');
 const {
   insertMetaPurchaseOutbox,
   recordMetaPurchaseValidationFailure
@@ -16,9 +17,11 @@ const {
 const BROWSER_CLAIM_LEASE_MS = 2 * 60_000;
 const PURCHASE_SUCCESSFUL_STATUSES = new Set(['received', 'confirmed', 'packed', 'shipped', 'delivered']);
 
-function metaPurchaseEligibility(order, { allowLegacyServer = false } = {}) {
+function metaPurchaseEligibility(order, { allowLegacyServer = false, allowControlledTest = false } = {}) {
   if (!order?.orderNumber) return { eligible: false, reason: 'order_missing' };
-  if (order.isTestOrder) return { eligible: false, reason: 'test_order' };
+  if (order.isTestOrder && !(allowControlledTest && isControlledMetaTestOrder(order))) {
+    return { eligible: false, reason: 'test_order' };
+  }
   if (['declined', 'unset'].includes(String(order.paymentMetadata?.metaTrackingConsent || ''))) {
     return { eligible: false, reason: 'consent_not_granted' };
   }
@@ -74,11 +77,12 @@ async function claimBrowserMetaPurchase({ orderNumber, confirmationToken }, depe
 
     // CAPI is the production authority until Meta account-side Event Setup rules
     // and browser/server deduplication are verified in Test Events.
-    if (!dependencies.browserPurchaseEnabled) {
+    const controlledTestAllowed = Boolean(dependencies.allowControlledTest?.(order));
+    if (!dependencies.browserPurchaseEnabled && !controlledTestAllowed) {
       return { shouldSend: false, reason: 'browser_purchase_disabled', tracking: browserPurchaseState(order) };
     }
 
-    const eligibility = metaPurchaseEligibility(order);
+    const eligibility = metaPurchaseEligibility(order, { allowControlledTest: controlledTestAllowed });
     if (!eligibility.eligible) {
       return { shouldSend: false, reason: eligibility.reason, tracking: browserPurchaseState(order) };
     }
@@ -199,7 +203,16 @@ async function queueMetaPurchase({ client, order, requestContext = {}, enabled =
   if (requestContext.metaConsentGranted === false) {
     return { status: 'consent_not_granted', event: null, outbox: null };
   }
-  const eligibility = metaPurchaseEligibility(order, { allowLegacyServer: true });
+  const controlledTestAllowed = Boolean(
+    requestContext.metaControlledTestAuthorized === true
+      && requestContext.metaTestReference
+      && requestContext.metaTestReference === order?.paymentMetadata?.metaTestReference
+      && requestContext.metaTestEventCode
+  );
+  const eligibility = metaPurchaseEligibility(order, {
+    allowLegacyServer: true,
+    allowControlledTest: controlledTestAllowed
+  });
   const candidate = eligibility.eligible
     ? (options.buildEvent || buildMetaPurchaseEvent)({ order, requestContext })
     : null;
@@ -245,6 +258,7 @@ function defaultBrowserPurchaseDependencies(overrides = {}) {
   const { env } = require('../config/env');
   return {
     browserPurchaseEnabled: Boolean(env.meta?.enabled && env.meta?.browserPurchaseEnabled),
+    allowControlledTest: (order) => isControlledMetaTestOrder(order),
     transaction,
     findOrder: orderRepository.findOrderByNumber,
     claimOrder: orderRepository.claimOrderMetaBrowserPurchase,

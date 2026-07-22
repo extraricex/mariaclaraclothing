@@ -44,6 +44,7 @@ const { customerFullName, normalizeCustomerName } = require('../customers/custom
 const { enqueueAdminNewOrderEmail } = require('../notifications/adminOrderEmailNotificationService');
 const { enqueueOrderConfirmationNotifications } = require('../notifications/orderNotificationService');
 const { formatDeliveryAddress, requireCompleteDeliveryInformation } = require('../checkout/deliveryDetails');
+const { verifyControlledMetaTestGrant } = require('../marketing/metaControlledTest');
 
 const { enqueueOrderExport } = pancakeOrderExportRepository;
 
@@ -405,6 +406,24 @@ function notFoundConfirmation(res) {
   });
 }
 
+function controlledMetaTestRequest(body, dependencies) {
+  const reference = String(body?.metaTestReference || '').trim().toUpperCase();
+  const token = String(body?.metaTestGrant || '').trim();
+  if (!reference && !token) return null;
+  const grant = token ? dependencies.verifyControlledMetaTestGrant(token) : null;
+  if (!grant || grant.reference !== reference) {
+    throw new CommerceError('Controlled Meta test authorization is invalid or expired.', {
+      code: 'meta_test_authorization_invalid', status: 403
+    });
+  }
+  if (String(body?.paymentMethod || 'cash_on_delivery') !== 'cash_on_delivery') {
+    throw new CommerceError('Controlled Meta checkout must use Cash on Delivery.', {
+      code: 'meta_test_payment_method_invalid', status: 400
+    });
+  }
+  return grant;
+}
+
 function publicOrderPayload(order) {
   return {
     orderNumber: order.orderNumber,
@@ -447,6 +466,8 @@ function privateOrderPayload(order) {
     paidAmountCents: order.paidAmountCents,
     paidAt: order.paidAt || '',
     paymentExpiresAt: order.paymentExpiresAt || '',
+    metaControlledTest: Boolean(order.isTestOrder && order.paymentMetadata?.metaControlledTest),
+    metaTestReference: order.paymentMetadata?.metaTestReference || '',
     placedAt: order.placedAt
   };
 }
@@ -537,6 +558,10 @@ const DEFAULT_ROUTE_DEPENDENCIES = {
   })),
   placeAuthoritativeCheckout,
   resolveCustomerAccountId,
+  verifyControlledMetaTestGrant: (token) => verifyControlledMetaTestGrant(token, {
+    secret: env.checkout.confirmationSecret,
+    expectedDatasetId: env.meta.pixelId
+  }),
   verifyConfirmationToken,
   v2Required: env.checkout.v2Required
 };
@@ -604,6 +629,7 @@ function createOrderRouter(overrides = {}) {
       }
       if (req.body?.quoteId) {
         const paymentMethod = String(req.body?.paymentMethod || 'cash_on_delivery').trim();
+        const controlledMetaTest = controlledMetaTestRequest(req.body, dependencies);
         const enabledPaymentMethods = Array.isArray(settings.payments?.methods)
           ? settings.payments.methods.filter((method) => method.enabled).map((method) => method.id)
           : ['cash_on_delivery'];
@@ -619,8 +645,17 @@ function createOrderRouter(overrides = {}) {
         }
         const customerAccountId = await dependencies.resolveCustomerAccountId(req);
         const cookies = parseMetaCookies(req.headers.cookie);
+        const authoritativeDependencies = dependencies.authoritativeDependencies(req);
+        const checkoutDependencies = controlledMetaTest ? {
+          ...authoritativeDependencies,
+          enqueueOrderExport: null,
+          enqueueAdminEmail: null,
+          enqueueCustomerConfirmation: null,
+          enqueueInventorySync: null
+        } : authoritativeDependencies;
         const result = await dependencies.placeAuthoritativeCheckout({
           ...req.body,
+          controlledMetaTest,
           customerAccountId,
           idempotencyKey: req.get('Idempotency-Key') || '',
           requestContext: {
@@ -634,16 +669,23 @@ function createOrderRouter(overrides = {}) {
             metaTrackingConsent: settings.marketing?.metaPixel?.requireConsent
               ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
                 : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')
-              : 'not_required'
+              : 'not_required',
+            ...(controlledMetaTest ? {
+              metaControlledTestAuthorized: true,
+              metaTestReference: controlledMetaTest.reference,
+              metaTestEventCode: controlledMetaTest.testEventCode
+            } : {})
           }
-        }, dependencies.authoritativeDependencies(req));
-        try {
-          const pancakeExport = await dependencies.exportPancakeOrderNow(result.orderNumber);
-          if (Number(pancakeExport?.summary?.sentCount || 0) > 0) {
-            await syncOrderInventoryNow(result.orderNumber);
+        }, checkoutDependencies);
+        if (!controlledMetaTest) {
+          try {
+            const pancakeExport = await dependencies.exportPancakeOrderNow(result.orderNumber);
+            if (Number(pancakeExport?.summary?.sentCount || 0) > 0) {
+              await syncOrderInventoryNow(result.orderNumber);
+            }
+          } catch (error) {
+            dependencies.logger?.error?.('Realtime Pancake order/inventory sync failed:', error?.message || error);
           }
-        } catch (error) {
-          dependencies.logger?.error?.('Realtime Pancake order/inventory sync failed:', error?.message || error);
         }
         return res.status(201).json(result);
       }
@@ -673,5 +715,6 @@ module.exports = {
   privateOrderPayload,
   publicOrderPayload,
   resolveCustomerAccountId,
+  controlledMetaTestRequest,
   syncOrderInventoryNow
 };

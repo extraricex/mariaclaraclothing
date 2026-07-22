@@ -195,6 +195,55 @@ test('browser Purchase is disabled by default when server CAPI is authoritative'
   assert.equal(state.dispatch, null);
 });
 
+test('one authorized controlled test can pair browser and CAPI while the global browser flag stays off', async () => {
+  const controlled = order({
+    orderNumber: 'MCC-CONTROLLED-1',
+    metaPurchaseEventId: 'purchase_MCC-CONTROLLED-1',
+    isTestOrder: true,
+    paymentMetadata: {
+      metaTrackingConsent: 'not_required',
+      metaControlledTest: true,
+      metaTestReference: 'META-TEST-20260722-ABC12345',
+      metaPrimaryDatasetId: '595813035761213',
+      metaTestGrantExpiresAt: Math.floor(Date.now() / 1000) + 1800
+    }
+  });
+  const insertedEvents = [];
+  const queued = await queueMetaPurchase({
+    client: {},
+    order: controlled,
+    enabled: true,
+    requestContext: {
+      metaControlledTestAuthorized: true,
+      metaTestReference: 'META-TEST-20260722-ABC12345',
+      metaTestEventCode: 'TEST12345'
+    }
+  }, {
+    insertEvent: async (_client, event) => {
+      insertedEvents.push(event);
+      return { id: 'outbox-controlled' };
+    },
+    logger: { info() {}, warn() {} }
+  });
+  assert.equal(queued.status, 'queued');
+  assert.equal(insertedEvents[0].event_id, 'purchase_MCC-CONTROLLED-1');
+  assert.equal(insertedEvents[0].custom_data.value, 1278);
+  assert.equal(insertedEvents[0].custom_data.currency, 'PHP');
+  assert.equal(insertedEvents[0]._meta_test_event_code, 'TEST12345');
+
+  const state = browserDependencies(controlled);
+  state.dependencies.browserPurchaseEnabled = false;
+  state.dependencies.allowControlledTest = () => true;
+  const claim = await claimBrowserMetaPurchase({
+    orderNumber: controlled.orderNumber,
+    confirmationToken: 'confirmation-token'
+  }, state.dependencies);
+  assert.equal(claim.shouldSend, true);
+  assert.equal(claim.purchase.eventId, insertedEvents[0].event_id);
+  assert.equal(claim.purchase.payload.value, insertedEvents[0].custom_data.value);
+  assert.equal(claim.purchase.payload.currency, 'PHP');
+});
+
 test('durable browser dispatch blocks a second Pixel attempt even if the order lease is lost', async () => {
   const state = browserDependencies(order());
   const input = { orderNumber: state.order.orderNumber, confirmationToken: 'confirmation-token' };

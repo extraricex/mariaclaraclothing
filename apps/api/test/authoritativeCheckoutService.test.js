@@ -197,6 +197,50 @@ test('successful checkout performs every commerce write in one transaction', asy
   assert.equal(result.status, 'confirmed');
 });
 
+test('controlled Meta checkout is marked as test and omits fulfillment and notification outboxes', async () => {
+  const deps = createDependencies();
+  let savedOrder;
+  let metaOrder;
+  let metaContext;
+  deps.saveOrder = async (order) => { deps.calls.push('saveOrder'); savedOrder = order; };
+  deps.insertMeta = async (_client, order, context) => {
+    deps.calls.push('insertMeta');
+    metaOrder = order;
+    metaContext = context;
+  };
+  deps.enqueueOrderExport = null;
+  deps.enqueueAdminEmail = null;
+  deps.enqueueCustomerConfirmation = null;
+  deps.enqueueInventorySync = null;
+
+  const controlledMetaTest = {
+    reference: 'META-TEST-20260722-ABC12345',
+    datasetId: '595813035761213',
+    testEventCode: 'TEST12345',
+    expiresAt: 1784694600
+  };
+  const result = await placeAuthoritativeCheckout(requestFixture({
+    controlledMetaTest,
+    requestContext: {
+      metaTrackingConsent: 'not_required',
+      metaControlledTestAuthorized: true,
+      metaTestReference: controlledMetaTest.reference,
+      metaTestEventCode: controlledMetaTest.testEventCode
+    }
+  }), deps);
+
+  assert.equal(result.metaControlledTest, true);
+  assert.equal(savedOrder.isTestOrder, true);
+  assert.deepEqual(savedOrder.tags, ['meta-controlled-test', controlledMetaTest.reference]);
+  assert.equal(savedOrder.paymentMetadata.metaPrimaryDatasetId, controlledMetaTest.datasetId);
+  assert.equal(savedOrder.paymentMetadata.metaTestAudit.fulfillmentBlocked, true);
+  assert.equal(metaOrder, savedOrder);
+  assert.equal(metaContext.metaTestEventCode, 'TEST12345');
+  assert.equal(deps.calls.includes('enqueueOrderExport'), false);
+  assert.equal(deps.calls.includes('enqueueAdminEmail'), false);
+  assert.equal(deps.calls.includes('enqueueCustomerConfirmation'), false);
+});
+
 test('PayMongo checkout queues one pending-payment New Order email but no confirmation or Purchase', async () => {
   const deps = createDependencies();
   const result = await placeAuthoritativeCheckout(requestFixture({ paymentMethod: 'paymongo' }), deps);

@@ -87,6 +87,8 @@ export function createCheckoutQuote(input) {
 }
 
 export function buildOrderRequest(input, quoteId, idempotencyKey) {
+  const metaTestReference = String(input.metaTestReference || '').trim();
+  const metaTestGrant = String(input.metaTestGrant || '').trim();
   return {
     headers: { 'Idempotency-Key': idempotencyKey },
     body: {
@@ -94,7 +96,8 @@ export function buildOrderRequest(input, quoteId, idempotencyKey) {
       cartSessionId: input.cartSessionId,
       customer: input.customer,
       paymentMethod: input.paymentMethod,
-      metaTrackingConsent: getMetaTrackingConsent()
+      metaTrackingConsent: getMetaTrackingConsent(),
+      ...(metaTestReference && metaTestGrant ? { metaTestReference, metaTestGrant } : {})
     }
   };
 }

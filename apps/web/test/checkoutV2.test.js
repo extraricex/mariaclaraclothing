@@ -87,6 +87,20 @@ test('order request excludes browser totals and sends quote identity', () => {
   assert.equal('items' in request.body, false);
 });
 
+test('order request carries a controlled Meta authorization only when both fields exist', () => {
+  const input = {
+    cartSessionId: 'cart-1', customer: {}, paymentMethod: 'cash_on_delivery',
+    metaTestReference: 'META-TEST-20260722-ABC12345', metaTestGrant: 'signed-grant'
+  };
+  const controlled = buildOrderRequest(input, 'quote-1', 'uuid-1');
+  assert.equal(controlled.body.metaTestReference, input.metaTestReference);
+  assert.equal(controlled.body.metaTestGrant, input.metaTestGrant);
+
+  const incomplete = buildOrderRequest({ ...input, metaTestGrant: '' }, 'quote-1', 'uuid-2');
+  assert.equal('metaTestReference' in incomplete.body, false);
+  assert.equal('metaTestGrant' in incomplete.body, false);
+});
+
 test('confirmation fetch sends the token in a header and never a URL', async () => {
   let request;
   await fetchOrderConfirmation('MCC-1', 'secret-token', async (url, options) => {

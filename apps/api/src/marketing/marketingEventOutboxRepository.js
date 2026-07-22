@@ -151,7 +151,7 @@ async function markMetaEventSent(client, id, { traceId = '' } = {}) {
        UPDATE marketing_event_outbox
           SET status = 'sent', sent_at = now(), locked_at = NULL,
               provider_trace_id = $2, last_error = '',
-              payload = jsonb_set(payload, '{user_data}', '{}'::jsonb), updated_at = now()
+              payload = jsonb_set(payload, '{user_data}', '{}'::jsonb) - '_meta_test_event_code', updated_at = now()
         WHERE id = $1
        RETURNING aggregate_id, event_name, event_id, sent_at
      ), dispatch_state AS (

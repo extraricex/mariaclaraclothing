@@ -325,7 +325,9 @@ export default function CheckoutReview() {
       const payload = {
         cartSessionId,
         customer: deliveryValidation.customer,
-        paymentMethod
+        paymentMethod,
+        metaTestReference: draft.metaTestReference || '',
+        metaTestGrant: draft.metaTestGrant || ''
       };
       const idempotencyKey = getCheckoutIdempotencyKey(latestQuote.id);
       if (paymentMethod === 'paymongo') paymentProviderAttempted = true;
@@ -348,7 +350,10 @@ export default function CheckoutReview() {
       clearCheckoutIdempotencyKey();
       clearCart();
       resetCartSessionId();
-      navigate(`/thank-you?order=${encodeURIComponent(result.orderNumber)}`);
+      const controlledTestFragment = result.metaControlledTest
+        ? `&meta_test=1#confirmation=${encodeURIComponent(result.confirmationToken)}`
+        : '';
+      navigate(`/thank-you?order=${encodeURIComponent(result.orderNumber)}${controlledTestFragment}`);
     } catch (error) {
       placingOrderRef.current = false;
       if (paymentProviderAttempted) {

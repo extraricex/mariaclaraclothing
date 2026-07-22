@@ -35,6 +35,25 @@ test('Meta CAPI client posts the event and maps acceptance metadata', async () =
   assert.deepEqual(result, { eventsReceived: 1, traceId: 'trace-1', messages: [], status: 200 });
 });
 
+test('a controlled event uses its one-time Test Events code without leaking the internal field', async () => {
+  let body;
+  await sendMetaConversionsEvent({ ...event, _meta_test_event_code: 'TEST12345' }, {
+    config,
+    fetchImpl: async (_url, options) => {
+      body = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ events_received: 1, fbtrace_id: 'trace-controlled', messages: [] })
+      };
+    }
+  });
+
+  assert.equal(body.test_event_code, 'TEST12345');
+  assert.deepEqual(body.data, [event]);
+  assert.equal('_meta_test_event_code' in body.data[0], false);
+});
+
 test('Meta CAPI client classifies retryable and permanent errors without leaking tokens', async () => {
   await assert.rejects(
     sendMetaConversionsEvent(event, {

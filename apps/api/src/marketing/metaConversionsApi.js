@@ -60,11 +60,16 @@ async function sendMetaConversionsEvent(event, {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const url = `https://graph.facebook.com/${encodeURIComponent(config.graphApiVersion)}/${encodeURIComponent(config.pixelId)}/events`;
+  const outboundEvent = { ...event };
+  const controlledTestEventCode = String(outboundEvent._meta_test_event_code || '').trim();
+  delete outboundEvent._meta_test_event_code;
   const body = {
-    data: [event],
+    data: [outboundEvent],
     access_token: config.accessToken
   };
-  if (config.testEventCode) body.test_event_code = config.testEventCode;
+  if (controlledTestEventCode || config.testEventCode) {
+    body.test_event_code = controlledTestEventCode || config.testEventCode;
+  }
 
   try {
     const response = await fetchImpl(url, {

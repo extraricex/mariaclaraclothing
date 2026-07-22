@@ -210,6 +210,10 @@ CREATE INDEX IF NOT EXISTS payment_operation_events_order_idx
 CREATE INDEX IF NOT EXISTS orders_placed_at_idx ON orders(placed_at DESC);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
 CREATE INDEX IF NOT EXISTS orders_test_order_placed_idx ON orders(is_test_order, placed_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS orders_meta_controlled_test_reference_idx
+  ON orders ((payment_metadata->>'metaTestReference'))
+  WHERE payment_metadata->>'metaControlledTest' = 'true'
+    AND COALESCE(payment_metadata->>'metaTestReference', '') <> '';
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code text NOT NULL DEFAULT '';
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb;

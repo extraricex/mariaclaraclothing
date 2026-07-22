@@ -6,6 +6,7 @@ const {
   normalizeMetaValue,
   validateMetaPurchase
 } = require('./metaMoney');
+const { normalizeTestEventCode } = require('./metaControlledTest');
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
@@ -142,6 +143,10 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
   if (!validation.valid) return null;
   const sourceUrl = optionalText(requestContext.sourceUrl, 2048);
   if (sourceUrl) event.event_source_url = sourceUrl;
+  const controlledTestEventCode = normalizeTestEventCode(requestContext.metaTestEventCode);
+  if (requestContext.metaControlledTestAuthorized === true && controlledTestEventCode) {
+    event._meta_test_event_code = controlledTestEventCode;
+  }
   return event;
 }
 

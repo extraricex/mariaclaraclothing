@@ -212,6 +212,87 @@ test('V2 order ignores client money and forwards the idempotency key', async () 
   });
 });
 
+test('controlled Meta order requires a signed grant and skips every Pancake path', async () => {
+  let checkoutInput;
+  let checkoutDependencies;
+  let pancakeCalls = 0;
+  const reference = 'META-TEST-20260722-ABC12345';
+  const grant = {
+    reference,
+    datasetId: '595813035761213',
+    testEventCode: 'TEST12345',
+    expiresAt: 1784694600
+  };
+  const fulfillmentDependencies = {
+    enqueueOrderExport() {},
+    enqueueAdminEmail() {},
+    enqueueCustomerConfirmation() {},
+    enqueueInventorySync() {}
+  };
+  await withOrderServer({
+    getStoreSettings: async () => storeSettings(),
+    resolveCustomerAccountId: async () => '',
+    verifyControlledMetaTestGrant: (token) => token === 'signed-grant' ? grant : null,
+    placeAuthoritativeCheckout: async (input, dependencies) => {
+      checkoutInput = input;
+      checkoutDependencies = dependencies;
+      return {
+        orderNumber: 'MCC-CONTROLLED-1', totalCents: 72900,
+        confirmationToken: 'secret', metaControlledTest: true
+      };
+    },
+    exportPancakeOrderNow: async () => { pancakeCalls += 1; },
+    authoritativeDependencies: () => fulfillmentDependencies
+  }, async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': 'idem-controlled-123456789' },
+      body: JSON.stringify({
+        quoteId: 'quote-1', cartSessionId: 'cart-1',
+        customer: { fullName: 'Meta Test', phone: '09171234567' },
+        paymentMethod: 'cash_on_delivery', metaTestReference: reference, metaTestGrant: 'signed-grant'
+      })
+    });
+    assert.equal(response.status, 201);
+  });
+
+  assert.equal(checkoutInput.controlledMetaTest, grant);
+  assert.equal(checkoutInput.requestContext.metaControlledTestAuthorized, true);
+  assert.equal(checkoutInput.requestContext.metaTestReference, reference);
+  assert.equal(checkoutInput.requestContext.metaTestEventCode, 'TEST12345');
+  assert.equal(checkoutDependencies.enqueueOrderExport, null);
+  assert.equal(checkoutDependencies.enqueueAdminEmail, null);
+  assert.equal(checkoutDependencies.enqueueCustomerConfirmation, null);
+  assert.equal(checkoutDependencies.enqueueInventorySync, null);
+  assert.equal(pancakeCalls, 0);
+});
+
+test('controlled Meta order rejects an invalid grant before creating an order', async () => {
+  let checkoutCalled = false;
+  await withOrderServer({
+    getStoreSettings: async () => storeSettings(),
+    resolveCustomerAccountId: async () => '',
+    verifyControlledMetaTestGrant: () => null,
+    placeAuthoritativeCheckout: async () => { checkoutCalled = true; },
+    authoritativeDependencies: () => ({})
+  }, async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': 'idem-controlled-invalid' },
+      body: JSON.stringify({
+        quoteId: 'quote-1', cartSessionId: 'cart-1',
+        customer: { fullName: 'Meta Test', phone: '09171234567' },
+        paymentMethod: 'cash_on_delivery',
+        metaTestReference: 'META-TEST-20260722-ABC12345', metaTestGrant: 'invalid'
+      })
+    });
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.code, 'meta_test_authorization_invalid');
+  });
+  assert.equal(checkoutCalled, false);
+});
+
 test('V2 order rejects a payment method that is not enabled in server settings', async () => {
   let checkoutCalled = false;
   await withOrderServer({

@@ -35,6 +35,9 @@ function manualDiscountCode(snapshot) {
 function buildOrder(input, request, quote, orderNumber, tokenHash, now) {
   const snapshot = quote.snapshot;
   const paymentMethod = String(input.paymentMethod || 'cash_on_delivery');
+  const controlledMetaTest = input.controlledMetaTest && typeof input.controlledMetaTest === 'object'
+    ? input.controlledMetaTest
+    : null;
   return {
     orderNumber,
     metaPurchaseEventId: metaPurchaseEventId({ orderNumber }),
@@ -77,6 +80,22 @@ function buildOrder(input, request, quote, orderNumber, tokenHash, now) {
     inventoryReservationStatus: input.paymentMethod === 'paymongo' ? 'reserved' : 'committed',
     paymentMetadata: {
       metaTrackingConsent: String(input.requestContext?.metaTrackingConsent || 'unset'),
+      ...(controlledMetaTest ? {
+        metaControlledTest: true,
+        metaTestReference: controlledMetaTest.reference,
+        metaPrimaryDatasetId: controlledMetaTest.datasetId,
+        metaTestGrantExpiresAt: controlledMetaTest.expiresAt,
+        metaTestAudit: {
+          testReference: controlledMetaTest.reference,
+          primaryDatasetId: controlledMetaTest.datasetId,
+          browserPixelId: controlledMetaTest.datasetId,
+          capiDatasetId: controlledMetaTest.datasetId,
+          eventTime: Math.floor(now.getTime() / 1000),
+          expectedPurchaseCount: 1,
+          fulfillmentBlocked: true,
+          status: 'authorized'
+        }
+      } : {}),
       ...(input.paymentMethod === 'paymongo'
         ? { metaRequestContext: input.requestContext || {} }
         : {})
@@ -85,10 +104,11 @@ function buildOrder(input, request, quote, orderNumber, tokenHash, now) {
     deliveryStatus: 'pending',
     deliveryMethod: 'Standard shipping',
     trackingNumber: '',
-    tags: [],
+    tags: controlledMetaTest ? ['meta-controlled-test', controlledMetaTest.reference] : [],
     // Historical orders may retain notes in storage, but checkout no longer
     // collects or persists customer delivery notes for new orders.
     notes: '',
+    isTestOrder: Boolean(controlledMetaTest),
     customerAccountId: String(input.customerAccountId || ''),
     confirmationTokenHash: tokenHash,
     confirmationTokenCreatedAt: now.toISOString(),
@@ -116,7 +136,8 @@ function checkoutResponse(order) {
     freeShippingUnlocked: order.freeShippingUnlocked,
     status: order.status,
     fulfillmentStatus: order.fulfillmentStatus,
-    paymentStatus: order.paymentStatus
+    paymentStatus: order.paymentStatus,
+    metaControlledTest: Boolean(order.paymentMetadata?.metaControlledTest)
   };
 }
 
