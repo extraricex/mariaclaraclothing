@@ -255,6 +255,8 @@ jobs:
               )"
               test "$controlled" = CONTROLLED
 
+              printf 'CANCEL_PRECHECK reference=%s order=%s controlled=true\n' "$META_TEST_REFERENCE" "$ORDER_NUMBER"
+
               cookie_file="$(mktemp)"
               trap 'shred -u "$cookie_file" 2>/dev/null || rm -f "$cookie_file"' EXIT
               admin_password="$(${compose[@]} exec -T api printenv ADMIN_PASSWORD | tr -d '\r\n')"
@@ -263,14 +265,45 @@ jobs:
                     --data-binary @- http://127.0.0.1/api/admin/login)"
               unset admin_password
               csrf_token="$(printf '%s' "$login_response" | jq -er '.csrfToken')"
-              update_response="$(curl -fsS -b "$cookie_file" -X PATCH \
+              response_file="$(mktemp)"
+              http_code="$(curl -sS -o "$response_file" -w '%{http_code}' -b "$cookie_file" -X PATCH \
                 -H 'content-type: application/json' -H "X-CSRF-Token: $csrf_token" \
                 --data '{"status":"cancelled","cancellationReason":"other","isTestOrder":true}' \
                 "http://127.0.0.1/api/admin/orders/$ORDER_NUMBER")"
-              printf 'CANCEL_RESULT %s\n' "$(printf '%s' "$update_response" | jq -c '.order | {
+              test "$http_code" = 200
+              update_response="$(<"$response_file")"
+              printf 'CANCEL_RESPONSE %s\n' "$(printf '%s' "$update_response" | jq -c '.order | {
                 orderNumber,status,fulfillmentStatus,paymentStatus,codConfirmationStatus,
                 deliveryStatus,cancellationReason,isTestOrder
               }')"
+
+              verified="$(${compose[@]} exec -T -e META_TEST_REFERENCE="$META_TEST_REFERENCE" -e ORDER_NUMBER="$ORDER_NUMBER" api node <<'NODE'
+              const { closePool, query } = require('./src/db/postgres');
+              query(`SELECT order_number,status,fulfillment_status,payment_status,
+                            cod_confirmation_status,delivery_status,is_test_order
+                       FROM orders
+                      WHERE order_number=$1 AND is_test_order=true
+                        AND payment_metadata->>'metaControlledTest'='true'
+                        AND payment_metadata->>'metaTestReference'=$2`,
+                [process.env.ORDER_NUMBER, process.env.META_TEST_REFERENCE])
+                .then((result) => {
+                  const row = result.rows[0] || {};
+                  console.log(JSON.stringify({
+                    orderNumber: row.order_number || '',
+                    status: row.status || '',
+                    fulfillmentStatus: row.fulfillment_status || '',
+                    paymentStatus: row.payment_status || '',
+                    codConfirmationStatus: row.cod_confirmation_status || '',
+                    deliveryStatus: row.delivery_status || '',
+                    isTestOrder: Boolean(row.is_test_order)
+                  }));
+                })
+                .catch(() => { process.exitCode = 1; })
+                .finally(closePool);
+          NODE
+              )"
+              test "$(printf '%s' "$verified" | jq -r '.status')" = cancelled
+              printf 'CANCEL_RESULT %s\n' "$verified"
           REMOTE
               ;;
 
