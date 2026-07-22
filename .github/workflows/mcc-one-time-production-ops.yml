@@ -178,8 +178,8 @@ jobs:
                 console.error(`ORDER_AUDIT_ERROR ${String(error?.message || error).slice(0, 200)}`);
                 process.exitCode = 1;
               }).finally(closePool);
-              NODE
-              REMOTE
+          NODE
+          REMOTE
               ;;
 
             record_audit)
@@ -229,8 +229,8 @@ jobs:
                 console.error(`AUDIT_RECORD_ERROR ${String(error?.message || error).slice(0, 200)}`);
                 process.exitCode = 1;
               }).finally(closePool);
-              NODE
-              REMOTE
+          NODE
+          REMOTE
               ;;
 
             cancel_test)
@@ -251,7 +251,7 @@ jobs:
                 .then((result) => console.log(Number(result.rows[0]?.count || 0) === 1 ? 'CONTROLLED' : 'DENIED'))
                 .catch(() => { process.exitCode = 1; })
                 .finally(closePool);
-              NODE
+          NODE
               )"
               test "$controlled" = CONTROLLED
 
@@ -271,7 +271,7 @@ jobs:
                 orderNumber,status,fulfillmentStatus,paymentStatus,codConfirmationStatus,
                 deliveryStatus,cancellationReason,isTestOrder
               }')"
-              REMOTE
+          REMOTE
               ;;
 
             remove_access)
@@ -282,7 +282,7 @@ jobs:
                 iptables -D INPUT -s 111.90.220.87/32 -p tcp --dport 2222 -j ACCEPT
               fi
               echo 'TEMP_SSH_ACCESS_REMOVED=true'
-              REMOTE
+          REMOTE
               ;;
 
             *)
