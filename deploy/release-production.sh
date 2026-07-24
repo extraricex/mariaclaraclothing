@@ -35,6 +35,10 @@ compose config --quiet
 # available while PostgreSQL and API are updated, then perform the short nginx
 # handover only after the new API is healthy.
 compose build api web
+# Refuse to replace a healthy release when configured SMTP credentials cannot
+# authenticate. This catches revoked or mismatched Gmail app passwords before
+# a customer order can become the first production failure signal.
+compose run --rm --no-deps api node scripts/verify-smtp.js
 compose up -d postgres
 compose up -d --no-deps api
 wait_for_api

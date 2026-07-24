@@ -70,14 +70,24 @@ function notificationConfig(source = process.env) {
   if (!['true', 'false'].includes(smtpSecureRaw)) {
     throw new Error('SMTP_SECURE must be true or false');
   }
+  const smtpHost = String(source.SMTP_HOST || '').trim().toLowerCase();
+  const smtpUser = String(source.SMTP_USER || '').trim().toLowerCase();
+  const smtpFrom = String(source.SMTP_FROM || '').trim();
+  const smtpFromAddress = (smtpFrom.match(/<([^<>]+)>/)?.[1] || smtpFrom).trim().toLowerCase();
+  const gmailSmtp = ['smtp.gmail.com', 'smtp.googlemail.com'].includes(smtpHost);
+  const smtpPass = String(source.SMTP_PASS || '');
+  const normalizedSmtpPass = gmailSmtp ? smtpPass.replace(/ /g, '') : smtpPass;
+  if (gmailSmtp && smtpUser && smtpFromAddress && smtpUser !== smtpFromAddress) {
+    throw new Error('SMTP_FROM address must match SMTP_USER when Gmail SMTP is used');
+  }
   const adminOrderEmail = {
     recipient: String(source.ORDER_NOTIFICATION_EMAIL || '').trim(),
-    host: String(source.SMTP_HOST || '').trim(),
+    host: smtpHost,
     port: smtpPort,
     secure: smtpSecureRaw === 'true',
-    user: String(source.SMTP_USER || '').trim(),
-    pass: String(source.SMTP_PASS || ''),
-    from: String(source.SMTP_FROM || '').trim(),
+    user: smtpUser,
+    pass: normalizedSmtpPass,
+    from: smtpFrom,
     siteUrl: String(source.FRONTEND_URL || 'http://localhost:5173').trim().replace(/\/$/, '')
   };
   sms.configured = enabled && Boolean(sms.apiKey);

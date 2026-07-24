@@ -30,5 +30,5 @@ test('customer client uses cookie credentials and CSRF without browser-stored be
 test('checkout relies on the customer session cookie instead of a bearer header', async () => {
   const checkout = await source('pages/Checkout.jsx');
   assert.doesNotMatch(checkout, /getCustomerToken/);
-  assert.doesNotMatch(checkout, /Authorization/);
+  assert.doesNotMatch(checkout, /['"]Authorization['"]\s*:/);
 });

@@ -40,6 +40,14 @@ function variants(value, { type = '', parentName = '' } = {}) {
 
   add(normalized.replace(/^(province|city|municipality|barangay|brgy) of /, ''));
   add(normalized.replace(/^(barangay|brgy) /, ''));
+  if (type === 'commune') {
+    // The PSGC dataset uses the Filipino linker form "Daang Hari", while
+    // Pancake currently returns "Daan Hari" for the same Taguig barangays.
+    // Keep this exact-token alias scoped to the already-resolved district so
+    // similarly named barangays in another city can never be selected.
+    add(normalized.replace(/\bdaang\b/g, 'daan'));
+    add(normalized.replace(/\bdaan\b/g, 'daang'));
+  }
   if (type === 'district') {
     add(normalized.replace(/^city of /, '').replace(/ city$/, ''));
     add(normalized.replace(/^municipality of /, '').replace(/ municipality$/, ''));
@@ -179,7 +187,7 @@ async function resolveLevel({
   return publicResolved(selected, saved, matchMethod);
 }
 
-async function resolvePancakeAddress(addressInput = {}, {
+async function resolvePancakeAddressOnce(addressInput = {}, {
   client,
   repository = repositoryDefault,
   forceRefresh = false
@@ -238,6 +246,21 @@ async function resolvePancakeAddress(addressInput = {}, {
     mappingStatus: 'resolved',
     resolvedAt: new Date().toISOString()
   };
+}
+
+async function resolvePancakeAddress(addressInput = {}, options = {}) {
+  try {
+    return await resolvePancakeAddressOnce(addressInput, options);
+  } catch (error) {
+    // Pancake can add or rename geo records while a worker still holds its
+    // 24-hour cache. Refresh once before blocking an otherwise valid order.
+    // Ambiguous matches remain blocked and are never guessed.
+    if (!options.forceRefresh && error instanceof PancakeGeoResolutionError
+      && String(error.code || '').endsWith('_not_found')) {
+      return resolvePancakeAddressOnce(addressInput, { ...options, forceRefresh: true });
+    }
+    throw error;
+  }
 }
 
 async function saveManualPancakeAddressMapping(addressInput = {}, selection = {}, {

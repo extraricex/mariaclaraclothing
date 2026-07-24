@@ -7,7 +7,8 @@ const { notificationConfig } = require('../src/config/env');
 const {
   buildAdminNewOrderEmail,
   sendAdminNewOrderEmail,
-  smtpRetryable
+  smtpRetryable,
+  verifySmtpConnection
 } = require('../src/notifications/adminOrderEmail');
 const {
   ADMIN_NEW_ORDER_EVENT,
@@ -82,6 +83,19 @@ test('SMTP admin order configuration is server-side, validated, and starts the o
   assert.equal(config.workerEnabled, true);
   assert.throws(() => notificationConfig({ SMTP_PORT: 'invalid' }), /SMTP_PORT/);
   assert.throws(() => notificationConfig({ SMTP_SECURE: 'yes' }), /SMTP_SECURE/);
+  const gmail = notificationConfig({
+    SMTP_HOST: 'smtp.gmail.com',
+    SMTP_USER: 'mariaclaraclothing@gmail.com',
+    SMTP_PASS: 'abcd efgh ijkl mnop',
+    SMTP_FROM: 'Maria Clara Clothing <mariaclaraclothing@gmail.com>'
+  });
+  assert.equal(gmail.adminOrderEmail.pass, 'abcdefghijklmnop');
+  assert.throws(() => notificationConfig({
+    SMTP_HOST: 'smtp.gmail.com',
+    SMTP_USER: 'old-account@gmail.com',
+    SMTP_PASS: 'abcdefghijklmnop',
+    SMTP_FROM: 'Maria Clara Clothing <mariaclaraclothing@gmail.com>'
+  }), /SMTP_FROM address must match SMTP_USER/);
 });
 
 test('new-order email contains authoritative quantities and totals without internal product identifiers', () => {
@@ -124,6 +138,28 @@ test('temporary SMTP and network failures retry, while authentication and reject
   assert.equal(smtpRetryable({ responseCode: 421 }), true);
   assert.equal(smtpRetryable({ code: 'EAUTH', responseCode: 535 }), false);
   assert.equal(smtpRetryable({ code: 'EENVELOPE', responseCode: 550 }), false);
+});
+
+test('SMTP deployment preflight verifies authentication without sending a message', async () => {
+  let verified = 0;
+  const result = await verifySmtpConnection(smtpConfig, {
+    transport: { verify: async () => { verified += 1; } }
+  });
+  assert.deepEqual(result, { verified: true });
+  assert.equal(verified, 1);
+  await assert.rejects(
+    verifySmtpConnection(smtpConfig, {
+      transport: {
+        verify: async () => {
+          const error = new Error('Bad credentials');
+          error.code = 'EAUTH';
+          error.responseCode = 535;
+          throw error;
+        }
+      }
+    }),
+    (error) => error.code === 'EAUTH' && error.retryable === false
+  );
 });
 
 test('COD and pending PayMongo orders each queue exactly one durable New Order email after commit', async () => {
@@ -325,4 +361,6 @@ test('migration, env examples, and frontend keep SMTP secrets server-side', () =
     .filter((entry) => entry.isFile() && /\.(jsx?|css)$/.test(entry.name))
     .map((entry) => fs.readFileSync(path.join(entry.parentPath, entry.name), 'utf8')).join('\n');
   assert.doesNotMatch(webSource, /SMTP_PASS|SMTP_USER|ORDER_NOTIFICATION_EMAIL/);
+  const releaseScript = fs.readFileSync(path.join(root, 'deploy', 'release-production.sh'), 'utf8');
+  assert.match(releaseScript, /verify-smtp\.js/);
 });

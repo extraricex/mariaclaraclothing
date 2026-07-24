@@ -206,6 +206,38 @@ function smtpRetryable(error) {
     || (responseCode >= 400 && responseCode < 500);
 }
 
+function createSmtpTransport(config, nodemailerModule = nodemailer) {
+  return nodemailerModule.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    requireTLS: !config.secure,
+    connectionTimeout: 15_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    auth: { user: config.user, pass: config.pass }
+  });
+}
+
+async function verifySmtpConnection(config, { transport } = {}) {
+  if (!config?.configured) {
+    const error = new Error('Transactional SMTP email is not configured.');
+    error.code = 'SMTP_NOT_CONFIGURED';
+    error.retryable = false;
+    throw error;
+  }
+  const mailer = transport || createSmtpTransport(config);
+  try {
+    await mailer.verify();
+    return { verified: true };
+  } catch (error) {
+    error.retryable = smtpRetryable(error);
+    throw error;
+  } finally {
+    if (!transport && typeof mailer.close === 'function') mailer.close();
+  }
+}
+
 async function sendAdminNewOrderEmail(order, { config, transport, event } = {}) {
   if (!config?.configured) {
     const error = new Error('Admin order email is not configured.');
@@ -218,16 +250,7 @@ async function sendAdminNewOrderEmail(order, { config, transport, event } = {}) 
     eventName: event?.eventName,
     delayed: event?.payload?.delayed
   });
-  const mailer = transport || nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    requireTLS: !config.secure,
-    connectionTimeout: 15_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 20_000,
-    auth: { user: config.user, pass: config.pass }
-  });
+  const mailer = transport || createSmtpTransport(config);
   try {
     const result = await mailer.sendMail({
       from: cleanHeader(config.from),
@@ -258,16 +281,7 @@ async function sendTransactionalSmtpEmail(event, { config, transport } = {}) {
     error.retryable = false;
     throw error;
   }
-  const mailer = transport || nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    requireTLS: !config.secure,
-    connectionTimeout: 15_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 20_000,
-    auth: { user: config.user, pass: config.pass }
-  });
+  const mailer = transport || createSmtpTransport(config);
   try {
     const result = await mailer.sendMail({
       from: cleanHeader(config.from),
@@ -287,10 +301,12 @@ async function sendTransactionalSmtpEmail(event, { config, transport } = {}) {
 module.exports = {
   buildAdminNewOrderEmail,
   completeAddress,
+  createSmtpTransport,
   escapeHtml,
   formatMoney,
   safeImageUrl,
   sendAdminNewOrderEmail,
   sendTransactionalSmtpEmail,
-  smtpRetryable
+  smtpRetryable,
+  verifySmtpConnection
 };

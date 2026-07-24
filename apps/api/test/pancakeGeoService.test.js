@@ -109,6 +109,46 @@ test('an unknown or ambiguous barangay blocks instead of selecting the first res
   } finally { deps.restore(); }
 });
 
+test('maps PSGC Daang Hari to Pancake Daan Hari only inside the resolved district', async () => {
+  const deps = dependencies();
+  try {
+    deps.client.listCommunes = async (provinceId, districtId) => {
+      deps.calls.push(['communes', provinceId, districtId]);
+      return [
+        { id: 'north', name: 'North daan hari', provinceId, districtId },
+        { id: 'south', name: 'South daang hari', provinceId, districtId }
+      ];
+    };
+    const mapping = await deps.service.resolvePancakeAddress(address({
+      barangayCode: 'CAVITE|IMUS|NORTH DAANG HARI',
+      barangay: 'North Daang Hari'
+    }), { client: deps.client, repository: deps.repository });
+    assert.equal(mapping.commune.id, 'north');
+    assert.equal(mapping.commune.name, 'North daan hari');
+    assert.equal(mapping.commune.matchMethod, 'approved_alias');
+  } finally { deps.restore(); }
+});
+
+test('refreshes Pancake geo data once before declaring a location missing', async () => {
+  const deps = dependencies();
+  let communeLoads = 0;
+  try {
+    deps.client.listCommunes = async (provinceId, districtId) => {
+      deps.calls.push(['communes', provinceId, districtId]);
+      communeLoads += 1;
+      return communeLoads === 1 ? [] : [
+        { id: 'fresh', name: 'Fresh Barangay', provinceId, districtId }
+      ];
+    };
+    const mapping = await deps.service.resolvePancakeAddress(address({
+      barangayCode: 'CAVITE|IMUS|FRESH BARANGAY',
+      barangay: 'Fresh Barangay'
+    }), { client: deps.client, repository: deps.repository });
+    assert.equal(mapping.commune.id, 'fresh');
+    assert.equal(communeLoads, 2);
+  } finally { deps.restore(); }
+});
+
 test('manual mapping validates the selected Province, District, and Commune hierarchy', async () => {
   const deps = dependencies();
   try {

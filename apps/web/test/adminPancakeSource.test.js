@@ -63,7 +63,7 @@ test('Pancake admin page exposes modern order sync controls with live status cop
   for (const endpoint of ['/orders/status', '/orders/shadow-build']) {
     assert.match(page, new RegExp(endpoint.replaceAll('/', '\\/')));
   }
-  for (const label of ['Order sync', 'Sent means live Pancake order created', 'Queued', 'Sent', 'Failed', 'Blocked']) {
+  for (const label of ['Order sync', 'Sent means the live Pancake order', 'Queued', 'Sent', 'Failed', 'Blocked']) {
     assert.match(page, new RegExp(label, 'i'));
   }
   assert.match(page, /adminSend\('POST', `\$\{base\}\/orders\/shadow-build`/);
