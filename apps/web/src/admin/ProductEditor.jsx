@@ -1115,15 +1115,15 @@ export default function ProductEditor() {
 
         <div className="space-y-4">
           <section className="border border-line bg-paper p-6">
-            <label className="block">
-              <span className="eyebrow">Status</span>
-              <select className="field mt-1" value={product.status} onChange={(e) => {
+            <div className="block">
+              <label className="eyebrow" htmlFor="product-publication-status">Status</label>
+              <select id="product-publication-status" className="field mt-1" value={product.status} onChange={(e) => {
                 update('status', e.target.value);
                 clearFieldError('inventory');
               }}>
                 {STATUSES.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
-            </label>
+            </div>
             <label className="mt-4 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={Boolean(product.featured)} onChange={(e) => update('featured', e.target.checked)} />
               Featured product
