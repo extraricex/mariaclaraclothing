@@ -64,6 +64,8 @@ jobs:
           CUSTOMER_AUTH_SECRET: ci-customer-auth-secret-with-at-least-thirty-two-characters
           CHECKOUT_V2_REQUIRED: 'true'
           ORDER_CONFIRMATION_SECRET: ci-order-confirmation-secret-with-at-least-thirty-two-characters
+          FRONTEND_URL: https://mariaclaraclothing.example
+          AUTH_CALLBACK_URL: https://mariaclaraclothing.example/api/customer/oauth
           META_CONVERSIONS_API_ENABLED: 'false'
           ORDER_NOTIFICATIONS_ENABLED: 'false'
 
