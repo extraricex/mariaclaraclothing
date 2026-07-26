@@ -23,6 +23,9 @@ test('product-card editing controls live in Admin while customer cards receive d
 
 test('manual product-card ratings require a visible source and never replace review aggregates', () => {
   assert.match(repository, /A visible source is required when showing a manually entered product card rating/);
+  assert.match(editor, /source: String\(previous\.productPage\?\.cardContent\?\.source \|\| ''\)\.trim\(\) \|\| 'Previous website'/);
+  assert.match(editor, /showSource: product\.productPage\?\.cardContent\?\.showRating === true/);
+  assert.match(editor, /Add a source label before saving a visible manually entered rating/);
   assert.match(content, /<Stars rating=\{rating\}/);
   assert.doesNotMatch(content, /reviewSummary|ratingCount|AggregateRating/);
 });

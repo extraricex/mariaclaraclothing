@@ -233,7 +233,10 @@ export default function ProductEditor() {
         cardContent: {
           ...(previous.productPage?.cardContent || {}),
           [field]: value,
-          ...(field === 'showRating' && value ? { showSource: true } : {})
+          ...(field === 'showRating' && value ? {
+            showSource: true,
+            source: String(previous.productPage?.cardContent?.source || '').trim() || 'Previous website'
+          } : {})
         }
       }
     }));
@@ -448,6 +451,21 @@ export default function ProductEditor() {
   async function save() {
     setMessage('');
     let savedPancakeStatus = '';
+    const cardContent = {
+      ...(product.productPage?.cardContent || {}),
+      source: String(product.productPage?.cardContent?.source || '').trim(),
+      showSource: product.productPage?.cardContent?.showRating === true
+        ? true
+        : product.productPage?.cardContent?.showSource === true
+    };
+    if (cardContent.showRating && !cardContent.rating) {
+      setMessage('Choose a product card rating before showing it.');
+      return;
+    }
+    if (cardContent.showRating && !cardContent.source) {
+      setMessage('Add a source label before saving a visible manually entered rating.');
+      return;
+    }
     const partialSizeChartRow = sizeChartRows.some((row) => sizeChartRowHasValue(row) && !sizeChartRowIsComplete(row));
     if (partialSizeChartRow) {
       setMessage('Complete every size chart field before saving, or remove the incomplete row.');
@@ -482,6 +500,7 @@ export default function ProductEditor() {
       compareAtPriceCents: comparePeso.trim() === '' ? null : pesoToCents(comparePeso),
       productPage: {
         ...(product.productPage || {}),
+        cardContent,
         sizeChart: completeSizeChartRows
       },
       variants: product.variants.map((variant) => ({
