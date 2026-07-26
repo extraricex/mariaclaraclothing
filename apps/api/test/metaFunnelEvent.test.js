@@ -82,6 +82,7 @@ test('funnel CAPI hashes authenticated customer matching data without storing ra
 
 test('empty customer matching values are omitted instead of sent as empty strings', () => {
   assert.deepEqual(addHashedCustomerData({}, { email: '', phone: '', id: '' }), {});
+  assert.deepEqual(addHashedCustomerData({}, null), {});
 });
 
 test('funnel CAPI rejects ID mismatches, malformed values, unpaired browser events, and bots', () => {

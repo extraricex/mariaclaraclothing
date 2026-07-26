@@ -21,6 +21,12 @@ test('product page includes reference-style gallery, tabs, and upsell markers', 
   assert.match(source, /View Size Chart/);
   assert.match(source, /sizeChartOpen/);
   assert.match(source, /aria-label="Size chart"/);
+  assert.match(source, /loadedImageUrl === image\.url/);
+  assert.match(source, /onLoad=\{\(\) => setLoadedImageUrl\(image\.url\)\}/);
+  assert.doesNotMatch(source, /setMainImageLoaded\(false\)/);
+  assert.match(source, /Cash on Delivery/);
+  assert.match(source, /Secure online payment/);
+  assert.match(source, /Shipping fee is shown before you place the order/);
   assert.match(source, /displaySectionTitle/);
   assert.match(source, /min-h-11 min-w-11 rounded-full border/);
   assert.match(source, /rounded border border-line/);

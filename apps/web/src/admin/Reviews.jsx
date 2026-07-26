@@ -76,25 +76,12 @@ function ReviewSettings() {
   );
 }
 
-function downloadText(text, filename, type = 'text/csv;charset=utf-8') {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const link = document.createElement('a');
-  link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-}
-
 function ReviewImport() {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [token, setToken] = useState('');
-  const [errorCsv, setErrorCsv] = useState('');
-  const [batches, setBatches] = useState([]);
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);
-
-  function loadBatches() {
-    adminJson('/api/admin/reviews/import/batches').then((body) => setBatches(body.batches || [])).catch(() => {});
-  }
-  useEffect(loadBatches, []);
 
   async function previewFile() {
     if (!file) { setMessage('Choose an XLSX file first.'); return; }
@@ -104,7 +91,7 @@ function ReviewImport() {
       const response = await adminFetch('/api/admin/reviews/import/preview', { method: 'POST', body: data });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Preview failed.');
-      setPreview(body.preview); setToken(body.previewToken); setErrorCsv(body.errorReportCsv || '');
+      setPreview(body.preview); setToken(body.previewToken);
       setMessage('Preview complete. Review all matching and validation results before importing.');
     } catch (error) { setMessage(error.message); }
     finally { setPending(false); }
@@ -118,9 +105,8 @@ function ReviewImport() {
       const response = await adminFetch('/api/admin/reviews/import/confirm', { method: 'POST', body: data });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Import failed.');
-      setErrorCsv(body.errorReportCsv || '');
       setMessage(`Import complete: ${body.successfulRows} Pending reviews imported, ${body.failedRows} rows failed.`);
-      setPreview(null); setToken(''); loadBatches();
+      setPreview(null); setToken('');
     } catch (error) { setMessage(error.message); }
     finally { setPending(false); }
   }
@@ -129,9 +115,20 @@ function ReviewImport() {
     <div className="mt-6 space-y-5">
       <section className="border border-[var(--admin-line)] bg-[var(--admin-panel)] p-5 sm:p-7">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div><h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Excel review import</h2><p className="mt-2 max-w-2xl text-xs leading-5 text-[var(--admin-muted)]">Uses SheetJS CE 0.20.3 from the official CDN. Files are limited to 5 MB and 2,000 rows; formulas, unsafe URLs, invalid products, scripts, and duplicate reviews are rejected.</p></div>
-          <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => adminDownloadGet('/api/admin/reviews/import/template', 'maria-clara-review-import-template.xlsx')}>Download Review Import Template</button>
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Excel review import</h2>
+            <p className="mt-2 max-w-2xl text-xs leading-5 text-[var(--admin-muted)]">
+              Download the workbook and enter the exact product ID with each review. A valid product ID assigns the imported review directly to that product.
+              No delivered-order match is required; imported reviews remain Pending and are not labeled Verified Purchase.
+            </p>
+          </div>
+          <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => adminDownloadGet('/api/admin/reviews/import/template', 'maria-clara-review-import-template.xlsx')}>Download Excel Template (.xlsx)</button>
         </div>
+        <ol className="mt-5 grid gap-2 text-xs text-[var(--admin-muted)] sm:grid-cols-3">
+          <li className="border border-[var(--admin-line)] p-3"><strong className="block text-[var(--admin-text)]">1. Fill the template</strong><span className="mt-1 block">Enter the exact product ID and the review details.</span></li>
+          <li className="border border-[var(--admin-line)] p-3"><strong className="block text-[var(--admin-text)]">2. Preview the file</strong><span className="mt-1 block">Invalid products, duplicates, unsafe content, and formatting errors are flagged.</span></li>
+          <li className="border border-[var(--admin-line)] p-3"><strong className="block text-[var(--admin-text)]">3. Moderate Pending reviews</strong><span className="mt-1 block">Review the imported content before publishing it on the assigned product.</span></li>
+        </ol>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="block flex-1 text-xs font-semibold uppercase tracking-[0.1em]">Review workbook (.xlsx)<input className="field mt-1" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setFile(event.target.files?.[0] || null); setPreview(null); setToken(''); }} /></label>
           <button type="button" className="btn-primary" disabled={pending || !file} onClick={previewFile}>{pending ? 'Checking…' : 'Preview import'}</button>
@@ -142,7 +139,7 @@ function ReviewImport() {
         <section className="border border-[var(--admin-line)] bg-[var(--admin-panel)] p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Import preview</h2><p className="mt-1 text-xs text-[var(--admin-muted)]">{preview.parser} · {preview.totalRows} rows · {preview.validRows} valid · {preview.invalidRows} invalid</p></div>
-            <div className="flex flex-wrap gap-2">{errorCsv && <button type="button" className="btn-secondary" onClick={() => downloadText(errorCsv, 'review-import-errors.csv')}>Download error report</button>}<button type="button" className="btn-primary" disabled={pending || preview.validRows < 1} onClick={confirmImport}>Import {preview.validRows} valid rows</button></div>
+            <button type="button" className="btn-primary" disabled={pending || preview.validRows < 1} onClick={confirmImport}>Import {preview.validRows} valid rows</button>
           </div>
           <div className="mt-5 max-w-full overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-xs">
@@ -152,10 +149,6 @@ function ReviewImport() {
           </div>
         </section>
       )}
-      <section className="border border-[var(--admin-line)] bg-[var(--admin-panel)] p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Recent import batches</h2>
-        <div className="mt-4 space-y-3">{batches.length ? batches.map((batch) => <div key={batch.id} className="flex flex-col gap-2 border-b border-[var(--admin-line)] pb-3 text-xs sm:flex-row sm:items-center sm:justify-between"><span><strong>{batch.filename}</strong><span className="mt-1 block text-[var(--admin-muted)]">{formatDate(batch.createdAt)} · {batch.successfulRows} imported · {batch.failedRows} failed</span></span>{batch.failedRows > 0 && <button type="button" className="text-left text-[var(--admin-orange)] underline" onClick={() => adminDownloadGet(`/api/admin/reviews/import/batches/${encodeURIComponent(batch.id)}/errors.csv`, `review-import-errors-${batch.id}.csv`)}>Error report</button>}</div>) : <p className="text-xs text-[var(--admin-muted)]">No review imports yet.</p>}</div>
-      </section>
     </div>
   );
 }
@@ -307,7 +300,7 @@ export default function Reviews() {
     <div className="admin-content-shell min-w-0">
       <p className="eyebrow">Customer feedback</p>
       <h1 className="display mt-1 text-3xl">Reviews</h1>
-      <p className="mt-2 text-sm text-[var(--admin-muted)]">Moderate honestly, protect customer privacy, verify purchases against delivered orders, and publish only the records you intend to show.</p>
+      <p className="mt-2 text-sm text-[var(--admin-muted)]">Assign bulk imports by product ID, moderate customer feedback, protect customer privacy, and publish only the records you intend to show.</p>
       <AdminReviewTabs />
       {mode === 'settings' ? <ReviewSettings /> : mode === 'import' ? <ReviewImport /> : <ReviewList />}
     </div>

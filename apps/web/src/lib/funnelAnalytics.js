@@ -82,6 +82,10 @@ export function trackFunnelEvent(eventName, input = {}) {
     paymentMethod: String(input.paymentMethod || ''),
     metricName: String(input.metricName || ''),
     metricValue: Number.isFinite(Number(input.metricValue)) ? Number(input.metricValue) : null,
+    checkoutStep: String(input.checkoutStep || ''),
+    errorCategory: String(input.errorCategory || ''),
+    errorMessage: String(input.errorMessage || ''),
+    reference: String(input.reference || ''),
     referrer: document.referrer || '',
     ...campaign(),
     ...(input.metaBrowserSent === true ? {

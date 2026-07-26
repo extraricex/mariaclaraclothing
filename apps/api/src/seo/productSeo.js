@@ -463,7 +463,7 @@ function offerForVariant(product, variant, seo) {
 }
 
 function validRating(summary) {
-  const count = Number(summary?.totalReviews || 0);
+  const count = Number(summary?.ratingCount ?? summary?.totalReviews ?? 0);
   const average = Number(summary?.averageRating || 0);
   return Number.isInteger(count) && count > 0 && average >= 1 && average <= 5
     ? { count, average }
@@ -496,8 +496,10 @@ function publicReviewMarkup(reviewSummary, publicReviews, reviewsPublic) {
   return {
     aggregateRating: {
       '@type': 'AggregateRating',
-      ratingValue: Number(rating.average.toFixed(2)),
-      reviewCount: rating.count
+      ratingValue: Number(rating.average.toFixed(1)),
+      reviewCount: rating.count,
+      bestRating: 5,
+      worstRating: 1
     },
     ...(reviews.length ? { review: reviews } : {})
   };

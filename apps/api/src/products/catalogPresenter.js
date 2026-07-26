@@ -48,6 +48,8 @@ function toStorefrontProduct(product) {
     createdAt: product.createdAt || '',
     updatedAt: product.updatedAt || '',
     reviewSettings: product.reviewSettings || { reviewsEnabled: true, showRatingSummary: true },
+    commerceStats: product.commerceStats || {},
+    historicalSoldQuantity: Math.max(0, Number(product.historicalSoldQuantity || 0)),
     productPage: product.productPage,
     images: (product.imageRecords || product.images.map((url, index) => ({ url, altText: product.name, sortOrder: index }))).map((image, index) => ({
       id: `catalog-image-${product.slug}-${index}`,

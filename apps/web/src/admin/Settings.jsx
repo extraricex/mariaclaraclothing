@@ -503,6 +503,93 @@ function InventoryCard({ initial }) {
   );
 }
 
+function ProductCardSalesInformationCard({ initial }) {
+  const [form, setForm] = useState(initial);
+  const [status, setStatus] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function set(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const body = await adminSend('PUT', '/api/admin/settings/productCardSalesInformation', {
+        ...form,
+        defaultLowStockThreshold: Number(form.defaultLowStockThreshold)
+      });
+      setForm(body.settings.productCardSalesInformation);
+      setStatus({ tone: 'ok', message: 'Product-card sales information saved.' });
+    } catch (error) {
+      setStatus({ tone: 'error', message: error.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const toggles = [
+    ['showRemainingStockGlobally', 'Show remaining stock globally'],
+    ['showSoldCountGlobally', 'Show sold count globally'],
+    ['hideExactStockAboveThreshold', 'Hide exact stock above threshold'],
+    ['showInStockAboveThreshold', 'Show “In stock” above threshold'],
+    ['showNewWhenSoldCountZero', 'Show “New” when sold count is zero'],
+    ['includeVerifiedHistoricalSales', 'Include verified historical sales']
+  ];
+
+  return (
+    <SectionCard
+      title="Product Card Sales Information"
+      hint="Truthful inventory scarcity and verified sales shown on product cards and product pages."
+    >
+      <div className="mt-4 space-y-3">
+        {toggles.map(([field, label]) => (
+          <label key={field} className="flex items-center justify-between gap-4 text-sm">
+            <span>{label}</span>
+            <input type="checkbox" checked={Boolean(form[field])} onChange={(event) => set(field, event.target.checked)} />
+          </label>
+        ))}
+        <div className="grid gap-4 pt-2 sm:grid-cols-3">
+          <Field label="Default low-stock threshold">
+            <input
+              className="field mt-1"
+              type="number"
+              min="1"
+              max="999"
+              value={form.defaultLowStockThreshold}
+              onChange={(event) => set('defaultLowStockThreshold', event.target.value)}
+            />
+          </Field>
+          <Field label="Sold-count formatting">
+            <select className="field mt-1" value={form.soldCountFormatting} onChange={(event) => set('soldCountFormatting', event.target.value)}>
+              <option value="exact">Exact (1,204 sold)</option>
+              <option value="abbreviated">Abbreviated (1.2K sold)</option>
+            </select>
+          </Field>
+          <Field label="New-product period (days)">
+            <input
+              className="field mt-1"
+              type="number"
+              min="1"
+              max="365"
+              value={form.newProductPeriodDays}
+              onChange={(event) => set('newProductPeriodDays', event.target.value)}
+            />
+          </Field>
+        </div>
+        <p className="text-xs text-clay">
+          Exact low-stock quantities always use current sellable inventory. Historical sales remain zero until an admin records a verified source on the product.
+        </p>
+      </div>
+      <button type="button" className="btn-ink mt-5" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save product-card sales settings'}
+      </button>
+      <Status status={status} />
+    </SectionCard>
+  );
+}
+
 function AuthenticationCard({ initial }) {
   const [form, setForm] = useState(initial);
   const [status, setStatus] = useState(null);
@@ -827,6 +914,7 @@ export default function Settings() {
         <PaymentsCard initial={settings.payments} providers={settings.paymentProviders || {}} />
         <OrderNotificationsCard initial={settings.orderNotifications} provider={settings.notificationProvider} />
         <InventoryCard initial={settings.inventory} />
+        <ProductCardSalesInformationCard initial={settings.productCardSalesInformation} />
         <AuthenticationCard initial={settings.authentication} />
         <MarketingCard initial={settings.marketing} provider={settings.metaProvider} />
         <SeoCard initial={settings.website.seo} />

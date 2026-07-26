@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminJson } from '../lib/adminApi.js';
 import { formatMoney } from '../lib/money.js';
+import AnalyticsRangeControls, { analyticsRangeQuery } from './AnalyticsRangeControls.jsx';
 
 function percent(value) {
   return `${Number(value || 0).toFixed(1)}%`;
@@ -24,50 +25,67 @@ function Panel({ title: panelTitle, description = '', children, className = '' }
 }
 
 export default function Analytics() {
-  const [days, setDays] = useState(30);
+  const [range, setRange] = useState({ range: 'last_30_days', start: '', end: '' });
   const [analytics, setAnalytics] = useState(null);
+  const [checkoutIssues, setCheckoutIssues] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     let active = true;
     setMessage('');
+    const query = analyticsRangeQuery(range);
     Promise.all([
-      adminJson(`/api/admin/analytics?days=${days}`),
+      adminJson(`/api/admin/analytics?${query}`),
+      adminJson(`/api/admin/analytics/checkout-issues?${query}`),
       adminJson('/api/admin/content-readiness')
-    ]).then(([analyticsBody, readinessBody]) => {
+    ]).then(([analyticsBody, issuesBody, readinessBody]) => {
       if (!active) return;
       setAnalytics(analyticsBody.analytics);
+      setCheckoutIssues(issuesBody.checkoutIssues);
       setReadiness(readinessBody.readiness);
     }).catch((error) => { if (active) setMessage(error.message); });
     return () => { active = false; };
-  }, [days]);
+  }, [range]);
 
   const totals = analytics?.totals || {};
+  const issueRecords = checkoutIssues?.issues || [];
+  const issueCount = (...categories) => issueRecords
+    .filter((issue) => categories.includes(issue.category))
+    .reduce((sum, issue) => sum + Number(issue.count || 0), 0);
+  const methodCount = (name) => (analytics?.paymentMethods || [])
+    .find((method) => method.name === name)?.count || 0;
+  const topProducts = analytics?.topProducts || [];
+  const productLeaders = [
+    ['Top viewed products', [...topProducts].sort((left, right) => right.views - left.views).slice(0, 5), 'views'],
+    ['Top added-to-cart products', [...topProducts].sort((left, right) => right.addToCarts - left.addToCarts).slice(0, 5), 'addToCarts'],
+    ['Top purchased products', [...topProducts].sort((left, right) => right.quantity - left.quantity).slice(0, 5), 'quantity']
+  ];
   const metrics = [
-    ['Sessions', totals.sessions || 0],
-    ['Product views', totals.productViews || 0],
-    ['Add to carts', totals.addToCarts || 0],
-    ['Checkout starts', totals.checkoutStarts || 0],
-    ['Payment issues', Number(totals.paymentFailures || 0) + Number(totals.paymentCancellations || 0)],
-    ['Completed orders', totals.orders || 0],
+    ['Visitors', totals.sessions || 0],
+    ['Product viewers', totals.productViewers || 0],
+    ['Add-to-cart users', totals.addToCartUsers || 0],
+    ['Checkout users', totals.checkoutStarts || 0],
+    ['Successful orders', totals.orders || 0],
+    ['Conversion rate', percent(totals.conversionRate)],
+    ['Average order value', formatMoney(totals.averageOrderValueCents || 0)],
     ['Revenue', formatMoney(totals.revenueCents || 0)],
-    ['Average order', formatMoney(totals.averageOrderValueCents || 0)]
+    ['COD orders', methodCount('cash_on_delivery')],
+    ['PayMongo orders', methodCount('paymongo')],
+    ['Failed checkouts', totals.checkoutErrors || 0],
+    ['Payment failures', issueCount('payment_failure', 'payment_cancelled')],
+    ['Address failures', issueCount('invalid_address', 'missing_province', 'missing_city', 'missing_barangay', 'invalid_phone')]
   ];
 
   return (
     <div>
       <div className="admin-page-header">
         <div>
-          <p className="eyebrow">Sales & SEO</p>
-          <h1 className="display mt-1 text-3xl">Conversion analytics</h1>
-          <p className="mt-2 max-w-3xl text-sm text-[var(--admin-muted)]">Privacy-safe storefront funnel data, authoritative completed-order revenue, product performance, and content gaps. Cancelled and marked test orders are excluded from sales.</p>
+          <p className="eyebrow">Analytics</p>
+          <h1 className="display mt-1 text-3xl">Conversion overview</h1>
+          <p className="mt-2 max-w-3xl text-sm text-[var(--admin-muted)]">Privacy-safe storefront behavior and authoritative Online Store orders. Pancake POS imports, cancelled orders, and marked tests are excluded from website conversion and revenue.</p>
         </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Analytics date range">
-          {[7, 30, 90].map((value) => (
-            <button key={value} type="button" className={days === value ? 'btn-ink' : 'btn-secondary'} onClick={() => setDays(value)}>{value} days</button>
-          ))}
-        </div>
+        <AnalyticsRangeControls value={range} onChange={setRange} />
       </div>
 
       {message && <p className="mt-4 text-sm text-[#ff8b98]" role="alert">{message}</p>}
@@ -78,7 +96,7 @@ export default function Analytics() {
               First-party measurement starts after this release is deployed. Historical orders are included, but earlier page views and cart activity cannot be reconstructed.
             </div>
           )}
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
             {metrics.map(([label, value]) => (
               <article key={label} className="admin-metric-card">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--admin-muted)]">{label}</p>
@@ -129,6 +147,13 @@ export default function Analytics() {
                 </div>
               </div>
               <div className="mt-4 border-t border-[var(--admin-line)] pt-4">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Top landing pages</h3>
+                <div className="mt-2 space-y-2">
+                  {(analytics.landingPages || []).slice(0, 8).map((item) => <div key={item.name} className="flex justify-between gap-3 text-xs"><span className="break-all">{item.name}</span><strong>{item.count}</strong></div>)}
+                  {!analytics.landingPages?.length && <p className="text-xs text-[var(--admin-muted)]">Landing pages will appear after storefront sessions are measured.</p>}
+                </div>
+              </div>
+              <div className="mt-4 border-t border-[var(--admin-line)] pt-4">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">Last pages in session</h3>
                 <div className="mt-2 space-y-2">
                   {(analytics.exitPages || []).map((item) => <div key={item.name} className="flex justify-between gap-3 text-xs"><span className="break-all">{item.name}</span><strong>{item.count}</strong></div>)}
@@ -141,11 +166,30 @@ export default function Analytics() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[680px] text-left text-xs">
                   <thead><tr className="border-b border-[var(--admin-line)] text-[var(--admin-muted)]"><th className="py-2 pr-3">Product</th><th className="p-2">Views</th><th className="p-2">Carts</th><th className="p-2">View → cart</th><th className="p-2">Qty sold</th><th className="p-2 text-right">Revenue</th></tr></thead>
-                  <tbody>{(analytics.topProducts || []).map((product) => (
+                  <tbody>{topProducts.slice(0, 12).map((product) => (
                     <tr key={product.productId} className="border-b border-[var(--admin-line)]/70"><td className="py-3 pr-3 font-semibold">{product.name}</td><td className="p-2">{product.views}</td><td className="p-2">{product.addToCarts}</td><td className="p-2">{percent(product.viewToCartRate)}</td><td className="p-2">{product.quantity}</td><td className="p-2 text-right">{formatMoney(product.revenueCents)}</td></tr>
                   ))}</tbody>
                 </table>
                 {!analytics.topProducts?.length && <p className="py-4 text-xs text-[var(--admin-muted)]">Product performance will appear as customers browse and place valid orders.</p>}
+              </div>
+            </Panel>
+
+            <Panel title="Product leaders" description="Views and carts are anonymous website events; purchased quantities come from committed Online Store orders." className="xl:col-span-12">
+              <div className="grid gap-5 lg:grid-cols-3">
+                {productLeaders.map(([label, products, metric]) => (
+                  <div key={label}>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--admin-muted)]">{label}</h3>
+                    <ol className="mt-3 space-y-2">
+                      {products.filter((product) => Number(product[metric] || 0) > 0).map((product, index) => (
+                        <li key={product.productId} className="flex justify-between gap-4 border-b border-[var(--admin-line)]/70 pb-2 text-sm">
+                          <span className="min-w-0 truncate">{index + 1}. {product.name}</span>
+                          <strong>{product[metric]}</strong>
+                        </li>
+                      ))}
+                    </ol>
+                    {!products.some((product) => Number(product[metric] || 0) > 0) && <p className="mt-3 text-xs text-[var(--admin-muted)]">No data in this period.</p>}
+                  </div>
+                ))}
               </div>
             </Panel>
 
@@ -202,6 +246,8 @@ export default function Analytics() {
       )}
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Link to="/admin/analytics/funnel" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Open the detailed conversion funnel →</Link>
+        <Link to="/admin/analytics/checkout-issues" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Review checkout issues →</Link>
         <Link to="/admin/analytics/meta-reconciliation" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Reconcile website, Pancake, and Meta orders →</Link>
         <Link to="/admin/pancake" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Review Pancake POS health →</Link>
         <Link to="/admin/payments" className="admin-panel text-sm font-semibold hover:border-[var(--admin-orange)]">Review PayMongo operations →</Link>

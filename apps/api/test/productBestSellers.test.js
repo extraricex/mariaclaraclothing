@@ -27,12 +27,19 @@ test('best seller counts include only successful checkout quantities', () => {
       status: 'confirmed',
       paymentStatus: 'unpaid',
       items: [{ productId: 'catalog-pants', quantity: 9 }]
+    },
+    {
+      status: 'confirmed',
+      paymentStatus: 'paid',
+      isTestOrder: true,
+      items: [{ productId: 'catalog-shirt', quantity: 99 }]
     }
   ];
 
   assert.equal(successfulOrder(orders[0]), true);
   assert.equal(successfulOrder(orders[2]), false);
   assert.equal(successfulOrder(orders[3]), false);
+  assert.equal(successfulOrder(orders[4]), false);
   assert.deepEqual(
     annotateBestSellerCounts(products, orders).map(({ id, successfulOrderCount }) => ({ id, successfulOrderCount })),
     [

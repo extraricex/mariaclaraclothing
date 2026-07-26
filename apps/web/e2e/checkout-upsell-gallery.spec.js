@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const PRODUCT_HANDLE = 'curiosity-black';
+const PRODUCT_HANDLE = 'curiosity-black-oversized-240-gsm-shirt';
 
 async function pageOverflowMetrics(page) {
   return page.evaluate(() => {
@@ -107,7 +107,7 @@ test('review upsell adds an in-stock variant and unlocks server-quoted free ship
 
 test('product gallery thumbnails, arrows, keyboard, and mobile swipe share one active image', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/product/abot-kamay-white');
+  await page.goto('/product/curiosity-offwhite-oversized-240-gsm-shirt');
 
   const first = page.getByRole('button', { name: 'View product image 1', exact: true });
   const second = page.getByRole('button', { name: 'View product image 2', exact: true });
@@ -123,7 +123,7 @@ test('product gallery thumbnails, arrows, keyboard, and mobile swipe share one a
   await expect(first).toHaveAttribute('aria-current', 'true');
   await expect(first).toBeFocused();
 
-  const gallery = page.getByRole('region', { name: /ABOT KAMAY WHITE image gallery/i });
+  const gallery = page.getByRole('region', { name: /CURIOSITY OFFWHITE.+image gallery/i });
   await gallery.dispatchEvent('touchstart', { touches: [{ identifier: 1, clientX: 320, clientY: 250 }] });
   await gallery.dispatchEvent('touchend', { changedTouches: [{ identifier: 1, clientX: 100, clientY: 250 }] });
   await expect(second).toHaveAttribute('aria-current', 'true');

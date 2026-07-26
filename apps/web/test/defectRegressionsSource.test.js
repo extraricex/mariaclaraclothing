@@ -25,10 +25,14 @@ test('unknown storefront and product routes render a noindex not-found page', as
   assert.match(nginx, /proxy_pass \$api_origin\/api\/products\/\$storefront_product_slug\/route/);
   assert.match(nginx, /location ~ \^\/product[\s\S]*error_page 404 =404 \/index\.html\?seo_path=\$uri/);
   assert.match(nginx, /proxy_pass \$api_origin\/api\/products\/\$legacy_product_slug\/route/);
-  assert.match(nginx, /location ~ \^\/products\/oranges-mcc-box-tee\/\?\$ \{\s*return 301 \/product\/mariaclara-orange-crop-box-240-gsm-shirt;/);
+  assert.match(nginx, /location ~ \^\/products\/oranges-mcc-box-tee\/\?\$ \{\s*return 301 \/product\/mariaclara-orange-crop-box-240-gsm-shirt\$is_args\$args;/);
   assert.match(nginx, /proxy_pass \$api_origin\/api\/collections\/\$storefront_collection_slug\/route/);
   assert.match(nginx, /location = \/pages\/terms-of-use[\s\S]*return 301 \/terms/);
   assert.match(nginx, /location = \/collections\/all[\s\S]*return 301 \/shop/);
+  assert.match(nginx, /legacy_plural=1&\$args/);
+  assert.match(nginx, /location = \/pages\/contact[\s\S]*return 301 \/contact\$is_args\$args/);
+  assert.match(nginx, /location ~ \^\/policies\/\(\?:refund-policy\|shipping-policy\)/);
+  assert.match(nginx, /absolute_redirect off/);
   assert.match(nginx, /error_page 404 =404 \/index\.html/);
 });
 

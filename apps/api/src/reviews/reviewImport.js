@@ -2,7 +2,6 @@ const crypto = require('node:crypto');
 const XLSX = require('xlsx');
 const { listEditableProducts } = require('../products/catalogRepository');
 const {
-  REVIEW_STATUSES,
   createImportBatch,
   existingDuplicateKeys,
   insertReview,
@@ -10,14 +9,27 @@ const {
   updateImportBatch
 } = require('./reviewRepository');
 const { safeRemoteReviewImageUrl } = require('./reviewImages');
-const { verifyReviewPurchase } = require('./reviewVerification');
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 2000;
 const REVIEW_IMPORT_COLUMNS = [
-  'product_id', 'product_sku', 'product_slug', 'reviewer_name', 'reviewer_email', 'rating',
-  'review_title', 'review_body', 'review_date', 'variant', 'size', 'verified_purchase',
-  'order_number', 'status', 'photo_url_1', 'photo_url_2', 'photo_url_3', 'admin_reply', 'source'
+  'product_id', 'reviewer_name', 'reviewer_email', 'rating', 'review_title', 'review_body',
+  'review_date', 'variant', 'size', 'photo_url_1', 'photo_url_2', 'photo_url_3', 'admin_reply'
+];
+const REVIEW_IMPORT_FIELD_GUIDE = [
+  ['product_id', 'Required', 'Text', 'Exact product ID. The review is assigned directly to this product.'],
+  ['reviewer_name', 'Required', 'Text', 'Customer display name.'],
+  ['reviewer_email', 'Optional', 'Email', 'Stored privately and used for duplicate checks.'],
+  ['rating', 'Required', 'Whole number 1–5', 'A real rating supplied by the reviewer.'],
+  ['review_title', 'Optional', 'Text', 'Short review headline.'],
+  ['review_body', 'Required', 'Text', 'The customer review. Formula-like text is rejected.'],
+  ['review_date', 'Optional', 'YYYY-MM-DD', 'Leave blank to use the import date.'],
+  ['variant', 'Optional', 'Text', 'Purchased color, style, or variant description.'],
+  ['size', 'Optional', 'Text', 'Purchased size when known.'],
+  ['photo_url_1', 'Optional', 'Public HTTPS URL', 'JPG, PNG, or WebP only.'],
+  ['photo_url_2', 'Optional', 'Public HTTPS URL', 'JPG, PNG, or WebP only.'],
+  ['photo_url_3', 'Optional', 'Public HTTPS URL', 'JPG, PNG, or WebP only.'],
+  ['admin_reply', 'Optional', 'Text', 'Optional store response; review remains Pending after import.']
 ];
 const runtimeImportSecret = crypto.randomBytes(32).toString('hex');
 
@@ -96,10 +108,6 @@ function parseWorkbook(buffer) {
   }));
 }
 
-function booleanValue(value) {
-  return ['true', 'yes', '1', 'y'].includes(String(value || '').trim().toLowerCase());
-}
-
 function importDate(value) {
   if (value === '' || value === null || value === undefined) return new Date().toISOString();
   if (typeof value === 'number') {
@@ -129,38 +137,20 @@ function formulaLike(value) {
 
 function productIndexes(products) {
   const byId = new Map();
-  const bySku = new Map();
-  const bySlug = new Map();
   for (const product of products) {
     for (const id of [product.id, product.slug ? `catalog-${product.slug}` : '']) {
       if (id) byId.set(String(id).trim().toLowerCase(), product);
     }
-    bySlug.set(String(product.slug).trim().toLowerCase(), product);
-    bySlug.set(String(product.publicHandle || '').trim().toLowerCase(), product);
-    for (const variant of product.variants || []) {
-      if (variant.sku) bySku.set(String(variant.sku).trim().toUpperCase(), { product, variant });
-    }
   }
-  return { byId, bySku, bySlug };
+  return { byId };
 }
 
 function matchProduct(row, indexes) {
   const productId = String(row.product_id || '').trim().toLowerCase();
-  const sku = String(row.product_sku || '').trim().toUpperCase();
-  const slug = String(row.product_slug || '').trim().toLowerCase();
-  if (productId && indexes.byId.has(productId)) return { product: indexes.byId.get(productId), method: 'product_id', variant: null };
-  if (sku && indexes.bySku.has(sku)) {
-    const match = indexes.bySku.get(sku);
-    return { product: match.product, method: 'product_sku', variant: match.variant };
+  if (productId && indexes.byId.has(productId)) {
+    return { product: indexes.byId.get(productId), method: 'product_id', variant: null };
   }
-  if (slug && indexes.bySlug.has(slug)) return { product: indexes.bySlug.get(slug), method: 'product_slug', variant: null };
   return { product: null, method: 'unmatched', variant: null };
-}
-
-function requestedStatus(value) {
-  const status = String(value || 'pending').trim().toLowerCase();
-  if (!REVIEW_STATUSES.includes(status)) throw new Error(`Status must be one of: ${REVIEW_STATUSES.join(', ')}.`);
-  return status;
 }
 
 async function validateRow(record, indexes, dependencies = {}) {
@@ -168,17 +158,15 @@ async function validateRow(record, indexes, dependencies = {}) {
   const warnings = [];
   const row = record.values;
   const matching = matchProduct(row, indexes);
-  if (!matching.product) errors.push('Product could not be matched by product_id, SKU, or product_slug.');
+  if (!String(row.product_id || '').trim()) errors.push('product_id is required.');
+  else if (!matching.product) errors.push('Product could not be matched by product_id.');
   for (const [column, value] of Object.entries(row)) {
     if (formulaLike(value)) errors.push(`${column} starts with a spreadsheet formula character.`);
   }
   let candidate = null;
   let photos = [];
-  let verification = { verified: false, reason: 'not_requested' };
   try {
     const date = importDate(row.review_date);
-    const status = requestedStatus(row.status);
-    if (status !== 'pending') warnings.push(`Requested status "${status}" was changed to Pending for moderation.`);
     photos = [row.photo_url_1, row.photo_url_2, row.photo_url_3]
       .map((value) => safeRemoteReviewImageUrl(value))
       .filter(Boolean);
@@ -191,24 +179,16 @@ async function validateRow(record, indexes, dependencies = {}) {
         title: row.review_title,
         body: row.review_body,
         createdAt: date,
-        variant: row.variant || matching.variant?.size || '',
-        size: row.size || matching.variant?.size || '',
-        orderNumber: row.order_number,
+        variant: row.variant,
+        size: row.size,
+        orderNumber: '',
         status: 'pending',
         source: 'imported',
+        verifiedPurchase: false,
         adminReply: row.admin_reply,
         originalRowNumber: record.rowNumber,
         originalImportData: row
       });
-      if (booleanValue(row.verified_purchase)) {
-        verification = await (dependencies.verifyReviewPurchase || verifyReviewPurchase)({
-          orderNumber: candidate.orderNumber,
-          reviewerEmail: candidate.reviewerEmail,
-          product: matching.product
-        });
-        if (!verification.verified) warnings.push(`Verified Purchase was not assigned (${verification.reason.replaceAll('_', ' ')}).`);
-        candidate = normalizeReview({ ...candidate, verifiedPurchase: verification.verified }, candidate);
-      }
     }
   } catch (error) {
     errors.push(error.message);
@@ -319,24 +299,34 @@ function errorRow(row) {
 function reviewImportTemplateBuffer() {
   const reviews = XLSX.utils.aoa_to_sheet([REVIEW_IMPORT_COLUMNS]);
   reviews['!cols'] = REVIEW_IMPORT_COLUMNS.map((column) => ({ wch: Math.max(14, column.length + 2) }));
+  reviews['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(REVIEW_IMPORT_COLUMNS.length - 1)}1` };
   const instructions = [
     ['Review Import Instructions', ''],
-    ['Required fields', 'Provide product_id, product_sku, or product_slug; reviewer_name; rating; review_body.'],
+    ['Safe workflow', '1. Complete the Reviews sheet. 2. Upload it to Admin > Reviews > Import reviews. 3. Check the preview. 4. Import valid rows. 5. Moderate Pending reviews before publishing.'],
+    ['Required fields', 'Provide product_id, reviewer_name, rating, and review_body.'],
     ['Rating', 'Whole numbers 1–5 only.'],
-    ['Statuses', REVIEW_STATUSES.join(', ') + '. All imports are saved as Pending for moderation.'],
+    ['Review status', 'All imports are saved as Pending for moderation.'],
     ['Date format', 'YYYY-MM-DD. Leave blank to use the import date.'],
-    ['Product matching', 'Priority: product_id, then product_sku, then product_slug. Product names are not used.'],
-    ['Verified Purchase', 'TRUE is accepted only when order_number, reviewer email, delivered order, and product all match.'],
+    ['Product matching', 'The exact product_id assigns the review directly to that product. Product names, SKUs, slugs, and delivered orders are not used for bulk-import matching.'],
+    ['Verification', 'Bulk-imported reviews are not labeled Verified Purchase. Verification is a separate real-order process.'],
+    ['Imported source', 'The website records all workbook rows as imported and preserves the original row data in the audit record.'],
     ['Photo URLs', 'Public HTTPS JPG, PNG, or WebP URLs only; maximum 3.'],
     ['Maximum rows', String(MAX_IMPORT_ROWS)],
     ['Security', 'Do not enter formulas. Text beginning with =, +, -, or @ is rejected.'],
-    ['Example row', 'prod_example | EXAMPLE-SKU | example-product | Example Customer | example@example.com | 5 | Great fit | Comfortable and well made. | 2026-01-31 | Black | M | FALSE | | pending | | | | | imported']
+    ['Example row', 'prod_example | Example Customer | example@example.com | 5 | Great fit | Comfortable and well made. | 2026-01-31 | Black | M | | | |']
   ];
   const instructionSheet = XLSX.utils.aoa_to_sheet(instructions);
   instructionSheet['!cols'] = [{ wch: 24 }, { wch: 120 }];
+  const fieldGuide = XLSX.utils.aoa_to_sheet([
+    ['Field', 'Required?', 'Accepted format', 'Guidance'],
+    ...REVIEW_IMPORT_FIELD_GUIDE
+  ]);
+  fieldGuide['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 24 }, { wch: 78 }];
+  fieldGuide['!autofilter'] = { ref: `A1:D${REVIEW_IMPORT_FIELD_GUIDE.length + 1}` };
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, reviews, 'Reviews');
   XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Instructions');
+  XLSX.utils.book_append_sheet(workbook, fieldGuide, 'Field Guide');
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx', compression: true });
 }
 
@@ -357,6 +347,7 @@ module.exports = {
   MAX_IMPORT_BYTES,
   MAX_IMPORT_ROWS,
   REVIEW_IMPORT_COLUMNS,
+  REVIEW_IMPORT_FIELD_GUIDE,
   assertWorkbookUpload,
   importErrorsCsv,
   importPlannedReviews,

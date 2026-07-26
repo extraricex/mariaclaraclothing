@@ -77,13 +77,14 @@ function safeSourceUrl(path, baseUrl) {
 }
 
 function addHashedCustomerData(userData, customer = {}) {
-  const email = normalizeEmailForMeta(customer.email);
-  const phone = normalizePhoneForMeta(customer.phone);
-  const firstName = normalizeTextForMeta(customer.firstName, { compact: true });
-  const lastName = normalizeTextForMeta(customer.lastName, { compact: true });
-  const externalId = normalizeTextForMeta(customer.id || customer.externalId, { compact: true });
-  const address = customer.savedAddress && typeof customer.savedAddress === 'object'
-    ? customer.savedAddress
+  const safeCustomer = customer && typeof customer === 'object' ? customer : {};
+  const email = normalizeEmailForMeta(safeCustomer.email);
+  const phone = normalizePhoneForMeta(safeCustomer.phone);
+  const firstName = normalizeTextForMeta(safeCustomer.firstName, { compact: true });
+  const lastName = normalizeTextForMeta(safeCustomer.lastName, { compact: true });
+  const externalId = normalizeTextForMeta(safeCustomer.id || safeCustomer.externalId, { compact: true });
+  const address = safeCustomer.savedAddress && typeof safeCustomer.savedAddress === 'object'
+    ? safeCustomer.savedAddress
     : {};
   const city = normalizeTextForMeta(address.cityName || address.city || address.municipality, { compact: true });
   const province = normalizeTextForMeta(address.provinceName || address.province, { compact: true });

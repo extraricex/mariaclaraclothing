@@ -17,7 +17,9 @@ const PRODUCT_SUBNAV = [
 ];
 
 const REVIEW_NAV_ITEM = { to: '/admin/reviews', label: 'Reviews', badge: 'reviews' };
-const ANALYTICS_NAV_ITEM = { to: '/admin/analytics', label: 'Sales & SEO', end: true };
+const ANALYTICS_NAV_ITEM = { to: '/admin/analytics', label: 'Conversion overview', end: true };
+const CONVERSION_FUNNEL_NAV_ITEM = { to: '/admin/analytics/funnel', label: 'Conversion funnel' };
+const CHECKOUT_ISSUES_NAV_ITEM = { to: '/admin/analytics/checkout-issues', label: 'Checkout issues' };
 const META_RECONCILIATION_NAV_ITEM = { to: '/admin/analytics/meta-reconciliation', label: 'Meta reconciliation' };
 const SEO_NAV_ITEM = { to: '/admin/marketing/seo', label: 'Marketing · SEO' };
 
@@ -36,6 +38,8 @@ const SECONDARY_NAV = [
 const MOBILE_NAV = [
   { to: '/admin', label: 'Dashboard', end: true },
   ANALYTICS_NAV_ITEM,
+  CONVERSION_FUNNEL_NAV_ITEM,
+  CHECKOUT_ISSUES_NAV_ITEM,
   META_RECONCILIATION_NAV_ITEM,
   SEO_NAV_ITEM,
   REVIEW_NAV_ITEM,
@@ -153,6 +157,14 @@ export default function AdminLayout() {
 
           <NavLink to={ANALYTICS_NAV_ITEM.to} end={ANALYTICS_NAV_ITEM.end} className={({ isActive }) => topLinkClass(isActive)}>
             {ANALYTICS_NAV_ITEM.label}
+          </NavLink>
+
+          <NavLink to={CONVERSION_FUNNEL_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>
+            {CONVERSION_FUNNEL_NAV_ITEM.label}
+          </NavLink>
+
+          <NavLink to={CHECKOUT_ISSUES_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>
+            {CHECKOUT_ISSUES_NAV_ITEM.label}
           </NavLink>
 
           <NavLink to={META_RECONCILIATION_NAV_ITEM.to} className={({ isActive }) => topLinkClass(isActive)}>

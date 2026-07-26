@@ -121,7 +121,7 @@ function ProductRecommendation({ product, onClose, onNavigate }) {
 function OfferDock({ offer, product, offerCount, mobileOffersOpen, dockRef, onToggle, onNavigate, onCloseOffer, onCloseProduct }) {
   if (!offerCount) return null;
   return (
-    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] hidden w-[min(13.5rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:block sm:w-72">
+    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] hidden w-[min(13.5rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:block sm:w-[17rem]">
       <div id="storefront-offer-cards" className={`${mobileOffersOpen ? 'grid' : 'hidden'} pointer-events-auto mb-2 gap-1.5 sm:grid sm:gap-2`}>
         <div className={offer ? 'hidden sm:block' : ''}>
           <ProductRecommendation product={product} onClose={onCloseProduct} onNavigate={onNavigate} />
@@ -169,7 +169,7 @@ function CartIcon() {
   );
 }
 
-function CartDrawer({ items, quote, quoteError, open, onClose }) {
+function CartDrawer({ items, quote, quoteError, settings, open, onClose }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const [quantityNotice, setQuantityNotice] = useState('');
@@ -180,6 +180,12 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
   const displayDiscount = quote?.discountTotalCents ?? 0;
   const displayShipping = quote?.shippingFeeCents;
   const displayTotal = quote?.totalCents ?? Math.max(0, displaySubtotal - displayDiscount);
+  const itemCount = cartQuantity(items);
+  const freeShippingRemaining = quote?.freeShippingEnabled
+    ? Math.max(0, Number(quote.freeShippingMinimumItems || 0) - itemCount)
+    : null;
+  const codEnabled = settings?.paymentMethods?.some((method) => method.id === 'cash_on_delivery');
+  const payMongoEnabled = settings?.paymentMethods?.some((method) => method.id === 'paymongo');
 
   function checkout() {
     onClose();
@@ -279,6 +285,13 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
             </div>
 
             <div className="customer-order-summary border-t border-line px-5 py-5">
+              {freeShippingRemaining !== null && (
+                <p className="mb-4 border border-line bg-white px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.08em] text-ink-soft" role="status">
+                  {freeShippingRemaining === 0
+                    ? 'Free shipping unlocked'
+                    : `Add ${freeShippingRemaining} more item${freeShippingRemaining === 1 ? '' : 's'} to unlock free shipping`}
+                </p>
+              )}
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(displaySubtotal)}</dd></div>
                 {displayDiscount > 0 && <div className="flex justify-between text-[#2f7d32]"><dt>Discount</dt><dd>-{formatMoney(displayDiscount)}</dd></div>}
@@ -289,6 +302,13 @@ function CartDrawer({ items, quote, quoteError, open, onClose }) {
                 <Link to="/checkout" className="btn-ink customer-compact-button text-center" onClick={checkout}>Checkout</Link>
                 <Link to="/cart" className="btn-ghost customer-compact-button text-center" onClick={onClose}>View cart</Link>
               </div>
+              {(codEnabled || payMongoEnabled) && (
+                <p className="mt-3 text-center text-xs leading-relaxed text-ink-soft">
+                  {codEnabled && 'Cash on Delivery available nationwide.'}
+                  {codEnabled && payMongoEnabled && ' '}
+                  {payMongoEnabled && 'Secure online payment through PayMongo.'}
+                </p>
+              )}
             </div>
           </>
         )}
@@ -628,6 +648,7 @@ export default function Shell() {
         items={items}
         quote={quote}
         quoteError={quoteError}
+        settings={storeInfo}
         open={cartDrawerOpen}
         onClose={closeCartDrawer}
       />

@@ -18,6 +18,12 @@
   --customer-border: #d8d4ca;
   --customer-accent: #8a5a2b;
   --customer-accent-soft: #f2e6d6;
+  --rating-star-filled: #b8862d;
+  --rating-star-empty: #dedbd6;
+  --rating-star-border: #8d8983;
+  --rating-star-filled-border: #8a621d;
+  --rating-text: #4f4b45;
+  --rating-count-text: #6b665d;
   --radius-admin: 6px;
   --admin-bg: #0b0f14;
   --admin-sidebar: #070a0f;
@@ -308,6 +314,12 @@
     @apply flex min-h-screen overflow-x-hidden;
     background: var(--admin-bg);
     color: var(--admin-text);
+  }
+  .admin-shell {
+    --rating-star-empty: #3d4652;
+    --rating-star-border: #9aa6b2;
+    --rating-text: var(--admin-text);
+    --rating-count-text: var(--admin-muted);
   }
   .admin-main {
     @apply min-w-0 flex-1 overflow-x-hidden;
@@ -616,6 +628,17 @@
       padding: 0.65rem 0.85rem;
       font-size: 0.6875rem;
     }
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --rating-star-filled: Highlight;
+    --rating-star-empty: Canvas;
+    --rating-star-border: CanvasText;
+    --rating-star-filled-border: CanvasText;
+    --rating-text: CanvasText;
+    --rating-count-text: CanvasText;
   }
 }
 

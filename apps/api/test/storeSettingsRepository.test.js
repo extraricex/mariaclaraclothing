@@ -242,6 +242,40 @@ test('inventory settings store the low stock threshold', async () => {
   }
 });
 
+test('product-card sales information defaults safely and validates truthful display settings', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-commerce-settings-'));
+  const previousSettingsFile = process.env.STORE_SETTINGS_FILE;
+  process.env.STORE_SETTINGS_FILE = path.join(tempDir, 'store-settings.json');
+
+  try {
+    const repository = freshRepository();
+    const defaults = repository.getStoreSettings().productCardSalesInformation;
+    assert.equal(defaults.defaultLowStockThreshold, 10);
+    assert.equal(defaults.soldCountFormatting, 'exact');
+    assert.equal(defaults.newProductPeriodDays, 30);
+    assert.equal(defaults.includeVerifiedHistoricalSales, true);
+
+    const updated = repository.updateSettingsSection('productCardSalesInformation', {
+      ...defaults,
+      defaultLowStockThreshold: 7,
+      soldCountFormatting: 'abbreviated'
+    });
+    assert.equal(updated.productCardSalesInformation.defaultLowStockThreshold, 7);
+    assert.equal(updated.productCardSalesInformation.soldCountFormatting, 'abbreviated');
+    assert.throws(() => repository.updateSettingsSection('productCardSalesInformation', {
+      ...defaults,
+      defaultLowStockThreshold: 0
+    }), /Product-card low-stock threshold must be an integer between 1 and 999\./);
+    assert.throws(() => repository.updateSettingsSection('productCardSalesInformation', {
+      ...defaults,
+      soldCountFormatting: '150-plus'
+    }), /Sold-count formatting must be Exact or Abbreviated\./);
+  } finally {
+    restoreEnv('STORE_SETTINGS_FILE', previousSettingsFile);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('collection countdown settings validate and increment server revisions', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'maria-clara-countdowns-'));
   const previousSettingsFile = process.env.STORE_SETTINGS_FILE;

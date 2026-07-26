@@ -1,9 +1,8 @@
 import { Link } from 'react-router-dom';
 import { formatMoney } from '../lib/money.js';
-import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { CustomerBadge } from './ui/Badge.jsx';
 import { productPath } from '../lib/productUrl.js';
-import Stars from './Stars.jsx';
+import ProductCardContent from './ProductCardContent.jsx';
 import { responsiveImageAttributes } from '../lib/responsiveImage.js';
 
 export function totalStock(product) {
@@ -11,18 +10,13 @@ export function totalStock(product) {
 }
 
 export default function ProductCard({ product, index }) {
-  const settings = useStorefrontSettings();
   const image = product.images[0];
   const hoverImage = product.images[1];
   const stock = totalStock(product);
-  const soldOut = String(product.merchandisingStatus || '').toLowerCase() === 'sold_out' || stock <= 0;
-  const limited = !soldOut && stock > 0 && stock <= settings.inventory.lowStockThreshold;
+  const soldOut = typeof product.isSoldOut === 'boolean'
+    ? product.isSoldOut
+    : String(product.merchandisingStatus || '').toLowerCase() === 'sold_out' || stock <= 0;
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
-  const showRating = settings.reviews?.enabled !== false &&
-    settings.reviews?.showRatingsOnProductCards !== false &&
-    product.reviewSettings?.reviewsEnabled !== false &&
-    product.reviewSettings?.showRatingSummary !== false &&
-    Number(product.reviewSummary?.totalReviews || 0) > 0;
 
   return (
     <Link
@@ -68,26 +62,16 @@ export default function ProductCard({ product, index }) {
               Sold out
             </CustomerBadge>
           )}
-          {limited && (
-            <CustomerBadge tone="warm" className="product-stock-alert absolute bottom-2 left-1/2 -translate-x-1/2">
-              Limited pieces
-            </CustomerBadge>
-          )}
         </div>
         <div className="mt-2 flex flex-col items-center gap-0.5 px-1 pb-1 pt-0.5">
           <div className="min-w-0">
             <h3 className="line-clamp-2 text-[12px] font-semibold leading-snug sm:text-sm group-hover:text-accent">{product.name}</h3>
-            {showRating && (
-              <div className="mt-1 flex flex-wrap items-center justify-center gap-1 text-[11px] text-ink-soft">
-                <Stars rating={product.reviewSummary.averageRating} />
-                <span>{Number(product.reviewSummary.averageRating).toFixed(1)} ({product.reviewSummary.totalReviews})</span>
-              </div>
-            )}
           </div>
           <div className="text-[12px] sm:text-sm">
             <p className={onSale ? 'font-semibold text-accent' : 'font-semibold'}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-xs text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>
+          <ProductCardContent product={product} />
         </div>
       </article>
     </Link>

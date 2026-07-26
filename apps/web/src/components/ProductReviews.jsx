@@ -232,7 +232,11 @@ export default function ProductReviews({ product }) {
   const totalPages = Math.max(1, Math.ceil(Number(data.pagination?.total || 0) / Number(data.pagination?.pageSize || 10)));
 
   return (
-    <section id="customer-reviews" className="mt-20 scroll-mt-28 border-t border-line pt-8">
+    <section
+      id="customer-reviews"
+      tabIndex="-1"
+      className="mt-20 scroll-mt-28 border-t border-line pt-8 outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-4"
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">From our customers</p>

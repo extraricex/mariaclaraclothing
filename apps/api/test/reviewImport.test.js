@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const XLSX = require('xlsx');
 const {
   REVIEW_IMPORT_COLUMNS,
+  REVIEW_IMPORT_FIELD_GUIDE,
   importErrorsCsv,
   importPlannedReviews,
   parseWorkbook,
@@ -27,11 +28,10 @@ function fileFor(rows, filename = 'reviews.xlsx') {
 
 function validRow(overrides = {}) {
   return {
-    product_id: 'prod_real_1', product_sku: '', product_slug: '', reviewer_name: 'Import Customer',
+    product_id: 'prod_real_1', reviewer_name: 'Import Customer',
     reviewer_email: 'import@example.com', rating: 5, review_title: 'Great',
     review_body: 'Comfortable and well made.', review_date: '2026-07-01', variant: '', size: '',
-    verified_purchase: 'FALSE', order_number: '', status: 'published', photo_url_1: '', photo_url_2: '',
-    photo_url_3: '', admin_reply: '', source: 'customer_submitted', ...overrides
+    photo_url_1: '', photo_url_2: '', photo_url_3: '', admin_reply: '', ...overrides
   };
 }
 
@@ -39,22 +39,27 @@ function dependencies(overrides = {}) {
   return {
     listProducts: async () => [product],
     existingDuplicateKeys: async () => new Set(),
-    verifyReviewPurchase: async () => ({ verified: false, reason: 'order_not_found' }),
     ...overrides
   };
 }
 
-test('secure XLSX template has blank Reviews and Instructions worksheets', () => {
+test('secure XLSX template has blank Reviews, Instructions, and Field Guide worksheets', () => {
   assert.equal(XLSX.version, '0.20.3');
   const workbook = XLSX.read(reviewImportTemplateBuffer(), { type: 'buffer' });
-  assert.deepEqual(workbook.SheetNames, ['Reviews', 'Instructions']);
+  assert.deepEqual(workbook.SheetNames, ['Reviews', 'Instructions', 'Field Guide']);
   const records = parseWorkbook({ buffer: reviewImportTemplateBuffer(), originalname: 'template.xlsx' }.buffer);
   assert.deepEqual(records, []);
   const headers = XLSX.utils.sheet_to_json(workbook.Sheets.Reviews, { header: 1 })[0];
   assert.deepEqual(headers, REVIEW_IMPORT_COLUMNS);
+  const guideRows = XLSX.utils.sheet_to_json(workbook.Sheets['Field Guide'], { header: 1 });
+  assert.deepEqual(guideRows[0], ['Field', 'Required?', 'Accepted format', 'Guidance']);
+  assert.equal(guideRows.length, REVIEW_IMPORT_FIELD_GUIDE.length + 1);
+  assert.equal(guideRows.some((row) => row[0] === 'product_id' && /directly to this product/i.test(row[3])), true);
+  assert.equal(REVIEW_IMPORT_COLUMNS.includes('verified_purchase'), false);
+  assert.equal(REVIEW_IMPORT_COLUMNS.includes('order_number'), false);
 });
 
-test('preview matches product IDs before SKU/slug and forces imported reviews to Pending', async () => {
+test('preview assigns directly by product ID and forces imported reviews to Pending', async () => {
   const plan = await planReviewImport(fileFor([validRow()]), dependencies());
   assert.equal(plan.totalRows, 1);
   assert.equal(plan.validRows, 1);
@@ -62,11 +67,10 @@ test('preview matches product IDs before SKU/slug and forces imported reviews to
   assert.equal(plan.rows[0].candidate.status, 'pending');
   assert.equal(plan.rows[0].candidate.source, 'imported');
   assert.equal(plan.rows[0].candidate.verifiedPurchase, false);
-  assert.match(plan.rows[0].warnings.join(' '), /changed to Pending/);
 });
 
 test('confirmed import binds to the exact preview and stores batch and original row metadata', async () => {
-  const file = fileFor([validRow({ product_id: '', product_sku: 'SHIRT-M', status: 'pending' })]);
+  const file = fileFor([validRow()]);
   const planned = await planReviewImport(file, dependencies());
   const inserted = [];
   const result = await importPlannedReviews(file, planned.token, dependencies({
@@ -87,16 +91,12 @@ test('confirmed import binds to the exact preview and stores batch and original 
   );
 });
 
-test('verification is assigned only through a validated real order match', async () => {
-  const requested = fileFor([validRow({ verified_purchase: 'TRUE', order_number: 'MCC-1' })]);
-  const rejected = await planReviewImport(requested, dependencies());
-  assert.equal(rejected.rows[0].candidate.verifiedPurchase, false);
-  assert.match(rejected.rows[0].warnings.join(' '), /not assigned/);
-
-  const accepted = await planReviewImport(requested, dependencies({
-    verifyReviewPurchase: async () => ({ verified: true, reason: 'verified_order' })
-  }));
-  assert.equal(accepted.rows[0].candidate.verifiedPurchase, true);
+test('bulk import does not require a delivered order and never assigns Verified Purchase', async () => {
+  const plan = await planReviewImport(fileFor([validRow()]), dependencies());
+  assert.equal(plan.validRows, 1);
+  assert.equal(plan.rows[0].productMatch.method, 'product_id');
+  assert.equal(plan.rows[0].candidate.orderNumber, '');
+  assert.equal(plan.rows[0].candidate.verifiedPurchase, false);
 });
 
 test('invalid products, ratings, dates, scripts, unsafe URLs, formulas, and duplicate rows are rejected', async () => {

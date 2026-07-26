@@ -8,9 +8,9 @@ import { sanitizeRichHtml } from '../lib/richText.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
+import ProductCommerceStats from '../components/ProductCommerceStats.jsx';
 import { rememberRecentlyViewed } from '../lib/recentlyViewed.js';
 import CollectionCountdown from '../components/CollectionCountdown.jsx';
-import Stars from '../components/Stars.jsx';
 import NotFound from './NotFound.jsx';
 import { productPath } from '../lib/productUrl.js';
 import useModalFocus from '../hooks/useModalFocus.js';
@@ -19,6 +19,7 @@ import { responsiveImageAttributes } from '../lib/responsiveImage.js';
 import SEO from '../components/SEO.jsx';
 import { productSeoDescriptor } from '../lib/seo.js';
 import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
+import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 
 const ProductReviews = lazy(() => import('../components/ProductReviews.jsx'));
 
@@ -38,8 +39,8 @@ export default function Product() {
   const [activeDetailTab, setActiveDetailTab] = useState(0);
   const [sizeChartOpen, setSizeChartOpen] = useState(false);
   const [recommendations, setRecommendations] = useState([]);
-  const [mainImageLoaded, setMainImageLoaded] = useState(false);
-  const [mainImageFailed, setMainImageFailed] = useState(false);
+  const [loadedImageUrl, setLoadedImageUrl] = useState('');
+  const [failedImageUrl, setFailedImageUrl] = useState('');
   const imageTouchStartX = useRef(null);
   const thumbnailRefs = useRef([]);
   const sizeChartDialogRef = useRef(null);
@@ -125,11 +126,6 @@ export default function Product() {
   }, [activeImage, productImages.length]);
 
   useEffect(() => {
-    setMainImageLoaded(false);
-    setMainImageFailed(false);
-  }, [product?.id, activeImage]);
-
-  useEffect(() => {
     thumbnailRefs.current[activeImage]?.scrollIntoView({
       behavior: 'smooth',
       block: 'nearest',
@@ -158,6 +154,10 @@ export default function Product() {
   const variantStock = Math.max(0, Math.trunc(Number(variant?.stockQuantity || 0)));
   const variantSoldOut = soldOut || !variant || variantStock <= 0;
   const image = productImages[activeImage] || productImages[0];
+  const mainImageLoaded = Boolean(image?.url && loadedImageUrl === image.url);
+  const mainImageFailed = Boolean(image?.url && failedImageUrl === image.url);
+  const cashOnDeliveryAvailable = settings.paymentMethods?.some((method) => method.id === 'cash_on_delivery');
+  const payMongoAvailable = settings.paymentMethods?.some((method) => method.id === 'paymongo');
   const productPage = product.productPage || {};
   const metafieldText = (key) => {
     const value = product.metafields?.[key];
@@ -245,6 +245,15 @@ export default function Product() {
     setQuantity((current) => Math.max(1, Math.min(Number(current) || 1, Math.max(1, nextStock))));
     setAdded(false);
     setStockMessage(nextStock <= 0 ? 'Sold Out' : '');
+    trackFunnelEvent('size_select', {
+      productId: product.id,
+      variantId: nextVariant.id,
+      quantity: 1,
+      valueCents: nextVariant.priceCents ?? product.priceCents,
+      checkoutStep: 'product',
+      dedupeKey: `${product.id}:${nextVariant.id}`,
+      dedupeMilliseconds: 500
+    });
   }
 
   function increaseQuantity() {
@@ -387,8 +396,8 @@ export default function Product() {
                   sizes: '(min-width: 1024px) 55vw, 100vw',
                   shopifyWidths: [480, 960, 1600]
                 })}
-                onLoad={() => setMainImageLoaded(true)}
-                onError={() => setMainImageFailed(true)}
+                onLoad={() => setLoadedImageUrl(image.url)}
+                onError={() => setFailedImageUrl(image.url)}
               />
             )}
             {(!image || mainImageFailed) && (
@@ -456,16 +465,11 @@ export default function Product() {
         <div className="min-w-0">
           <div className="customer-buy-panel lg:sticky lg:top-24">
             <h1 className="display text-2xl leading-tight sm:text-4xl">{product.name}</h1>
-          {settings.reviews?.enabled !== false && settings.reviews?.showOnProductPages !== false && product.reviewSettings?.reviewsEnabled !== false && product.reviewSettings?.showRatingSummary !== false && Number(product.reviewSummary?.totalReviews || 0) > 0 && (
-            <a href="#customer-reviews" className="mt-3 inline-flex flex-wrap items-center gap-2 text-sm text-ink-soft hover:text-accent">
-              <Stars rating={product.reviewSummary.averageRating} />
-              <span>{Number(product.reviewSummary.averageRating).toFixed(1)} ({product.reviewSummary.totalReviews})</span>
-            </a>
-          )}
           <div className="mt-3 flex items-baseline gap-3 sm:mt-4">
             <p className={`text-xl font-semibold sm:text-2xl ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>
+          <ProductCommerceStats product={product} className="mt-2 !text-left text-xs sm:text-sm" />
 
           {productFacts.length > 0 && (
             <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4 text-sm">
@@ -555,6 +559,13 @@ export default function Product() {
               Add {freeShippingMinimumItems} or more item{freeShippingMinimumItems === 1 ? '' : 's'} and get free shipping.
             </p>
           )}
+
+          <ul className="mt-4 grid gap-2 border-y border-line py-4 text-xs leading-relaxed text-ink-soft sm:grid-cols-2" aria-label="Payment and delivery reassurance">
+            {cashOnDeliveryAvailable && <li><strong className="text-ink">Cash on Delivery</strong> available nationwide</li>}
+            {payMongoAvailable && <li><strong className="text-ink">Secure online payment</strong> through PayMongo</li>}
+            <li>Shipping fee is shown before you place the order</li>
+            <li><Link to="/shipping-returns" className="font-semibold text-accent underline">Review shipping and exchange information</Link></li>
+          </ul>
 
           <nav className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold uppercase tracking-[0.1em] text-accent" aria-label="Product help and collection links">
             {parentCollection && (

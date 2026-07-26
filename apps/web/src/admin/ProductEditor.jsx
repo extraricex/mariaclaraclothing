@@ -24,6 +24,7 @@ import { productPath } from '../lib/productUrl.js';
 import AdminConfirmDialog from './AdminConfirmDialog.jsx';
 import SeoSearchPreview from './SeoSearchPreview.jsx';
 import { productSeoAnalysis } from '../lib/seoAdmin.js';
+import Stars from '../components/Stars.jsx';
 
 const STATUSES = ['active', 'draft', 'archived'];
 const DESCRIPTION_TOOLS = [
@@ -66,6 +67,27 @@ const EMPTY_PRODUCT = {
   },
   metafields: { color: [], material: [], fit: [], fabricWeight: [], modelHeight: [], modelWearsSize: [] },
   reviewSettings: { reviewsEnabled: true, showRatingSummary: true },
+  ratingSummary: {
+    averageRating: 0,
+    ratingCount: 0,
+    publishedRatedReviews: 0,
+    pendingReviews: 0,
+    hiddenReviews: 0,
+    ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+    hasRatings: false,
+    lastRecalculatedAt: ''
+  },
+  commerceStats: {
+    showStockStatus: null,
+    lowStockThreshold: null,
+    showExactRemainingStock: null,
+    showSoldCount: null,
+    historicalSoldQuantity: 0,
+    historicalSoldSource: '',
+    historicalSoldNote: '',
+    historicalSoldUpdatedBy: '',
+    historicalSoldUpdatedAt: ''
+  },
   collections: [],
   priceCents: 0,
   parcelWeightGrams: 250,
@@ -75,6 +97,14 @@ const EMPTY_PRODUCT = {
   productPage: {
     detailsText: '',
     shippingText: '',
+    cardContent: {
+      text: '',
+      rating: null,
+      source: '',
+      showText: false,
+      showRating: false,
+      showSource: false
+    },
     sections: [
       {
         title: 'Product details',
@@ -195,6 +225,30 @@ export default function ProductEditor() {
     }));
   }
 
+  function updateProductCardContent(field, value) {
+    setProduct((previous) => ({
+      ...previous,
+      productPage: {
+        ...(previous.productPage || {}),
+        cardContent: {
+          ...(previous.productPage?.cardContent || {}),
+          [field]: value,
+          ...(field === 'showRating' && value ? { showSource: true } : {})
+        }
+      }
+    }));
+  }
+
+  function updateCommerceStats(field, value) {
+    setProduct((previous) => ({
+      ...previous,
+      commerceStats: {
+        ...(previous.commerceStats || {}),
+        [field]: value
+      }
+    }));
+  }
+
   function metafieldText(field) {
     const value = product.metafields?.[field];
     return Array.isArray(value) ? value.join(', ') : String(value || '');
@@ -284,6 +338,14 @@ export default function ProductEditor() {
   const statusLabel = product.status ? product.status[0].toUpperCase() + product.status.slice(1) : 'Draft';
   const imageCount = product.images?.length || 0;
   const productPage = product.productPage || {};
+  const productCardContent = productPage.cardContent || {
+    text: '',
+    rating: null,
+    source: '',
+    showText: false,
+    showRating: false,
+    showSource: false
+  };
   const sizeChartRows = Array.isArray(productPage.sizeChart) ? productPage.sizeChart : [];
   const seoAnalysis = productSeoAnalysis(product);
   const seoWarnings = [...new Set([...seoAnalysis.warnings, ...serverSeoWarnings])];
@@ -832,6 +894,214 @@ export default function ProductEditor() {
             </button>
             {fieldErrors.inventory && <p className="mt-2 text-xs text-accent-deep" role="alert">{fieldErrors.inventory}</p>}
           </section>
+
+          <section className="border border-line bg-paper p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Inventory Display</h2>
+            <p className="mt-2 text-xs text-clay">
+              Website sales are calculated from eligible real orders and cannot be overwritten here. Only verified historical or external sales may be adjusted.
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {[
+                ['showStockStatus', 'Show Stock Status'],
+                ['showExactRemainingStock', 'Show Exact Remaining Stock'],
+                ['showSoldCount', 'Show Sold Count']
+              ].map(([field, label]) => (
+                <label key={field} className="block">
+                  <span className="eyebrow">{label}</span>
+                  <select
+                    className="field mt-1"
+                    value={product.commerceStats?.[field] === null || product.commerceStats?.[field] === undefined
+                      ? 'inherit'
+                      : product.commerceStats[field] ? 'on' : 'off'}
+                    onChange={(event) => updateCommerceStats(
+                      field,
+                      event.target.value === 'inherit' ? null : event.target.value === 'on'
+                    )}
+                  >
+                    <option value="inherit">Use global setting</option>
+                    <option value="on">On</option>
+                    <option value="off">Off</option>
+                  </select>
+                </label>
+              ))}
+              <label className="block">
+                <span className="eyebrow">Low Stock Threshold</span>
+                <input
+                  className="field mt-1"
+                  type="number"
+                  min="1"
+                  max="999"
+                  placeholder="Use global setting"
+                  value={product.commerceStats?.lowStockThreshold ?? ''}
+                  onChange={(event) => updateCommerceStats(
+                    'lowStockThreshold',
+                    event.target.value === '' ? null : Number(event.target.value)
+                  )}
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="eyebrow">Verified Historical Sold Quantity</span>
+                <input
+                  className="field mt-1"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={product.commerceStats?.historicalSoldQuantity ?? 0}
+                  onChange={(event) => updateCommerceStats('historicalSoldQuantity', Number(event.target.value))}
+                />
+              </label>
+              <label className="block">
+                <span className="eyebrow">Historical Sales Source</span>
+                <input
+                  className="field mt-1"
+                  maxLength="200"
+                  placeholder="e.g. Verified TikTok Shop sales as of July 2026"
+                  value={product.commerceStats?.historicalSoldSource || ''}
+                  onChange={(event) => updateCommerceStats('historicalSoldSource', event.target.value)}
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="eyebrow">Historical Sales Note</span>
+                <textarea
+                  className="field mt-1"
+                  rows="3"
+                  maxLength="1000"
+                  placeholder="Optional verification details or migration source"
+                  value={product.commerceStats?.historicalSoldNote || ''}
+                  onChange={(event) => updateCommerceStats('historicalSoldNote', event.target.value)}
+                />
+              </label>
+            </div>
+
+            <dl className="mt-6 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-2">
+              {[
+                ['Current sellable stock', product.commerceStatsCalculated?.currentSellableStock ?? totalInventory],
+                ['Website eligible units sold', product.commerceStatsCalculated?.websiteEligibleUnitsSold ?? 0],
+                ['Refund or return deduction', product.commerceStatsCalculated?.refundOrReturnDeduction ?? 0],
+                ['Historical verified quantity', product.commerceStats?.historicalSoldQuantity ?? 0],
+                ['Final displayed sold count', product.commerceStatsCalculated?.finalDisplayedSoldCount ?? product.commerceStats?.historicalSoldQuantity ?? 0],
+                ['Last recalculated', product.commerceStatsCalculated?.lastRecalculatedTime
+                  ? new Date(product.commerceStatsCalculated.lastRecalculatedTime).toLocaleString()
+                  : 'Recalculates after save']
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-xs text-clay">{label}</dt>
+                  <dd className="mt-0.5 font-semibold text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {(product.commerceStats?.historicalSoldUpdatedBy || product.commerceStats?.historicalSoldUpdatedAt) && (
+              <p className="mt-4 text-xs text-clay">
+                Historical adjustment last updated by {product.commerceStats.historicalSoldUpdatedBy || 'admin'}
+                {product.commerceStats.historicalSoldUpdatedAt
+                  ? ` on ${new Date(product.commerceStats.historicalSoldUpdatedAt).toLocaleString()}`
+                  : ''}.
+              </p>
+            )}
+          </section>
+
+          <section className="border border-line bg-paper p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Product card content</h2>
+            <p className="mt-2 text-xs leading-relaxed text-clay">
+              These controls are visible only in Admin. Enabled content appears below the product price
+              on customer-facing product cards. Manually entered ratings require a visible source.
+            </p>
+
+            <label className="mt-5 block">
+              <span className="eyebrow">Card text</span>
+              <textarea
+                className="field mt-1"
+                rows="3"
+                maxLength="280"
+                placeholder="Enter a short product-card note"
+                value={productCardContent.text || ''}
+                onChange={(event) => updateProductCardContent('text', event.target.value)}
+              />
+              <span className="mt-1 block text-[11px] text-clay">
+                {String(productCardContent.text || '').length}/280 characters
+              </span>
+            </label>
+
+            <fieldset className="mt-5">
+              <legend className="eyebrow">Five-star rating</legend>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Stars
+                  rating={productCardContent.rating || 0}
+                  interactive
+                  label={false}
+                  onChange={(rating) => updateProductCardContent('rating', rating)}
+                />
+                <span className="text-sm font-semibold tabular-nums">
+                  {productCardContent.rating ? `${Number(productCardContent.rating).toFixed(1)} / 5` : 'Not set'}
+                </span>
+                {productCardContent.rating && (
+                  <button
+                    type="button"
+                    className="text-xs text-clay underline hover:text-accent"
+                    onClick={() => {
+                      updateProductCardContent('rating', null);
+                      updateProductCardContent('showRating', false);
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </fieldset>
+
+            <label className="mt-5 block">
+              <span className="eyebrow">Source label</span>
+              <input
+                className="field mt-1"
+                maxLength="120"
+                placeholder="e.g. Previous website or Facebook Messenger"
+                value={productCardContent.source || ''}
+                onChange={(event) => updateProductCardContent('source', event.target.value)}
+              />
+              <span className="mt-1 block text-[11px] text-clay">
+                Optional unless the manually entered star rating is shown.
+              </span>
+            </label>
+
+            <fieldset className="mt-5 border-t border-line pt-4">
+              <legend className="eyebrow">Customer display</legend>
+              <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={productCardContent.showText === true}
+                    onChange={(event) => updateProductCardContent('showText', event.target.checked)}
+                  />
+                  Show text
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={productCardContent.showRating === true}
+                    onChange={(event) => updateProductCardContent('showRating', event.target.checked)}
+                  />
+                  Show rating
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={productCardContent.showSource === true}
+                    disabled={productCardContent.showRating === true}
+                    onChange={(event) => updateProductCardContent('showSource', event.target.checked)}
+                  />
+                  Show source
+                </label>
+              </div>
+              {productCardContent.showRating && !String(productCardContent.source || '').trim() && (
+                <p className="mt-3 text-xs text-accent-deep" role="alert">
+                  Add a source label before saving a visible manually entered rating.
+                </p>
+              )}
+            </fieldset>
+          </section>
         </div>
 
         <div className="space-y-4">
@@ -892,6 +1162,31 @@ export default function ProductEditor() {
               </label>
             </div>
             <p className="mt-3 text-xs text-clay">Disabling reviews hides them without deleting any review records.</p>
+            {!isNew && (
+              <div className="mt-5 border-t border-line pt-4">
+                <p className="eyebrow">Calculated rating summary</p>
+                <p className="mt-3 text-sm font-semibold">
+                  {Number(product.ratingSummary?.ratingCount || 0) > 0
+                    ? `${Number(product.ratingSummary?.averageRating || 0).toFixed(1)} out of 5`
+                    : 'No ratings yet'}
+                </p>
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                  <div><dt className="text-clay">Published rated reviews</dt><dd className="mt-1 font-semibold">{Number(product.ratingSummary?.publishedRatedReviews || 0).toLocaleString('en-PH')}</dd></div>
+                  <div><dt className="text-clay">Pending reviews</dt><dd className="mt-1 font-semibold">{Number(product.ratingSummary?.pendingReviews || 0).toLocaleString('en-PH')}</dd></div>
+                  <div><dt className="text-clay">Hidden reviews</dt><dd className="mt-1 font-semibold">{Number(product.ratingSummary?.hiddenReviews || 0).toLocaleString('en-PH')}</dd></div>
+                  <div><dt className="text-clay">Last recalculated</dt><dd className="mt-1 font-semibold">{product.ratingSummary?.lastRecalculatedAt ? new Date(product.ratingSummary.lastRecalculatedAt).toLocaleString('en-PH') : 'Not calculated'}</dd></div>
+                </dl>
+                <div className="mt-4 space-y-1 text-xs" aria-label="Published rating distribution">
+                  {[5, 4, 3, 2, 1].map((rating) => (
+                    <div key={rating} className="flex items-center justify-between gap-3">
+                      <span>{rating} {rating === 1 ? 'star' : 'stars'}</span>
+                      <strong>{Number(product.ratingSummary?.ratingDistribution?.[rating] || 0).toLocaleString('en-PH')}</strong>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-clay">Read-only. The average updates from published review records and cannot be overridden here.</p>
+              </div>
+            )}
           </section>
 
           <section className="border border-line bg-paper p-6">

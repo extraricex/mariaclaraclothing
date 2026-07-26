@@ -85,37 +85,88 @@ async function listOrders() {
     .map((order) => ({ ...order, statusEvents: [] }));
 }
 
-async function productSalesCounts() {
+const EXCLUDED_SALE_STATUSES = new Set([
+  'cancelled', 'canceled', 'returned', 'failed', 'expired', 'unreachable',
+  'draft', 'pending_payment', 'abandoned_checkout'
+]);
+const EXCLUDED_SALE_PAYMENT_STATUSES = new Set([
+  'unpaid', 'failed', 'expired', 'pending_payment', 'cancelled', 'canceled', 'refunded'
+]);
+
+function normalizedOrderStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function orderItemQuantity(item) {
+  return Math.max(0, Math.trunc(Number(item?.quantity || 0)));
+}
+
+function isRefundOrReturn(order) {
+  return normalizedOrderStatus(order?.status) === 'returned'
+    || normalizedOrderStatus(order?.paymentStatus) === 'refunded';
+}
+
+function isEligibleProductSale(order) {
+  if (order?.isTestOrder) return false;
+  return !EXCLUDED_SALE_STATUSES.has(normalizedOrderStatus(order?.status))
+    && !EXCLUDED_SALE_PAYMENT_STATUSES.has(normalizedOrderStatus(order?.paymentStatus));
+}
+
+async function productSalesSummaries() {
   if (usePostgresOrders()) {
     const result = await query(
       `SELECT COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', '')) AS product_id,
-              SUM(GREATEST(0, CASE
-                WHEN COALESCE(item->>'quantity', '') ~ '^\\d+$' THEN (item->>'quantity')::integer
+              SUM(CASE
+                WHEN lower(status) NOT IN ('cancelled','canceled','returned','failed','expired','unreachable','draft','pending_payment','abandoned_checkout')
+                 AND lower(payment_status) NOT IN ('unpaid','failed','expired','pending_payment','cancelled','canceled','refunded')
+                THEN GREATEST(0, CASE
+                  WHEN COALESCE(item->>'quantity', '') ~ '^\\d+$' THEN (item->>'quantity')::integer
+                  ELSE 0
+                END)
                 ELSE 0
-              END))::integer AS quantity
+              END)::integer AS eligible_quantity,
+              SUM(CASE
+                WHEN lower(status) = 'returned' OR lower(payment_status) = 'refunded'
+                THEN GREATEST(0, CASE
+                  WHEN COALESCE(item->>'quantity', '') ~ '^\\d+$' THEN (item->>'quantity')::integer
+                  ELSE 0
+                END)
+                ELSE 0
+              END)::integer AS refund_return_deduction
          FROM orders
          CROSS JOIN LATERAL jsonb_array_elements(items) AS item
-        WHERE lower(status) NOT IN ('cancelled','canceled','returned','failed','expired','unreachable','draft','pending_payment','abandoned_checkout')
-          AND lower(payment_status) NOT IN ('unpaid','failed','expired','pending_payment','cancelled','canceled','refunded')
-          AND is_test_order = false
+        WHERE is_test_order = false
           AND COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', '')) IS NOT NULL
         GROUP BY COALESCE(NULLIF(item->>'productId', ''), NULLIF(item->>'slug', ''))`
     );
-    return new Map(result.rows.map((row) => [String(row.product_id), Number(row.quantity || 0)]));
+    return new Map(result.rows.map((row) => [String(row.product_id), {
+      eligibleQuantity: Math.max(0, Number(row.eligible_quantity || 0)),
+      refundReturnDeduction: Math.max(0, Number(row.refund_return_deduction || 0))
+    }]));
   }
   const store = await readOrderStore();
-  const counts = new Map();
-  const excludedStatuses = new Set(['cancelled', 'canceled', 'returned', 'failed', 'expired', 'unreachable', 'draft', 'pending_payment', 'abandoned_checkout']);
-  const excludedPayments = new Set(['unpaid', 'failed', 'expired', 'pending_payment', 'cancelled', 'canceled', 'refunded']);
+  const summaries = new Map();
   for (const order of store.orders) {
-    if (order.isTestOrder || excludedStatuses.has(String(order.status || '').toLowerCase()) || excludedPayments.has(String(order.paymentStatus || '').toLowerCase())) continue;
+    if (order.isTestOrder) continue;
     for (const item of order.items || []) {
       const productId = String(item.productId || item.slug || '').trim();
       if (!productId) continue;
-      counts.set(productId, (counts.get(productId) || 0) + Math.max(0, Math.trunc(Number(item.quantity || 0))));
+      const current = summaries.get(productId) || { eligibleQuantity: 0, refundReturnDeduction: 0 };
+      const quantity = orderItemQuantity(item);
+      if (isEligibleProductSale(order)) current.eligibleQuantity += quantity;
+      if (isRefundOrReturn(order)) current.refundReturnDeduction += quantity;
+      summaries.set(productId, current);
     }
   }
-  return counts;
+  return summaries;
+}
+
+async function productSalesCounts() {
+  const summaries = await productSalesSummaries();
+  return new Map([...summaries].map(([productId, summary]) => [
+    productId,
+    Math.max(0, Number(summary.eligibleQuantity || 0))
+  ]));
 }
 
 async function findOrderByNumber(orderNumber, options = {}) {
@@ -705,6 +756,7 @@ module.exports = {
   listOrderTrackingNotifications,
   listOrders,
   productSalesCounts,
+  productSalesSummaries,
   resetOrderRepositoryForTests,
   saveOrder,
   updateOrder,

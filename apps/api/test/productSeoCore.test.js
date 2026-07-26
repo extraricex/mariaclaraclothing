@@ -285,7 +285,7 @@ test('ProductGroup schema uses variant price and stock and gates public review m
     reviewsPublic: true
   });
   assert.deepEqual(publicReviews.aggregateRating, {
-    '@type': 'AggregateRating', ratingValue: 5, reviewCount: 1
+    '@type': 'AggregateRating', ratingValue: 5, reviewCount: 1, bestRating: 5, worstRating: 1
   });
   assert.equal(publicReviews.review[0].author.name, 'Customer');
   assert.equal(publicReviews.review[0].datePublished, '2026-07-15');

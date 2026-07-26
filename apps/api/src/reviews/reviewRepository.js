@@ -9,6 +9,59 @@ const REVIEW_SOURCES = ['customer_submitted', 'imported', 'admin_created', 'veri
 const REVIEW_TYPES = ['product', 'store'];
 const DEFAULT_DATA_FILE = path.join(__dirname, '..', '..', 'data', 'reviews.json');
 const EMPTY_STORE = { reviews: [], images: [], importBatches: [], auditEvents: [] };
+const PUBLIC_REVIEW_SQL_FILTER = [
+  "status='published'",
+  'deleted_at IS NULL',
+  'rating BETWEEN 1 AND 5',
+  "lower(coalesce(original_import_data->>'is_test','false')) NOT IN ('true','1','yes')",
+  "lower(coalesce(original_import_data->>'test','false')) NOT IN ('true','1','yes')",
+  "lower(coalesce(original_import_data->>'is_demo','false')) NOT IN ('true','1','yes')",
+  "lower(coalesce(original_import_data->>'demo','false')) NOT IN ('true','1','yes')"
+].join(' AND ');
+
+function truthyDataFlag(value) {
+  return value === true || ['true', '1', 'yes'].includes(String(value || '').trim().toLowerCase());
+}
+
+function isDemoOrTestReview(review) {
+  const data = review?.originalImportData && typeof review.originalImportData === 'object'
+    ? review.originalImportData
+    : {};
+  return ['is_test', 'test', 'is_demo', 'demo'].some((key) => truthyDataFlag(data[key]));
+}
+
+function hasValidRating(review) {
+  const rating = Number(review?.rating);
+  return Number.isInteger(rating) && rating >= 1 && rating <= 5;
+}
+
+function isEligiblePublishedReview(review) {
+  return review?.status === 'published' &&
+    !review.deletedAt &&
+    hasValidRating(review) &&
+    !isDemoOrTestReview(review);
+}
+
+function ratingDistributionFromReviews(reviews) {
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (const review of reviews) distribution[Number(review.rating)] += 1;
+  return distribution;
+}
+
+function ratingSummaryFromReviews(reviews) {
+  const eligible = reviews.filter(isEligiblePublishedReview);
+  const ratingCount = eligible.length;
+  const averageRating = ratingCount
+    ? Number((eligible.reduce((sum, review) => sum + Number(review.rating), 0) / ratingCount).toFixed(2))
+    : 0;
+  return {
+    averageRating,
+    ratingCount,
+    totalReviews: ratingCount,
+    ratingDistribution: ratingDistributionFromReviews(eligible),
+    hasRatings: ratingCount > 0
+  };
+}
 
 function reviewsDataFile() {
   return resolveRuntimeDataFile('REVIEWS_DATA_FILE', DEFAULT_DATA_FILE);
@@ -441,7 +494,7 @@ async function listPublishedReviews(input = {}) {
   const rating = Number(input.rating);
   if (usePostgresReviews()) {
     const values = [reviewType];
-    const where = ["status='published'", 'deleted_at IS NULL', 'review_type=$1'];
+    const where = [PUBLIC_REVIEW_SQL_FILTER, 'review_type=$1'];
     if (reviewType === 'product') {
       values.push(String(input.productSlug || ''));
       where.push(`product_slug=$${values.length}`);
@@ -463,7 +516,7 @@ async function listPublishedReviews(input = {}) {
 
   const store = await readStore();
   let records = attachJsonImages(store.reviews.filter((review) => (
-    review.status === 'published' && !review.deletedAt && review.reviewType === reviewType &&
+    isEligiblePublishedReview(review) && review.reviewType === reviewType &&
     (reviewType === 'store' || review.productSlug === input.productSlug)
   )), store);
   if (Number.isInteger(rating) && rating >= 1 && rating <= 5) records = records.filter((review) => review.rating === rating);
@@ -505,12 +558,12 @@ async function reviewStatistics({ productSlug = '', reviewType = 'product' } = {
     const product = reviewType === 'product' ? ' AND product_slug=$2' : '';
     if (product) values.push(productSlug);
     const [ratings, extras] = await Promise.all([
-      query(`SELECT rating,count(*)::integer AS count FROM reviews WHERE status='published' AND deleted_at IS NULL AND review_type=$1${product} GROUP BY rating`, values),
+      query(`SELECT rating,count(*)::integer AS count FROM reviews WHERE ${PUBLIC_REVIEW_SQL_FILTER} AND review_type=$1${product} GROUP BY rating`, values),
       query(
         `SELECT
            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM review_images i WHERE i.review_id=reviews.id))::integer AS with_photos,
            count(*) FILTER (WHERE verified_purchase)::integer AS verified
-         FROM reviews WHERE status='published' AND deleted_at IS NULL AND review_type=$1${product}`,
+         FROM reviews WHERE ${PUBLIC_REVIEW_SQL_FILTER} AND review_type=$1${product}`,
         values
       )
     ]);
@@ -521,7 +574,7 @@ async function reviewStatistics({ productSlug = '', reviewType = 'product' } = {
   }
   const store = await readStore();
   const records = attachJsonImages(store.reviews.filter((review) => (
-    review.status === 'published' && !review.deletedAt && review.reviewType === reviewType &&
+    isEligiblePublishedReview(review) && review.reviewType === reviewType &&
     (reviewType === 'store' || review.productSlug === productSlug)
   )), store);
   const rows = [1, 2, 3, 4, 5].map((rating) => ({ rating, count: records.filter((review) => review.rating === rating).length }));
@@ -534,23 +587,94 @@ async function reviewStatistics({ productSlug = '', reviewType = 'product' } = {
 async function reviewSummariesByProduct() {
   if (usePostgresReviews()) {
     const result = await query(
-      `SELECT product_slug,count(*)::integer AS total,round(avg(rating)::numeric,2)::float AS average
-       FROM reviews WHERE review_type='product' AND status='published' AND deleted_at IS NULL
+      `SELECT
+         product_slug,
+         count(*)::integer AS total,
+         round(avg(rating)::numeric,2)::float AS average,
+         count(*) FILTER (WHERE rating=1)::integer AS rating_1,
+         count(*) FILTER (WHERE rating=2)::integer AS rating_2,
+         count(*) FILTER (WHERE rating=3)::integer AS rating_3,
+         count(*) FILTER (WHERE rating=4)::integer AS rating_4,
+         count(*) FILTER (WHERE rating=5)::integer AS rating_5
+       FROM reviews WHERE review_type='product' AND ${PUBLIC_REVIEW_SQL_FILTER}
        GROUP BY product_slug`
     );
     return Object.fromEntries(result.rows.map((row) => [row.product_slug, {
-      averageRating: Number(row.average || 0), totalReviews: Number(row.total || 0)
+      averageRating: Number(row.average || 0),
+      ratingCount: Number(row.total || 0),
+      totalReviews: Number(row.total || 0),
+      ratingDistribution: {
+        1: Number(row.rating_1 || 0),
+        2: Number(row.rating_2 || 0),
+        3: Number(row.rating_3 || 0),
+        4: Number(row.rating_4 || 0),
+        5: Number(row.rating_5 || 0)
+      },
+      hasRatings: Number(row.total || 0) > 0
     }]));
   }
   const store = await readStore();
   const grouped = new Map();
-  for (const review of store.reviews.filter((item) => item.reviewType === 'product' && item.status === 'published' && !item.deletedAt)) {
-    grouped.set(review.productSlug, [...(grouped.get(review.productSlug) || []), review.rating]);
+  for (const review of store.reviews.filter((item) => item.reviewType === 'product' && isEligiblePublishedReview(item))) {
+    grouped.set(review.productSlug, [...(grouped.get(review.productSlug) || []), review]);
   }
-  return Object.fromEntries([...grouped].map(([slug, ratings]) => [slug, {
-    averageRating: Number((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length).toFixed(2)),
-    totalReviews: ratings.length
-  }]));
+  return Object.fromEntries([...grouped].map(([slug, records]) => [slug, ratingSummaryFromReviews(records)]));
+}
+
+async function adminRatingSummaryForProduct(productSlug) {
+  const slug = String(productSlug || '').trim();
+  const lastRecalculatedAt = new Date().toISOString();
+  if (usePostgresReviews()) {
+    const result = await query(
+      `SELECT
+         count(*) FILTER (WHERE ${PUBLIC_REVIEW_SQL_FILTER})::integer AS published_count,
+         round((avg(rating) FILTER (WHERE ${PUBLIC_REVIEW_SQL_FILTER}))::numeric,2)::float AS average,
+         count(*) FILTER (WHERE status='pending' AND deleted_at IS NULL)::integer AS pending_count,
+         count(*) FILTER (WHERE status='hidden' AND deleted_at IS NULL)::integer AS hidden_count,
+         count(*) FILTER (WHERE ${PUBLIC_REVIEW_SQL_FILTER} AND rating=1)::integer AS rating_1,
+         count(*) FILTER (WHERE ${PUBLIC_REVIEW_SQL_FILTER} AND rating=2)::integer AS rating_2,
+         count(*) FILTER (WHERE ${PUBLIC_REVIEW_SQL_FILTER} AND rating=3)::integer AS rating_3,
+         count(*) FILTER (WHERE ${PUBLIC_REVIEW_SQL_FILTER} AND rating=4)::integer AS rating_4,
+         count(*) FILTER (WHERE ${PUBLIC_REVIEW_SQL_FILTER} AND rating=5)::integer AS rating_5
+       FROM reviews
+       WHERE review_type='product' AND product_slug=$1
+         AND ${PUBLIC_REVIEW_SQL_FILTER.replace("status='published' AND ", '').replace('deleted_at IS NULL AND ', '')}`,
+      [slug]
+    );
+    const row = result.rows[0] || {};
+    const ratingCount = Number(row.published_count || 0);
+    return {
+      averageRating: Number(row.average || 0),
+      ratingCount,
+      publishedRatedReviews: ratingCount,
+      pendingReviews: Number(row.pending_count || 0),
+      hiddenReviews: Number(row.hidden_count || 0),
+      ratingDistribution: {
+        1: Number(row.rating_1 || 0),
+        2: Number(row.rating_2 || 0),
+        3: Number(row.rating_3 || 0),
+        4: Number(row.rating_4 || 0),
+        5: Number(row.rating_5 || 0)
+      },
+      hasRatings: ratingCount > 0,
+      lastRecalculatedAt
+    };
+  }
+  const store = await readStore();
+  const records = store.reviews.filter((review) => (
+    review.reviewType === 'product' &&
+    review.productSlug === slug &&
+    !review.deletedAt &&
+    !isDemoOrTestReview(review)
+  ));
+  const summary = ratingSummaryFromReviews(records);
+  return {
+    ...summary,
+    publishedRatedReviews: summary.ratingCount,
+    pendingReviews: records.filter((review) => review.status === 'pending').length,
+    hiddenReviews: records.filter((review) => review.status === 'hidden').length,
+    lastRecalculatedAt
+  };
 }
 
 async function listAdminReviews(input = {}) {
@@ -726,6 +850,7 @@ module.exports = {
   REVIEW_SOURCES,
   REVIEW_STATUSES,
   REVIEW_TYPES,
+  adminRatingSummaryForProduct,
   createImportBatch,
   existingDuplicateKeys,
   findReviewById,

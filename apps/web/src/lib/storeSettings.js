@@ -121,6 +121,17 @@ export const DEFAULT_STOREFRONT_SETTINGS = {
     pushNotificationsEnabled: false
   },
   inventory: { lowStockThreshold: 12 },
+  productCardSalesInformation: {
+    showRemainingStockGlobally: true,
+    showSoldCountGlobally: true,
+    defaultLowStockThreshold: 10,
+    hideExactStockAboveThreshold: true,
+    showInStockAboveThreshold: true,
+    showNewWhenSoldCountZero: true,
+    newProductPeriodDays: 30,
+    soldCountFormatting: 'exact',
+    includeVerifiedHistoricalSales: true
+  },
   storefrontCollections: DEFAULT_COLLECTION_DEFINITIONS.map((collection) => collection.name),
   collectionDefinitions: DEFAULT_COLLECTION_DEFINITIONS,
   collectionCountdowns: {}

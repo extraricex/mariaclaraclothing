@@ -7,7 +7,10 @@ const DEFAULT_SETTINGS_FILE = path.join(__dirname, '..', '..', 'data', 'store-se
 const DEFAULT_CREDENTIALS_FILE = path.join(__dirname, '..', '..', 'data', 'admin-credentials.json');
 const SETTINGS_KEY = 'storeSettings';
 const CREDENTIALS_KEY = 'adminCredentials';
-const SETTINGS_SECTIONS = ['general', 'shipping', 'payments', 'website', 'inventory', 'authentication', 'marketing', 'reviews', 'orderNotifications'];
+const SETTINGS_SECTIONS = [
+  'general', 'shipping', 'payments', 'website', 'inventory',
+  'productCardSalesInformation', 'authentication', 'marketing', 'reviews', 'orderNotifications'
+];
 const WEBSITE_INFO_PAGE_KEYS = ['faq', 'shippingReturns', 'terms'];
 const SHIPPING_REGION_IDS = ['metro_manila_cavite', 'luzon', 'visayas_mindanao'];
 const PAYMENT_METHOD_IDS = ['cash_on_delivery', 'paymongo', 'gcash', 'bank_transfer'];
@@ -376,6 +379,17 @@ function defaultStoreSettings() {
     inventory: {
       lowStockThreshold: 12
     },
+    productCardSalesInformation: {
+      showRemainingStockGlobally: true,
+      showSoldCountGlobally: true,
+      defaultLowStockThreshold: 10,
+      hideExactStockAboveThreshold: true,
+      showInStockAboveThreshold: true,
+      showNewWhenSoldCountZero: true,
+      newProductPeriodDays: 30,
+      soldCountFormatting: 'exact',
+      includeVerifiedHistoricalSales: true
+    },
     storefrontCollections,
     collectionDefinitions,
     collectionCountdowns: defaultCollectionCountdowns(storefrontCollections)
@@ -681,6 +695,50 @@ function normalizeInventory(inventory) {
   return { lowStockThreshold };
 }
 
+function normalizeProductCardSalesInformation(input) {
+  const value = input && typeof input === 'object' ? input : {};
+  const defaults = defaultStoreSettings().productCardSalesInformation;
+  const defaultLowStockThreshold = value.defaultLowStockThreshold === undefined
+    ? defaults.defaultLowStockThreshold
+    : Number(value.defaultLowStockThreshold);
+  if (!Number.isInteger(defaultLowStockThreshold) || defaultLowStockThreshold < 1 || defaultLowStockThreshold > 999) {
+    throw badRequest('Product-card low-stock threshold must be an integer between 1 and 999.');
+  }
+  const soldCountFormatting = String(value.soldCountFormatting || defaults.soldCountFormatting).trim().toLowerCase();
+  if (!['exact', 'abbreviated'].includes(soldCountFormatting)) {
+    throw badRequest('Sold-count formatting must be Exact or Abbreviated.');
+  }
+  const newProductPeriodDays = value.newProductPeriodDays === undefined
+    ? defaults.newProductPeriodDays
+    : Number(value.newProductPeriodDays);
+  if (!Number.isInteger(newProductPeriodDays) || newProductPeriodDays < 1 || newProductPeriodDays > 365) {
+    throw badRequest('New-product period must be an integer between 1 and 365 days.');
+  }
+  return {
+    showRemainingStockGlobally: value.showRemainingStockGlobally === undefined
+      ? defaults.showRemainingStockGlobally
+      : Boolean(value.showRemainingStockGlobally),
+    showSoldCountGlobally: value.showSoldCountGlobally === undefined
+      ? defaults.showSoldCountGlobally
+      : Boolean(value.showSoldCountGlobally),
+    defaultLowStockThreshold,
+    hideExactStockAboveThreshold: value.hideExactStockAboveThreshold === undefined
+      ? defaults.hideExactStockAboveThreshold
+      : Boolean(value.hideExactStockAboveThreshold),
+    showInStockAboveThreshold: value.showInStockAboveThreshold === undefined
+      ? defaults.showInStockAboveThreshold
+      : Boolean(value.showInStockAboveThreshold),
+    showNewWhenSoldCountZero: value.showNewWhenSoldCountZero === undefined
+      ? defaults.showNewWhenSoldCountZero
+      : Boolean(value.showNewWhenSoldCountZero),
+    newProductPeriodDays,
+    soldCountFormatting,
+    includeVerifiedHistoricalSales: value.includeVerifiedHistoricalSales === undefined
+      ? defaults.includeVerifiedHistoricalSales
+      : Boolean(value.includeVerifiedHistoricalSales)
+  };
+}
+
 function normalizeAuthentication(authentication) {
   const value = authentication && typeof authentication === 'object' ? authentication : {};
   const defaults = defaultStoreSettings().authentication;
@@ -772,6 +830,7 @@ function normalizeStoreSettings(settings) {
     payments: normalizePayments(value.payments),
     website: normalizeWebsite(value.website),
     inventory: normalizeInventory(value.inventory),
+    productCardSalesInformation: normalizeProductCardSalesInformation(value.productCardSalesInformation),
     authentication: normalizeAuthentication(value.authentication),
     marketing: normalizeMarketing(value.marketing),
     reviews: normalizeReviews(value.reviews),
@@ -822,6 +881,7 @@ function normalizeSectionValue(section, value, current) {
   if (section === 'shipping') return normalizeShipping(value);
   if (section === 'payments') return normalizePayments(value);
   if (section === 'inventory') return normalizeInventory(value);
+  if (section === 'productCardSalesInformation') return normalizeProductCardSalesInformation(value);
   if (section === 'authentication') return normalizeAuthentication(value);
   if (section === 'marketing') return normalizeMarketing(value);
   if (section === 'reviews') return normalizeReviews(value);

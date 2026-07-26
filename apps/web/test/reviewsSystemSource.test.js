@@ -21,12 +21,9 @@ test('customer reviews expose real summaries, filters, photos, replies, verifica
   assert.doesNotMatch(productReviews, /review\.reviewerEmail|review\.orderNumber/);
 });
 
-test('ratings use published API summaries and honor global and per-product visibility', () => {
-  assert.match(productCard, /reviewSummary\?\.totalReviews/);
-  assert.match(productCard, /showRatingsOnProductCards/);
-  assert.match(productCard, /reviewSettings\?\.reviewsEnabled/);
-  assert.match(productPage, /showOnProductPages/);
-  assert.match(productPage, /reviewSettings\?\.reviewsEnabled/);
+test('product cards and product buying panels omit rating rows while the review section remains available', () => {
+  assert.doesNotMatch(productCard, /reviewSummary\?\.totalReviews|<Stars|<ProductRating/);
+  assert.doesNotMatch(productPage, /href="#customer-reviews"|<ProductRating/);
   assert.match(productReviews, /showRatingSummary/);
   assert.match(productPage, /<ProductReviews product=\{product\}/);
 });
@@ -43,7 +40,7 @@ test('admin routes cover moderation, settings, import preview, bulk actions, aud
     assert.match(path, productionSpaRoute);
   }
   for (const expected of [
-    'Global review visibility', 'Download Review Import Template', 'Preview import', 'Import preview',
+    'Global review visibility', 'Download Excel Template (.xlsx)', 'Preview import', 'Import preview',
     'Bulk moderation action saved', 'Moderation reason', 'Audit history', 'Soft delete',
     'Permanent delete', 'Verified Purchase (requires live order match)', 'Deleted', 'Review date'
   ]) assert.match(adminReviews, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));

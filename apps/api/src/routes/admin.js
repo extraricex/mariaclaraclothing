@@ -63,6 +63,7 @@ const {
   saveEditableProduct,
   saveEditableProductsBatch
 } = require('../products/catalogRepository');
+const { annotateProductsWithCommerceStats } = require('../products/productCommerceStatsService');
 const {
   failedProductRowsCsv,
   planProductCsvImport,
@@ -120,6 +121,7 @@ const {
   updateIssueReport
 } = require('../issueReports/issueReportRepository');
 const { createAdminReviewsRouter } = require('./adminReviews');
+const { adminRatingSummaryForProduct } = require('../reviews/reviewRepository');
 const { CommerceError } = require('../checkout/commerceError');
 const {
   deliveryInformationIssues,
@@ -129,9 +131,11 @@ const {
   normalizeDeliveryAddress
 } = require('../checkout/deliveryDetails');
 const {
+  checkoutIssuesSummary,
   contentReadinessSummary,
   storefrontAnalyticsSummary
 } = require('../analytics/storefrontAnalyticsService');
+const { resolveCheckoutIssueCategory } = require('../analytics/storefrontAnalyticsRepository');
 const { metaOrderReconciliation } = require('../analytics/metaOrderReconciliationService');
 const { buildSeoAudit, seoAuditCsv } = require('../seo/seoAudit');
 
@@ -277,7 +281,25 @@ router.get('/session', (req, res) => res.json({ authenticated: true }));
 
 router.get('/analytics', async (req, res, next) => {
   try {
-    return res.json({ analytics: await storefrontAnalyticsSummary({ days: req.query.days }) });
+    return res.json({ analytics: await storefrontAnalyticsSummary(req.query) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/analytics/checkout-issues', async (req, res, next) => {
+  try {
+    return res.json({ checkoutIssues: await checkoutIssuesSummary(req.query) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.patch('/analytics/checkout-issues/:category', async (req, res, next) => {
+  try {
+    return res.json({
+      result: await resolveCheckoutIssueCategory(req.params.category, req.body?.resolved !== false)
+    });
   } catch (error) {
     return next(error);
   }
@@ -1014,7 +1036,7 @@ router.get('/products/:slug', async (req, res, next) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    return res.json({ product });
+    return res.json({ product: await adminProductCommerceStats(product) });
   } catch (error) {
     return next(error);
   }
@@ -1056,7 +1078,13 @@ router.post('/products/:slug/duplicate', async (req, res, next) => {
       urlAliases: [],
       variants: duplicateVariants,
       status: 'draft',
-      featured: false
+      featured: false,
+      createdAt: new Date().toISOString(),
+      historicalSoldQuantity: 0,
+      historicalSoldSource: '',
+      historicalSoldNote: '',
+      historicalSoldUpdatedBy: '',
+      historicalSoldUpdatedAt: ''
     })));
 
     return res.status(201).json({ product, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
@@ -1077,10 +1105,15 @@ router.post('/products', upload.array('images', 8), async (req, res, next) => {
     }
     await normalizeProductUploads(files);
     const images = files.length ? uploadedProductImages(files, incoming.name) : incoming.images;
-    product = await saveEditableProduct(withSyncedStorefrontProductPage(normalizeProductRequest({
+    const requested = normalizeProductRequest({
       ...incoming,
       images
-    })));
+    });
+    product = await saveEditableProduct(withSyncedStorefrontProductPage({
+      ...requested,
+      createdAt: new Date().toISOString(),
+      ...historicalSalesUpdate(null, incoming, req)
+    }));
   } catch (error) {
     try {
       removeUploadedProductFiles(files);
@@ -1102,9 +1135,11 @@ router.put('/products/:slug', async (req, res, next) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
+    const requested = normalizeProductRequest(req.body || {});
     const product = await saveEditableProduct(withSyncedStorefrontProductPage({
       ...existingProduct,
-      ...normalizeProductRequest(req.body || {}),
+      ...requested,
+      ...historicalSalesUpdate(existingProduct, req.body || {}, req),
       slug,
       productPage: req.body?.productPage || existingProduct.productPage
     }), slug);
@@ -1124,7 +1159,11 @@ router.put('/products/:slug', async (req, res, next) => {
         lastErrorCode: result?.code || '', pendingRetry: result?.status === 'failed'
       };
     }
-    return res.json({ product, pancakeSync, summary: productSummary(await listEditableProducts(), await activeLowStockThreshold()) });
+    return res.json({
+      product: await adminProductCommerceStats(product),
+      pancakeSync,
+      summary: productSummary(await listEditableProducts(), await activeLowStockThreshold())
+    });
   } catch (error) {
     return next(error);
   }
@@ -1959,6 +1998,65 @@ function normalizeProductRequest(body) {
       reviewsEnabled: body.reviewSettings?.reviewsEnabled === undefined ? true : Boolean(body.reviewSettings.reviewsEnabled),
       showRatingSummary: body.reviewSettings?.showRatingSummary === undefined ? true : Boolean(body.reviewSettings.showRatingSummary)
     }
+  };
+}
+
+async function adminProductCommerceStats(product) {
+  const settings = await getStoreSettings();
+  const [[annotated], ratingSummary] = await Promise.all([
+    annotateProductsWithCommerceStats([product], {
+      settings,
+      includeAdmin: true
+    }),
+    adminRatingSummaryForProduct(product.slug)
+  ]);
+  return { ...annotated, ratingSummary };
+}
+
+function historicalSalesUpdate(existingProduct, body, req) {
+  const input = body?.commerceStats && typeof body.commerceStats === 'object'
+    ? body.commerceStats
+    : body || {};
+  const previous = {
+    quantity: Number(existingProduct?.historicalSoldQuantity || 0),
+    source: String(existingProduct?.historicalSoldSource || ''),
+    note: String(existingProduct?.historicalSoldNote || ''),
+    updatedBy: String(existingProduct?.historicalSoldUpdatedBy || ''),
+    updatedAt: String(existingProduct?.historicalSoldUpdatedAt || '')
+  };
+  const quantity = input.historicalSoldQuantity === undefined
+    ? previous.quantity
+    : Number(input.historicalSoldQuantity);
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 2_147_483_647) {
+    const error = new Error('Verified historical sold quantity must be a non-negative whole number.');
+    error.status = 400;
+    throw error;
+  }
+  const source = input.historicalSoldSource === undefined
+    ? previous.source
+    : String(input.historicalSoldSource || '').trim();
+  const note = input.historicalSoldNote === undefined
+    ? previous.note
+    : String(input.historicalSoldNote || '').trim();
+  if (source.length > 200) {
+    const error = new Error('Historical sales source must be 200 characters or fewer.');
+    error.status = 400;
+    throw error;
+  }
+  if (note.length > 1000) {
+    const error = new Error('Historical sales note must be 1,000 characters or fewer.');
+    error.status = 400;
+    throw error;
+  }
+  const changed = quantity !== previous.quantity || source !== previous.source || note !== previous.note;
+  return {
+    historicalSoldQuantity: quantity,
+    historicalSoldSource: source,
+    historicalSoldNote: note,
+    historicalSoldUpdatedBy: changed
+      ? String(req.authSession?.actorId || 'admin')
+      : previous.updatedBy,
+    historicalSoldUpdatedAt: changed ? new Date().toISOString() : previous.updatedAt
   };
 }
 

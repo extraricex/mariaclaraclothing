@@ -62,6 +62,24 @@ function CollectionLoadingSkeleton() {
   );
 }
 
+function PriorityProducts({ products }) {
+  if (!products.length) return null;
+  return (
+    <section className="mx-auto mt-8 max-w-7xl px-5 sm:mt-14 lg:px-8" aria-labelledby="most-ordered-heading">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-t border-[var(--customer-border)] pt-6">
+        <div>
+          <p className="eyebrow">Customer favorites</p>
+          <h2 id="most-ordered-heading" className="display mt-2 text-3xl sm:text-5xl">Most ordered</h2>
+        </div>
+        <Link to="/shop" className="text-action text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-deep">Shop all</Link>
+      </div>
+      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:mt-8 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
+        {products.map((product, index) => <ProductCard key={product.id} product={product} index={index} />)}
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const location = useLocation();
   const [products, setProducts] = useState([]);
@@ -98,6 +116,11 @@ export default function Home() {
   }, []);
 
   const collectionSections = buildStorefrontCollectionSections(products, collections);
+  const priorityProducts = products
+    .filter((product) => Number(product.successfulOrderCount || 0) > 0)
+    .filter((product) => (product.variants || []).some((variant) => Number(variant.stockQuantity || 0) > 0))
+    .sort((left, right) => Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0))
+    .slice(0, 4);
   const activeBanner = banners[activeHeroIndex] || banners[0] || null;
   const heroCopy = storefrontSettings.hero || DEFAULT_STOREFRONT_SETTINGS.hero;
   const onlinePaymentEnabled = storefrontSettings.paymentMethods?.some((method) => method.id === 'paymongo');
@@ -238,9 +261,8 @@ export default function Home() {
             <p className="reveal reveal-3 mt-3 max-w-xs text-xs leading-relaxed text-paper/85 sm:text-[13px] lg:mt-6 lg:max-w-sm lg:text-sm">
               {heroCopy.subtitle}
             </p>
-            <div className="reveal reveal-4 mt-3 flex flex-wrap justify-start gap-1.5 sm:mt-8 sm:gap-3">
+            <div className="reveal reveal-4 mt-3 flex flex-wrap justify-start sm:mt-8">
               <CustomerButton as="a" href={heroCopy.primaryButtonLink} className="customer-compact-button !bg-accent hover:!bg-accent-deep">{heroCopy.primaryButtonText}</CustomerButton>
-              <CustomerButton as="a" href={heroCopy.secondaryButtonLink} variant="inverse" className="customer-compact-button">{heroCopy.secondaryButtonText}</CustomerButton>
             </div>
           </div>
           {banners.length > 1 && (
@@ -264,6 +286,8 @@ export default function Home() {
       {catalogLoaded && error && (
         <div className="mx-auto min-h-[70vh] max-w-7xl px-5 pt-16 text-sm text-accent-deep lg:px-8" role="alert">{error}</div>
       )}
+
+      {catalogLoaded && !error && <PriorityProducts products={priorityProducts} />}
 
       {catalogLoaded && !error && collectionSections.map((section) => {
         const isFreedomOfMind = String(section.slug || '').trim().toLowerCase() === 'freedom-of-mind';

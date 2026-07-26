@@ -44,6 +44,15 @@ function paymentDescription(method) {
   return method.instructions || 'Pay cash to the rider when your order arrives.';
 }
 
+function reviewErrorCategory(error, paymentProviderAttempted = false) {
+  const code = String(error?.code || '').trim().toLowerCase();
+  if (paymentProviderAttempted || code.includes('payment') || code.includes('paymongo')) return 'payment_failure';
+  if (['insufficient_stock', 'product_unavailable', 'variant_unavailable', 'cart_invalid'].includes(code)) return 'insufficient_stock';
+  if (['address_invalid', 'incomplete_delivery_address', 'checkout_customer_invalid'].includes(code)) return 'invalid_address';
+  if (code.includes('duplicate') || code.includes('idempot')) return 'duplicate_submission';
+  return 'order_api_failure';
+}
+
 export default function CheckoutReview() {
   const items = useCart();
   const navigate = useNavigate();
@@ -308,10 +317,30 @@ export default function CheckoutReview() {
       });
       return;
     }
-    if (pending || placingOrderRef.current || !draftMatchesCart || !quote) return;
+    if (pending || placingOrderRef.current) {
+      trackFunnelEvent('checkout_error', {
+        errorCategory: 'duplicate_submission',
+        errorMessage: 'A Place Order request was already in progress.',
+        checkoutStep: 'review_payment',
+        reference: cartSessionId,
+        dedupeKey: `duplicate-submit:${cartSessionId}`,
+        dedupeMilliseconds: 10_000
+      });
+      return;
+    }
+    if (!draftMatchesCart || !quote) return;
     placingOrderRef.current = true;
     setPending(true);
     setStatus({ tone: 'neutral', message: paymentMethod === 'paymongo' ? 'Preparing secure payment...' : 'Placing your order...' });
+    trackFunnelEvent('place_order', {
+      paymentMethod,
+      quantity: cartQuantity(items),
+      valueCents: quote.totalCents,
+      checkoutStep: 'review_payment',
+      reference: cartSessionId,
+      dedupeKey: `place-order:${cartSessionId}:${paymentMethod}`,
+      dedupeMilliseconds: 10_000
+    });
     let paymentProviderAttempted = false;
     try {
       const latestQuote = await createCheckoutQuote(quotePayload(draft.discountCode || '')).then((body) => body.quote);
@@ -360,8 +389,23 @@ export default function CheckoutReview() {
         trackFunnelEvent('payment_failed', {
           paymentMethod: 'paymongo',
           metricName: error.code || 'CHECKOUT_SESSION_FAILED',
+          errorCategory: 'payment_failure',
+          errorMessage: error.message,
+          checkoutStep: 'payment',
+          reference: cartSessionId,
           valueCents: quote?.totalCents,
           dedupeKey: `paymongo-failed:${cartSessionId}:${error.code || 'unknown'}`,
+          dedupeMilliseconds: 10_000
+        });
+      } else {
+        trackFunnelEvent('checkout_error', {
+          paymentMethod,
+          errorCategory: reviewErrorCategory(error),
+          errorMessage: error.message,
+          checkoutStep: 'review_payment',
+          reference: cartSessionId,
+          valueCents: quote?.totalCents,
+          dedupeKey: `review-error:${cartSessionId}:${error.code || 'unknown'}`,
           dedupeMilliseconds: 10_000
         });
       }

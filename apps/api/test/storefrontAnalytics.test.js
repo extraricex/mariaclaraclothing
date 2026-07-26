@@ -15,15 +15,23 @@ fs.writeFileSync(process.env.ORDERS_DATA_FILE, JSON.stringify({
   orders: [
     {
       orderNumber: 'REAL-1', placedAt, status: 'confirmed', paymentMethod: 'cash_on_delivery', paymentStatus: 'cod_pending', totalCents: 127800,
+      channel: 'Online Store', checkoutChannel: 'storefront_checkout',
       items: [{ productId: 'product-a', productName: 'Product A', quantity: 2, unitPriceCents: 64900 }], isTestOrder: false
     },
     {
       orderNumber: 'CANCELLED-1', placedAt, status: 'cancelled', paymentMethod: 'cash_on_delivery', paymentStatus: 'cancelled', totalCents: 64900,
+      channel: 'Online Store', checkoutChannel: 'storefront_checkout',
       cancellationReason: 'customer_requested', items: [], isTestOrder: false
     },
     {
       orderNumber: 'TEST-1', placedAt, status: 'confirmed', paymentMethod: 'cash_on_delivery', paymentStatus: 'cod_pending', totalCents: 999900,
+      channel: 'Online Store', checkoutChannel: 'storefront_checkout',
       items: [{ productId: 'product-a', productName: 'Product A', quantity: 10, unitPriceCents: 99990 }], isTestOrder: true
+    },
+    {
+      orderNumber: 'PANCAKE-1', placedAt, status: 'delivered', paymentMethod: 'cash_on_delivery', paymentStatus: 'cod_pending', totalCents: 500000,
+      channel: 'Pancake POS', checkoutChannel: 'pancake_pos',
+      items: [{ productId: 'product-a', productName: 'Product A', quantity: 5, unitPriceCents: 100000 }], isTestOrder: false
     }
   ], statusEvents: [], trackingNotifications: []
 }));
@@ -32,9 +40,12 @@ const { createApp } = require('../src/app');
 const {
   listAnalyticsEvents,
   normalizeEvent,
-  recordAnalyticsEvent
+  recordAnalyticsEvent,
+  resolveCheckoutIssueCategory
 } = require('../src/analytics/storefrontAnalyticsRepository');
 const {
+  analyticsDateWindow,
+  checkoutIssuesSummary,
   percentile,
   productContentReadiness,
   storefrontAnalyticsSummary
@@ -56,6 +67,47 @@ test('analytics records an anonymous hashed session and deduplicates event IDs',
   assert.equal(Object.hasOwn(records[0], 'email'), false);
 });
 
+test('concurrent JSON fallback events remain valid and complete', async () => {
+  await Promise.all(Array.from({ length: 30 }, (_, index) => recordAnalyticsEvent({
+    ...event(`event_concurrent_${String(index).padStart(3, '0')}`, 'page_view'),
+    sessionId: `session_concurrent_${String(index).padStart(3, '0')}`
+  })));
+  const parsed = JSON.parse(fs.readFileSync(process.env.ANALYTICS_DATA_FILE, 'utf8'));
+  assert.equal(parsed.events.filter((item) => item.eventId.startsWith('event_concurrent_')).length, 30);
+});
+
+test('checkout failures retain only sanitized operational context', () => {
+  const normalized = normalizeEvent(event('event_checkout_failure', 'checkout_error', {
+    checkoutStep: 'information',
+    errorCategory: 'Missing Province',
+    errorMessage: 'Send to maria@example.com or +63 917 123 4567 at https://private.example/path',
+    reference: 'cart-customer-reference'
+  }), { userAgent: 'Mozilla/5.0 FBAN/FBIOS Mobile' });
+  assert.equal(normalized.checkoutStep, 'information');
+  assert.equal(normalized.errorCategory, 'missing_province');
+  assert.equal(normalized.browserCategory, 'facebook');
+  assert.equal(normalized.errorMessage.includes('maria@example.com'), false);
+  assert.equal(normalized.errorMessage.includes('917 123 4567'), false);
+  assert.equal(normalized.errorMessage.includes('private.example'), false);
+  assert.notEqual(normalized.referenceHash, 'cart-customer-reference');
+});
+
+test('checkout issue categories can be resolved and reopen when requested', async () => {
+  await recordAnalyticsEvent(event('event_checkout_issue', 'checkout_error', {
+    checkoutStep: 'information',
+    errorCategory: 'missing_province',
+    errorMessage: 'Province is required.'
+  }));
+  let summary = await checkoutIssuesSummary({ days: 30 });
+  assert.equal(summary.issues.find((issue) => issue.category === 'missing_province').resolved, false);
+  await resolveCheckoutIssueCategory('missing_province', true);
+  summary = await checkoutIssuesSummary({ days: 30 });
+  assert.equal(summary.issues.find((issue) => issue.category === 'missing_province').resolved, true);
+  await resolveCheckoutIssueCategory('missing_province', false);
+  summary = await checkoutIssuesSummary({ days: 30 });
+  assert.equal(summary.issues.find((issue) => issue.category === 'missing_province').resolved, false);
+});
+
 test('analytics summary excludes cancelled and marked test orders from revenue', async () => {
   await recordAnalyticsEvent({ ...event('event_page_1', 'page_view'), sessionId: 'session_exit_111', path: '/shop' });
   await recordAnalyticsEvent({ ...event('event_page_2', 'page_view'), sessionId: 'session_exit_111', path: '/cart' });
@@ -68,6 +120,17 @@ test('analytics summary excludes cancelled and marked test orders from revenue',
   assert.equal(summary.topProducts[0].quantity, 2);
   assert.deepEqual(summary.cancellations, [{ name: 'customer_requested', count: 1 }]);
   assert.ok(summary.exitPages.some((item) => item.name === '/cart' && item.count === 1));
+  assert.deepEqual(summary.funnel.map((step) => step.name), [
+    'Sessions', 'Product views', 'Add to cart', 'Checkout starts', 'Add Payment Info', 'Successful orders'
+  ]);
+});
+
+test('analytics date presets use exclusive Manila day boundaries', () => {
+  const previous = analyticsDateWindow({ range: 'previous_7_days' });
+  assert.equal((previous.end.getTime() - previous.start.getTime()) / (24 * 60 * 60 * 1000), 7);
+  const custom = analyticsDateWindow({ range: 'custom', start: '2026-07-01', end: '2026-07-03' });
+  assert.equal(custom.start.toISOString(), '2026-06-30T16:00:00.000Z');
+  assert.equal(custom.end.toISOString(), '2026-07-03T16:00:00.000Z');
 });
 
 test('Web Vitals accept only supported finite metrics and aggregate p75', async () => {

@@ -40,6 +40,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS products_public_handle_lower_idx
 
 ALTER TABLE products ADD COLUMN IF NOT EXISTS reviews_enabled boolean NOT NULL DEFAULT true;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS show_rating_summary boolean NOT NULL DEFAULT true;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS commerce_stats jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS historical_sold_quantity integer NOT NULL DEFAULT 0;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS historical_sold_source text NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS historical_sold_note text NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS historical_sold_updated_by text NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS historical_sold_updated_at timestamptz;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'products_historical_sold_quantity_non_negative'
+  ) THEN
+    ALTER TABLE products
+      ADD CONSTRAINT products_historical_sold_quantity_non_negative
+      CHECK (historical_sold_quantity >= 0);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS product_url_aliases (
   alias text PRIMARY KEY,
@@ -394,8 +412,9 @@ CREATE INDEX IF NOT EXISTS cart_sessions_recovery_idx
 CREATE TABLE IF NOT EXISTS storefront_analytics_events (
   event_id text PRIMARY KEY,
   event_name text NOT NULL CHECK (event_name IN (
-    'page_view', 'product_view', 'add_to_cart', 'initiate_checkout', 'add_payment_info',
-    'payment_failed', 'payment_cancelled', 'web_vital'
+    'page_view', 'product_view', 'size_select', 'add_to_cart', 'checkout_start',
+    'shipping_info_completed', 'initiate_checkout', 'add_payment_info', 'place_order',
+    'checkout_error', 'thank_you_view', 'payment_failed', 'payment_cancelled', 'web_vital'
   )),
   session_hash text NOT NULL,
   path text NOT NULL DEFAULT '',
@@ -406,15 +425,39 @@ CREATE TABLE IF NOT EXISTS storefront_analytics_events (
   currency text NOT NULL DEFAULT 'PHP' CHECK (currency = 'PHP'),
   payment_method text NOT NULL DEFAULT '',
   device_type text NOT NULL DEFAULT 'unknown' CHECK (device_type IN ('mobile', 'tablet', 'desktop', 'unknown')),
+  browser_category text NOT NULL DEFAULT 'unknown',
   referrer_host text NOT NULL DEFAULT '',
   utm_source text NOT NULL DEFAULT '',
   utm_medium text NOT NULL DEFAULT '',
   utm_campaign text NOT NULL DEFAULT '',
   metric_name text NOT NULL DEFAULT '',
   metric_value double precision CHECK (metric_value IS NULL OR (metric_value >= 0 AND metric_value <= 600000)),
+  checkout_step text NOT NULL DEFAULT '',
+  error_category text NOT NULL DEFAULT '',
+  error_message text NOT NULL DEFAULT '',
+  reference_hash text NOT NULL DEFAULT '',
+  resolved_at timestamptz,
   occurred_at timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE storefront_analytics_events
+  ADD COLUMN IF NOT EXISTS browser_category text NOT NULL DEFAULT 'unknown',
+  ADD COLUMN IF NOT EXISTS checkout_step text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS error_category text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS error_message text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS reference_hash text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
+ALTER TABLE storefront_analytics_events
+  DROP CONSTRAINT IF EXISTS storefront_analytics_events_event_name_check;
+ALTER TABLE storefront_analytics_events
+  DROP CONSTRAINT IF EXISTS storefront_analytics_event_name_check;
+ALTER TABLE storefront_analytics_events
+  ADD CONSTRAINT storefront_analytics_event_name_check CHECK (event_name IN (
+    'page_view', 'product_view', 'size_select', 'add_to_cart', 'checkout_start',
+    'shipping_info_completed', 'initiate_checkout', 'add_payment_info', 'place_order',
+    'checkout_error', 'thank_you_view', 'payment_failed', 'payment_cancelled', 'web_vital'
+  ));
 
 CREATE INDEX IF NOT EXISTS storefront_analytics_events_time_idx
   ON storefront_analytics_events(occurred_at DESC);
@@ -426,6 +469,14 @@ CREATE INDEX IF NOT EXISTS storefront_analytics_events_product_time_idx
   ON storefront_analytics_events(product_id, occurred_at DESC) WHERE product_id <> '';
 CREATE INDEX IF NOT EXISTS storefront_analytics_events_metric_time_idx
   ON storefront_analytics_events(metric_name, occurred_at DESC) WHERE metric_name <> '';
+CREATE INDEX IF NOT EXISTS storefront_analytics_events_error_time_idx
+  ON storefront_analytics_events(error_category, occurred_at DESC) WHERE error_category <> '';
+
+CREATE TABLE IF NOT EXISTS checkout_issue_resolutions (
+  category text PRIMARY KEY,
+  resolved_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS checkout_quotes (
   id text PRIMARY KEY,

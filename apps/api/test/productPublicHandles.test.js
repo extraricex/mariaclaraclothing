@@ -76,8 +76,14 @@ test('public product handles keep internal slugs stable and retain previous URLs
     const redirect = await fetch(`http://127.0.0.1:${server.address().port}/api/products/clean-product-name/route`, {
       redirect: 'manual'
     });
-    assert.equal(redirect.status, 308);
+    assert.equal(redirect.status, 301);
     assert.equal(redirect.headers.get('location'), '/product/clean-product-name-2026');
+
+    const pluralRedirect = await fetch(`http://127.0.0.1:${server.address().port}/api/products/clean-product-name-2026/route?legacy_plural=1&utm_source=shared`, {
+      redirect: 'manual'
+    });
+    assert.equal(pluralRedirect.status, 301);
+    assert.equal(pluralRedirect.headers.get('location'), '/product/clean-product-name-2026?utm_source=shared');
 
     const route = await fetch(`http://127.0.0.1:${server.address().port}/api/products/clean-product-name-2026/route`);
     assert.equal(route.status, 200);

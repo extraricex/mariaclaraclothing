@@ -49,6 +49,11 @@ test('published-only statistics, filters, sorting, photos, and privacy stay exac
     reviewerName: 'Pending R.', reviewerEmail: 'pending@example.com', orderNumber: 'MCC-PRIVATE-3',
     rating: 1, body: 'Waiting for moderation.', status: 'pending', createdAt: '2026-07-12T00:00:00.000Z'
   }));
+  await reviews.insertReview(review({
+    reviewerName: 'Demo R.', reviewerEmail: 'demo@example.com', orderNumber: '',
+    rating: 5, body: 'Development fixture.', originalImportData: { is_demo: true },
+    createdAt: '2026-07-12T12:00:00.000Z'
+  }));
 
   const stats = await reviews.reviewStatistics({ productSlug: 'shirt' });
   assert.equal(stats.totalReviews, 2);
@@ -111,6 +116,32 @@ test('duplicates are rejected while product and store summaries remain independe
   assert.equal((await reviews.reviewStatistics({ reviewType: 'store' })).totalReviews, 1);
   assert.equal((await reviews.reviewStatistics({ productSlug: 'shirt' })).totalReviews, 1);
   assert.deepEqual(await reviews.reviewSummariesByProduct(), {
-    shirt: { averageRating: 5, totalReviews: 1 }
+    shirt: {
+      averageRating: 5,
+      ratingCount: 1,
+      totalReviews: 1,
+      ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 1 },
+      hasRatings: true
+    }
   });
+});
+
+test('admin product rating summary is calculated and read-only source data stays separated by status', async () => {
+  await reviews.insertReview(review());
+  await reviews.insertReview(review({
+    reviewerName: 'Pending R.', reviewerEmail: 'pending-summary@example.com',
+    body: 'Pending summary review.', status: 'pending', rating: 4
+  }));
+  await reviews.insertReview(review({
+    reviewerName: 'Hidden R.', reviewerEmail: 'hidden-summary@example.com',
+    body: 'Hidden summary review.', status: 'hidden', rating: 3
+  }));
+
+  const summary = await reviews.adminRatingSummaryForProduct('shirt');
+  assert.equal(summary.averageRating, 5);
+  assert.equal(summary.publishedRatedReviews, 1);
+  assert.equal(summary.pendingReviews, 1);
+  assert.equal(summary.hiddenReviews, 1);
+  assert.deepEqual(summary.ratingDistribution, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 1 });
+  assert.match(summary.lastRecalculatedAt, /^\d{4}-\d{2}-\d{2}T/);
 });

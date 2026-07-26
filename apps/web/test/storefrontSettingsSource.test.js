@@ -121,18 +121,19 @@ test('info pages render sections from settings by pageKey', async () => {
   assert.match(app, /pageKey="terms"/);
 });
 
-test('storefront uses the low stock threshold from settings', async () => {
+test('storefront keeps centralized stock settings while product cards omit detailed stock labels', async () => {
   const lib = await readFile(path.join(root, 'lib', 'storeSettings.js'), 'utf8');
   assert.match(lib, /export function useStorefrontSettings/);
   assert.match(lib, /lowStockThreshold: 12/);
+  assert.match(lib, /defaultLowStockThreshold: 10/);
 
   const card = await readFile(path.join(root, 'components', 'ProductCard.jsx'), 'utf8');
-  assert.match(card, /useStorefrontSettings/);
-  assert.match(card, /settings\.inventory\.lowStockThreshold/);
-  assert.doesNotMatch(card, /<= 12/);
+  assert.doesNotMatch(card, /ProductCommerceStats/);
+  assert.doesNotMatch(card, /Math\.random|150\+ sold/);
 
   const productPage = await readFile(path.join(root, 'pages', 'Product.jsx'), 'utf8');
   assert.match(productPage, /useStorefrontSettings/);
   assert.match(productPage, /settings\.inventory\.lowStockThreshold/);
+  assert.match(productPage, /ProductCommerceStats/);
   assert.doesNotMatch(productPage, /<= 12/);
 });

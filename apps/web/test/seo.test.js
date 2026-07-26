@@ -51,7 +51,13 @@ test('product variant schema uses PHP numeric prices and real availability', () 
     { '@type': 'PropertyValue', name: 'Fit', value: 'Oversized fit' },
     { '@type': 'PropertyValue', name: 'Fabric weight', value: '240 GSM' }
   ]);
-  assert.deepEqual(schema.aggregateRating, { '@type': 'AggregateRating', ratingValue: 4.7, reviewCount: 3 });
+  assert.deepEqual(schema.aggregateRating, {
+    '@type': 'AggregateRating',
+    ratingValue: 4.7,
+    reviewCount: 3,
+    bestRating: 5,
+    worstRating: 1
+  });
 });
 
 test('review markup is omitted when reviews are not visibly published', () => {

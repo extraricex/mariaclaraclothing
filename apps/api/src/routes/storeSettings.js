@@ -47,6 +47,7 @@ router.get('/', async (_req, res, next) => {
           position: settings.website.reportIssue.position
         },
         inventory: settings.inventory,
+        productCardSalesInformation: settings.productCardSalesInformation,
         storefrontCollections: settings.storefrontCollections,
         collectionDefinitions: settings.collectionDefinitions,
         collectionCountdowns: settings.collectionCountdowns,

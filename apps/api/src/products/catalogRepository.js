@@ -64,7 +64,7 @@ function findCatalogProductBySlug(slug) {
 }
 
 function saveEditableProduct(product, originalSlug = '') {
-  const normalized = normalizeEditableProduct(product);
+  let normalized = normalizeEditableProduct(product);
   if (originalSlug && String(originalSlug).trim() !== normalized.slug) {
     const error = new Error('Internal product IDs cannot be changed. Edit the public handle instead.');
     error.status = 400;
@@ -79,6 +79,9 @@ function saveEditableProduct(product, originalSlug = '') {
 
   const products = loadEditableProducts();
   const index = products.findIndex((item) => item.slug === (originalSlug || normalized.slug));
+  if (index < 0 && !normalized.createdAt) {
+    normalized = normalizeEditableProduct({ ...normalized, createdAt: new Date().toISOString() });
+  }
 
   if (index >= 0) {
     const previous = products[index];
@@ -298,8 +301,12 @@ function normalizeEditableProduct(product) {
   const variants = normalizeVariants(product.variants, slug);
   const status = normalizeStatus(product.status);
   const category = String(product.category || collections[0] || 'T-Shirts').trim();
+  const commerceStats = normalizeProductCommerceStats(product.commerceStats);
+  const historicalSoldQuantity = normalizeInventory(
+    product.historicalSoldQuantity ?? product.commerceStats?.historicalSoldQuantity
+  );
 
-  return {
+  const normalized = {
     ...product,
     id: String(product.id || stableEntityId('prod', slug)).trim(),
     slug,
@@ -324,11 +331,25 @@ function normalizeEditableProduct(product) {
     images,
     variants,
     productPage: normalizeProductPage(product.productPage, name),
+    commerceStats,
+    historicalSoldQuantity,
+    historicalSoldSource: String(product.historicalSoldSource ?? product.commerceStats?.historicalSoldSource ?? '').trim().slice(0, 200),
+    historicalSoldNote: String(product.historicalSoldNote ?? product.commerceStats?.historicalSoldNote ?? '').trim().slice(0, 1000),
+    historicalSoldUpdatedBy: String(product.historicalSoldUpdatedBy ?? product.commerceStats?.historicalSoldUpdatedBy ?? '').trim().slice(0, 120),
+    historicalSoldUpdatedAt: normalizeOptionalTimestamp(
+      product.historicalSoldUpdatedAt ?? product.commerceStats?.historicalSoldUpdatedAt
+    ),
     reviewSettings: normalizeReviewSettings(product.reviewSettings || {
       reviewsEnabled: product.reviewsEnabled,
       showRatingSummary: product.showRatingSummary
     })
   };
+  [
+    'availableStock', 'isSoldOut', 'isLowStock', 'stockDisplayText',
+    'websiteSoldQuantity', 'displayedSoldQuantity', 'soldDisplayText',
+    'commerceStatsCalculated'
+  ].forEach((field) => delete normalized[field]);
+  return normalized;
 }
 
 function validateProducts(products) {
@@ -463,6 +484,8 @@ function toCatalogProduct(product) {
     imageRecords,
     productPage: product.productPage || null,
     reviewSettings: normalizeReviewSettings(product.reviewSettings),
+    commerceStats: normalizeProductCommerceStats(product.commerceStats),
+    historicalSoldQuantity: normalizeInventory(product.historicalSoldQuantity),
     variants
   };
 }
@@ -540,8 +563,10 @@ async function savePostgresProduct(client, product) {
     `INSERT INTO products (
       slug, product_id, public_handle, name, description, collections, price_cents, compare_at_price_cents,
       merchandising_status, status, featured, category, product_type, vendor, tags, seo,
-      metafields, theme_template, product_page, parcel_weight_grams, reviews_enabled, show_rating_summary, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18, $19::jsonb, $20, $21, $22, now())
+      metafields, theme_template, product_page, parcel_weight_grams, reviews_enabled, show_rating_summary,
+      commerce_stats, historical_sold_quantity, historical_sold_source, historical_sold_note,
+      historical_sold_updated_by, historical_sold_updated_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18, $19::jsonb, $20, $21, $22, $23::jsonb, $24, $25, $26, $27, $28, now())
     ON CONFLICT (slug) DO UPDATE SET
       public_handle = EXCLUDED.public_handle,
       name = EXCLUDED.name,
@@ -563,6 +588,12 @@ async function savePostgresProduct(client, product) {
       parcel_weight_grams = EXCLUDED.parcel_weight_grams,
       reviews_enabled = EXCLUDED.reviews_enabled,
       show_rating_summary = EXCLUDED.show_rating_summary,
+      commerce_stats = EXCLUDED.commerce_stats,
+      historical_sold_quantity = EXCLUDED.historical_sold_quantity,
+      historical_sold_source = EXCLUDED.historical_sold_source,
+      historical_sold_note = EXCLUDED.historical_sold_note,
+      historical_sold_updated_by = EXCLUDED.historical_sold_updated_by,
+      historical_sold_updated_at = EXCLUDED.historical_sold_updated_at,
       updated_at = now()`,
     [
       product.slug,
@@ -586,7 +617,13 @@ async function savePostgresProduct(client, product) {
       JSON.stringify(product.productPage || null),
       product.parcelWeightGrams,
       product.reviewSettings.reviewsEnabled,
-      product.reviewSettings.showRatingSummary
+      product.reviewSettings.showRatingSummary,
+      JSON.stringify(product.commerceStats || {}),
+      product.historicalSoldQuantity,
+      product.historicalSoldSource,
+      product.historicalSoldNote,
+      product.historicalSoldUpdatedBy,
+      product.historicalSoldUpdatedAt || null
     ]
   );
 
@@ -716,6 +753,12 @@ function fromPostgresProduct(row) {
     metafields: row.metafields || {},
     themeTemplate: row.theme_template || 'Default product',
     productPage: row.product_page || null,
+    commerceStats: normalizeProductCommerceStats(row.commerce_stats),
+    historicalSoldQuantity: normalizeInventory(row.historical_sold_quantity),
+    historicalSoldSource: row.historical_sold_source || '',
+    historicalSoldNote: row.historical_sold_note || '',
+    historicalSoldUpdatedBy: row.historical_sold_updated_by || '',
+    historicalSoldUpdatedAt: row.historical_sold_updated_at ? new Date(row.historical_sold_updated_at).toISOString() : '',
     reviewSettings: normalizeReviewSettings({
       reviewsEnabled: row.reviews_enabled,
       showRatingSummary: row.show_rating_summary
@@ -796,6 +839,34 @@ function normalizeVariants(variants, slug) {
   });
 }
 
+function normalizeProductCommerceStats(value) {
+  const record = value && typeof value === 'object' ? value : {};
+  const lowStockThreshold = record.lowStockThreshold === null || record.lowStockThreshold === undefined || record.lowStockThreshold === ''
+    ? null
+    : Number(record.lowStockThreshold);
+  if (lowStockThreshold !== null && (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 1 || lowStockThreshold > 999)) {
+    const error = new Error('Product low-stock threshold must be an integer between 1 and 999.');
+    error.status = 400;
+    throw error;
+  }
+  return {
+    showStockStatus: optionalBoolean(record.showStockStatus),
+    lowStockThreshold,
+    showExactRemainingStock: optionalBoolean(record.showExactRemainingStock),
+    showSoldCount: optionalBoolean(record.showSoldCount)
+  };
+}
+
+function optionalBoolean(value) {
+  return value === null || value === undefined || value === '' ? null : Boolean(value);
+}
+
+function normalizeOptionalTimestamp(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? '' : date.toISOString();
+}
+
 function stableEntityId(prefix, seed) {
   return `${prefix}_${crypto.createHash('sha256').update(String(seed || '')).digest('hex').slice(0, 20)}`;
 }
@@ -823,8 +894,7 @@ function normalizeSizeLabel(size) {
 }
 
 function normalizeProductPage(productPage, productName) {
-  if (productPage) return productPage;
-  return {
+  const fallback = {
     heading: productName || 'Product details',
     intro: 'Premium Maria Clara Clothing piece with everyday comfort and clean styling.',
     sections: [
@@ -833,6 +903,50 @@ function normalizeProductPage(productPage, productName) {
         items: ['Comfortable fit', 'Easy to style', 'Ready for everyday wear']
       }
     ]
+  };
+  const record = productPage && typeof productPage === 'object' ? productPage : fallback;
+  return {
+    ...fallback,
+    ...record,
+    cardContent: normalizeProductCardContent(record.cardContent)
+  };
+}
+
+function normalizeProductCardContent(value) {
+  const record = value && typeof value === 'object' ? value : {};
+  const text = String(record.text || '').trim();
+  const source = String(record.source || '').trim();
+  const rawRating = record.rating;
+  const rating = rawRating === '' || rawRating === null || rawRating === undefined
+    ? null
+    : Number(rawRating);
+  const showText = Boolean(record.showText);
+  const showRating = Boolean(record.showRating);
+  const showSource = Boolean(record.showSource);
+
+  if (text.length > 280) {
+    throw seoValidationError('Product card text must be 280 characters or fewer.');
+  }
+  if (source.length > 120) {
+    throw seoValidationError('Product card source must be 120 characters or fewer.');
+  }
+  if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+    throw seoValidationError('Product card rating must be a whole number from 1 to 5.');
+  }
+  if (showRating && rating === null) {
+    throw seoValidationError('Choose a product card rating before showing it.');
+  }
+  if (showRating && (!source || !showSource)) {
+    throw seoValidationError('A visible source is required when showing a manually entered product card rating.');
+  }
+
+  return {
+    text,
+    rating,
+    source,
+    showText,
+    showRating,
+    showSource
   };
 }
 
@@ -1062,6 +1176,7 @@ module.exports = {
   loadEditableProducts,
   normalizeEditableProduct,
   normalizePublicHandle,
+  normalizeProductCommerceStats,
   normalizeReviewSettings,
   productsPath,
   replaceEditableProducts,

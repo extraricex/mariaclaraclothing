@@ -484,8 +484,10 @@ function reviewAggregate(product, includeReviews = true) {
   return {
     aggregateRating: {
       '@type': 'AggregateRating',
-      ratingValue: Number(rating.toFixed(2)),
-      reviewCount: Math.trunc(count)
+      ratingValue: Number(rating.toFixed(1)),
+      reviewCount: Math.trunc(count),
+      bestRating: 5,
+      worstRating: 1
     }
   };
 }

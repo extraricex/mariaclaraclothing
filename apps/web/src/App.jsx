@@ -41,11 +41,19 @@ const IssueReports = lazy(() => import('./admin/IssueReports.jsx'));
 const Payments = lazy(() => import('./admin/Payments.jsx'));
 const Reviews = lazy(() => import('./admin/Reviews.jsx'));
 const Analytics = lazy(() => import('./admin/Analytics.jsx'));
+const ConversionFunnel = lazy(() => import('./admin/ConversionFunnel.jsx'));
+const CheckoutIssues = lazy(() => import('./admin/CheckoutIssues.jsx'));
 const MetaReconciliation = lazy(() => import('./admin/MetaReconciliation.jsx'));
 const SeoDashboard = lazy(() => import('./admin/SeoDashboard.jsx'));
 const Guide = lazy(() => import('./pages/Guide.jsx'));
 const ProductCountdown = lazy(() => import('./admin/ProductCountdown.jsx'));
 const PancakePos = lazy(() => import('./admin/PancakePos.jsx'));
+const RatingVisualCompanion = import.meta.env.DEV
+  ? lazy(() => import('./pages/RatingVisualCompanion.jsx'))
+  : null;
+const ProductCardReviewControlsPreview = import.meta.env.DEV
+  ? lazy(() => import('./pages/ProductCardReviewControlsPreview.jsx'))
+  : null;
 
 export default function App() {
   return (
@@ -74,6 +82,15 @@ export default function App() {
       </Route>
       <Route path="/checkout" element={<MaintenanceGate><PageTransition><Checkout /></PageTransition></MaintenanceGate>} />
       <Route path="/checkout/review" element={<MaintenanceGate><PageTransition><CheckoutReview /></PageTransition></MaintenanceGate>} />
+      {RatingVisualCompanion && (
+        <Route path="/__dev/rating-visual-companion" element={<RatingVisualCompanion />} />
+      )}
+      {ProductCardReviewControlsPreview && (
+        <Route
+          path="/__dev/product-card-review-controls"
+          element={<ProductCardReviewControlsPreview />}
+        />
+      )}
       <Route path="/admin/login" element={<Login />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />
@@ -86,6 +103,8 @@ export default function App() {
         <Route path="reviews/import" element={<Reviews />} />
         <Route path="reviews/settings" element={<Reviews />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="analytics/funnel" element={<ConversionFunnel />} />
+        <Route path="analytics/checkout-issues" element={<CheckoutIssues />} />
         <Route path="analytics/meta-reconciliation" element={<MetaReconciliation />} />
         <Route path="marketing/seo" element={<SeoDashboard />} />
         <Route path="products" element={<Products />} />

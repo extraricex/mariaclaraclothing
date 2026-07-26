@@ -13,6 +13,15 @@ import { normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
 import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 import { fetchWithRecovery } from '../lib/network.js';
 
+function checkoutErrorCategory(error, fallback = 'order_api_failure') {
+  const code = String(error?.code || '').trim().toLowerCase();
+  if (['insufficient_stock', 'product_unavailable', 'variant_unavailable', 'cart_invalid'].includes(code)) return 'insufficient_stock';
+  if (['address_invalid', 'incomplete_delivery_address', 'checkout_customer_invalid'].includes(code)) return 'invalid_address';
+  if (code.includes('phone')) return 'invalid_phone';
+  if (code.includes('duplicate') || code.includes('idempot')) return 'duplicate_submission';
+  return fallback;
+}
+
 export default function Checkout() {
   const items = useCart();
   const navigate = useNavigate();
@@ -88,10 +97,27 @@ export default function Checkout() {
     trackFunnelEvent('payment_cancelled', {
       paymentMethod: 'paymongo',
       metricName: 'CUSTOMER_RETURN',
+      errorCategory: 'payment_cancelled',
+      errorMessage: 'Customer returned from online payment without completing payment.',
+      checkoutStep: 'payment',
+      reference: getCartSessionId(),
       dedupeKey: `paymongo-cancelled:${getCartSessionId()}`,
       dedupeMilliseconds: 60_000
     });
   }, [paymentWasCancelled]);
+
+  useEffect(() => {
+    if (!items.length) return;
+    const cartSessionId = getCartSessionId();
+    trackFunnelEvent('checkout_start', {
+      quantity: cartQuantity(items),
+      valueCents: subtotalCents(items),
+      checkoutStep: 'information',
+      reference: cartSessionId,
+      dedupeKey: `checkout-start:${cartSessionId}`,
+      dedupeMilliseconds: 60 * 60 * 1000
+    });
+  }, [items.length]);
 
   useEffect(() => {
     if (!items.length) {
@@ -226,7 +252,21 @@ export default function Checkout() {
     }
     setMissingFields(result.errors);
     setStatus({ tone: 'error', message: 'Please correct the highlighted delivery information before continuing.' });
-    focusMissingField(Object.keys(result.errors)[0]);
+    const firstInvalidField = Object.keys(result.errors)[0];
+    const category = firstInvalidField === 'province' ? 'missing_province'
+      : firstInvalidField === 'city' ? 'missing_city'
+        : firstInvalidField === 'barangay' ? 'missing_barangay'
+          : firstInvalidField === 'phone' ? 'invalid_phone'
+            : 'invalid_address';
+    trackFunnelEvent('checkout_error', {
+      errorCategory: category,
+      errorMessage: 'Checkout information did not pass validation.',
+      checkoutStep: 'information',
+      reference: getCartSessionId(),
+      dedupeKey: `validation:${category}:${getCartSessionId()}`,
+      dedupeMilliseconds: 3000
+    });
+    focusMissingField(firstInvalidField);
     return null;
   }
 
@@ -256,6 +296,14 @@ export default function Checkout() {
       });
       const quote = body.quote;
       if (!quote?.finalizable) throw new Error('Your checkout information is not ready for review.');
+      trackFunnelEvent('shipping_info_completed', {
+        quantity: cartQuantity(quote.items || items),
+        valueCents: quote.totalCents,
+        checkoutStep: 'information',
+        reference: cartSessionId,
+        dedupeKey: `shipping-complete:${cartSessionId}`,
+        dedupeMilliseconds: 60 * 60 * 1000
+      });
       trackFacebookInitiateCheckout(
         quote.items || items,
         quote,
@@ -274,6 +322,14 @@ export default function Checkout() {
       });
       navigate('/checkout/review');
     } catch (error) {
+      trackFunnelEvent('checkout_error', {
+        errorCategory: checkoutErrorCategory(error),
+        errorMessage: error.message,
+        checkoutStep: 'information',
+        reference: cartSessionId,
+        dedupeKey: `information-error:${cartSessionId}:${error.code || 'unknown'}`,
+        dedupeMilliseconds: 10_000
+      });
       if (['insufficient_stock', 'product_unavailable', 'variant_unavailable', 'cart_invalid'].includes(error.code)) {
         navigate('/cart', { replace: true, state: { message: error.message } });
         return;

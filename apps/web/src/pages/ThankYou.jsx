@@ -6,6 +6,7 @@ import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings } from '../lib/stor
 import { clearCart, clearCheckoutIdempotencyKey, resetCartSessionId } from '../lib/cart.js';
 import { clearCheckoutReviewDraft } from '../lib/checkoutDraft.js';
 import { isFacebookBrowserPurchaseReady, trackFacebookPurchasePayload, wasFacebookPurchaseTracked } from '../lib/metaPixel.js';
+import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 
 function storedConfirmation() {
   try {
@@ -34,6 +35,7 @@ export default function ThankYou() {
   const [storefrontSettingsLoaded, setStorefrontSettingsLoaded] = useState(false);
   const [purchaseRetry, setPurchaseRetry] = useState(0);
   const purchaseAttempts = useRef(new Set());
+  const trackedConfirmation = useRef('');
 
   useEffect(() => {
     let timer;
@@ -106,6 +108,19 @@ export default function ThankYou() {
       setStorefrontSettingsLoaded(true);
     });
   }, []);
+
+  useEffect(() => {
+    if (!order?.orderNumber || trackedConfirmation.current === order.orderNumber) return;
+    trackedConfirmation.current = order.orderNumber;
+    trackFunnelEvent('thank_you_view', {
+      paymentMethod: order.paymentMethod,
+      valueCents: order.totalCents,
+      checkoutStep: 'confirmation',
+      reference: order.orderNumber,
+      dedupeKey: `thank-you:${order.orderNumber}`,
+      dedupeMilliseconds: 60 * 60 * 1000
+    });
+  }, [order]);
 
   const summary = order;
 
