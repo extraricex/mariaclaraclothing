@@ -25,7 +25,7 @@ test('legacy product URLs permanently redirect to the canonical public handle', 
   expect(productHandle).toBeTruthy();
 
   const legacy = await request.get(`/product/${PRODUCT_SLUG}`, { maxRedirects: 0 });
-  expect(legacy.status()).toBe(308);
+  expect(legacy.status()).toBe(301);
   expect(legacy.headers().location).toBe(`/product/${productHandle}`);
 
   const canonical = await page.goto(`/product/${productHandle}`);

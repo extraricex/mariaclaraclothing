@@ -201,7 +201,7 @@ export default function Product() {
     {
       title: 'Shipping',
       type: 'text',
-      body: freeShippingProductCopy
+      body: [productPage.shippingText, freeShippingProductCopy].filter(Boolean).join('\n\n')
     }
   ].filter(Boolean);
   const activeTab = detailTabs[activeDetailTab] || detailTabs[0];

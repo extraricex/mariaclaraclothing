@@ -48,7 +48,7 @@ test('storefront pages consume centralized descriptors and preserve clean varian
   assert.equal((productCard.match(/height="1250"/g) || []).length, 2);
   assert.match(shell, /collectionMembers\(catalogProducts, collection\)\.length > 0/);
   assert.doesNotMatch(shell, /Premium 240 GSM cotton, cut oversized/);
-  assert.match(product, /body: freeShippingProductCopy/);
+  assert.match(product, /body: \[productPage\.shippingText, freeShippingProductCopy\]\.filter\(Boolean\)\.join/);
   assert.match(product, /right\.score - left\.score \|\| left\.index - right\.index/);
 });
 

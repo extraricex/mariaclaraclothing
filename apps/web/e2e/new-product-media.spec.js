@@ -64,7 +64,7 @@ test('new product validates before sending a create request', async ({ page }) =
     if (request.method() === 'POST' && request.url().endsWith('/api/admin/products')) createRequests += 1;
   });
   await page.goto('/admin/products/new');
-  await expect(page.getByLabel('Status')).toHaveValue('active');
+  await expect(page.getByLabel('Status', { exact: true })).toHaveValue('active');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Enter a product title.' })).toBeVisible();
   await expect(page.getByRole('alert').filter({ hasText: 'Enter a price greater than zero.' })).toBeVisible();
@@ -80,7 +80,7 @@ test('active product saves to admin and customer catalogs with reordered photos'
     await page.goto('/admin/products/new');
     await page.getByLabel('Title', { exact: true }).fill(productName);
     await page.getByLabel('Price (₱)').fill('699');
-    await page.locator('input[type="number"][min="0"]').fill('4');
+    await page.getByLabel('Stock for variant 1', { exact: true }).fill('4');
     await page.getByLabel('Add photos').setInputFiles([LARGE_JPEG, TRANSPARENT_PNG]);
     const photos = page.locator('[data-queued-photo]');
     await photos.nth(1).getByRole('button', { name: 'Move first' }).click();

@@ -869,7 +869,16 @@ export default function ProductEditor() {
                       <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" value={variant.size} onChange={(e) => updateVariant(index, 'size', e.target.value)} /></td>
                       <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" value={variant.sku || ''} onChange={(e) => updateVariant(index, 'sku', e.target.value)} /></td>
                       <td className="py-2 pr-3"><input className="field !px-2 !py-1.5" inputMode="decimal" value={variantPricePeso(variant)} onChange={(e) => updateVariant(index, 'priceCents', pesoToCents(e.target.value) ?? 0)} /></td>
-                      <td className="py-2"><input className="field !px-2 !py-1.5" type="number" min="0" value={variant.stockQuantity} onChange={(e) => updateVariant(index, 'stockQuantity', e.target.value)} /></td>
+                      <td className="py-2">
+                        <input
+                          className="field !px-2 !py-1.5"
+                          type="number"
+                          min="0"
+                          aria-label={`Stock for variant ${index + 1}`}
+                          value={variant.stockQuantity}
+                          onChange={(e) => updateVariant(index, 'stockQuantity', e.target.value)}
+                        />
+                      </td>
                       <td className="py-2 pl-2">
                         <button
                           type="button"

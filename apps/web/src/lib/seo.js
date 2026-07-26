@@ -4,8 +4,8 @@ export const SEO_BRAND_NAME = 'Maria Clara Clothing';
 export const DEFAULT_SEO_TITLE = 'Maria Clara Clothing | Premium Filipino Streetwear';
 export const DEFAULT_SEO_DESCRIPTION = 'Shop Maria Clara Clothing premium oversized, regular-fit, and crop-box shirts with current size availability and nationwide online ordering.';
 export const INDEX_ROBOTS = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1';
-export const NOINDEX_ROBOTS = 'noindex,nofollow';
-export const NOINDEX_FOLLOW_ROBOTS = 'noindex,follow';
+export const NOINDEX_ROBOTS = 'noindex, nofollow';
+export const NOINDEX_FOLLOW_ROBOTS = 'noindex, follow';
 
 const PRIVATE_PATH_PREFIXES = [
   '/admin', '/account', '/checkout', '/thank-you', '/cart', '/login', '/register',
