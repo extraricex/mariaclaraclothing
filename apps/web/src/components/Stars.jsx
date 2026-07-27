@@ -45,7 +45,6 @@ function StarIcon({ fill = 0, size = 14 }) {
 
 export default function Stars({ rating, label = true, ariaLabel = '', interactive = false, onChange, size = 14 }) {
   const normalizedRating = clampRating(rating);
-  const rounded = Math.round(normalizedRating);
   return (
     <span
       className="inline-flex items-center gap-0.5 align-middle"
@@ -58,10 +57,10 @@ export default function Stars({ rating, label = true, ariaLabel = '', interactiv
           type="button"
           className="inline-flex min-h-11 min-w-9 items-center justify-center"
           aria-label={`${star} star${star === 1 ? '' : 's'}`}
-          aria-pressed={star === rounded}
+          aria-pressed={star === normalizedRating}
           onClick={() => onChange?.(star)}
         >
-          <StarIcon fill={star <= rounded ? 100 : 0} size={24} />
+          <StarIcon fill={getStarFill(normalizedRating, star - 1)} size={24} />
         </button>
       ) : (
         <StarIcon key={star} fill={getStarFill(normalizedRating, star - 1)} size={size} />

@@ -26,6 +26,10 @@ test('manual product-card ratings require a visible source and never replace rev
   assert.match(editor, /source: String\(previous\.productPage\?\.cardContent\?\.source \|\| ''\)\.trim\(\) \|\| 'Previous website'/);
   assert.match(editor, /showSource: product\.productPage\?\.cardContent\?\.showRating === true/);
   assert.match(editor, /Add a source label before saving a visible manually entered rating/);
+  assert.match(editor, /type="number"/);
+  assert.match(editor, /inputMode="decimal"/);
+  assert.match(editor, /step="0\.1"/);
+  assert.match(editor, /Type a rating from 1\.0 to 5\.0/);
   assert.match(content, /<Stars rating=\{rating\}/);
   assert.doesNotMatch(content, /reviewSummary|ratingCount|AggregateRating/);
 });

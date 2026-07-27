@@ -923,6 +923,8 @@ function normalizeProductCardContent(value) {
   const showText = Boolean(record.showText);
   const showRating = Boolean(record.showRating);
   const showSource = Boolean(record.showSource);
+  const ratingHasSupportedPrecision = rating === null
+    || Math.abs((rating * 10) - Math.round(rating * 10)) < Number.EPSILON * 100;
 
   if (text.length > 280) {
     throw seoValidationError('Product card text must be 280 characters or fewer.');
@@ -930,8 +932,8 @@ function normalizeProductCardContent(value) {
   if (source.length > 120) {
     throw seoValidationError('Product card source must be 120 characters or fewer.');
   }
-  if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
-    throw seoValidationError('Product card rating must be a whole number from 1 to 5.');
+  if (rating !== null && (!Number.isFinite(rating) || rating < 1 || rating > 5 || !ratingHasSupportedPrecision)) {
+    throw seoValidationError('Product card rating must be between 1.0 and 5.0 in 0.1 increments.');
   }
   if (showRating && rating === null) {
     throw seoValidationError('Choose a product card rating before showing it.');
@@ -942,7 +944,7 @@ function normalizeProductCardContent(value) {
 
   return {
     text,
-    rating,
+    rating: rating === null ? null : Number(rating.toFixed(1)),
     source,
     showText,
     showRating,

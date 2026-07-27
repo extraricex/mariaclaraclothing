@@ -45,7 +45,7 @@ test('admin product-card controls persist while the storefront receives display 
 
     const cardContent = {
       text: 'A short sourced product-card note.',
-      rating: 5,
+      rating: 4.8,
       source: 'Previous website',
       showText: true,
       showRating: true,
@@ -84,6 +84,21 @@ test('admin product-card controls persist while the storefront receives display 
     assert.equal(invalidResponse.status, 400);
     const invalid = await invalidResponse.json();
     assert.match(invalid.error, /visible source is required/i);
+
+    const invalidPrecisionResponse = await fetch(`${base}/api/admin/products/${encodeURIComponent(first.slug)}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        ...updated,
+        productPage: {
+          ...(updated.productPage || {}),
+          cardContent: { ...cardContent, rating: 4.85 }
+        }
+      })
+    });
+    assert.equal(invalidPrecisionResponse.status, 400);
+    const invalidPrecision = await invalidPrecisionResponse.json();
+    assert.match(invalidPrecision.error, /0\.1 increments/i);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     Object.entries(previous).forEach(([key, value]) => {

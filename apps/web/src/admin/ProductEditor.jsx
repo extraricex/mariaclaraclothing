@@ -453,11 +453,27 @@ export default function ProductEditor() {
     let savedPancakeStatus = '';
     const cardContent = {
       ...(product.productPage?.cardContent || {}),
+      rating: product.productPage?.cardContent?.rating === ''
+        || product.productPage?.cardContent?.rating === null
+        || product.productPage?.cardContent?.rating === undefined
+        ? null
+        : Number(product.productPage.cardContent.rating),
       source: String(product.productPage?.cardContent?.source || '').trim(),
       showSource: product.productPage?.cardContent?.showRating === true
         ? true
         : product.productPage?.cardContent?.showSource === true
     };
+    const ratingHasSupportedPrecision = cardContent.rating === null
+      || Math.abs((cardContent.rating * 10) - Math.round(cardContent.rating * 10)) < Number.EPSILON * 100;
+    if (cardContent.rating !== null && (
+      !Number.isFinite(cardContent.rating)
+      || cardContent.rating < 1
+      || cardContent.rating > 5
+      || !ratingHasSupportedPrecision
+    )) {
+      setMessage('Enter a product card rating from 1.0 to 5.0 in 0.1 increments.');
+      return;
+    }
     if (cardContent.showRating && !cardContent.rating) {
       setMessage('Choose a product card rating before showing it.');
       return;
@@ -1056,6 +1072,23 @@ export default function ProductEditor() {
             <fieldset className="mt-5">
               <legend className="eyebrow">Five-star rating</legend>
               <div className="mt-2 flex flex-wrap items-center gap-3">
+                <label>
+                  <span className="sr-only">Product card rating value</span>
+                  <input
+                    className="field w-24 tabular-nums"
+                    type="number"
+                    inputMode="decimal"
+                    min="1"
+                    max="5"
+                    step="0.1"
+                    placeholder="4.8"
+                    value={productCardContent.rating ?? ''}
+                    onChange={(event) => updateProductCardContent(
+                      'rating',
+                      event.target.value === '' ? null : event.target.value
+                    )}
+                  />
+                </label>
                 <Stars
                   rating={productCardContent.rating || 0}
                   interactive
@@ -1078,6 +1111,9 @@ export default function ProductEditor() {
                   </button>
                 )}
               </div>
+              <span className="mt-2 block text-[11px] text-clay">
+                Type a rating from 1.0 to 5.0, or select a whole star.
+              </span>
             </fieldset>
 
             <label className="mt-5 block">
