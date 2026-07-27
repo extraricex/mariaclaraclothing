@@ -31,5 +31,7 @@ test('manual product-card ratings require a visible source and never replace rev
   assert.match(editor, /step="0\.1"/);
   assert.match(editor, /Type a rating from 1\.0 to 5\.0/);
   assert.match(content, /<Stars rating=\{rating\}/);
+  assert.match(content, /Number\.isFinite\(rating\)/);
+  assert.doesNotMatch(content, /Number\.isInteger\(rating\)/);
   assert.doesNotMatch(content, /reviewSummary|ratingCount|AggregateRating/);
 });

@@ -8,7 +8,7 @@ export default function ProductCardContent({ product }) {
   const source = String(content.source || '').trim();
   const rating = Number(content.rating);
   const showRating = content.showRating === true
-    && Number.isInteger(rating)
+    && Number.isFinite(rating)
     && rating >= 1
     && rating <= 5
     && content.showSource === true
