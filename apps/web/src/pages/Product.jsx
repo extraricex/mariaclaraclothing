@@ -517,12 +517,12 @@ export default function Product() {
               })}
             </div>
             {variant && Number(variant.stockQuantity) > 0 && Number(variant.stockQuantity) <= settings.inventory.lowStockThreshold && (
-              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep">
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-red-600">
                 {variantStockLabel()}
               </p>
             )}
             {variantSoldOut && (
-              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-accent-deep">Sold Out</p>
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-red-600">Sold Out</p>
             )}
           </div>
 
