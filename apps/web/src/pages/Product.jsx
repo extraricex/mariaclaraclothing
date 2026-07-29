@@ -8,7 +8,6 @@ import { sanitizeRichHtml } from '../lib/richText.js';
 import { useStorefrontSettings } from '../lib/storeSettings.js';
 import { selectProductCountdown } from '../lib/collectionCountdown.js';
 import ProductCard from '../components/ProductCard.jsx';
-import ProductCommerceStats from '../components/ProductCommerceStats.jsx';
 import { rememberRecentlyViewed } from '../lib/recentlyViewed.js';
 import CollectionCountdown from '../components/CollectionCountdown.jsx';
 import NotFound from './NotFound.jsx';
@@ -469,8 +468,6 @@ export default function Product() {
             <p className={`text-xl font-semibold sm:text-2xl ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
           </div>
-          <ProductCommerceStats product={product} className="mt-2 !text-left text-xs sm:text-sm" />
-
           {productFacts.length > 0 && (
             <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4 text-sm">
               {productFacts.map(([label, value]) => (

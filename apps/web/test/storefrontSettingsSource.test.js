@@ -134,6 +134,6 @@ test('storefront keeps centralized stock settings while product cards omit detai
   const productPage = await readFile(path.join(root, 'pages', 'Product.jsx'), 'utf8');
   assert.match(productPage, /useStorefrontSettings/);
   assert.match(productPage, /settings\.inventory\.lowStockThreshold/);
-  assert.match(productPage, /ProductCommerceStats/);
+  assert.doesNotMatch(productPage, /ProductCommerceStats/);
   assert.doesNotMatch(productPage, /<= 12/);
 });

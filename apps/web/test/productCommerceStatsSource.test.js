@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
-test('product pages retain backend-computed commerce statistics after card stats are removed', async () => {
+test('customer product cards and product pages omit backend-computed commerce statistics', async () => {
   const [component, card, page] = await Promise.all([
     fs.readFile(new URL('../src/components/ProductCommerceStats.jsx', import.meta.url), 'utf8'),
     fs.readFile(new URL('../src/components/ProductCard.jsx', import.meta.url), 'utf8'),
@@ -16,7 +16,7 @@ test('product pages retain backend-computed commerce statistics after card stats
   assert.match(component, /break-words/);
   assert.match(component, /aria-hidden="true"/);
   assert.doesNotMatch(card, /<ProductCommerceStats product=\{product\}/);
-  assert.match(page, /<ProductCommerceStats product=\{product\}/);
+  assert.doesNotMatch(page, /<ProductCommerceStats product=\{product\}/);
   assert.doesNotMatch(card, /150\+ sold/);
   assert.doesNotMatch(component, /Math\.random|localStorage|viewer/);
 });
