@@ -17,11 +17,11 @@ test('product-card editing controls live in Admin while customer cards receive d
   assert.match(card, /<ProductCardContent product=\{product\}/);
   assert.doesNotMatch(card, /Card text|Show text|Show rating|Show source/);
   assert.doesNotMatch(card, /ProductCommerceStats/);
-  assert.match(content, />\{source\}</);
-  assert.doesNotMatch(content, />Source: \{source\}</);
+  assert.match(content, /ProductCardContent\(\)[\s\S]*return null/);
+  assert.doesNotMatch(content, /cardContent|showText|showSource|\{text\}|\{source\}/);
 });
 
-test('manual product-card ratings require a visible source and never replace review aggregates', () => {
+test('customer product cards never render manual rating stars while Admin keeps its controls', () => {
   assert.match(repository, /A visible source is required when showing a manually entered product card rating/);
   assert.match(editor, /source: String\(previous\.productPage\?\.cardContent\?\.source \|\| ''\)\.trim\(\) \|\| 'Previous website'/);
   assert.match(editor, /showSource: product\.productPage\?\.cardContent\?\.showRating === true/);
@@ -30,8 +30,6 @@ test('manual product-card ratings require a visible source and never replace rev
   assert.match(editor, /inputMode="decimal"/);
   assert.match(editor, /step="0\.1"/);
   assert.match(editor, /Type a rating from 1\.0 to 5\.0/);
-  assert.match(content, /<Stars rating=\{rating\}/);
-  assert.match(content, /Number\.isFinite\(rating\)/);
-  assert.doesNotMatch(content, /Number\.isInteger\(rating\)/);
+  assert.doesNotMatch(content, /import Stars|<Stars|role="img"|Rated .* out of 5|toFixed\(1\)/);
   assert.doesNotMatch(content, /reviewSummary|ratingCount|AggregateRating/);
 });
