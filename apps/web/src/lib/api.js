@@ -14,8 +14,26 @@ async function request(path, options = {}) {
   return body;
 }
 
+let catalogProductsPromise = null;
+let siteContentPromise = null;
+
+export function invalidateCatalogProducts() {
+  catalogProductsPromise = null;
+}
+
+export function invalidateSiteContent() {
+  siteContentPromise = null;
+}
+
 export function fetchProducts() {
-  return request('/api/products');
+  if (!catalogProductsPromise) {
+    catalogProductsPromise = request('/api/products?view=card', { cache: 'default' })
+      .catch((error) => {
+        catalogProductsPromise = null;
+        throw error;
+      });
+  }
+  return catalogProductsPromise;
 }
 
 export function fetchProduct(slug) {
@@ -45,8 +63,16 @@ export function submitProductReview(slug, formData) {
   });
 }
 
-export function fetchSiteContent() {
-  return request('/api/site-content');
+export function fetchSiteContent({ forceRefresh = false } = {}) {
+  if (forceRefresh) siteContentPromise = null;
+  if (!siteContentPromise) {
+    siteContentPromise = request('/api/site-content', { cache: forceRefresh ? 'reload' : 'default' })
+      .catch((error) => {
+        siteContentPromise = null;
+        throw error;
+      });
+  }
+  return siteContentPromise;
 }
 
 export function fetchActivePromoNotification() {

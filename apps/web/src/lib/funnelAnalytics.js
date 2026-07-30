@@ -1,6 +1,8 @@
 const SESSION_KEY = 'maria-clara-anonymous-funnel-session';
 const CAMPAIGN_KEY = 'maria-clara-anonymous-funnel-campaign';
 const recentEvents = new Map();
+const META_BROWSER_ID_PATTERN = /^fb\.\d+\.\d+\.[a-zA-Z0-9._~-]+$/;
+const META_CLICK_ID_PATTERN = /^[a-zA-Z0-9._~-]{8,220}$/;
 
 function storage() {
   try { return typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch (_error) { return null; }
@@ -33,6 +35,42 @@ function sessionId() {
 function privacyOptOut() {
   if (typeof navigator === 'undefined') return true;
   return navigator.doNotTrack === '1' || navigator.globalPrivacyControl === true;
+}
+
+function cookieValue(name, source) {
+  const match = String(source || '').split(';').map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match.slice(name.length + 1));
+  } catch (_error) {
+    return match.slice(name.length + 1);
+  }
+}
+
+function validMetaBrowserId(value) {
+  const normalized = String(value || '').trim().slice(0, 255);
+  return META_BROWSER_ID_PATTERN.test(normalized) ? normalized : '';
+}
+
+export function metaBrowserIdentifiers({
+  cookieSource = typeof document !== 'undefined' ? document.cookie : '',
+  search = typeof window !== 'undefined' ? window.location.search : '',
+  now = Date.now()
+} = {}) {
+  const fbp = validMetaBrowserId(cookieValue('_fbp', cookieSource));
+  let fbc = validMetaBrowserId(cookieValue('_fbc', cookieSource));
+  if (!fbc) {
+    const fbclid = String(new URLSearchParams(String(search || '')).get('fbclid') || '').trim();
+    const timestamp = Math.trunc(Number(now));
+    if (META_CLICK_ID_PATTERN.test(fbclid) && Number.isFinite(timestamp) && timestamp > 0) {
+      fbc = `fb.1.${timestamp}.${fbclid}`;
+    }
+  }
+  return {
+    ...(fbp ? { fbp } : {}),
+    ...(fbc ? { fbc } : {})
+  };
 }
 
 function campaign() {
@@ -70,6 +108,7 @@ export function trackFunnelEvent(eventName, input = {}) {
   const valueCents = input.valueCents === undefined || input.valueCents === null
     ? null
     : Math.round(Number(input.valueCents));
+  const metaIdentifiers = input.metaBrowserSent === true ? metaBrowserIdentifiers() : {};
   const payload = {
     eventId: normalizeFunnelEventId(input.eventId),
     eventName,
@@ -94,7 +133,9 @@ export function trackFunnelEvent(eventName, input = {}) {
       metaEventName: String(input.metaEventName || '').slice(0, 40),
       metaCustomData: input.metaCustomData && typeof input.metaCustomData === 'object'
         ? input.metaCustomData
-        : undefined
+        : undefined,
+      ...(metaIdentifiers.fbp ? { metaFbp: metaIdentifiers.fbp } : {}),
+      ...(metaIdentifiers.fbc ? { metaFbc: metaIdentifiers.fbc } : {})
     } : {})
   };
   fetch('/api/analytics/events', {

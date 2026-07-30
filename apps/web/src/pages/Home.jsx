@@ -23,10 +23,11 @@ function initialHeroBanners() {
   }];
 }
 
-function CollectionSection({ id, index, title, blurb, slug, products, compactTop = false }) {
+function CollectionSection({ id, index, title, blurb, slug, products, compactTop = false, eagerImages = false, deferRendering = false }) {
   if (!products.length) return null;
+  const visibleProducts = products.slice(0, 8);
   return (
-    <section id={id} className={`mx-auto max-w-7xl scroll-mt-36 px-5 lg:px-8 ${compactTop ? 'mt-4 sm:mt-6 lg:mt-8' : 'mt-8 sm:mt-14 lg:mt-20'}`}>
+    <section id={id} className={`mx-auto max-w-7xl scroll-mt-36 px-5 lg:px-8 ${deferRendering ? 'storefront-deferred-section' : ''} ${compactTop ? 'mt-4 sm:mt-6 lg:mt-8' : 'mt-8 sm:mt-14 lg:mt-20'}`}>
       <div className="flex flex-wrap items-end justify-between gap-4 border-t border-[var(--customer-border)] pt-6">
         <div>
           <p className="eyebrow">{index} / Collection</p>
@@ -40,8 +41,8 @@ function CollectionSection({ id, index, title, blurb, slug, products, compactTop
         </div>
       </div>
       <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:mt-8 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
-        {products.map((product, i) => (
-          <ProductCard key={product.id} product={product} index={i} />
+        {visibleProducts.map((product, i) => (
+          <ProductCard key={product.id} product={product} index={i} eager={eagerImages && i < 4} />
         ))}
       </div>
     </section>
@@ -264,13 +265,18 @@ export default function Home() {
         <div className="mx-auto min-h-[70vh] max-w-7xl px-5 pt-16 text-sm text-accent-deep lg:px-8" role="alert">{error}</div>
       )}
 
-      {catalogLoaded && !error && collectionSections.map((section) => {
+      {catalogLoaded && !error && collectionSections.map((section, sectionIndex) => {
         const isFreedomOfMind = String(section.slug || '').trim().toLowerCase() === 'freedom-of-mind';
         const hasCollectionBanner = Boolean(isFreedomOfMind && collectionBanner?.visible && collectionBanner?.desktopImage?.url);
         return (
           <Fragment key={section.title}>
             {isFreedomOfMind && <CollectionBanner banner={collectionBanner} />}
-            <CollectionSection {...section} compactTop={hasCollectionBanner} />
+            <CollectionSection
+              {...section}
+              compactTop={hasCollectionBanner}
+              eagerImages={sectionIndex === 0}
+              deferRendering={sectionIndex > 0}
+            />
           </Fragment>
         );
       })}
@@ -290,7 +296,7 @@ export default function Home() {
         </section>
       )}
 
-      <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
+      <section className="storefront-deferred-section mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             onlinePaymentEnabled
@@ -310,7 +316,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto mt-24 max-w-7xl px-5 lg:px-8">
+      <section className="storefront-deferred-section mx-auto mt-24 max-w-7xl px-5 lg:px-8">
         <div className="border-t border-[var(--customer-border)] pt-6">
           <p className="eyebrow">Don't overthink it</p>
           <p className="display mt-2 max-w-3xl text-3xl leading-tight sm:text-5xl">

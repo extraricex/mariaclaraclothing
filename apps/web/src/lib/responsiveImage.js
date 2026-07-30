@@ -6,6 +6,14 @@ const BRAND_IMAGE_VARIANTS = new Map([
   ['/brand/hero2-2200.webp', [
     { width: 1200, url: '/brand/hero2-1200.webp' },
     { width: 2200, url: '/brand/hero2-2200.webp' }
+  ]],
+  ['/brand/logo.png', [
+    { width: 256, url: '/brand/logo-256.webp' },
+    { width: 512, url: '/brand/logo-512.webp' }
+  ]],
+  ['/brand/logomccwhite.png', [
+    { width: 256, url: '/brand/logomccwhite-256.webp' },
+    { width: 512, url: '/brand/logomccwhite-512.webp' }
   ]]
 ]);
 
@@ -28,10 +36,12 @@ function shopifyVariantUrl(value, width) {
   }
 }
 
-function localProductVariantUrl(value, width) {
+function localOptimizedVariantUrl(value, width) {
   try {
     const url = new URL(String(value || ''), window.location.origin);
-    if (url.origin !== window.location.origin || !url.pathname.startsWith('/uploads/products/') || !/-optimized\.webp$/i.test(url.pathname)) return '';
+    const supportedUpload = ['/uploads/products/', '/uploads/logos/', '/uploads/banners/']
+      .some((prefix) => url.pathname.startsWith(prefix));
+    if (url.origin !== window.location.origin || !supportedUpload || !/-optimized\.webp$/i.test(url.pathname)) return '';
     url.pathname = url.pathname.replace(/-optimized\.webp$/i, `-${width}.webp`);
     url.search = '';
     return `${url.pathname}${url.hash}`;
@@ -67,7 +77,7 @@ export function responsiveImageAttributes(value, {
 
   if (Math.max(...shopifyWidths) <= 1000) {
     const localVariants = [320, 800]
-      .map((width) => ({ width, url: localProductVariantUrl(url, width) }))
+      .map((width) => ({ width, url: localOptimizedVariantUrl(url, width) }))
       .filter((variant) => variant.url);
     if (localVariants.length) {
       return {

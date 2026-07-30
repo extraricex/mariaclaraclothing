@@ -12,6 +12,8 @@ import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storef
 import useModalFocus from '../hooks/useModalFocus.js';
 import PageTransition from './PageTransition.jsx';
 import ReportIssueWidget from './ReportIssueWidget.jsx';
+import { responsiveImageAttributes } from '../lib/responsiveImage.js';
+import { prefetchCustomerRoute } from '../lib/routePrefetch.js';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -386,8 +388,8 @@ export default function Shell() {
   }, [menuOpen]);
 
   useEffect(() => {
-    function loadSiteContent() {
-      fetchSiteContent()
+    function loadSiteContent(event) {
+      fetchSiteContent({ forceRefresh: Boolean(event) })
         .then((body) => {
           const defaultLogo = body.siteContent?.logo || null;
           setHeaderLogo(defaultLogo);
@@ -482,6 +484,11 @@ export default function Shell() {
       alt={activeHeaderLogo.altText || 'Maria Clara Clothing'}
       width={Number(activeHeaderLogo.width) || 1999}
       height={Number(activeHeaderLogo.height) || 1999}
+      decoding="async"
+      {...responsiveImageAttributes(activeHeaderLogo.url, {
+        sizes: '(min-width: 1024px) 230px, 205px',
+        shopifyWidths: [256, 512]
+      })}
       className={`h-[65px] max-w-[205px] object-contain transition-[filter,opacity] duration-300 lg:h-[73px] lg:max-w-[230px] ${headerSolid ? '' : 'drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]'}`}
     />
   ) : (
@@ -559,6 +566,8 @@ export default function Shell() {
               <NavLink
                 key={link.to}
                 to={link.to}
+                onPointerEnter={() => link.to === '/shop' && prefetchCustomerRoute('shop')}
+                onFocus={() => link.to === '/shop' && prefetchCustomerRoute('shop')}
                 className={({ isActive }) =>
                   `text-action text-[12px] font-semibold uppercase tracking-[0.18em] transition-colors hover:text-accent ${headerSolid ? (isActive ? 'text-accent' : 'text-ink') : (isActive ? 'text-white' : 'text-paper/90')}`}
               >
@@ -696,6 +705,12 @@ export default function Shell() {
                 alt={footerLogo.altText || 'Maria Clara Clothing'}
                 width={Number(footerLogo.width) || 1999}
                 height={Number(footerLogo.height) || 1999}
+                loading="lazy"
+                decoding="async"
+                {...responsiveImageAttributes(footerLogo.url, {
+                  sizes: '256px',
+                  shopifyWidths: [256, 512]
+                })}
                 className="max-h-20 max-w-64 object-contain brightness-0 invert"
               />
             </div>

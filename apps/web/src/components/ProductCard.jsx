@@ -4,14 +4,17 @@ import { CustomerBadge } from './ui/Badge.jsx';
 import { productPath } from '../lib/productUrl.js';
 import ProductCardContent from './ProductCardContent.jsx';
 import { responsiveImageAttributes } from '../lib/responsiveImage.js';
+import useHoverCapability from '../hooks/useHoverCapability.js';
+import { prefetchCustomerRoute } from '../lib/routePrefetch.js';
 
 export function totalStock(product) {
   return (product.variants || []).reduce((sum, variant) => sum + Number(variant.stockQuantity || 0), 0);
 }
 
-export default function ProductCard({ product, index }) {
+export default function ProductCard({ product, index, eager = false }) {
   const image = product.images[0];
   const hoverImage = product.images[1];
+  const canHover = useHoverCapability();
   const stock = totalStock(product);
   const soldOut = typeof product.isSoldOut === 'boolean'
     ? product.isSoldOut
@@ -23,14 +26,17 @@ export default function ProductCard({ product, index }) {
       to={productPath(product)}
       className="group block text-center"
       aria-label={`View ${product.name}, ${formatMoney(product.priceCents)}${onSale ? `, previously ${formatMoney(product.compareAtPriceCents)}` : ''}`}
+      onPointerEnter={() => prefetchCustomerRoute('product')}
+      onFocus={() => prefetchCustomerRoute('product')}
     >
       <article>
         <div className="media-zoom relative aspect-[4/5] overflow-hidden bg-transparent">
           {image && (
             <img
               src={image.url}
-              alt={product.seo?.imageAltText || image.altText || product.name}
-              loading="lazy"
+              alt={product.imageAltText || product.seo?.imageAltText || image.altText || product.name}
+              loading={eager ? 'eager' : 'lazy'}
+              fetchPriority={eager ? 'high' : 'auto'}
               decoding="async"
               width="1000"
               height="1250"
@@ -41,7 +47,7 @@ export default function ProductCard({ product, index }) {
               className="product-photo-blend h-full w-full object-contain group-hover:hidden"
             />
           )}
-          {hoverImage && (
+          {canHover && hoverImage && (
             <img
               src={hoverImage.url}
               alt=""

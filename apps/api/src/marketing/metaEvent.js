@@ -7,9 +7,16 @@ const {
   validateMetaPurchase
 } = require('./metaMoney');
 const { normalizeTestEventCode } = require('./metaControlledTest');
+const { PII_DATA_TYPE, annotateMetaHashedPii } = require('./metaParameterBuilder');
+
+const META_BROWSER_ID_PATTERN = /^fb\.\d+\.\d+\.[a-zA-Z0-9._~-]+$/;
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
+}
+
+function metaPii(value, dataType) {
+  return annotateMetaHashedPii(sha256(value), dataType);
 }
 
 function normalizeEmailForMeta(email) {
@@ -50,6 +57,28 @@ function optionalText(value, maxLength) {
   return String(value || '').trim().slice(0, maxLength);
 }
 
+function normalizeMetaBrowserId(value) {
+  const normalized = optionalText(value, 255);
+  return META_BROWSER_ID_PATTERN.test(normalized) ? normalized : '';
+}
+
+function safeMetaUrl(value, { baseUrl, sameOrigin = false } = {}) {
+  try {
+    const base = baseUrl ? new URL(String(baseUrl)) : undefined;
+    const url = base
+      ? new URL(optionalText(value, 2048) || '/', base)
+      : new URL(optionalText(value, 2048));
+    if (!['http:', 'https:'].includes(url.protocol)) return '';
+    if (sameOrigin && base && url.origin !== base.origin) return '';
+    url.username = '';
+    url.password = '';
+    url.hash = '';
+    return url.toString();
+  } catch (_error) {
+    return '';
+  }
+}
+
 function parseMetaCookies(header) {
   const cookies = Object.fromEntries(String(header || '').split(';').map((part) => {
     const index = part.indexOf('=');
@@ -63,8 +92,8 @@ function parseMetaCookies(header) {
     }
   }).filter(([name]) => name));
   return {
-    fbp: optionalText(cookies._fbp, 255),
-    fbc: optionalText(cookies._fbc, 255)
+    fbp: normalizeMetaBrowserId(cookies._fbp),
+    fbc: normalizeMetaBrowserId(cookies._fbc)
   };
 }
 
@@ -92,26 +121,26 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
   const email = normalizeEmailForMeta(order?.customer?.email);
   const phone = normalizePhoneForMeta(order?.customer?.phone);
   const userData = {};
-  if (email) userData.em = [sha256(email)];
-  if (phone) userData.ph = [sha256(phone)];
+  if (email) userData.em = [metaPii(email, PII_DATA_TYPE.EMAIL)];
+  if (phone) userData.ph = [metaPii(phone, PII_DATA_TYPE.PHONE)];
   const firstName = normalizeTextForMeta(order?.customer?.firstName, { compact: true });
   const lastName = normalizeTextForMeta(order?.customer?.lastName, { compact: true });
   const city = normalizeTextForMeta(order?.address?.cityName || order?.address?.city || order?.address?.municipality, { compact: true });
   const province = normalizeTextForMeta(order?.address?.provinceName || order?.address?.province, { compact: true });
   const postalCode = normalizeTextForMeta(order?.address?.postalCode || order?.address?.zipCode, { compact: true });
   const externalId = normalizeTextForMeta(order?.customerAccountId, { compact: true });
-  if (firstName) userData.fn = [sha256(firstName)];
-  if (lastName) userData.ln = [sha256(lastName)];
-  if (city) userData.ct = [sha256(city)];
-  if (province) userData.st = [sha256(province)];
-  if (postalCode) userData.zp = [sha256(postalCode)];
-  if (city || province || postalCode) userData.country = [sha256('ph')];
-  if (externalId) userData.external_id = [sha256(externalId)];
+  if (firstName) userData.fn = [metaPii(firstName, PII_DATA_TYPE.FIRST_NAME)];
+  if (lastName) userData.ln = [metaPii(lastName, PII_DATA_TYPE.LAST_NAME)];
+  if (city) userData.ct = [metaPii(city, PII_DATA_TYPE.CITY)];
+  if (province) userData.st = [metaPii(province, PII_DATA_TYPE.STATE)];
+  if (postalCode) userData.zp = [metaPii(postalCode, PII_DATA_TYPE.ZIP_CODE)];
+  if (city || province || postalCode) userData.country = [metaPii('ph', PII_DATA_TYPE.COUNTRY)];
+  if (externalId) userData.external_id = [metaPii(externalId, PII_DATA_TYPE.EXTERNAL_ID)];
 
-  const clientIp = optionalText(requestContext.clientIp, 64);
+  const clientIp = optionalText(requestContext.clientIp, 96);
   const clientUserAgent = optionalText(requestContext.clientUserAgent, 512);
-  const fbp = optionalText(requestContext.fbp, 255);
-  const fbc = optionalText(requestContext.fbc, 255);
+  const fbp = normalizeMetaBrowserId(requestContext.fbp);
+  const fbc = normalizeMetaBrowserId(requestContext.fbc);
   if (clientIp) userData.client_ip_address = clientIp;
   if (clientUserAgent) userData.client_user_agent = clientUserAgent;
   if (fbp) userData.fbp = fbp;
@@ -141,8 +170,10 @@ function buildMetaPurchaseEvent({ order, requestContext = {} }) {
     eventId: event.event_id
   });
   if (!validation.valid) return null;
-  const sourceUrl = optionalText(requestContext.sourceUrl, 2048);
+  const sourceUrl = safeMetaUrl(requestContext.sourceUrl);
   if (sourceUrl) event.event_source_url = sourceUrl;
+  const referrerUrl = safeMetaUrl(requestContext.referrerUrl);
+  if (referrerUrl) event.referrer_url = referrerUrl;
   const controlledTestEventCode = normalizeTestEventCode(requestContext.metaTestEventCode);
   if (requestContext.metaControlledTestAuthorized === true && controlledTestEventCode) {
     event._meta_test_event_code = controlledTestEventCode;
@@ -179,11 +210,13 @@ module.exports = {
   logMetaPurchaseDevelopment,
   metaPurchaseEventId,
   normalizeMetaValue,
+  normalizeMetaBrowserId,
   normalizeEmailForMeta,
   normalizePhoneForMeta,
   normalizeTextForMeta,
   parseMetaCookies,
   purchaseValue,
+  safeMetaUrl,
   sha256,
   META_CURRENCY,
   validateMetaPurchase

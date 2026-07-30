@@ -371,7 +371,7 @@ export function trackFacebookEvent(eventName, payload = {}, options = {}) {
   }
   if (!hasMetaTrackingConsent(options)) return false;
   if (!windowRef?.fbq) {
-    if (runtimePixelConfig === null && pendingPixelEvents.length < 50) {
+    if (runtimePixelConfig?.enabled !== false && pendingPixelEvents.length < 50) {
       const key = `${eventName}:${options.eventId || ''}:${JSON.stringify(payload)}`;
       if (!pendingPixelEvents.some((event) => event.key === key)) {
         pendingPixelEvents.push({ key, eventName, payload, options: { ...options, windowRef: undefined } });

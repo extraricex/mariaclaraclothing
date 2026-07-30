@@ -14,6 +14,10 @@ const {
 } = require('../src/marketing/metaEvent');
 const { resolveMetaCurrency } = require('../src/marketing/metaMoney');
 
+function assertMetaPii(actual, normalizedValue) {
+  assert.match(actual?.[0] || '', new RegExp(`^${sha256(normalizedValue)}\\.[a-zA-Z0-9]{8}$`));
+}
+
 test('Meta CAPI is disabled by default', () => {
   assert.deepEqual(metaConfig({}), { enabled: false });
 });
@@ -117,9 +121,52 @@ test('Meta Purchase uses persisted totals and hashed matching data', () => {
   assert.equal(event.custom_data.value, 1718);
   assert.deepEqual(event.custom_data.content_ids, ['POS-1']);
   assert.equal(event.custom_data.num_items, 2);
-  assert.deepEqual(event.user_data.em, [sha256('test@example.com')]);
-  assert.deepEqual(event.user_data.ph, [sha256('639171234567')]);
+  assertMetaPii(event.user_data.em, 'test@example.com');
+  assertMetaPii(event.user_data.ph, '639171234567');
   assert.equal(JSON.stringify(event).includes('must not be sent'), false);
+});
+
+test('Meta Purchase accepts official builder parameters and rejects malformed matching input', () => {
+  const order = {
+    orderNumber: 'MCC-BUILDER',
+    placedAt: '2026-07-29T03:00:00.000Z',
+    totalCents: 14252,
+    customer: {},
+    items: [{ sku: 'SKU-1', quantity: 1, unitPriceCents: 14252 }]
+  };
+  const event = buildMetaPurchaseEvent({
+    order,
+    requestContext: {
+      clientIp: '2001:db8::1.AQQAAQMB',
+      clientUserAgent: 'Mozilla/5.0',
+      fbp: 'fb.1.1785332985000.browser.AQQAAQMB',
+      fbc: 'fb.1.1785332985000.MetaClick_ABC-123.AQQAAQMB',
+      sourceUrl: 'https://mariaclaraclothing.com/checkout.AQQCAQMB',
+      referrerUrl: 'https://www.facebook.com/ad?campaign=summer.AQQAAQMB'
+    }
+  });
+
+  assert.equal(event.user_data.client_ip_address, '2001:db8::1.AQQAAQMB');
+  assert.equal(event.user_data.fbp, 'fb.1.1785332985000.browser.AQQAAQMB');
+  assert.equal(event.user_data.fbc, 'fb.1.1785332985000.MetaClick_ABC-123.AQQAAQMB');
+  assert.equal(event.event_source_url, 'https://mariaclaraclothing.com/checkout.AQQCAQMB');
+  assert.equal(event.referrer_url, 'https://www.facebook.com/ad?campaign=summer.AQQAAQMB');
+  assert.equal(event.custom_data.currency, 'PHP');
+  assert.equal(event.custom_data.value, 142.52);
+
+  const unsafe = buildMetaPurchaseEvent({
+    order,
+    requestContext: {
+      fbp: '<script>alert(1)</script>',
+      fbc: 'not-a-meta-id',
+      sourceUrl: 'javascript:alert(1)',
+      referrerUrl: 'data:text/html,unsafe'
+    }
+  });
+  assert.equal(unsafe.user_data.fbp, undefined);
+  assert.equal(unsafe.user_data.fbc, undefined);
+  assert.equal(unsafe.event_source_url, undefined);
+  assert.equal(unsafe.referrer_url, undefined);
 });
 
 test('only an authorized controlled Purchase carries a valid server Test Events code', () => {
@@ -241,4 +288,5 @@ test('Meta browser cookies are parsed and length-limited', () => {
     fbc: 'fb.1.123.click'
   });
   assert.deepEqual(parseMetaCookies(''), { fbp: '', fbc: '' });
+  assert.deepEqual(parseMetaCookies('_fbp=invalid; _fbc=%3Cscript%3E'), { fbp: '', fbc: '' });
 });

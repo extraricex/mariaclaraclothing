@@ -29,6 +29,10 @@ export default function CollectionBanner({ banner }) {
       : 'items-start text-left';
   const textColor = banner.textColor === 'dark' ? 'text-ink' : 'text-white';
   const linkLabel = banner.title || banner.altText || 'View Maria Clara Clothing collection';
+  const mobileImageAttributes = responsiveImageAttributes(mobileImage.url, {
+    sizes: '100vw',
+    shopifyWidths: [480, 768]
+  });
 
   return (
     <section className="mx-auto mt-10 max-w-7xl px-5 sm:mt-14 lg:mt-20 lg:px-8" aria-label="Freedom of Mind collection banner">
@@ -37,7 +41,8 @@ export default function CollectionBanner({ banner }) {
           {mobileImage.url && (
             <source
               media="(max-width: 639px)"
-              srcSet={mobileImage.url}
+              srcSet={mobileImageAttributes.srcSet || mobileImage.url}
+              sizes={mobileImageAttributes.sizes}
               width={mobileImage.width || undefined}
               height={mobileImage.height || undefined}
             />

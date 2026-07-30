@@ -196,7 +196,12 @@ test('V2 order ignores client money and forwards the idempotency key', async () 
   }, async (port) => {
     const response = await fetch(`http://127.0.0.1:${port}/api/orders`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'Idempotency-Key': 'idem-1234567890123456' },
+      headers: {
+        'content-type': 'application/json',
+        'Idempotency-Key': 'idem-1234567890123456',
+        Cookie: '_fbp=fb.1.1785332985000.browser; _fbc=fb.1.1785332985000.MetaClick_ABC-123',
+        Referer: 'https://www.facebook.com/ad?campaign=summer'
+      },
       body: JSON.stringify({
         quoteId: 'quote-1', cartSessionId: 'cart-1', totalCents: 1,
         customer: { fullName: 'Maria Test', phone: '09171234567' },
@@ -208,6 +213,10 @@ test('V2 order ignores client money and forwards the idempotency key', async () 
     assert.equal(body.totalCents, 72900);
     assert.equal(body.confirmationToken, 'secret');
     assert.equal(input.idempotencyKey, 'idem-1234567890123456');
+    assert.match(input.requestContext.fbp, /^fb\.1\.1785332985000\.browser\.[a-zA-Z0-9]{8}$/);
+    assert.match(input.requestContext.fbc, /^fb\.1\.1785332985000\.MetaClick_ABC-123\.[a-zA-Z0-9]{8}$/);
+    assert.match(input.requestContext.referrerUrl, /^https:\/\/www\.facebook\.com\/ad\?campaign=summer\.[a-zA-Z0-9]{8}$/);
+    assert.equal(input.requestContext.metaConsentGranted, true);
     assert.deepEqual(calls, [['pancake', 'MCC-1']]);
   });
 });

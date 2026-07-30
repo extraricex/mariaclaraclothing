@@ -1,4 +1,6 @@
 import { fetchWithRecovery, responseErrorMessage } from './network.js';
+import { invalidateCatalogProducts, invalidateSiteContent } from './api.js';
+import { invalidateStorefrontSettings } from './storeSettings.js';
 
 const CSRF_COOKIE = 'mc_admin_csrf';
 
@@ -15,7 +17,22 @@ function csrfHeaders(options) {
     : {};
 }
 
+function invalidatePublicDataAfterWrite(path, method) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return;
+  if (/^\/api\/admin\/(?:products|orders|reviews)(?:\/|$)/.test(path)) {
+    invalidateCatalogProducts();
+  }
+  if (/^\/api\/admin\/site-content(?:\/|$)/.test(path)) {
+    invalidateSiteContent();
+  }
+  if (/^\/api\/admin\/(?:settings|collections)(?:\/|$)/.test(path)) {
+    invalidateStorefrontSettings();
+    invalidateCatalogProducts();
+  }
+}
+
 export async function adminFetch(path, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
   const response = await fetchWithRecovery(path, {
     cache: 'no-store',
     credentials: 'same-origin',
@@ -31,6 +48,7 @@ export async function adminFetch(path, options = {}) {
     }
     throw new Error('Session expired. Log in again.');
   }
+  if (response.ok) invalidatePublicDataAfterWrite(path, method);
   return response;
 }
 

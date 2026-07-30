@@ -2,7 +2,7 @@ const express = require('express');
 const { env } = require('../config/env');
 const { getStoreSettings } = require('../settings/storeSettingsRepository');
 const { placeAuthoritativeCheckout } = require('../checkout/authoritativeCheckoutService');
-const { parseMetaCookies } = require('../marketing/metaEvent');
+const { buildMetaRequestContext } = require('../marketing/metaParameterBuilder');
 const {
   defaultAuthoritativeDependencies, exportPancakeOrderNow, resolveCustomerAccountId, syncOrderInventoryNow
 } = require('./orders');
@@ -22,6 +22,10 @@ function createPayMongoRouter(dependencies = {}) {
   const router = express.Router();
   const config = dependencies.config || env.paymongo;
   const client = dependencies.client || createPayMongoClient(config);
+  const loadStoreSettings = dependencies.getStoreSettings || getStoreSettings;
+  const placeCheckout = dependencies.placeAuthoritativeCheckout || placeAuthoritativeCheckout;
+  const resolveAccountId = dependencies.resolveCustomerAccountId || resolveCustomerAccountId;
+  const authoritativeDependencies = dependencies.defaultAuthoritativeDependencies || defaultAuthoritativeDependencies;
   const exportPaidPancakeOrder = dependencies.exportPancakeOrderNow || exportPancakeOrderNow;
   const processPancakeOrderUpdates = dependencies.processPancakeOrderUpdates || (async () => {
     if (env.pancake.mode !== 'live' || !env.pancake.apiKeyConfigured) return { status: 'skipped' };
@@ -36,31 +40,35 @@ function createPayMongoRouter(dependencies = {}) {
       if (!config.configured) {
         const error = new Error('PayMongo online payment is not configured.'); error.status = 503; error.code = 'paymongo_not_configured'; throw error;
       }
-      const settings = await getStoreSettings();
+      const settings = await loadStoreSettings();
       const enabled = settings.payments.methods.some((method) => method.id === 'paymongo' && method.enabled);
       if (!enabled) {
         const error = new Error('PayMongo online payment is currently disabled.'); error.status = 409; error.code = 'paymongo_disabled'; throw error;
       }
-      const customerAccountId = await resolveCustomerAccountId(req);
-      const cookies = parseMetaCookies(req.headers.cookie);
+      const customerAccountId = await resolveAccountId(req);
+      const metaConsentGranted = settings.marketing?.metaPixel?.requireConsent
+        ? req.body?.metaTrackingConsent === 'accepted'
+        : true;
+      const metaRequestContext = buildMetaRequestContext(req, res, {
+        siteUrl: env.oauth.frontendUrl,
+        sourceUrl: sourceUrl(req),
+        referrerUrl: req.get('referer') || '',
+        consentGranted: metaConsentGranted,
+        secure: env.appEnv === 'production'
+      });
       const paymentExpiresAt = new Date(Date.now() + config.reservationMinutes * 60_000).toISOString();
-      const result = await placeAuthoritativeCheckout({
+      const result = await placeCheckout({
         ...req.body, paymentMethod: 'paymongo', paymentExpiresAt, customerAccountId,
         idempotencyKey: req.get('Idempotency-Key') || '',
         requestContext: {
-          ...cookies,
-          clientIp: req.ip,
-          clientUserAgent: req.get('user-agent') || '',
-          sourceUrl: sourceUrl(req),
-          metaConsentGranted: settings.marketing?.metaPixel?.requireConsent
-            ? req.body?.metaTrackingConsent === 'accepted'
-            : true,
+          ...metaRequestContext,
+          metaConsentGranted,
           metaTrackingConsent: settings.marketing?.metaPixel?.requireConsent
             ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
               : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')
             : 'not_required'
         }
-      }, defaultAuthoritativeDependencies(req));
+      }, authoritativeDependencies(req));
       const checkout = await (dependencies.ensureCheckoutSession || ensureCheckoutSession)(result.orderNumber, { client, config });
       const order = checkout.order;
       const checkoutUrl = checkout.checkoutUrl;

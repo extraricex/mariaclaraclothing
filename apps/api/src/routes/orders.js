@@ -21,7 +21,8 @@ const { getStoreSettings, listEnabledPaymentMethodIds } = require('../settings/s
 const { hasDatabaseUrl, transaction } = require('../db/postgres');
 const { env } = require('../config/env');
 const { persistPostgresCheckout } = require('../orders/checkoutService');
-const { META_CURRENCY, metaPurchaseEventId, parseMetaCookies, purchaseValue } = require('../marketing/metaEvent');
+const { META_CURRENCY, metaPurchaseEventId, purchaseValue } = require('../marketing/metaEvent');
+const { buildMetaRequestContext } = require('../marketing/metaParameterBuilder');
 const {
   claimBrowserMetaPurchase,
   completeBrowserMetaPurchase,
@@ -128,7 +129,16 @@ legacyRouter.post('/', async (req, res, next) => {
     let completedOrder = persistedOrder;
 
     if (hasDatabaseUrl()) {
-      const cookies = parseMetaCookies(req.headers.cookie);
+      const metaConsentGranted = storeSettings.marketing?.metaPixel?.requireConsent
+        ? req.body?.metaTrackingConsent === 'accepted'
+        : true;
+      const metaRequestContext = buildMetaRequestContext(req, res, {
+        siteUrl: env.oauth.frontendUrl,
+        sourceUrl: checkoutSourceUrl(req),
+        referrerUrl: req.get('referer') || '',
+        consentGranted: metaConsentGranted,
+        secure: env.appEnv === 'production'
+      });
       completedOrder = await persistPostgresCheckout({
         persistedOrder,
         cartSessionId: req.body?.cartSessionId,
@@ -136,13 +146,8 @@ legacyRouter.post('/', async (req, res, next) => {
         movements,
         discountCode: persistedOrder.discountCode,
         requestContext: {
-          ...cookies,
-          clientIp: req.ip,
-          clientUserAgent: req.get('user-agent') || '',
-          sourceUrl: checkoutSourceUrl(req),
-          metaConsentGranted: storeSettings.marketing?.metaPixel?.requireConsent
-            ? req.body?.metaTrackingConsent === 'accepted'
-            : true,
+          ...metaRequestContext,
+          metaConsentGranted,
           metaTrackingConsent: storeSettings.marketing?.metaPixel?.requireConsent
             ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
               : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')
@@ -644,7 +649,16 @@ function createOrderRouter(overrides = {}) {
           });
         }
         const customerAccountId = await dependencies.resolveCustomerAccountId(req);
-        const cookies = parseMetaCookies(req.headers.cookie);
+        const metaConsentGranted = settings.marketing?.metaPixel?.requireConsent
+          ? req.body?.metaTrackingConsent === 'accepted'
+          : true;
+        const metaRequestContext = buildMetaRequestContext(req, res, {
+          siteUrl: env.oauth.frontendUrl,
+          sourceUrl: checkoutSourceUrl(req),
+          referrerUrl: req.get('referer') || '',
+          consentGranted: metaConsentGranted,
+          secure: env.appEnv === 'production'
+        });
         const authoritativeDependencies = dependencies.authoritativeDependencies(req);
         const checkoutDependencies = controlledMetaTest ? {
           ...authoritativeDependencies,
@@ -659,13 +673,8 @@ function createOrderRouter(overrides = {}) {
           customerAccountId,
           idempotencyKey: req.get('Idempotency-Key') || '',
           requestContext: {
-            ...cookies,
-            clientIp: req.ip,
-            clientUserAgent: req.get('user-agent') || '',
-            sourceUrl: checkoutSourceUrl(req),
-            metaConsentGranted: settings.marketing?.metaPixel?.requireConsent
-              ? req.body?.metaTrackingConsent === 'accepted'
-              : true,
+            ...metaRequestContext,
+            metaConsentGranted,
             metaTrackingConsent: settings.marketing?.metaPixel?.requireConsent
               ? (req.body?.metaTrackingConsent === 'accepted' ? 'accepted'
                 : req.body?.metaTrackingConsent === 'declined' ? 'declined' : 'unset')

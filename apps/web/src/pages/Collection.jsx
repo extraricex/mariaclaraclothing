@@ -98,7 +98,7 @@ export default function Collection() {
         </div>
         {members.length ? (
           <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
-            {members.map((product, index) => <ProductCard key={product.id} product={product} index={index} />)}
+            {members.map((product, index) => <ProductCard key={product.id} product={product} index={index} eager={index < 4} />)}
           </div>
         ) : (
           <div className="border-b border-line py-16 text-center">

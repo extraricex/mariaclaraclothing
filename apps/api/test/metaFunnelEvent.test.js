@@ -9,6 +9,10 @@ const {
 } = require('../src/marketing/metaFunnelEvent');
 const { sha256 } = require('../src/marketing/metaEvent');
 
+function assertMetaPii(actual, normalizedValue) {
+  assert.match(actual?.[0] || '', new RegExp(`^${sha256(normalizedValue)}\\.[a-zA-Z0-9]{8}$`));
+}
+
 function analyticsEvent(overrides = {}) {
   return {
     eventId: 'addtocart_action_1', eventName: 'add_to_cart', path: '/product/mandala?utm_source=meta',
@@ -39,6 +43,66 @@ test('funnel CAPI event reuses the exact browser event identity and sanitized PH
   assert.equal(event.user_data.fbc, 'fb.1.123.click');
 });
 
+test('funnel CAPI accepts validated browser identifiers when the request cookie is not ready', () => {
+  const event = buildMetaFunnelEvent({
+    eventId: 'viewcontent_click_1', metaEventId: 'viewcontent_click_1',
+    metaEventName: 'ViewContent', metaBrowserSent: true, metaCustomData: customData,
+    metaFbp: 'fb.1.1785332985000.browser', metaFbc: 'fb.1.1785332985000.MetaClick_ABC-123'
+  }, analyticsEvent({
+    eventId: 'viewcontent_click_1', eventName: 'product_view'
+  }), {
+    clientIp: '203.0.113.10', userAgent: 'Mozilla/5.0',
+    cookieHeader: '', siteUrl: 'https://mariaclaraclothing.com'
+  });
+
+  assert.equal(event.user_data.fbp, 'fb.1.1785332985000.browser');
+  assert.equal(event.user_data.fbc, 'fb.1.1785332985000.MetaClick_ABC-123');
+});
+
+test('funnel CAPI prefers official builder values and preserves its URL metadata', () => {
+  const event = buildMetaFunnelEvent({
+    eventId: 'viewcontent_builder_1', metaEventId: 'viewcontent_builder_1',
+    metaEventName: 'ViewContent', metaBrowserSent: true, metaCustomData: customData,
+    metaFbp: 'fb.1.1.browser-fallback', metaFbc: 'fb.1.1.click-fallback'
+  }, analyticsEvent({
+    eventId: 'viewcontent_builder_1', eventName: 'product_view'
+  }), {
+    clientIp: '203.0.113.10', userAgent: 'Mozilla/5.0',
+    cookieHeader: '_fbp=fb.1.2.cookie-fallback',
+    siteUrl: 'https://mariaclaraclothing.com',
+    parameterBuilder: {
+      clientIpAddress: '2001:db8::1.AQQAAQMB',
+      fbp: 'fb.1.1785332985000.browser.AQQAAQMB',
+      fbc: 'fb.1.1785332985000.MetaClick_ABC-123.AQQAAQMB',
+      eventSourceUrl: 'https://mariaclaraclothing.com/product/mandala?utm_source=meta.AQQCAQMB',
+      referrerUrl: 'https://www.facebook.com/ad?campaign=summer.AQQAAQMB'
+    }
+  });
+
+  assert.equal(event.user_data.client_ip_address, '2001:db8::1.AQQAAQMB');
+  assert.equal(event.user_data.fbp, 'fb.1.1785332985000.browser.AQQAAQMB');
+  assert.equal(event.user_data.fbc, 'fb.1.1785332985000.MetaClick_ABC-123.AQQAAQMB');
+  assert.equal(event.event_source_url, 'https://mariaclaraclothing.com/product/mandala?utm_source=meta.AQQCAQMB');
+  assert.equal(event.referrer_url, 'https://www.facebook.com/ad?campaign=summer.AQQAAQMB');
+  assert.equal(event.event_id, 'viewcontent_builder_1');
+});
+
+test('funnel CAPI prefers valid request cookies and rejects malformed browser identifiers', () => {
+  const event = buildMetaFunnelEvent({
+    eventId: 'viewcontent_cookie_1', metaEventId: 'viewcontent_cookie_1',
+    metaEventName: 'ViewContent', metaBrowserSent: true, metaCustomData: customData,
+    metaFbp: 'not-an-fbp', metaFbc: '<script>alert(1)</script>'
+  }, analyticsEvent({
+    eventId: 'viewcontent_cookie_1', eventName: 'product_view'
+  }), {
+    userAgent: 'Mozilla/5.0', cookieHeader: '_fbp=fb.1.123.cookie',
+    siteUrl: 'https://mariaclaraclothing.com'
+  });
+
+  assert.equal(event.user_data.fbp, 'fb.1.123.cookie');
+  assert.equal(event.user_data.fbc, undefined);
+});
+
 test('PageView CAPI is one real browser navigation and strips private query data', () => {
   const event = buildMetaFunnelEvent({
     eventId: 'pageview_route_1', metaEventId: 'pageview_route_1',
@@ -65,15 +129,15 @@ test('funnel CAPI hashes authenticated customer matching data without storing ra
     }
   });
 
-  assert.deepEqual(event.user_data.em, [sha256('buyer@example.com')]);
-  assert.deepEqual(event.user_data.ph, [sha256('639171234567')]);
-  assert.deepEqual(event.user_data.external_id, [sha256('customerabc123')]);
-  assert.deepEqual(event.user_data.fn, [sha256('maria')]);
-  assert.deepEqual(event.user_data.ln, [sha256('delacruz')]);
-  assert.deepEqual(event.user_data.ct, [sha256('imuscity')]);
-  assert.deepEqual(event.user_data.st, [sha256('cavite')]);
-  assert.deepEqual(event.user_data.zp, [sha256('4103')]);
-  assert.deepEqual(event.user_data.country, [sha256('ph')]);
+  assertMetaPii(event.user_data.em, 'buyer@example.com');
+  assertMetaPii(event.user_data.ph, '639171234567');
+  assertMetaPii(event.user_data.external_id, 'customerabc123');
+  assertMetaPii(event.user_data.fn, 'maria');
+  assertMetaPii(event.user_data.ln, 'delacruz');
+  assertMetaPii(event.user_data.ct, 'imuscity');
+  assertMetaPii(event.user_data.st, 'cavite');
+  assertMetaPii(event.user_data.zp, '4103');
+  assertMetaPii(event.user_data.country, 'ph');
   const serialized = JSON.stringify(event);
   for (const raw of ['buyer@example.com', '0917 123 4567', 'María', 'Dela Cruz']) {
     assert.equal(serialized.toLowerCase().includes(raw.toLowerCase()), false);

@@ -4,6 +4,10 @@ const { recordStorefrontMetaEvent } = require('../analytics/storefrontMetaEventS
 const { findAuthSession } = require('../auth/sessionRepository');
 const { sessionTokenFromRequest } = require('../auth/sessionHttp');
 const { findAccountById } = require('../customers/customerAccountRepository');
+const {
+  applyMetaParameterCookies,
+  collectMetaParameters
+} = require('../marketing/metaParameterBuilder');
 
 const router = express.Router();
 
@@ -27,13 +31,28 @@ async function authenticatedMetaCustomer(req) {
 router.post('/events', async (req, res, next) => {
   try {
     if (req.get('Sec-GPC') === '1' || req.get('DNT') === '1') return res.status(204).end();
+    const parameterBuilder = req.body?.metaBrowserSent === true
+      ? collectMetaParameters(req, {
+        siteUrl: env.oauth.frontendUrl,
+        sourceUrl: req.body?.path,
+        referrerUrl: req.body?.referrer,
+        fallbackFbc: req.body?.metaFbc,
+        fallbackFbp: req.body?.metaFbp
+      })
+      : null;
+    if (parameterBuilder) {
+      applyMetaParameterCookies(res, parameterBuilder.cookiesToSet, {
+        secure: env.appEnv === 'production'
+      });
+    }
     const customer = await authenticatedMetaCustomer(req);
     const result = await recordStorefrontMetaEvent(req.body || {}, {
       userAgent: req.get('user-agent') || '',
-      clientIp: req.ip,
+      clientIp: parameterBuilder?.clientIpAddress || req.ip,
       cookieHeader: req.headers.cookie || '',
       siteUrl: env.oauth.frontendUrl,
-      customer
+      customer,
+      parameterBuilder
     });
     res.set('Cache-Control', 'no-store');
     return res.status(result.recorded ? 202 : 200).json(result);

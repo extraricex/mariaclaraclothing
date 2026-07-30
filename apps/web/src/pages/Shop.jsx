@@ -10,6 +10,7 @@ import { breadcrumbStructuredData, INDEX_ROBOTS, NOINDEX_FOLLOW_ROBOTS } from '.
 const VALID_SORTS = new Set(['featured', 'most_ordered', 'price_low', 'price_high', 'name', 'availability']);
 
 function searchableText(product) {
+  if (product.searchText) return String(product.searchText).toLowerCase();
   return [
     product.name, product.description, product.category, product.productType, product.vendor,
     ...(product.collections || []), ...(product.tags || []),
@@ -126,7 +127,7 @@ export default function Shop() {
       </div>
       {results.length ? (
         <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
-          {results.map((product, index) => <ProductCard key={product.id} product={product} index={index} />)}
+          {results.map((product, index) => <ProductCard key={product.id} product={product} index={index} eager={index < 4} />)}
         </div>
       ) : (
         <div className="py-16 text-center"><h2 className="display text-3xl">No matching pieces</h2><p className="mt-3 text-sm text-ink-soft">Try clearing a filter or searching for another size or style.</p><button type="button" className="btn-ghost mt-6" onClick={clearFilters}>Clear filters</button></div>

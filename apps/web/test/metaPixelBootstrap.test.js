@@ -9,33 +9,27 @@ const routeTracker = readFileSync(new URL('../src/components/MetaRouteTracker.js
 const webDockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
 const productionCompose = readFileSync(new URL('../../../deploy/docker-compose.production.yml', import.meta.url), 'utf8');
 
-test('initial HTML loads the external settings-backed Meta Pixel bootstrap', () => {
-  assert.match(html, /<script src="\/meta-bootstrap\.js\?v=\d+"><\/script>/);
-  assert.match(bootstrap, /connect\.facebook\.net\/en_US\/fbevents\.js/);
-  assert.match(bootstrap, /fbq\('init', pixelId\)/);
-  assert.match(bootstrap, /fbq\('set', 'autoConfig', false, pixelId\)/);
-  assert.doesNotMatch(bootstrap, /fbq\('track', 'PageView'\)/);
+test('initial HTML defers the settings bootstrap without loading remote Meta code', () => {
+  assert.match(html, /<script defer src="\/meta-bootstrap\.js\?v=\d+"><\/script>/);
+  assert.doesNotMatch(bootstrap, /connect\.facebook\.net|fbevents|fbq\(/);
   assert.match(bootstrap, /\/api\/storefront-settings/);
   assert.doesNotMatch(html, /facebook\.com\/tr\?/);
   assert.doesNotMatch(`${html}\n${bootstrap}`, /595813035761213/);
   assert.match(nginx, /location = \/meta-bootstrap\.js[\s\S]*no-store, no-cache, must-revalidate/);
 });
 
-test('external bootstrap honors admin enable and consent settings and fails closed', () => {
-  assert.match(bootstrap, /config\.enabled/);
-  assert.match(bootstrap, /config\.requireConsent/);
-  assert.match(bootstrap, /maria-clara-meta-tracking-consent/);
-  assert.match(bootstrap, /if \(!consent\)[\s\S]*__mariaClaraFacebookConsent = 'revoke';[\s\S]*return;/);
-  assert.match(bootstrap, /centralized route tracker sends the initial PageView/);
-  assert.match(bootstrap, /enabled: false/);
-  assert.match(bootstrap, /requireConsent: true/);
+test('React schedules Meta after the critical visual window and retains consent-aware initialization', () => {
+  assert.match(routeTracker, /requestIdleCallback/);
+  assert.match(routeTracker, /\['pointerdown', 'touchstart', 'keydown'\]/);
+  assert.match(routeTracker, /window\.setTimeout\(finish, 3500\)/);
+  assert.match(routeTracker, /configureFacebookMetaPixel\(pixelSettings\)/);
+  assert.match(routeTracker, /initializeFacebookMetaPixel/);
+  assert.match(routeTracker, /flushPendingFacebookEvents/);
 });
 
-test('Meta bootstrap loads once on customer routes and leaves Purchase gating to centralized tracking', () => {
-  assert.match(bootstrap, /browserPurchaseEnabled/);
-  assert.match(bootstrap, /\.toLowerCase\(\)/);
-  assert.match(bootstrap, /Server CAPI is authoritative/);
-  assert.doesNotMatch(bootstrap, /purchaseSensitivePath/);
+test('Meta bootstrap only shares the single settings request with the React app', () => {
+  assert.match(bootstrap, /__mariaClaraStorefrontSettingsPromise = settingsRequest/);
+  assert.doesNotMatch(bootstrap, /browserPurchaseEnabled|Purchase|customerPath/);
 });
 
 test('privacy-safe first-party page views are not gated by Meta Pixel initialization', () => {

@@ -1,9 +1,12 @@
 const { META_CURRENCY, centavosToMetaPesos } = require('./metaMoney');
+const { PII_DATA_TYPE, annotateMetaHashedPii } = require('./metaParameterBuilder');
 const {
   normalizeEmailForMeta,
+  normalizeMetaBrowserId,
   normalizePhoneForMeta,
   normalizeTextForMeta,
   parseMetaCookies,
+  safeMetaUrl,
   sha256
 } = require('./metaEvent');
 
@@ -14,7 +17,6 @@ const ANALYTICS_TO_META = Object.freeze({
   initiate_checkout: 'InitiateCheckout',
   add_payment_info: 'AddPaymentInfo'
 });
-
 function text(value, maximum = 255) {
   return String(value || '').trim().slice(0, maximum);
 }
@@ -66,14 +68,14 @@ function sanitizeCustomData(input, analyticsEvent) {
 }
 
 function safeSourceUrl(path, baseUrl) {
-  try {
-    const url = new URL(text(path, 240) || '/', String(baseUrl || 'https://mariaclaraclothing.com'));
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch (_error) {
-    return '';
-  }
+  const source = safeMetaUrl(text(path, 240) || '/', {
+    baseUrl: String(baseUrl || 'https://mariaclaraclothing.com'),
+    sameOrigin: true
+  });
+  if (!source) return '';
+  const url = new URL(source);
+  url.search = '';
+  return url.toString();
 }
 
 function addHashedCustomerData(userData, customer = {}) {
@@ -90,15 +92,16 @@ function addHashedCustomerData(userData, customer = {}) {
   const province = normalizeTextForMeta(address.provinceName || address.province, { compact: true });
   const postalCode = normalizeTextForMeta(address.postalCode || address.zipCode, { compact: true });
 
-  if (email) userData.em = [sha256(email)];
-  if (phone) userData.ph = [sha256(phone)];
-  if (firstName) userData.fn = [sha256(firstName)];
-  if (lastName) userData.ln = [sha256(lastName)];
-  if (externalId) userData.external_id = [sha256(externalId)];
-  if (city) userData.ct = [sha256(city)];
-  if (province) userData.st = [sha256(province)];
-  if (postalCode) userData.zp = [sha256(postalCode)];
-  if (city || province || postalCode) userData.country = [sha256('ph')];
+  const metaPii = (value, dataType) => annotateMetaHashedPii(sha256(value), dataType);
+  if (email) userData.em = [metaPii(email, PII_DATA_TYPE.EMAIL)];
+  if (phone) userData.ph = [metaPii(phone, PII_DATA_TYPE.PHONE)];
+  if (firstName) userData.fn = [metaPii(firstName, PII_DATA_TYPE.FIRST_NAME)];
+  if (lastName) userData.ln = [metaPii(lastName, PII_DATA_TYPE.LAST_NAME)];
+  if (externalId) userData.external_id = [metaPii(externalId, PII_DATA_TYPE.EXTERNAL_ID)];
+  if (city) userData.ct = [metaPii(city, PII_DATA_TYPE.CITY)];
+  if (province) userData.st = [metaPii(province, PII_DATA_TYPE.STATE)];
+  if (postalCode) userData.zp = [metaPii(postalCode, PII_DATA_TYPE.ZIP_CODE)];
+  if (city || province || postalCode) userData.country = [metaPii('ph', PII_DATA_TYPE.COUNTRY)];
   return userData;
 }
 
@@ -112,13 +115,22 @@ function buildMetaFunnelEvent(input, analyticsEvent, request = {}) {
     : sanitizeCustomData(input.metaCustomData, analyticsEvent);
   if (eventName !== 'PageView' && !customData) return null;
   const cookies = parseMetaCookies(request.cookieHeader);
+  const parameterBuilder = request.parameterBuilder && typeof request.parameterBuilder === 'object'
+    ? request.parameterBuilder
+    : {};
   const userData = {};
-  const clientIp = text(request.clientIp, 64);
+  const clientIp = text(parameterBuilder.clientIpAddress || request.clientIp, 96);
   const clientUserAgent = text(request.userAgent, 512);
+  const fbp = normalizeMetaBrowserId(parameterBuilder.fbp)
+    || normalizeMetaBrowserId(cookies.fbp)
+    || normalizeMetaBrowserId(input.metaFbp);
+  const fbc = normalizeMetaBrowserId(parameterBuilder.fbc)
+    || normalizeMetaBrowserId(cookies.fbc)
+    || normalizeMetaBrowserId(input.metaFbc);
   if (clientIp) userData.client_ip_address = clientIp;
   if (clientUserAgent) userData.client_user_agent = clientUserAgent;
-  if (cookies.fbp) userData.fbp = cookies.fbp;
-  if (cookies.fbc) userData.fbc = cookies.fbc;
+  if (fbp) userData.fbp = fbp;
+  if (fbc) userData.fbc = fbc;
   addHashedCustomerData(userData, request.customer);
   const event = {
     event_name: eventName,
@@ -127,8 +139,15 @@ function buildMetaFunnelEvent(input, analyticsEvent, request = {}) {
     action_source: 'website',
     user_data: userData
   };
-  const sourceUrl = safeSourceUrl(analyticsEvent.path, request.siteUrl);
+  const sourceUrl = parameterBuilder.eventSourceUrl
+    ? safeMetaUrl(parameterBuilder.eventSourceUrl, {
+      baseUrl: request.siteUrl,
+      sameOrigin: true
+    })
+    : safeSourceUrl(analyticsEvent.path, request.siteUrl);
   if (sourceUrl) event.event_source_url = sourceUrl;
+  const referrerUrl = safeMetaUrl(parameterBuilder.referrerUrl);
+  if (referrerUrl) event.referrer_url = referrerUrl;
   if (customData) event.custom_data = customData;
   return event;
 }
@@ -138,6 +157,7 @@ module.exports = {
   addHashedCustomerData,
   buildMetaFunnelEvent,
   isLikelyBot,
+  normalizeMetaBrowserId,
   safeSourceUrl,
   sanitizeContents,
   sanitizeCustomData
