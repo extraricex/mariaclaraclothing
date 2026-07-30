@@ -12,6 +12,7 @@ test('shop search and filters use live catalog fields without demo products', as
   ]);
   assert.match(app, /path="\/shop"/);
   assert.match(shell, /to: '\/shop', label: 'Shop'/);
+  assert.match(shell, /href: '\/shop\?sort=most_ordered', label: 'Most Ordered'/);
   assert.match(nginx, /\(\?:shop\|guides/);
   assert.match(nginx, /location ~ \^\/collections\/\(\?<storefront_collection_slug>/);
   assert.match(shop, /fetchProducts\(\)/);
@@ -22,6 +23,8 @@ test('shop search and filters use live catalog fields without demo products', as
   assert.match(shop, /In stock/);
   assert.match(shop, /Minimum price/);
   assert.match(shop, /Price: low to high/);
+  assert.match(shop, /value="most_ordered">Most ordered/);
+  assert.match(shop, /successfulOrderCount/);
   assert.match(shop, /results\.map\(\(product, index\) => <ProductCard/);
 });
 

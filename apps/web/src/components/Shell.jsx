@@ -28,6 +28,7 @@ const NAV_LINKS = [
 ];
 const MENU_LINKS = [
   { href: '/shop', label: 'Shop' },
+  { href: '/shop?sort=most_ordered', label: 'Most Ordered' },
   { href: '/faq', label: 'FAQ' },
   { href: '/terms', label: 'Terms' },
   { href: '/contact', label: 'Contact' }
@@ -590,6 +591,7 @@ export default function Shell() {
                 {collection.name}
               </Link>
             ))}
+            <Link to="/shop?sort=most_ordered" className="text-action shrink-0 hover:text-accent">Most Ordered</Link>
           </div>
         </nav>
       </header>
@@ -710,6 +712,7 @@ export default function Shell() {
                 {shopCollections.map((collection) => (
                   <li key={collection.slug}><Link to={`/collections/${collection.slug}`} className="text-action hover:text-accent">{collection.name}</Link></li>
                 ))}
+                <li><Link to="/shop?sort=most_ordered" className="text-action hover:text-accent">Most ordered</Link></li>
                 <li><Link to="/cart" className="text-action hover:text-accent">Cart</Link></li>
               </ul>
             </div>

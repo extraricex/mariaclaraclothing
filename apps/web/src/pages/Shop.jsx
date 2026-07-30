@@ -7,6 +7,8 @@ import { collectionMembers, normalizeCollectionDefinitions } from '../lib/storef
 import SEO from '../components/SEO.jsx';
 import { breadcrumbStructuredData, INDEX_ROBOTS, NOINDEX_FOLLOW_ROBOTS } from '../lib/seo.js';
 
+const VALID_SORTS = new Set(['featured', 'most_ordered', 'price_low', 'price_high', 'name', 'availability']);
+
 function searchableText(product) {
   return [
     product.name, product.description, product.category, product.productType, product.vendor,
@@ -27,7 +29,8 @@ export default function Shop() {
   const [availability, setAvailability] = useState(params.get('availability') || '');
   const [minimumPrice, setMinimumPrice] = useState('');
   const [maximumPrice, setMaximumPrice] = useState('');
-  const [sort, setSort] = useState('featured');
+  const requestedSort = params.get('sort') || 'featured';
+  const [sort, setSort] = useState(VALID_SORTS.has(requestedSort) ? requestedSort : 'featured');
 
   useEffect(() => {
     let active = true;
@@ -48,8 +51,9 @@ export default function Shop() {
     if (collection) next.set('collection', collection);
     if (size) next.set('size', size);
     if (availability) next.set('availability', availability);
+    if (sort !== 'featured') next.set('sort', sort);
     setParams(next, { replace: true });
-  }, [availability, collection, query, setParams, size]);
+  }, [availability, collection, query, setParams, size, sort]);
 
   const collections = useMemo(() => normalizeCollectionDefinitions(settings.collectionDefinitions || [])
     .filter((item) => item.visible && item.showOnShop)
@@ -70,6 +74,10 @@ export default function Shop() {
       .filter((product) => minimumCents === null || Number(product.priceCents || 0) >= minimumCents)
       .filter((product) => maximumCents === null || Number(product.priceCents || 0) <= maximumCents);
     return filtered.sort((left, right) => {
+      if (sort === 'most_ordered') {
+        return Number(right.successfulOrderCount || 0) - Number(left.successfulOrderCount || 0)
+          || Number(Boolean(right.featured)) - Number(Boolean(left.featured));
+      }
       if (sort === 'price_low') return Number(left.priceCents) - Number(right.priceCents);
       if (sort === 'price_high') return Number(right.priceCents) - Number(left.priceCents);
       if (sort === 'name') return String(left.name).localeCompare(String(right.name));
@@ -107,7 +115,7 @@ export default function Shop() {
           <label><span className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Availability</span><select className="field mt-1" value={availability} onChange={(event) => setAvailability(event.target.value)}><option value="">All products</option><option value="in_stock">In stock</option><option value="sold_out">Sold out</option></select></label>
           <label><span className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Minimum price</span><input className="field mt-1" type="number" min="0" inputMode="decimal" value={minimumPrice} onChange={(event) => setMinimumPrice(event.target.value)} placeholder="₱0" /></label>
           <label><span className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Maximum price</span><input className="field mt-1" type="number" min="0" inputMode="decimal" value={maximumPrice} onChange={(event) => setMaximumPrice(event.target.value)} placeholder="No maximum" /></label>
-          <label><span className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Sort</span><select className="field mt-1" value={sort} onChange={(event) => setSort(event.target.value)}><option value="featured">Featured</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option><option value="name">Name</option><option value="availability">Availability</option></select></label>
+          <label><span className="text-xs font-semibold uppercase tracking-[0.12em] text-clay">Sort</span><select className="field mt-1" value={sort} onChange={(event) => setSort(event.target.value)}><option value="featured">Featured</option><option value="most_ordered">Most ordered</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option><option value="name">Name</option><option value="availability">Availability</option></select></label>
         </div>
         <button type="button" className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-accent underline" onClick={clearFilters}>Clear filters</button>
       </section>

@@ -60,10 +60,14 @@ test('cart drawer uses the authoritative quote for free-shipping progress and co
   assert.match(shell, /settings=\{storeInfo\}/);
 });
 
-test('homepage priority products come only from real successful order counts and available stock', async () => {
-  const home = await source('src/pages/Home.jsx');
-  assert.match(home, /Number\(product\.successfulOrderCount \|\| 0\) > 0/);
-  assert.match(home, /variant\.stockQuantity/);
-  assert.match(home, /Most ordered/);
-  assert.match(home, /priorityProducts/);
+test('homepage removes Most Ordered so collection sections begin with New Arrivals', async () => {
+  const [home, shop, shell] = await Promise.all([
+    source('src/pages/Home.jsx'),
+    source('src/pages/Shop.jsx'),
+    source('src/components/Shell.jsx')
+  ]);
+  assert.doesNotMatch(home, /Most ordered|PriorityProducts|priorityProducts/);
+  assert.match(home, /collectionSections\.map/);
+  assert.match(shop, /sort === 'most_ordered'/);
+  assert.match(shell, /\/shop\?sort=most_ordered/);
 });
