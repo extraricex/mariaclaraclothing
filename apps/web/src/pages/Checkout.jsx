@@ -10,6 +10,7 @@ import { loadBarangays, loadCities, loadProvinces, regionForProvince } from '../
 import { DEFAULT_STOREFRONT_SETTINGS, loadStorefrontSettings, regionEstimate } from '../lib/storeSettings.js';
 import { customerNameParts } from '../lib/customerName.js';
 import { normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
+import { isCartAvailabilityError } from '../lib/checkoutAvailability.js';
 import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 import { fetchWithRecovery } from '../lib/network.js';
 
@@ -65,6 +66,7 @@ export default function Checkout() {
   const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
   const [missingFields, setMissingFields] = useState({});
   const [pending, setPending] = useState(false);
+  const [cartAvailability, setCartAvailability] = useState({ state: 'checking', message: '' });
   const [status, setStatus] = useState({
     tone: (location.state?.message || paymentWasCancelled) ? 'error' : 'neutral',
     message: location.state?.message || (paymentWasCancelled
@@ -125,6 +127,25 @@ export default function Checkout() {
       return;
     }
   }, [items, navigate]);
+
+  useEffect(() => {
+    if (!items.length) return undefined;
+    let cancelled = false;
+    setCartAvailability({ state: 'checking', message: '' });
+    createCheckoutQuote({ cartSessionId: getCartSessionId(), items })
+      .then(() => {
+        if (!cancelled) setCartAvailability({ state: 'ready', message: '' });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCartAvailability(isCartAvailabilityError(error)
+          ? { state: 'blocked', message: error.message }
+          : { state: 'ready', message: '' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -330,8 +351,20 @@ export default function Checkout() {
         dedupeKey: `information-error:${cartSessionId}:${error.code || 'unknown'}`,
         dedupeMilliseconds: 10_000
       });
-      if (['insufficient_stock', 'product_unavailable', 'variant_unavailable', 'cart_invalid'].includes(error.code)) {
-        navigate('/cart', { replace: true, state: { message: error.message } });
+      if (isCartAvailabilityError(error)) {
+        saveCheckoutReviewDraft({
+          cartSessionId,
+          cartFingerprint: checkoutCartFingerprint(items),
+          customer: details.customer,
+          address,
+          saveAddress,
+          recoveryConsent,
+          discountCode: initialDraft?.discountCode || '',
+          quote: null,
+          ...metaTestAuthorization
+        });
+        setCartAvailability({ state: 'blocked', message: error.message });
+        setStatus({ tone: 'error', message: 'Your details are saved. Please update the unavailable item in your cart, then return to continue.' });
         return;
       }
       setStatus({ tone: 'error', message: error.message });
@@ -348,6 +381,14 @@ export default function Checkout() {
           <p className="eyebrow">Checkout information</p>
           <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Where do we send it?</h1>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">Enter your contact and delivery details. You will review the products, total, and payment method on the next page.</p>
+
+          {cartAvailability.state === 'blocked' && (
+            <div className="mt-5 border border-accent/40 bg-accent/10 px-4 py-4 text-sm text-accent-deep" role="alert">
+              <p className="font-semibold">Your cart needs a quick update before checkout.</p>
+              <p className="mt-1">{cartAvailability.message}</p>
+              <Link to="/cart" className="btn-ghost customer-compact-button mt-3 inline-flex">Update cart</Link>
+            </div>
+          )}
 
           {!loggedIn && (
             <div className="mt-6 border-y border-line py-5">
@@ -461,8 +502,12 @@ export default function Checkout() {
               {status.message}
             </p>
           )}
-          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending}>
-            {pending ? 'Checking stock...' : 'Review order'}
+          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={pending || cartAvailability.state !== 'ready'}>
+            {pending || cartAvailability.state === 'checking'
+              ? 'Checking stock...'
+              : cartAvailability.state === 'blocked'
+                ? 'Update cart to continue'
+                : 'Review order'}
           </button>
           <p className="mt-3 text-center text-xs text-clay">No order is created and no stock is deducted until you confirm on the review page.</p>
           <p className="mt-2 text-center text-xs leading-relaxed text-clay">

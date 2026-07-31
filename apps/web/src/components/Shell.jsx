@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { CART_DRAWER_EVENT, cartQuantity, getCartSessionId, removeFromCart, updateQuantity, useCart } from '../lib/cart.js';
 import { useCustomerLoggedIn } from '../lib/customerAuth.js';
 import { createCheckoutQuote, fetchProducts, fetchSiteContent } from '../lib/api.js';
+import { isCartAvailabilityError } from '../lib/checkoutAvailability.js';
 import { formatMoney } from '../lib/money.js';
 import { productPath } from '../lib/productUrl.js';
 import { getMetaTrackingConsent, setMetaTrackingConsent } from '../lib/metaPixel.js';
@@ -172,7 +173,7 @@ function CartIcon() {
   );
 }
 
-function CartDrawer({ items, quote, quoteError, settings, open, onClose }) {
+function CartDrawer({ items, quote, quoteIssue, settings, open, onClose }) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const [quantityNotice, setQuantityNotice] = useState('');
@@ -189,6 +190,7 @@ function CartDrawer({ items, quote, quoteError, settings, open, onClose }) {
     : null;
   const codEnabled = settings?.paymentMethods?.some((method) => method.id === 'cash_on_delivery');
   const payMongoEnabled = settings?.paymentMethods?.some((method) => method.id === 'paymongo');
+  const checkoutBlocked = isCartAvailabilityError(quoteIssue);
 
   function checkout() {
     onClose();
@@ -244,7 +246,7 @@ function CartDrawer({ items, quote, quoteError, settings, open, onClose }) {
         ) : (
           <>
             <div className="flex-1 overflow-y-auto px-5">
-              {quoteError && <p className="mt-4 border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-deep">{quoteError}</p>}
+              {quoteIssue && <p className="mt-4 border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-deep" role="alert">{quoteIssue.message}</p>}
               {quantityNotice && <p className="mt-4 border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-deep" role="alert">{quantityNotice}</p>}
               <div className="divide-y divide-line">
                 {items.map((item) => (
@@ -302,7 +304,9 @@ function CartDrawer({ items, quote, quoteError, settings, open, onClose }) {
                 <div className="flex justify-between border-t border-line pt-3 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(displayTotal)}</dd></div>
               </dl>
               <div className="mt-5 grid gap-2">
-                <Link to="/checkout" className="btn-ink customer-compact-button text-center" onClick={checkout}>Checkout</Link>
+                {checkoutBlocked
+                  ? <button type="button" className="btn-ink customer-compact-button cursor-not-allowed text-center opacity-60" disabled>Update cart before checkout</button>
+                  : <Link to="/checkout" className="btn-ink customer-compact-button text-center" onClick={checkout}>Checkout</Link>}
                 <Link to="/cart" className="btn-ghost customer-compact-button text-center" onClick={onClose}>View cart</Link>
               </div>
               {(codEnabled || payMongoEnabled) && (
@@ -330,7 +334,7 @@ export default function Shell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [quote, setQuote] = useState(null);
-  const [quoteError, setQuoteError] = useState('');
+  const [quoteIssue, setQuoteIssue] = useState(null);
   const [headerScrolled, setHeaderScrolled] = useState(false);
   const [headerLogo, setHeaderLogo] = useState(null);
   const [blackLogo, setBlackLogo] = useState(null);
@@ -456,7 +460,7 @@ export default function Shell() {
   useEffect(() => {
     if (!cartDrawerOpen || !items.length) {
       setQuote(null);
-      setQuoteError('');
+      setQuoteIssue(null);
       return;
     }
     let cancelled = false;
@@ -464,12 +468,12 @@ export default function Shell() {
       .then((body) => {
         if (cancelled) return;
         setQuote(body.quote || null);
-        setQuoteError('');
+        setQuoteIssue(null);
       })
       .catch((error) => {
         if (cancelled) return;
         setQuote(null);
-        setQuoteError(error.message);
+        setQuoteIssue(error);
       });
     return () => {
       cancelled = true;
@@ -658,7 +662,7 @@ export default function Shell() {
       <CartDrawer
         items={items}
         quote={quote}
-        quoteError={quoteError}
+        quoteIssue={quoteIssue}
         settings={storeInfo}
         open={cartDrawerOpen}
         onClose={closeCartDrawer}

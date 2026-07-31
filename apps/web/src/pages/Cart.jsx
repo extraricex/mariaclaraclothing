@@ -7,6 +7,7 @@ import { trackFacebookAddToCart } from '../lib/metaPixel.js';
 import { productPath } from '../lib/productUrl.js';
 import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
 import { fetchWithRecovery, responseErrorMessage } from '../lib/network.js';
+import { cartAvailabilityRepair, isCartAvailabilityError } from '../lib/checkoutAvailability.js';
 
 export default function Cart() {
   const items = useCart();
@@ -15,7 +16,7 @@ export default function Cart() {
   const recoveryStarted = useRef(false);
   const [products, setProducts] = useState([]);
   const [quote, setQuote] = useState(null);
-  const [quoteError, setQuoteError] = useState('');
+  const [quoteIssue, setQuoteIssue] = useState(null);
   const [cartNotice, setCartNotice] = useState('');
   const [upsellVariantIds, setUpsellVariantIds] = useState({});
   const [recoveryNotice, setRecoveryNotice] = useState('');
@@ -67,7 +68,7 @@ export default function Cart() {
   useEffect(() => {
     if (!items.length) {
       setQuote(null);
-      setQuoteError('');
+      setQuoteIssue(null);
       return;
     }
     let cancelled = false;
@@ -75,12 +76,12 @@ export default function Cart() {
       .then((body) => {
         if (cancelled) return;
         setQuote(body.quote || null);
-        setQuoteError('');
+        setQuoteIssue(null);
       })
       .catch((error) => {
         if (cancelled) return;
         setQuote(null);
-        setQuoteError(error.message);
+        setQuoteIssue(error);
       });
     return () => {
       cancelled = true;
@@ -131,6 +132,19 @@ export default function Cart() {
     updateQuantity(item.variantId, Number(item.quantity) - 1);
   }
 
+  function repairCart() {
+    const repair = cartAvailabilityRepair(quoteIssue, items);
+    if (repair?.type === 'reduce') {
+      updateQuantity(repair.variantId, repair.quantity);
+    } else if (repair?.type === 'remove') {
+      repair.variantIds.forEach((variantId) => removeFromCart(variantId));
+    }
+    setCartNotice('Cart updated. Rechecking availability...');
+  }
+
+  const checkoutBlocked = isCartAvailabilityError(quoteIssue);
+  const repair = cartAvailabilityRepair(quoteIssue, items);
+
   if (!items.length) {
     return (
       <div className="customer-page mx-auto max-w-3xl px-5 py-20 text-center sm:py-24">
@@ -150,7 +164,16 @@ export default function Cart() {
       <p className="mt-4 inline-block bg-cream px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft">
         {quote?.freeShippingUnlocked ? 'FREE shipping unlocked!' : freeShippingMessage}
       </p>
-      {quoteError && <p className="mt-3 text-sm text-accent-deep" role="alert">{quoteError}</p>}
+      {quoteIssue && (
+        <div className="mt-3 text-sm text-accent-deep" role="alert">
+          <p>{quoteIssue.message}</p>
+          {repair && (
+            <button type="button" className="btn-ghost customer-compact-button mt-3" onClick={repairCart}>
+              {repair.type === 'reduce' ? `Set quantity to ${repair.quantity}` : 'Remove unavailable item'}
+            </button>
+          )}
+        </div>
+      )}
       {cartNotice && <p className="mt-3 text-sm text-accent-deep" role="alert">{cartNotice}</p>}
       {recoveryNotice && <p className="mt-3 text-sm text-accent-deep" role="status">{recoveryNotice}</p>}
 
@@ -192,7 +215,9 @@ export default function Cart() {
         <p className="text-sm text-ink-soft">Shipping <span className="ml-4 text-base font-semibold text-ink">{quote?.freeShippingUnlocked ? 'Free' : 'Calculated at checkout'}</span></p>
         <p className="text-base font-semibold">Total <span className="ml-4 text-lg">{formatMoney(displayTotal)}</span></p>
         <p className="text-xs text-clay">Final delivery fee is confirmed after your address.</p>
-        <Link to="/checkout" className="btn-ink customer-compact-button mt-3 w-full sm:w-auto">Continue to checkout</Link>
+        {checkoutBlocked
+          ? <button type="button" className="btn-ink customer-compact-button mt-3 w-full cursor-not-allowed opacity-60 sm:w-auto" disabled>Update cart before checkout</button>
+          : <Link to="/checkout" className="btn-ink customer-compact-button mt-3 w-full sm:w-auto">Continue to checkout</Link>}
       </div>
 
       {cartUpsells.length > 0 && (
