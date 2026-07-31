@@ -133,6 +133,53 @@ test('review access and direct checkout bypass are blocked without delivery info
   await expect(page.getByRole('button', { name: /Place Order|Online Payment/i })).toHaveCount(0);
 });
 
+test('stock changing during checkout keeps customer details instead of returning to cart', async ({ page }) => {
+  await openPage(page, '/');
+  await page.evaluate(() => {
+    localStorage.removeItem('maria-clara-cart');
+    localStorage.removeItem('maria-clara-cart-session-id');
+    sessionStorage.clear();
+  });
+
+  await openPage(page, `/product/${PRODUCT_SLUG}`);
+  await page.getByRole('button', { name: /add to cart/i }).click();
+  await page.getByRole('dialog', { name: /your cart/i }).getByRole('link', { name: /^checkout$/i }).click();
+  await expect(page.getByRole('button', { name: 'Review order', exact: true })).toBeEnabled();
+
+  await page.getByPlaceholder('First name').fill('Saved');
+  await page.getByPlaceholder('Last name').fill('Customer');
+  await page.getByPlaceholder('09XXXXXXXXX').fill('09171234567');
+  await page.getByPlaceholder(/House no/).fill('45 Preserved Street');
+  const selects = page.getByRole('combobox');
+  await selects.nth(0).selectOption({ label: 'CAVITE' });
+  await selects.nth(1).selectOption({ label: 'IMUS' });
+  await selects.nth(2).selectOption({ label: 'BUCANDALA IV' });
+
+  await page.route('**/api/checkout/quotes', (route) => route.fulfill({
+    status: 409,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      success: false,
+      code: 'insufficient_stock',
+      error: 'M only has 0 pieces left. Please update your cart quantity.',
+      details: { variantId: 'changed-while-checking-out', availableQuantity: 0 }
+    })
+  }));
+
+  await page.getByRole('button', { name: 'Review order', exact: true }).click();
+  await expect(page).toHaveURL(/\/checkout$/);
+  await expect(page.getByText('Your details are saved.', { exact: false })).toBeVisible();
+  await expect(page.getByPlaceholder('First name')).toHaveValue('Saved');
+  await expect(page.getByPlaceholder(/House no/)).toHaveValue('45 Preserved Street');
+  await expect(page.getByRole('button', { name: 'Update cart to continue', exact: true })).toBeDisabled();
+
+  await page.unroute('**/api/checkout/quotes');
+  await openPage(page, '/cart');
+  await openPage(page, '/checkout');
+  await expect(page.getByPlaceholder('First name')).toHaveValue('Saved');
+  await expect(page.getByPlaceholder(/House no/)).toHaveValue('45 Preserved Street');
+});
+
 test('checkout validation has no horizontal overflow at supported mobile and tablet widths', async ({ page }) => {
   await openPage(page, '/');
   await page.evaluate(() => {
