@@ -34,3 +34,16 @@ test('review adds fresh-stock upsells and refreshes the authoritative quote', as
   assert.match(upsell, /Add to Order/);
   assert.match(upsell, /overflow-x-auto/);
 });
+
+test('review keeps payment and place-order action above customer details and upsells', async () => {
+  const review = await source('pages/CheckoutReview.jsx');
+  const paymentPosition = review.indexOf('Complete your order');
+  const placeOrderPosition = review.indexOf('Place Order - Cash on Delivery');
+  const customerDetailsPosition = review.indexOf('Customer information');
+  const upsellPosition = review.indexOf('<CheckoutUpsell');
+
+  assert.ok(paymentPosition >= 0, 'payment panel should be present');
+  assert.ok(placeOrderPosition > paymentPosition, 'place-order action should follow payment choices');
+  assert.ok(customerDetailsPosition > placeOrderPosition, 'customer details should follow the primary checkout action');
+  assert.ok(upsellPosition > customerDetailsPosition, 'optional upsells should remain below the primary checkout action');
+});
