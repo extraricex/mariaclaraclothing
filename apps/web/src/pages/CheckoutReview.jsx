@@ -436,7 +436,47 @@ export default function CheckoutReview() {
         <form className="customer-card w-full min-w-0 max-w-full rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={placeOrder}>
           <p className="eyebrow">Final review</p>
           <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Review and payment</h1>
-          <p className="mt-3 text-sm leading-relaxed text-ink-soft">Confirm your delivery details, then choose how you would like to pay.</p>
+          <p className="mt-3 text-sm leading-relaxed text-ink-soft">Choose how you would like to pay and place your order. Your delivery details remain below for review.</p>
+
+          <div className="mt-6 rounded-[8px] border-2 border-ink bg-[var(--customer-accent-soft)]/35 p-4 sm:p-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-deep">Complete your order</p>
+            <fieldset className="mt-4 space-y-3">
+              <legend className="mb-3 text-sm font-semibold uppercase tracking-[0.12em]">Payment method</legend>
+              {settings.paymentMethods.map((method) => (
+                <label key={method.id} className={`flex cursor-pointer items-start gap-3 rounded-[8px] border px-4 py-4 text-sm transition-colors ${paymentMethod === method.id ? 'border-ink bg-white shadow-sm' : 'border-line bg-white/60 hover:border-clay'}`}>
+                  <input
+                    type="radio"
+                    name="payment-method"
+                    value={method.id}
+                    checked={paymentMethod === method.id}
+                    onChange={() => selectPayment(method.id)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{method.label}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-ink-soft">{paymentDescription(method)}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+
+            {status.message && (
+              <p className={`mt-4 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role={status.tone === 'error' ? 'alert' : 'status'}>
+                {status.message}
+              </p>
+            )}
+            <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={!deliveryReady || pending || pendingUpsellId || loadingQuote || !settingsLoaded || !selectedPayment}>
+              {pending
+                ? (paymentMethod === 'paymongo' ? 'Preparing payment...' : 'Placing order...')
+                : paymentMethod === 'paymongo'
+                  ? 'Proceed to Online Payment'
+                  : 'Place Order - Cash on Delivery'}
+            </button>
+            <p className="mt-3 text-center text-xs text-clay">
+              {paymentMethod === 'paymongo'
+                ? 'Your payment status becomes Paid only after PayMongo confirms it securely.'
+                : 'Your order is created only once when you press the button above.'}
+            </p>
+          </div>
 
           <section className="mt-7 min-w-0 max-w-full rounded-[8px] border border-line bg-white p-4 sm:p-5" aria-labelledby="customer-review-heading">
             <div className="flex items-start justify-between gap-4">
@@ -466,43 +506,6 @@ export default function CheckoutReview() {
             message={upsellMessage}
             onAdd={addUpsellProduct}
           />
-
-          <fieldset className="mt-7 space-y-3">
-            <legend className="mb-3 text-sm font-semibold uppercase tracking-[0.12em]">Payment method</legend>
-            {settings.paymentMethods.map((method) => (
-              <label key={method.id} className={`flex cursor-pointer items-start gap-3 rounded-[8px] border px-4 py-4 text-sm transition-colors ${paymentMethod === method.id ? 'border-ink bg-white' : 'border-line bg-white/60 hover:border-clay'}`}>
-                <input
-                  type="radio"
-                  name="payment-method"
-                  value={method.id}
-                  checked={paymentMethod === method.id}
-                  onChange={() => selectPayment(method.id)}
-                />
-                <span className="min-w-0">
-                  <span className="block font-semibold">{method.label}</span>
-                  <span className="mt-1 block text-xs leading-relaxed text-ink-soft">{paymentDescription(method)}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-
-          {status.message && (
-            <p className={`mt-5 text-sm ${status.tone === 'error' ? 'text-accent-deep' : 'text-ink-soft'}`} role={status.tone === 'error' ? 'alert' : 'status'}>
-              {status.message}
-            </p>
-          )}
-          <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={!deliveryReady || pending || pendingUpsellId || loadingQuote || !settingsLoaded || !selectedPayment}>
-            {pending
-              ? (paymentMethod === 'paymongo' ? 'Preparing payment...' : 'Placing order...')
-              : paymentMethod === 'paymongo'
-                ? 'Proceed to Online Payment'
-                : 'Place Order - Cash on Delivery'}
-          </button>
-          <p className="mt-3 text-center text-xs text-clay">
-            {paymentMethod === 'paymongo'
-              ? 'Your payment status becomes Paid only after PayMongo confirms it securely.'
-              : 'Your order is created only once when you press the button above.'}
-          </p>
         </form>
 
         <aside className="customer-order-summary w-full min-w-0 max-w-full self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6" aria-label="Order summary">

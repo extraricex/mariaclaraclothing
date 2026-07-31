@@ -54,6 +54,9 @@ const RatingVisualCompanion = import.meta.env.DEV
 const ProductCardReviewControlsPreview = import.meta.env.DEV
   ? lazy(() => import('./pages/ProductCardReviewControlsPreview.jsx'))
   : null;
+const CheckoutPaymentTopPreview = import.meta.env.DEV
+  ? lazy(() => import('./pages/CheckoutPaymentTopPreview.jsx'))
+  : null;
 
 export default function App() {
   return (
@@ -89,6 +92,12 @@ export default function App() {
         <Route
           path="/__dev/product-card-review-controls"
           element={<ProductCardReviewControlsPreview />}
+        />
+      )}
+      {CheckoutPaymentTopPreview && (
+        <Route
+          path="/__dev/checkout-payment-top-preview"
+          element={<CheckoutPaymentTopPreview />}
         />
       )}
       <Route path="/admin/login" element={<Login />} />
