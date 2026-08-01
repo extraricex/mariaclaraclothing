@@ -428,17 +428,66 @@ export default function CheckoutReview() {
   const selectedPayment = settings.paymentMethods.find((method) => method.id === paymentMethod);
   const address = deliveryValidation.address;
   const customerName = customerNameParts(draft.customer);
+  const renderOrderSummary = (visibilityClass = '') => (
+    <aside className={`${visibilityClass} customer-order-summary w-full min-w-0 max-w-full self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6`} aria-label="Order summary">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order summary</h2>
+        <Link to="/cart" className="text-xs text-accent underline">Edit cart</Link>
+      </div>
+      <div className="mt-6 space-y-5">
+        {displayItems.map((item) => (
+          <article key={item.variantId} className="flex min-w-0 gap-3 sm:gap-4">
+            <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20">
+              {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="product-photo-blend block h-full w-full object-contain" loading="lazy" />}
+              <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-paper">{item.quantity}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="break-words text-sm font-semibold leading-snug">{item.productName}</h3>
+              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">Size {item.size}</p>
+              <p className="mt-1 text-xs text-ink-soft">{formatMoney(item.unitPriceCents)} each</p>
+            </div>
+            <strong className="shrink-0 text-sm">{formatMoney(Number(item.unitPriceCents) * Number(item.quantity))}</strong>
+          </article>
+        ))}
+      </div>
+
+      <div className="mt-7 border-t border-line pt-4">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+          <input name="discount-code" className="field customer-input flex-1 uppercase" placeholder="Discount code" value={discountInput} onChange={(event) => setDiscountInput(event.target.value)} />
+          <button type="button" className="btn-ghost !px-4" onClick={applyDiscount} disabled={pending}>Apply</button>
+        </div>
+        {discountError && <p className="mt-2 text-xs text-accent-deep" role="alert">{discountError}</p>}
+        {quote?.discountCode && <p className="mt-2 text-xs text-[#2f7d32]">Code {quote.discountCode} applied.</p>}
+      </div>
+
+      <dl className="mt-5 space-y-2 text-sm" aria-busy={loadingQuote}>
+        <div className="flex justify-between gap-4"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(quote?.subtotalCents || 0)}</dd></div>
+        {Number(quote?.discountTotalCents || 0) > 0 && (
+          <div className="flex justify-between gap-4 text-[#2f7d32]"><dt>Discount{quote.discountCode ? ` (${quote.discountCode})` : ''}</dt><dd>-{formatMoney(quote.discountTotalCents)}</dd></div>
+        )}
+        <div className="flex justify-between gap-4"><dt className="text-ink-soft">Shipping</dt><dd>{quote?.shippingFeeCents ? formatMoney(quote.shippingFeeCents) : 'Free'}</dd></div>
+        <div className="flex justify-between gap-4 border-t border-line pt-3 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(quote?.totalCents || 0)}</dd></div>
+      </dl>
+      <p className="mt-4 bg-cream px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">
+        {quote?.freeShippingUnlocked
+          ? 'FREE shipping unlocked!'
+          : freeShippingHint(settings, cartQuantity(items))}
+      </p>
+    </aside>
+  );
 
   return (
     <div className="customer-checkout-shell min-h-screen min-w-0 overflow-x-hidden bg-[var(--customer-bg)]">
       <CheckoutHeader current="review" />
-      <main className="mx-auto grid w-full min-w-0 max-w-6xl gap-7 px-5 pb-14 pt-7 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)] lg:px-8">
-        <form className="customer-card w-full min-w-0 max-w-full rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={placeOrder}>
-          <p className="eyebrow">Final review</p>
-          <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Review and payment</h1>
-          <p className="mt-3 text-sm leading-relaxed text-ink-soft">Choose how you would like to pay and place your order. Your delivery details remain below for review.</p>
+      <main className="mx-auto w-full min-w-0 max-w-6xl px-5 pb-14 pt-7 lg:px-8">
+        <p className="eyebrow">Final review</p>
+        <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Review and place your COD order</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-soft">Confirm the items, shipping fee, and final total below. You will pay the rider in cash when your order arrives.</p>
 
-          <div className="mt-6 rounded-[8px] border-2 border-ink bg-[var(--customer-accent-soft)]/35 p-4 sm:p-5">
+        <div className="mt-7 grid w-full min-w-0 gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)]">
+        {renderOrderSummary('lg:hidden')}
+        <form className="customer-card w-full min-w-0 max-w-full rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={placeOrder}>
+          <div className="rounded-[8px] border-2 border-ink bg-[var(--customer-accent-soft)]/35 p-4 sm:p-5">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-deep">Complete your order</p>
             <fieldset className="mt-4 space-y-3">
               <legend className="mb-3 text-sm font-semibold uppercase tracking-[0.12em]">Payment method</legend>
@@ -464,6 +513,10 @@ export default function CheckoutReview() {
                 {status.message}
               </p>
             )}
+            <div className="mt-5 flex items-end justify-between gap-4 border-t border-ink/20 pt-4" aria-live="polite">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">Total including shipping</span>
+              <strong className="text-xl">{formatMoney(quote?.totalCents || 0)}</strong>
+            </div>
             <button type="submit" className="btn-ink customer-compact-button mt-6 w-full" disabled={!deliveryReady || pending || pendingUpsellId || loadingQuote || !settingsLoaded || !selectedPayment}>
               {pending
                 ? (paymentMethod === 'paymongo' ? 'Preparing payment...' : 'Placing order...')
@@ -508,51 +561,8 @@ export default function CheckoutReview() {
           />
         </form>
 
-        <aside className="customer-order-summary w-full min-w-0 max-w-full self-start rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm lg:sticky lg:top-6" aria-label="Order summary">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.12em]">Order summary</h2>
-            <Link to="/cart" className="text-xs text-accent underline">Edit cart</Link>
-          </div>
-          <div className="mt-6 space-y-5">
-            {displayItems.map((item) => (
-              <article key={item.variantId} className="flex min-w-0 gap-3 sm:gap-4">
-                <div className="relative aspect-[4/5] w-16 shrink-0 self-start overflow-hidden bg-transparent sm:w-20">
-                  {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="product-photo-blend block h-full w-full object-contain" loading="lazy" />}
-                  <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-paper">{item.quantity}</span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="break-words text-sm font-semibold leading-snug">{item.productName}</h3>
-                  <p className="mt-1 text-xs uppercase tracking-[0.12em] text-clay">Size {item.size}</p>
-                  <p className="mt-1 text-xs text-ink-soft">{formatMoney(item.unitPriceCents)} each</p>
-                </div>
-                <strong className="shrink-0 text-sm">{formatMoney(Number(item.unitPriceCents) * Number(item.quantity))}</strong>
-              </article>
-            ))}
-          </div>
-
-          <div className="mt-7 border-t border-line pt-4">
-            <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-              <input className="field customer-input flex-1 uppercase" placeholder="Discount code" value={discountInput} onChange={(event) => setDiscountInput(event.target.value)} />
-              <button type="button" className="btn-ghost !px-4" onClick={applyDiscount} disabled={pending}>Apply</button>
-            </div>
-            {discountError && <p className="mt-2 text-xs text-accent-deep" role="alert">{discountError}</p>}
-            {quote?.discountCode && <p className="mt-2 text-xs text-[#2f7d32]">Code {quote.discountCode} applied.</p>}
-          </div>
-
-          <dl className="mt-5 space-y-2 text-sm" aria-busy={loadingQuote}>
-            <div className="flex justify-between gap-4"><dt className="text-ink-soft">Subtotal</dt><dd>{formatMoney(quote?.subtotalCents || 0)}</dd></div>
-            {Number(quote?.discountTotalCents || 0) > 0 && (
-              <div className="flex justify-between gap-4 text-[#2f7d32]"><dt>Discount{quote.discountCode ? ` (${quote.discountCode})` : ''}</dt><dd>-{formatMoney(quote.discountTotalCents)}</dd></div>
-            )}
-            <div className="flex justify-between gap-4"><dt className="text-ink-soft">Shipping</dt><dd>{quote?.shippingFeeCents ? formatMoney(quote.shippingFeeCents) : 'Free'}</dd></div>
-            <div className="flex justify-between gap-4 border-t border-line pt-3 text-base font-semibold"><dt>Total</dt><dd>{formatMoney(quote?.totalCents || 0)}</dd></div>
-          </dl>
-          <p className="mt-4 bg-cream px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">
-            {quote?.freeShippingUnlocked
-              ? 'FREE shipping unlocked!'
-              : freeShippingHint(settings, cartQuantity(items))}
-          </p>
-        </aside>
+        {renderOrderSummary('hidden lg:block')}
+        </div>
       </main>
     </div>
   );

@@ -5,7 +5,7 @@
     "status": "active",
     "priceCents": 64900,
     "compareAtPriceCents": 84900,
-    "description": "WANNA DIE GRAY — REGULAR FIT 240 GSM Shirt is a regular fit shirt from Maria Clara Clothing with premium cotton, streetwear styling, COD availability, and nationwide shipping.",
+    "description": "WANNA GRAY — REGULAR FIT 240 GSM Shirt is a regular fit shirt from Maria Clara Clothing with premium cotton, streetwear styling, Cash on Delivery, and nationwide shipping.",
     "collections": [
       "Catalog"
     ],
@@ -55,6 +55,10 @@
     ],
     "merchandisingStatus": "sale",
     "featured": false,
+    "seo": {
+      "title": "WANNA GRAY — Regular Fit 240 GSM Shirt",
+      "description": "Shop the WANNA GRAY premium regular-fit 240 GSM cotton shirt from Maria Clara Clothing, with Cash on Delivery and nationwide shipping."
+    },
     "productPage": {
       "heading": "WANNA GRAY — REGULAR FIT 240 GSM Shirt",
       "intro": "Premium Maria Clara Clothing piece with everyday comfort and clean styling.",

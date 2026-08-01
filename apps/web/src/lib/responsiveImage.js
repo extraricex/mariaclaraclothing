@@ -36,13 +36,13 @@ function shopifyVariantUrl(value, width) {
   }
 }
 
-function localOptimizedVariantUrl(value, width) {
+function localUploadVariantUrl(value, width) {
   try {
     const url = new URL(String(value || ''), window.location.origin);
     const supportedUpload = ['/uploads/products/', '/uploads/logos/', '/uploads/banners/']
       .some((prefix) => url.pathname.startsWith(prefix));
-    if (url.origin !== window.location.origin || !supportedUpload || !/-optimized\.webp$/i.test(url.pathname)) return '';
-    url.pathname = url.pathname.replace(/-optimized\.webp$/i, `-${width}.webp`);
+    if (url.origin !== window.location.origin || !supportedUpload || !/\.(?:jpe?g|png|webp)$/i.test(url.pathname)) return '';
+    url.pathname = url.pathname.replace(/-optimized(?=\.[^.]+$)/i, '').replace(/\.[^.]+$/i, `-${width}.webp`);
     url.search = '';
     return `${url.pathname}${url.hash}`;
   } catch (_error) {
@@ -75,16 +75,18 @@ export function responsiveImageAttributes(value, {
     };
   }
 
-  if (Math.max(...shopifyWidths) <= 1000) {
-    const localVariants = [320, 800]
-      .map((width) => ({ width, url: localOptimizedVariantUrl(url, width) }))
-      .filter((variant) => variant.url);
-    if (localVariants.length) {
-      return {
-        srcSet: localVariants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
-        sizes
-      };
-    }
+  const maximumRequestedWidth = Math.max(...shopifyWidths);
+  const localWidths = [320, 800, 1600];
+  const firstLargerWidth = localWidths.find((width) => width > maximumRequestedWidth);
+  const selectedLocalWidths = localWidths.filter((width) => width <= maximumRequestedWidth || width === firstLargerWidth);
+  const localVariants = selectedLocalWidths
+    .map((width) => ({ width, url: localUploadVariantUrl(url, width) }))
+    .filter((variant) => variant.url);
+  if (localVariants.length) {
+    return {
+      srcSet: localVariants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
+      sizes
+    };
   }
 
   return {};

@@ -320,7 +320,7 @@ export default function Home() {
         <div className="border-t border-[var(--customer-border)] pt-6">
           <p className="eyebrow">Don't overthink it</p>
           <p className="display mt-2 max-w-3xl text-3xl leading-tight sm:text-5xl">
-            Pick a shirt. We deliver. <span className="text-accent">Choose how you pay.</span>
+            Pick a shirt. We deliver. <span className="text-accent">Pay cash when it arrives.</span>
           </p>
           <CustomerButton as={Link} to="/faq" variant="secondary" className="mt-8">How payment works</CustomerButton>
         </div>

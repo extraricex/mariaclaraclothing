@@ -12,13 +12,15 @@ test('homepage places the persisted banner immediately before Freedom of Mind', 
   assert.match(source, /compactTop=\{hasCollectionBanner\}/);
 });
 
-test('collection banner is responsive, lazy, linked, and collapses on failure', async () => {
+test('collection banner is responsive, lazy, linked, and falls back before collapsing', async () => {
   const source = await readFile(path.join(root, 'src', 'components', 'CollectionBanner.jsx'), 'utf8');
   assert.match(source, /<picture>/);
   assert.match(source, /media="\(max-width: 639px\)"/);
   assert.match(source, /loading="lazy"/);
   assert.match(source, /if \(!banner\?\.visible \|\| !desktopImage\.url \|\| failed\) return null/);
-  assert.match(source, /onError=\{\(\) => setFailed\(true\)\}/);
+  assert.match(source, /fallbackToOriginal/);
+  assert.match(source, /if \(!fallbackToOriginal\) setFallbackToOriginal\(true\)/);
+  assert.match(source, /else setFailed\(true\)/);
   assert.match(source, /openInNewTab/);
 });
 

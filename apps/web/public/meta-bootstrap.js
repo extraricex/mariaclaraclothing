@@ -1,6 +1,6 @@
 (function bootstrapMariaClaraMetaPixel() {
   var settingsRequest = fetch('/api/storefront-settings', {
-    cache: 'no-store',
+    cache: 'no-cache',
     credentials: 'same-origin'
   }).then(function parseSettings(response) {
     if (!response.ok) throw new Error('Could not load storefront settings.');

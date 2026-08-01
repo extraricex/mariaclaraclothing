@@ -16,8 +16,12 @@ export default function CollectionBanner({ banner }) {
   const desktopImage = banner?.desktopImage || {};
   const mobileImage = banner?.mobileImage || {};
   const [failed, setFailed] = useState(false);
+  const [fallbackToOriginal, setFallbackToOriginal] = useState(false);
 
-  useEffect(() => setFailed(false), [desktopImage.url, mobileImage.url]);
+  useEffect(() => {
+    setFailed(false);
+    setFallbackToOriginal(false);
+  }, [desktopImage.url, mobileImage.url]);
 
   if (!banner?.visible || !desktopImage.url || failed) return null;
 
@@ -29,10 +33,15 @@ export default function CollectionBanner({ banner }) {
       : 'items-start text-left';
   const textColor = banner.textColor === 'dark' ? 'text-ink' : 'text-white';
   const linkLabel = banner.title || banner.altText || 'View Maria Clara Clothing collection';
-  const mobileImageAttributes = responsiveImageAttributes(mobileImage.url, {
+  const mobileImageAttributes = fallbackToOriginal ? {} : responsiveImageAttributes(mobileImage.url, {
     sizes: '100vw',
     shopifyWidths: [480, 768]
   });
+  const desktopImageAttributes = fallbackToOriginal ? {} : responsiveImageAttributes(desktopImage.url);
+  const handleImageError = () => {
+    if (!fallbackToOriginal) setFallbackToOriginal(true);
+    else setFailed(true);
+  };
 
   return (
     <section className="mx-auto mt-10 max-w-7xl px-5 sm:mt-14 lg:mt-20 lg:px-8" aria-label="Freedom of Mind collection banner">
@@ -41,7 +50,7 @@ export default function CollectionBanner({ banner }) {
           {mobileImage.url && (
             <source
               media="(max-width: 639px)"
-              srcSet={mobileImageAttributes.srcSet || mobileImage.url}
+              srcSet={fallbackToOriginal ? mobileImage.url : (mobileImageAttributes.srcSet || mobileImage.url)}
               sizes={mobileImageAttributes.sizes}
               width={mobileImage.width || undefined}
               height={mobileImage.height || undefined}
@@ -49,14 +58,14 @@ export default function CollectionBanner({ banner }) {
           )}
           <img
             src={desktopImage.url}
-            {...responsiveImageAttributes(desktopImage.url)}
+            {...desktopImageAttributes}
             width={desktopImage.width || undefined}
             height={desktopImage.height || undefined}
             alt={banner.altText || 'Maria Clara Clothing collection banner'}
             loading="lazy"
             decoding="async"
             className="block h-auto w-full"
-            onError={() => setFailed(true)}
+            onError={handleImageError}
           />
         </picture>
         {banner.overlayOpacity > 0 && (

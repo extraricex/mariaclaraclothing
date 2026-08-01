@@ -33,7 +33,8 @@ test('checkout gates order placement behind a separate backend-quoted review rou
   assert.match(details, /saveCheckoutReviewDraft/);
   assert.match(details, /navigate\('\/checkout\/review'\)/);
   assert.doesNotMatch(details, /createQuoteBackedOrder|createPayMongoCheckout/);
-  assert.match(review, /Review and payment/);
+  assert.match(review, /Review and place your COD order/);
+  assert.match(review, /Total including shipping/);
   assert.match(review, /getCheckoutIdempotencyKey/);
   assert.match(review, /createQuoteBackedOrder/);
   assert.match(review, /createPayMongoCheckout/);

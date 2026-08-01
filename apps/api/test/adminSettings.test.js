@@ -302,7 +302,7 @@ test('public storefront settings expose only the safe subset', async () => {
 
     const response = await fetch(`http://127.0.0.1:${port}/api/storefront-settings`);
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=30, stale-while-revalidate=60');
 
     const body = await response.json();
     assert.equal(body.settings.storeName, 'Maria Clara Clothing');

@@ -25,7 +25,8 @@ test('product page includes reference-style gallery, tabs, and upsell markers', 
   assert.match(source, /onLoad=\{\(\) => setLoadedImageUrl\(image\.url\)\}/);
   assert.doesNotMatch(source, /setMainImageLoaded\(false\)/);
   assert.match(source, /Cash on Delivery/);
-  assert.match(source, /Secure online payment/);
+  assert.doesNotMatch(source, /Secure online payment/);
+  assert.match(source, /7-day replacement support/);
   assert.match(source, /Shipping fee is shown before you place the order/);
   assert.match(source, /displaySectionTitle/);
   assert.match(source, /min-h-11 min-w-11 rounded-full border/);

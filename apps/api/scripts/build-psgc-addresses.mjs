@@ -22,6 +22,22 @@ function sortByName(items) {
   return items.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function canonicalName(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ');
+}
+
+function dedupeByCanonicalName(items) {
+  const unique = new Map();
+  for (const item of items) {
+    const key = canonicalName(item.name);
+    const current = unique.get(key);
+    const itemUsesCanonicalSpacing = String(item.name || '').trim().toUpperCase() === key;
+    const currentUsesCanonicalSpacing = String(current?.name || '').trim().toUpperCase() === key;
+    if (!current || (itemUsesCanonicalSpacing && !currentUsesCanonicalSpacing)) unique.set(key, item);
+  }
+  return [...unique.values()];
+}
+
 function islandGroupForRegion(regionCode) {
   const prefix = String(regionCode || '').slice(0, 2);
   if (['06', '07', '08', '18'].includes(prefix)) return 'Visayas';
@@ -89,7 +105,7 @@ cities.forEach((city) => {
   citiesByArea[city.areaCode].push(city);
 });
 Object.keys(citiesByArea).forEach((areaCode) => {
-  citiesByArea[areaCode] = sortByName(citiesByArea[areaCode]);
+  citiesByArea[areaCode] = sortByName(dedupeByCanonicalName(citiesByArea[areaCode]));
 });
 
 const barangaysByCity = {};
@@ -98,7 +114,7 @@ barangays.forEach((barangay) => {
   barangaysByCity[barangay.cityCode].push(barangay);
 });
 Object.keys(barangaysByCity).forEach((cityCode) => {
-  barangaysByCity[cityCode] = sortByName(barangaysByCity[cityCode]);
+  barangaysByCity[cityCode] = sortByName(dedupeByCanonicalName(barangaysByCity[cityCode]));
 });
 
 const output = {
@@ -111,7 +127,7 @@ const output = {
     cityMunicipalityCount: cities.length,
     barangayCount: barangays.length
   },
-  provinces: sortByName(deliveryAreas),
+  provinces: sortByName(dedupeByCanonicalName(deliveryAreas)),
   cities: citiesByArea,
   barangays: barangaysByCity
 };

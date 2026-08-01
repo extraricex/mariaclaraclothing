@@ -4,7 +4,6 @@ import { fetchWithRecovery } from './network.js';
 export const DEFAULT_INFO_PAGES = {
   faq: [
     { heading: 'How does Cash on Delivery work?', body: 'Place your order online — no advance payment needed. Our team reviews your order and may contact you by text or phone before shipping via J&T Express. You pay the rider in cash when the parcel arrives.' },
-    { heading: 'How does online payment work?', body: 'Choose Online Payment at checkout to continue to PayMongo. The payment methods currently available for your order appear on the secure PayMongo page. Your order is confirmed after PayMongo verifies successful payment.' },
     { heading: 'How long is delivery?', body: 'Metro Manila and Cavite: 2–4 days. Other Luzon provinces: 3–6 days. Visayas and Mindanao: 5–8 days. Estimates begin after your order is reviewed and prepared for shipment.' },
     { heading: 'How much is shipping?', body: 'Metro Manila & Cavite ₱80, Luzon ₱120, Visayas/Mindanao ₱180. Order any 2 items and shipping is free.' },
     { heading: 'What if my size is sold out?', body: 'Check the product page for current size availability and follow our social channels for confirmed restock announcements.' },
@@ -17,7 +16,7 @@ export const DEFAULT_INFO_PAGES = {
     { heading: 'Returns & exchanges', body: 'Wrong or damaged item? Message us within 7 days of delivery with photos and we will arrange a replacement. Items must be unworn and unwashed. Size exchanges are subject to stock availability; buyer shoulders return shipping for size exchanges.' }
   ],
   terms: [
-    { heading: 'Orders', body: 'Orders may use any enabled payment method shown at checkout, including Cash on Delivery or secure online payment through PayMongo. COD orders are reviewed before fulfillment, and online-payment orders are confirmed only after the payment provider verifies payment. We may contact you by text or phone and may hold or cancel orders with invalid or unreachable contact details.' },
+    { heading: 'Orders', body: 'All storefront orders use Cash on Delivery. No advance payment is required. Orders are reviewed before fulfillment, and we may contact you by text or phone or hold or cancel orders with invalid or unreachable contact details.' },
     { heading: 'Pricing', body: 'Prices are in Philippine pesos and may change without notice. The price at the time of your order is what you pay.' },
     { heading: 'Size Chart', body: 'Check the size chart before ordering. Measurements have a ±2cm tolerance and size exchanges depend on available stock.', linkText: 'View Size Chart', linkHref: '/size-chart' },
     { heading: 'Privacy', body: 'We use your name, mobile number, and address to fulfill and deliver orders. The customer website also uses the Facebook Meta Pixel to send page visits and shopping actions to Meta for advertising measurement. When an order is completed, our server may send purchase details and hashed contact details to Meta through the Conversions API to match the purchase without sending your delivery address. Meta handles this information under its own privacy policy. We do not sell your personal information.' },
@@ -149,7 +148,7 @@ export function loadStorefrontSettings() {
       window.__mariaClaraStorefrontSettingsPromise?.then
       ? window.__mariaClaraStorefrontSettingsPromise
       : null;
-    const request = bootstrappedRequest || fetchWithRecovery('/api/storefront-settings', { cache: 'no-store' })
+    const request = bootstrappedRequest || fetchWithRecovery('/api/storefront-settings', { cache: 'no-cache' })
       .then((response) => {
         if (!response.ok) throw new Error('Could not load storefront settings.');
         return response.json();

@@ -15,7 +15,7 @@ function storefrontMetaPixel(metaPixel, metaConfig) {
 }
 
 router.use((_req, res, next) => {
-  res.set('Cache-Control', 'no-store');
+  res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
   next();
 });
 

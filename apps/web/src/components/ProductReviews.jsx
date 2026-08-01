@@ -276,7 +276,11 @@ export default function ProductReviews({ product }) {
       </div>
       <div className="mt-7 min-h-20">
         {loading ? <p className="text-sm text-clay">Loading reviews…</p> : data.reviews?.length ? data.reviews.map((review) => <ReviewCard key={review.id} review={review} onPhoto={setLightbox} />) : (
-          <p className="py-10 text-center text-sm text-clay">No published reviews match these filters.</p>
+          <p className="py-10 text-center text-sm text-clay">
+            {statistics.totalReviews === 0
+              ? 'No reviews yet. Customers can submit an honest review for moderation after ordering.'
+              : 'No published reviews match these filters.'}
+          </p>
         )}
       </div>
       {totalPages > 1 && (
