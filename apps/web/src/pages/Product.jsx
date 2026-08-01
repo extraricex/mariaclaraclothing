@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { fetchProduct, fetchProducts } from '../lib/api.js';
 import { addToCart, getCart, openCartDrawer } from '../lib/cart.js';
@@ -19,8 +19,6 @@ import SEO from '../components/SEO.jsx';
 import { productSeoDescriptor } from '../lib/seo.js';
 import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
 import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
-
-const ProductReviews = lazy(() => import('../components/ProductReviews.jsx'));
 
 export default function Product() {
   const { slug } = useParams();
@@ -356,13 +354,10 @@ export default function Product() {
   }
 
   return (
-    <div className="customer-page mx-auto max-w-7xl px-5 py-10 lg:px-8">
+    <div className="customer-page mx-auto max-w-7xl px-4 py-6 sm:px-5 sm:py-10 lg:px-8">
       <SEO {...productSeoDescriptor(product, {
         collection: parentCollection,
-        includeReviews: settings.reviews?.enabled !== false &&
-          settings.reviews?.showOnProductPages !== false &&
-          product.reviewSettings?.reviewsEnabled !== false &&
-          product.reviewSettings?.showRatingSummary !== false
+        includeReviews: false
       })} />
       <Breadcrumbs items={[
         { label: 'Home', to: '/' },
@@ -370,8 +365,8 @@ export default function Product() {
         ...(parentCollection ? [{ label: parentCollection.name, to: `/collections/${encodeURIComponent(parentCollection.slug)}` }] : []),
         { label: product.name }
       ]} />
-      <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
-        <div className="order-2 min-w-0 lg:order-1">
+      <div className="mt-5 grid min-w-0 gap-7 sm:mt-6 sm:gap-10 md:grid-cols-[1.05fr_1fr] lg:grid-cols-[1.15fr_1fr]">
+        <div className="order-1 min-w-0">
           <div
             className="media-zoom relative aspect-[4/5] max-h-[72svh] touch-pan-y overflow-hidden bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
             onTouchStart={handleImageTouchStart}
@@ -465,9 +460,9 @@ export default function Product() {
           )}
         </div>
 
-        <div className="order-1 min-w-0 lg:order-2">
-          <div className="customer-buy-panel lg:sticky lg:top-24">
-            <h1 className="display text-2xl leading-tight sm:text-4xl">{product.name}</h1>
+        <div className="order-2 min-w-0">
+          <div className="customer-buy-panel md:sticky md:top-24">
+            <h1 className="display break-words text-[clamp(1.5rem,7vw,2.25rem)] leading-tight sm:text-4xl">{product.name}</h1>
           <div className="mt-3 flex flex-wrap items-baseline gap-3 sm:mt-4">
             <p className={`text-xl font-semibold sm:text-2xl ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
@@ -657,10 +652,6 @@ export default function Product() {
         </div>
       </div>
 
-      <Suspense fallback={<div className="mt-16 min-h-24 border-t border-line" aria-label="Loading customer reviews" />}>
-        <ProductReviews product={product} />
-      </Suspense>
-
       {recommendedProducts.length > 0 && (
         <section className="mt-20 border-t border-line pt-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -674,7 +665,7 @@ export default function Product() {
                 : 'Explore more available pieces from Maria Clara Clothing.'}
             </p>
           </div>
-          <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-4">
+          <div className="storefront-product-grid mt-8">
             {recommendedProducts.map(({ candidate: recommended }, index) => (
               <ProductCard key={recommended.id} product={recommended} index={index} />
             ))}

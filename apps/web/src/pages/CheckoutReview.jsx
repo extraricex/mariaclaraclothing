@@ -479,14 +479,14 @@ export default function CheckoutReview() {
   return (
     <div className="customer-checkout-shell min-h-screen min-w-0 overflow-x-hidden bg-[var(--customer-bg)]">
       <CheckoutHeader current="review" />
-      <main className="mx-auto w-full min-w-0 max-w-6xl px-5 pb-14 pt-7 lg:px-8">
+      <main className="mx-auto w-full min-w-0 max-w-6xl px-4 pb-14 pt-6 sm:px-5 sm:pt-7 lg:px-8">
         <p className="eyebrow">Final review</p>
         <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Review and place your COD order</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-soft">Confirm the items, shipping fee, and final total below. You will pay the rider in cash when your order arrives.</p>
 
         <div className="mt-7 grid w-full min-w-0 gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)]">
         {renderOrderSummary('lg:hidden')}
-        <form className="customer-card w-full min-w-0 max-w-full rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={placeOrder}>
+        <form className="customer-card w-full min-w-0 max-w-full rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-4 shadow-sm sm:p-7" onSubmit={placeOrder}>
           <div className="rounded-[8px] border-2 border-ink bg-[var(--customer-accent-soft)]/35 p-4 sm:p-5">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent-deep">Complete your order</p>
             <fieldset className="mt-4 space-y-3">

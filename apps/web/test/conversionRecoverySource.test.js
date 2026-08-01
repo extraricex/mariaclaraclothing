@@ -4,14 +4,20 @@ import { readFile } from 'node:fs/promises';
 
 const source = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('mobile product pages put the buying panel before the gallery and expose size state', async () => {
+test('mobile product pages put the gallery before the buying panel and expose size state', async () => {
   const product = await source('src/pages/Product.jsx');
-  const gallery = product.indexOf('order-2 min-w-0 lg:order-1');
-  const buyingPanel = product.indexOf('order-1 min-w-0 lg:order-2');
+  const gallery = product.indexOf('order-1 min-w-0');
+  const buyingPanel = product.indexOf('order-2 min-w-0');
   assert.ok(gallery >= 0 && buyingPanel > gallery);
   assert.match(product, /aria-pressed=\{selected\}/);
   assert.match(product, /7-day replacement support/);
   assert.match(product, /Save \{formatMoney\(savingsCents\)\}/);
+});
+
+test('product reviews are removed from the public product journey and review SEO', async () => {
+  const product = await source('src/pages/Product.jsx');
+  assert.doesNotMatch(product, /ProductReviews|Loading customer reviews/);
+  assert.match(product, /includeReviews:\s*false/);
 });
 
 test('checkout fields expose stable autofill names and mobile totals precede COD placement', async () => {

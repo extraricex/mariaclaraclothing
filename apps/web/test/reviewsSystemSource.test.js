@@ -21,11 +21,12 @@ test('customer reviews expose real summaries, filters, photos, replies, verifica
   assert.doesNotMatch(productReviews, /review\.reviewerEmail|review\.orderNumber/);
 });
 
-test('product cards and product buying panels omit rating rows while the review section remains available', () => {
+test('public product cards and product pages omit reviews while admin review tools remain available', () => {
   assert.doesNotMatch(productCard, /reviewSummary\?\.totalReviews|<Stars|<ProductRating/);
   assert.doesNotMatch(productPage, /href="#customer-reviews"|<ProductRating/);
   assert.match(productReviews, /showRatingSummary/);
-  assert.match(productPage, /<ProductReviews product=\{product\}/);
+  assert.doesNotMatch(productPage, /ProductReviews|Loading customer reviews/);
+  assert.match(productPage, /includeReviews:\s*false/);
 });
 
 test('admin routes cover moderation, settings, import preview, bulk actions, audit, and deletion', () => {

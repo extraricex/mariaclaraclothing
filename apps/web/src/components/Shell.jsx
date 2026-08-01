@@ -125,16 +125,16 @@ function ProductRecommendation({ product, onClose, onNavigate }) {
 function OfferDock({ offer, product, offerCount, mobileOffersOpen, dockRef, onToggle, onNavigate, onCloseOffer, onCloseProduct }) {
   if (!offerCount) return null;
   return (
-    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] hidden w-[min(13.5rem,calc(100vw-5.5rem))] sm:bottom-4 sm:left-4 sm:block sm:w-[17rem]">
-      <div id="storefront-offer-cards" className={`${mobileOffersOpen ? 'grid' : 'hidden'} pointer-events-auto mb-2 gap-1.5 sm:grid sm:gap-2`}>
-        <div className={offer ? 'hidden sm:block' : ''}>
+    <div ref={dockRef} className="pointer-events-none fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] left-2 z-[45] hidden w-[min(13.5rem,calc(100vw-5.5rem))] lg:bottom-4 lg:left-4 lg:block lg:w-[17rem]">
+      <div id="storefront-offer-cards" className={`${mobileOffersOpen ? 'grid' : 'hidden'} pointer-events-auto mb-2 gap-1.5 lg:grid lg:gap-2`}>
+        <div className={offer ? 'hidden lg:block' : ''}>
           <ProductRecommendation product={product} onClose={onCloseProduct} onNavigate={onNavigate} />
         </div>
         <FreeShippingAside offer={offer} onClose={onCloseOffer} />
       </div>
       <button
         type="button"
-        className={`${mobileOffersOpen ? 'hidden' : 'inline-flex'} pointer-events-auto h-10 items-center rounded-full bg-ink px-3 text-[9px] font-bold uppercase tracking-[0.13em] text-paper shadow-2xl sm:hidden`}
+        className={`${mobileOffersOpen ? 'hidden' : 'inline-flex'} pointer-events-auto h-10 items-center rounded-full bg-ink px-3 text-[9px] font-bold uppercase tracking-[0.13em] text-paper shadow-2xl lg:hidden`}
         aria-expanded={mobileOffersOpen}
         aria-controls="storefront-offer-cards"
         onClick={onToggle}
@@ -152,12 +152,12 @@ function MessengerSupportLink({ href }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-2 z-[45] flex h-11 w-11 items-center justify-center rounded-full border border-paper/30 bg-ink p-0 text-paper shadow-2xl transition-transform hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink sm:bottom-4 sm:right-4 sm:h-14 sm:w-auto sm:gap-3 sm:px-4"
+      className="fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-2 z-[45] flex h-11 w-11 items-center justify-center rounded-full border border-paper/30 bg-ink p-0 text-paper shadow-2xl transition-transform hover:-translate-y-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink lg:bottom-4 lg:right-4 lg:h-14 lg:w-auto lg:gap-3 lg:px-4"
       aria-label="Chat Support — open Messenger"
       title="Chat Support — open Messenger"
     >
-      <span className="hidden text-[10px] font-bold uppercase tracking-[0.11em] sm:inline">Chat Support</span>
-      <svg viewBox="0 0 24 24" className="h-5 w-5 sm:h-7 sm:w-7" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <span className="hidden text-[10px] font-bold uppercase tracking-[0.11em] lg:inline">Chat Support</span>
+      <svg viewBox="0 0 24 24" className="h-5 w-5 lg:h-7 lg:w-7" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 9.2 9.2 0 0 1-3.8-.8L3 21l1.4-4.4A8.2 8.2 0 0 1 3 12C3 7.3 7 4 12 4s9 3 9 7.5Z" />
         <path d="m7.5 14 3-3 2.3 2 3.7-3" />
       </svg>
@@ -493,7 +493,7 @@ export default function Shell() {
         sizes: '(min-width: 1024px) 230px, 205px',
         shopifyWidths: [256, 512]
       })}
-      className={`h-[65px] max-w-[205px] object-contain transition-[filter,opacity] duration-300 lg:h-[73px] lg:max-w-[230px] ${headerSolid ? '' : 'drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]'}`}
+      className={`h-[56px] max-w-[172px] object-contain transition-[filter,opacity] duration-300 min-[380px]:max-w-[190px] sm:h-[65px] sm:max-w-[205px] lg:h-[73px] lg:max-w-[230px] ${headerSolid ? '' : 'drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]'}`}
     />
   ) : (
     <span className="display truncate text-[32px] tracking-tight sm:text-[40px] lg:text-[49px]">
@@ -595,7 +595,7 @@ export default function Shell() {
         </div>
         <nav
           aria-label="Shop categories"
-          className={`overflow-x-auto border-t border-line bg-paper transition-[max-height,opacity] duration-300 ${headerSolid ? 'max-h-12 opacity-100' : 'max-h-0 opacity-0'}`}
+          className={`hidden overflow-x-auto border-t border-line bg-paper transition-[max-height,opacity] duration-300 lg:block ${headerSolid ? 'max-h-12 opacity-100' : 'max-h-0 opacity-0'}`}
         >
           <div className="mx-auto flex max-w-7xl items-center gap-5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-clay sm:px-5 lg:px-8">
             <span className="shrink-0 border-r border-line pr-5 font-bold text-ink">Shop Categories</span>
