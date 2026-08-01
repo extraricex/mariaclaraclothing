@@ -113,7 +113,7 @@ test('product page renders the collection countdown between price and size', asy
   assert.doesNotMatch(nginx, /location \/product\/\s*\{[\s\S]*?proxy_pass/);
   assert.match(
     nginx,
-    /location = \/index\.html\s*\{[\s\S]*?Cache-Control "no-store, no-cache, must-revalidate"/
+    /location = \/index\.html\s*\{[\s\S]*?Cache-Control "no-cache, must-revalidate"/
   );
 });
 

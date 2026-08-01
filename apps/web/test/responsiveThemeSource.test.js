@@ -38,6 +38,17 @@ test('derived neutral interface tokens use only the approved endpoints', async (
   }
 });
 
+test('customer product photos visually remove flattened light studio backgrounds', async () => {
+  const [css, card] = await Promise.all([
+    source('src/index.css'),
+    source('src/components/ProductCard.jsx'),
+  ]);
+
+  assert.match(css, /\.product-photo-blend\s*{[^}]*background-color:\s*transparent;[^}]*mix-blend-mode:\s*darken;[^}]*}/s);
+  assert.match(css, /\.admin-main \.product-photo-blend,[^{]*{[^}]*mix-blend-mode:\s*normal;/s);
+  assert.match(card, /media-zoom relative isolate aspect-\[4\/5\][^\"]*bg-\[var\(--customer-bg\)\]/);
+});
+
 test('shared roots and every active storefront route define shrink and overflow boundaries', async () => {
   const [css, shell, cart, checkoutReview, account, product] = await Promise.all([
     source('src/index.css'),
@@ -56,6 +67,6 @@ test('shared roots and every active storefront route define shrink and overflow 
   assert.match(checkoutReview, /<article[^>]*className="flex min-w-0/);
   assert.match(account, /className="flex flex-wrap items-center gap-3"/);
   assert.match(product, /className="mt-6 flex flex-wrap items-center gap-3/);
-  assert.match(product, /className="mt-6 grid gap-10 lg:grid-cols-\[1\.15fr_1fr\]">\s*<div className="min-w-0">/);
-  assert.equal((product.match(/<div className="min-w-0">/g) || []).length, 2);
+  assert.match(product, /className="mt-6 grid gap-10 lg:grid-cols-\[1\.15fr_1fr\]">\s*<div className="order-2 min-w-0 lg:order-1">/);
+  assert.match(product, /<div className="order-1 min-w-0 lg:order-2">/);
 });

@@ -47,6 +47,8 @@ function buildMerchantFeedXml({ products = [], siteUrl = '' } = {}) {
       const size = String(variant.size || '').trim();
       const id = String(variant.sku || variant.id || `${product.id || product.slug}-${index + 1}`).trim();
       const priceCents = Number(variant.priceCents || product.priceCents || 0);
+      const stockQuantity = Math.max(0, Number(variant.stockQuantity || 0));
+      const inventoryLabel = stockQuantity <= 0 ? 'inventory_out' : stockQuantity <= 2 ? 'inventory_critical' : 'inventory_available';
       if (!id || !title || !description || !images[0] || !Number.isInteger(priceCents) || priceCents <= 0) continue;
       const variantTitle = wordSafeText(size ? `${title} - Size ${size.toUpperCase()}` : title, 150);
       const variantUrl = variantLandingUrl(productUrl, size);
@@ -58,7 +60,9 @@ function buildMerchantFeedXml({ products = [], siteUrl = '' } = {}) {
         `<g:link>${xmlEscape(variantUrl)}</g:link>`,
         `<g:image_link>${xmlEscape(new URL(images[0], `${origin}/`).toString())}</g:image_link>`,
         ...images.slice(1, 11).map((image) => `<g:additional_image_link>${xmlEscape(new URL(image, `${origin}/`).toString())}</g:additional_image_link>`),
-        `<g:availability>${Number(variant.stockQuantity || 0) > 0 ? 'in_stock' : 'out_of_stock'}</g:availability>`,
+        `<g:availability>${stockQuantity > 0 ? 'in_stock' : 'out_of_stock'}</g:availability>`,
+        `<g:custom_label_0>${inventoryLabel}</g:custom_label_0>`,
+        ...(size ? [`<g:custom_label_1>size_${xmlEscape(size.toLowerCase().replaceAll(' ', '_'))}</g:custom_label_1>`] : []),
         `<g:price>${(priceCents / 100).toFixed(2)} PHP</g:price>`,
         '<g:condition>new</g:condition>',
         `<g:brand>${xmlEscape(seo.brandName)}</g:brand>`,

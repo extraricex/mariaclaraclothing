@@ -6,8 +6,12 @@ import path from 'node:path';
 const source = (file) => readFile(path.join(import.meta.dirname, '..', file), 'utf8');
 
 test('product photos blend into the site background without affecting brand media', async () => {
-  const css = await source('src/index.css');
-  assert.match(css, /\.product-photo-blend\s*{[^}]*mix-blend-mode:\s*multiply;[^}]*}/s);
+  const [css, card] = await Promise.all([
+    source('src/index.css'),
+    source('src/components/ProductCard.jsx'),
+  ]);
+  assert.match(css, /\.product-photo-blend\s*{[^}]*mix-blend-mode:\s*darken;[^}]*}/s);
+  assert.match(card, /media-zoom relative isolate aspect-\[4\/5\][^\"]*bg-\[var\(--customer-bg\)\]/);
 
   const productFiles = new Map([
     ['src/components/ProductCard.jsx', 2],

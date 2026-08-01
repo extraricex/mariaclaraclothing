@@ -134,5 +134,5 @@ test('production web shell uses SSI SEO fragments and external Meta bootstrap', 
   assert.match(nginx, /ssi on/);
   assert.match(nginx, /Content-Security-Policy /);
   assert.doesNotMatch(nginx, /Content-Security-Policy-Report-Only/);
-  assert.match(nginx, /location = \/meta-bootstrap\.js[\s\S]*no-store, no-cache, must-revalidate/);
+  assert.match(nginx, /location = \/meta-bootstrap\.js[\s\S]*Cache-Control "no-cache, must-revalidate"/);
 });

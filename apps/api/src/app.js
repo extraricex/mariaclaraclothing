@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('node:path');
+const { createResponsiveUploadMiddleware } = require('./images/responsiveUploadMiddleware');
 const { adminRouter } = require('./routes/admin');
 const { productRouter } = require('./routes/products');
 const { collectionRouter } = require('./routes/collections');
@@ -135,6 +136,7 @@ function errorHandler(error, req, res, _next) {
 
 function createApp() {
   const app = express();
+  const publicDirectory = path.join(__dirname, '..', 'public');
   app.disable('x-powered-by');
 
   app.use((_req, res, next) => {
@@ -167,7 +169,8 @@ function createApp() {
       if (req.originalUrl?.startsWith('/api/payments/paymongo/webhook')) req.rawBody = Buffer.from(buffer);
     }
   }));
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.use(createResponsiveUploadMiddleware({ publicDirectory }));
+  app.use(express.static(publicDirectory));
 
   app.get('/collections/all', (_req, res) => {
     res.redirect(301, '/shop');

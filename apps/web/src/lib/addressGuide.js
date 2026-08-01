@@ -12,9 +12,30 @@ const FALLBACK_BARANGAYS = {
 
 let guidePromise = null;
 
+export function canonicalAddressName(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s*-\s*/g, '-')
+    .replace(/\s+/g, ' ');
+}
+
+export function dedupeAddressItems(items = []) {
+  const unique = new Map();
+  for (const item of items) {
+    const key = canonicalAddressName(item.name);
+    if (!key) continue;
+    const current = unique.get(key);
+    const itemUsesCanonicalSpacing = String(item.name || '').trim().toUpperCase() === key;
+    const currentUsesCanonicalSpacing = String(current?.name || '').trim().toUpperCase() === key;
+    if (!current || (itemUsesCanonicalSpacing && !currentUsesCanonicalSpacing)) unique.set(key, item);
+  }
+  return [...unique.values()];
+}
+
 function normalizeItems(payload) {
   const items = Array.isArray(payload) ? payload : payload?.data;
-  return Array.isArray(items) ? items.map((item) => ({
+  const normalized = Array.isArray(items) ? items.map((item) => ({
     code: String(item.code || item.id || '').trim().toUpperCase(),
     name: String(item.name || '').trim().toUpperCase(),
     provinceCode: String(item.provinceCode || item.province_code || '').trim().toUpperCase(),
@@ -22,6 +43,7 @@ function normalizeItems(payload) {
     cityCode: String(item.cityCode || item.city_code || '').trim().toUpperCase(),
     doorToDoor: String(item.doorToDoor || item.door_to_door || item.canDeliverDoorToDoor || '').trim().toUpperCase()
   })).filter((item) => item.code && item.name) : [];
+  return dedupeAddressItems(normalized);
 }
 
 function loadGuide() {

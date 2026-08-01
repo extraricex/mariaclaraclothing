@@ -72,7 +72,7 @@ test('collection navigation and delayed homepage hashes target real collection s
   assert.doesNotMatch(shell, /\/#best-sellers|\/#catalog/);
 });
 
-test('issue, account, contact, and product links expose explicit accessible names', async () => {
+test('issue, account, and contact links expose explicit names while product cards use their visible content', async () => {
   const [widget, shell, contact, productCard] = await Promise.all([
     source('src/components/ReportIssueWidget.jsx'),
     source('src/components/Shell.jsx'),
@@ -83,7 +83,8 @@ test('issue, account, contact, and product links expose explicit accessible name
   assert.match(widget, /aria-label="Report an issue"/);
   assert.equal((shell.match(/\{loggedIn \? 'Account' : 'Log in'\}/g) || []).length, 2);
   assert.match(contact, /aria-label=\{`\$\{label\}: \$\{value\}`\}/);
-  assert.match(productCard, /aria-label=\{`View \$\{product\.name\}/);
+  assert.doesNotMatch(productCard, /aria-label=\{`View \$\{product\.name\}/);
+  assert.match(productCard, /<h3[\s\S]*\{product\.name\}<\/h3>/);
 });
 
 test('customer email authentication is intercepted and sent with POST requests', async () => {

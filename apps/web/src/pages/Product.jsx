@@ -143,11 +143,16 @@ export default function Product() {
   const soldOut = String(product.merchandisingStatus || '').toLowerCase() === 'sold_out' ||
     !(product.variants || []).some((candidate) => Number(candidate.stockQuantity || 0) > 0);
   const onSale = Number(product.compareAtPriceCents) > Number(product.priceCents);
+  const savingsCents = onSale ? Number(product.compareAtPriceCents) - Number(product.priceCents) : 0;
   const freeShippingEnabled = Boolean(settings.shipping?.freeShippingEnabled);
   const freeShippingMinimumItems = Math.max(1, Number(settings.shipping?.freeShippingMinimumItems || 2));
   const freeShippingProductCopy = freeShippingEnabled
     ? `Nationwide delivery. Order ${freeShippingMinimumItems} or more item${freeShippingMinimumItems === 1 ? '' : 's'} and shipping is free; otherwise the fee is calculated from your delivery region.`
     : 'Nationwide delivery. Your shipping fee is calculated from your delivery region at checkout.';
+  const shippingEstimateCopy = (settings.shipping?.regions || [])
+    .map((region) => String(region.deliveryEstimate || '').trim())
+    .filter(Boolean)
+    .join('\n');
   const countdown = selectProductCountdown(product, settings);
   const variant = product.variants.find((candidate) => candidate.id === variantId) || null;
   const variantStock = Math.max(0, Math.trunc(Number(variant?.stockQuantity || 0)));
@@ -156,7 +161,6 @@ export default function Product() {
   const mainImageLoaded = Boolean(image?.url && loadedImageUrl === image.url);
   const mainImageFailed = Boolean(image?.url && failedImageUrl === image.url);
   const cashOnDeliveryAvailable = settings.paymentMethods?.some((method) => method.id === 'cash_on_delivery');
-  const payMongoAvailable = settings.paymentMethods?.some((method) => method.id === 'paymongo');
   const productPage = product.productPage || {};
   const metafieldText = (key) => {
     const value = product.metafields?.[key];
@@ -200,7 +204,7 @@ export default function Product() {
     {
       title: 'Shipping',
       type: 'text',
-      body: [productPage.shippingText, freeShippingProductCopy].filter(Boolean).join('\n\n')
+      body: [shippingEstimateCopy, freeShippingProductCopy].filter(Boolean).join('\n\n')
     }
   ].filter(Boolean);
   const activeTab = detailTabs[activeDetailTab] || detailTabs[0];
@@ -367,7 +371,7 @@ export default function Product() {
         { label: product.name }
       ]} />
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.15fr_1fr]">
-        <div className="min-w-0">
+        <div className="order-2 min-w-0 lg:order-1">
           <div
             className="media-zoom relative aspect-[4/5] max-h-[72svh] touch-pan-y overflow-hidden bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
             onTouchStart={handleImageTouchStart}
@@ -461,12 +465,13 @@ export default function Product() {
           )}
         </div>
 
-        <div className="min-w-0">
+        <div className="order-1 min-w-0 lg:order-2">
           <div className="customer-buy-panel lg:sticky lg:top-24">
             <h1 className="display text-2xl leading-tight sm:text-4xl">{product.name}</h1>
-          <div className="mt-3 flex items-baseline gap-3 sm:mt-4">
+          <div className="mt-3 flex flex-wrap items-baseline gap-3 sm:mt-4">
             <p className={`text-xl font-semibold sm:text-2xl ${onSale ? 'text-accent' : ''}`}>{formatMoney(product.priceCents)}</p>
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
+            {onSale && <p className="rounded-full bg-accent/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-accent-deep">Save {formatMoney(savingsCents)}</p>}
           </div>
           {productFacts.length > 0 && (
             <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4 text-sm">
@@ -504,6 +509,7 @@ export default function Product() {
                     type="button"
                     disabled={out}
                     onClick={() => selectVariant(candidate)}
+                    aria-pressed={selected}
                     className={`min-h-11 min-w-11 rounded-full border border-line px-3 py-2 text-[11px] font-semibold uppercase transition-colors sm:min-w-12 sm:px-4 sm:py-2.5 sm:text-xs ${
                       selected ? '!border-ink bg-ink text-paper' : 'hover:border-ink'
                     } ${out ? 'cursor-not-allowed text-clay line-through hover:border-line' : ''}`}
@@ -558,11 +564,16 @@ export default function Product() {
           )}
 
           <ul className="mt-4 grid gap-2 border-y border-line py-4 text-xs leading-relaxed text-ink-soft sm:grid-cols-2" aria-label="Payment and delivery reassurance">
-            {cashOnDeliveryAvailable && <li><strong className="text-ink">Cash on Delivery</strong> available nationwide</li>}
-            {payMongoAvailable && <li><strong className="text-ink">Secure online payment</strong> through PayMongo</li>}
+            {cashOnDeliveryAvailable && <li><strong className="text-ink">Cash on Delivery</strong> — no advance payment</li>}
+            <li><strong className="text-ink">J&amp;T nationwide delivery</strong> with the fee confirmed before ordering</li>
             <li>Shipping fee is shown before you place the order</li>
-            <li><Link to="/shipping-returns" className="font-semibold text-accent underline">Review shipping and exchange information</Link></li>
+            <li><strong className="text-ink">7-day replacement support</strong> for a wrong or damaged item</li>
           </ul>
+
+          <p className="mt-3 text-xs leading-relaxed text-ink-soft">
+            Items must be unworn and unwashed. Size exchanges depend on stock and return shipping is shouldered by the buyer.{' '}
+            <Link to="/shipping-returns" className="font-semibold text-accent underline">Read the complete shipping and exchange policy.</Link>
+          </p>
 
           <nav className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold uppercase tracking-[0.1em] text-accent" aria-label="Product help and collection links">
             {parentCollection && (

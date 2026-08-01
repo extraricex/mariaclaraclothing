@@ -21,7 +21,7 @@ const PRODUCT_IMAGE_EXTENSIONS = new Set([
   '.tif',
   '.tiff'
 ]);
-const PRODUCT_IMAGE_DERIVATIVE_WIDTHS = [320, 800];
+const PRODUCT_IMAGE_DERIVATIVE_WIDTHS = [320, 800, 1600];
 
 function productImageDerivativePath(sourcePath, width) {
   const extension = path.extname(sourcePath);

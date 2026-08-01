@@ -87,8 +87,8 @@ test('review upsell adds an in-stock variant and unlocks server-quoted free ship
   await card.getByRole('button', { name: 'Add to Order', exact: true }).click();
 
   await expect(page.getByText('Item added to your order.', { exact: true })).toBeVisible();
-  await expect(page.getByText('FREE shipping unlocked!', { exact: true }).first()).toBeVisible();
-  await expect(page.getByLabel('Order summary').getByText('Free', { exact: true })).toBeVisible();
+  await expect(page.getByText('FREE shipping unlocked!', { exact: true }).last()).toBeVisible();
+  await expect(page.getByLabel('Order summary').last().getByText('Free', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('maria-clara-cart') || '[]')
     .reduce((sum, item) => sum + Number(item.quantity || 0), 0))).toBe(2);
   await expect(page.getByRole('button', { name: 'Place Order - Cash on Delivery', exact: true })).toBeEnabled();

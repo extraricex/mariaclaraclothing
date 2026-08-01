@@ -406,27 +406,28 @@ export default function Checkout() {
             <legend className="mb-4 text-sm font-semibold uppercase tracking-[0.12em]">Contact</legend>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">First Name <span aria-hidden="true">*</span></span>
-              <input ref={checkoutFieldRefs.firstName} className={fieldClass('firstName')} required aria-invalid={Boolean(missingFields.firstName)} aria-describedby={missingFields.firstName ? 'checkout-first-name-error' : undefined} placeholder="First name" value={firstName} onChange={(event) => { setFirstName(event.target.value); clearMissingField('firstName'); }} autoComplete="given-name" />
+              <input name="given-name" ref={checkoutFieldRefs.firstName} className={fieldClass('firstName')} required aria-invalid={Boolean(missingFields.firstName)} aria-describedby={missingFields.firstName ? 'checkout-first-name-error' : undefined} placeholder="First name" value={firstName} onChange={(event) => { setFirstName(event.target.value); clearMissingField('firstName'); }} autoComplete="given-name" />
               {missingFields.firstName && <span id="checkout-first-name-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.firstName}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Last Name <span aria-hidden="true">*</span></span>
-              <input ref={checkoutFieldRefs.lastName} className={fieldClass('lastName')} required aria-invalid={Boolean(missingFields.lastName)} aria-describedby={missingFields.lastName ? 'checkout-last-name-error' : undefined} placeholder="Last name" value={lastName} onChange={(event) => { setLastName(event.target.value); clearMissingField('lastName'); }} autoComplete="family-name" />
+              <input name="family-name" ref={checkoutFieldRefs.lastName} className={fieldClass('lastName')} required aria-invalid={Boolean(missingFields.lastName)} aria-describedby={missingFields.lastName ? 'checkout-last-name-error' : undefined} placeholder="Last name" value={lastName} onChange={(event) => { setLastName(event.target.value); clearMissingField('lastName'); }} autoComplete="family-name" />
               {missingFields.lastName && <span id="checkout-last-name-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.lastName}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Mobile Number <span aria-hidden="true">*</span></span>
-              <input ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" inputMode="tel" aria-invalid={Boolean(missingFields.phone)} aria-describedby={missingFields.phone ? 'checkout-phone-error' : undefined} placeholder="09XXXXXXXXX" value={phone} onChange={(event) => { setPhone(event.target.value); clearMissingField('phone'); }} autoComplete="tel" />
+              <input name="tel" ref={checkoutFieldRefs.phone} className={fieldClass('phone')} required type="tel" inputMode="tel" aria-invalid={Boolean(missingFields.phone)} aria-describedby={missingFields.phone ? 'checkout-phone-error' : undefined} placeholder="09XXXXXXXXX" value={phone} onChange={(event) => { setPhone(event.target.value); clearMissingField('phone'); }} autoComplete="tel" />
               {missingFields.phone && <span id="checkout-phone-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.phone}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Email <span className="font-normal text-clay">(optional)</span></span>
-              <input ref={checkoutFieldRefs.email} className={fieldClass('email')} type="email" aria-invalid={Boolean(missingFields.email)} aria-describedby={missingFields.email ? 'checkout-email-error' : undefined} placeholder="you@example.com" value={email} onChange={(event) => { setEmail(event.target.value); clearMissingField('email'); }} autoComplete="email" />
+              <input name="email" ref={checkoutFieldRefs.email} className={fieldClass('email')} type="email" aria-invalid={Boolean(missingFields.email)} aria-describedby={missingFields.email ? 'checkout-email-error' : undefined} placeholder="you@example.com" value={email} onChange={(event) => { setEmail(event.target.value); clearMissingField('email'); }} autoComplete="email" />
               {missingFields.email && <span id="checkout-email-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.email}</span>}
             </label>
             <label className="flex items-start gap-3 text-sm text-ink-soft sm:col-span-2">
               <input
                 type="checkbox"
+                name="checkout-reminder-consent"
                 className="mt-1 h-4 w-4 shrink-0"
                 checked={recoveryConsent}
                 disabled={!String(email || '').trim()}
@@ -440,12 +441,12 @@ export default function Checkout() {
             <legend className="mb-4 text-sm font-semibold uppercase tracking-[0.12em]">Delivery address</legend>
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-xs font-semibold">House / Street / Building / Unit <span aria-hidden="true">*</span></span>
-              <input ref={checkoutFieldRefs.house} className={fieldClass('house')} required aria-invalid={Boolean(missingFields.house)} aria-describedby={missingFields.house ? 'checkout-house-error' : undefined} placeholder="House no. / Street / Building / Unit" value={house} onChange={(event) => { setHouse(event.target.value); clearMissingField('house'); }} autoComplete="street-address" />
+              <input name="street-address" ref={checkoutFieldRefs.house} className={fieldClass('house')} required aria-invalid={Boolean(missingFields.house)} aria-describedby={missingFields.house ? 'checkout-house-error' : undefined} placeholder="House no. / Street / Building / Unit" value={house} onChange={(event) => { setHouse(event.target.value); clearMissingField('house'); }} autoComplete="street-address" />
               {missingFields.house && <span id="checkout-house-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.house}</span>}
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Province <span aria-hidden="true">*</span></span>
-              <select ref={checkoutFieldRefs.province} className={fieldClass('province')} required aria-invalid={Boolean(missingFields.province)} aria-describedby={missingFields.province ? 'checkout-province-error' : undefined} value={provinceCode} onChange={(event) => { setPrefillAddress(null); setProvinceCode(event.target.value); clearMissingField('province'); }} autoComplete="address-level1">
+              <select name="address-level1" ref={checkoutFieldRefs.province} className={fieldClass('province')} required aria-invalid={Boolean(missingFields.province)} aria-describedby={missingFields.province ? 'checkout-province-error' : undefined} value={provinceCode} onChange={(event) => { setPrefillAddress(null); setProvinceCode(event.target.value); clearMissingField('province'); }} autoComplete="address-level1">
                 <option value="">Select province</option>
                 {provinces.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
               </select>
@@ -453,7 +454,7 @@ export default function Checkout() {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">City / Municipality <span aria-hidden="true">*</span></span>
-              <select ref={checkoutFieldRefs.city} className={fieldClass('city')} required aria-invalid={Boolean(missingFields.city)} aria-describedby={missingFields.city ? 'checkout-city-error' : undefined} value={cityCode} disabled={!cities.length} onChange={(event) => { setPrefillAddress(null); setCityCode(event.target.value); clearMissingField('city'); }} autoComplete="address-level2">
+              <select name="address-level2" ref={checkoutFieldRefs.city} className={fieldClass('city')} required aria-invalid={Boolean(missingFields.city)} aria-describedby={missingFields.city ? 'checkout-city-error' : undefined} value={cityCode} disabled={!cities.length} onChange={(event) => { setPrefillAddress(null); setCityCode(event.target.value); clearMissingField('city'); }} autoComplete="address-level2">
                 <option value="">{provinceCode ? 'Select city / municipality' : 'Select province first'}</option>
                 {cities.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
               </select>
@@ -461,7 +462,7 @@ export default function Checkout() {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">Barangay <span aria-hidden="true">*</span></span>
-              <select ref={checkoutFieldRefs.barangay} className={fieldClass('barangay')} required aria-invalid={Boolean(missingFields.barangay)} aria-describedby={missingFields.barangay ? 'checkout-barangay-error' : undefined} value={barangayCode} disabled={!barangays.length} onChange={(event) => { setPrefillAddress(null); setBarangayCode(event.target.value); clearMissingField('barangay'); }} autoComplete="address-level3">
+              <select name="address-level3" ref={checkoutFieldRefs.barangay} className={fieldClass('barangay')} required aria-invalid={Boolean(missingFields.barangay)} aria-describedby={missingFields.barangay ? 'checkout-barangay-error' : undefined} value={barangayCode} disabled={!barangays.length} onChange={(event) => { setPrefillAddress(null); setBarangayCode(event.target.value); clearMissingField('barangay'); }} autoComplete="address-level3">
                 <option value="">{cityCode ? 'Select barangay' : 'Select city / municipality first'}</option>
                 {barangays.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
               </select>
@@ -469,7 +470,7 @@ export default function Checkout() {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold">ZIP Code <span className="font-normal text-clay">(optional)</span></span>
-              <input ref={checkoutFieldRefs.postalCode} className={fieldClass('postalCode')} aria-invalid={Boolean(missingFields.postalCode)} aria-describedby={missingFields.postalCode ? 'checkout-postal-code-error' : undefined} inputMode="numeric" maxLength="4" placeholder="ZIP code (optional)" value={postalCode} onChange={(event) => { setPostalCode(event.target.value.replace(/\D/g, '').slice(0, 4)); clearMissingField('postalCode'); }} autoComplete="postal-code" />
+              <input name="postal-code" ref={checkoutFieldRefs.postalCode} className={fieldClass('postalCode')} aria-invalid={Boolean(missingFields.postalCode)} aria-describedby={missingFields.postalCode ? 'checkout-postal-code-error' : undefined} inputMode="numeric" maxLength="4" placeholder="ZIP code (optional)" value={postalCode} onChange={(event) => { setPostalCode(event.target.value.replace(/\D/g, '').slice(0, 4)); clearMissingField('postalCode'); }} autoComplete="postal-code" />
               {missingFields.postalCode && <span id="checkout-postal-code-error" className="mt-1 block text-xs text-accent-deep" role="alert">{missingFields.postalCode}</span>}
             </label>
             {loggedIn && (

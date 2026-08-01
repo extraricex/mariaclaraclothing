@@ -29,7 +29,7 @@ for (const viewport of [
     await expect(page.getByText(/Thickness: 240 GSM/)).toBeVisible();
 
     await page.getByRole('button', { name: 'Shipping', exact: true }).click();
-    await expect(page.getByText(/Metro Manila: Delivered within 2 to 3 days/)).toBeVisible();
+    await expect(page.getByText(/Estimated delivery: Metro Manila and Cavite 2-4 days\./)).toBeVisible();
 
     await page.getByRole('button', { name: 'View Size Chart', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Size Chart', exact: true })).toBeVisible();

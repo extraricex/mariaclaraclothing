@@ -15,7 +15,8 @@ test('initial HTML defers the settings bootstrap without loading remote Meta cod
   assert.match(bootstrap, /\/api\/storefront-settings/);
   assert.doesNotMatch(html, /facebook\.com\/tr\?/);
   assert.doesNotMatch(`${html}\n${bootstrap}`, /595813035761213/);
-  assert.match(nginx, /location = \/meta-bootstrap\.js[\s\S]*no-store, no-cache, must-revalidate/);
+  assert.match(nginx, /location = \/meta-bootstrap\.js[\s\S]*Cache-Control "no-cache, must-revalidate"/);
+  assert.match(bootstrap, /cache: 'no-cache'/);
 });
 
 test('React schedules Meta after the critical visual window and retains consent-aware initialization', () => {

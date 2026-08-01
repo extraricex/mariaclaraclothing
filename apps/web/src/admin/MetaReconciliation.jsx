@@ -103,6 +103,11 @@ export default function MetaReconciliation() {
   const coverageCount = (eventName, source, states) => eventCoverage
     .filter((item) => item.eventName === eventName && item.source === source && states.includes(item.status))
     .reduce((total, item) => total + Number(item.count || 0), 0);
+  const purchaseCapiSent = coverageCount('Purchase', 'server', ['sent']);
+  const expectedPurchases = Number(summary.expectedMetaPurchaseCount || 0);
+  const purchaseDeliveryRate = expectedPurchases > 0
+    ? `${Math.min(100, Math.round((purchaseCapiSent / expectedPurchases) * 100))}%`
+    : '—';
   const metrics = [
     ['Website orders', summary.totalWebsiteOrders || 0],
     ['Eligible purchases', summary.eligiblePurchaseOrders || 0],
@@ -113,6 +118,7 @@ export default function MetaReconciliation() {
     ['Duplicate warnings', summary.duplicateEventsDetected || 0],
     ['Unexpected Meta', summary.unexpectedMetaEvents || 0],
     ['Missing Meta', summary.missingEvents || 0],
+    ['CAPI delivery', purchaseDeliveryRate],
     ['Order value', formatMoney(summary.totalActualOrderValueCents || 0)],
     ['Meta value', formatMoney(summary.totalMetaPurchaseValueCents || 0)]
   ];
@@ -149,6 +155,24 @@ export default function MetaReconciliation() {
           </select>
         </label>
         <button className="btn-ink justify-self-start lg:justify-self-stretch" type="submit" disabled={loading}>{loading ? 'Checking…' : 'Reconcile orders'}</button>
+        <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4" aria-label="Quick reporting periods">
+          {[7, 14, 28].map((days) => (
+            <button
+              key={days}
+              type="button"
+              className="btn-secondary !px-3 !py-2 !text-xs"
+              disabled={loading}
+              onClick={() => {
+                const next = { start: shiftDate(today, -(days - 1)), end: today };
+                setForm(next);
+                setStatus('');
+                setRequest((current) => ({ ...next, revision: current.revision + 1 }));
+              }}
+            >
+              Last {days} days
+            </button>
+          ))}
+        </div>
       </form>
 
       {message && <p className="mt-4 rounded-[var(--radius-admin)] border border-[var(--admin-red)]/45 bg-[var(--admin-red)]/10 p-4 text-sm text-[#ffb4bd]" role="alert">{message}</p>}
@@ -168,7 +192,7 @@ export default function MetaReconciliation() {
 
           <section className="admin-panel mt-5 overflow-hidden">
             <h2 className="text-sm font-semibold uppercase tracking-[0.1em]">Browser and CAPI event coverage</h2>
-            <p className="mt-1 text-xs text-[var(--admin-muted)]">Counts come from the website dispatch ledger. Each browser/server pair should share one event ID; this is not an Ads attribution report.</p>
+            <p className="mt-1 text-xs text-[var(--admin-muted)]">Counts come from the website dispatch ledger. Each browser/server pair should share one event ID; this is not an Ads attribution report. Server CAPI is intentionally authoritative for COD Purchase events, so browser Purchase remains disabled.</p>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[680px] text-left text-xs">
                 <thead className="border-b border-[var(--admin-line)] text-[10px] uppercase tracking-[0.08em] text-[var(--admin-muted)]">

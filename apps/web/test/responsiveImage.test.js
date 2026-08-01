@@ -23,8 +23,10 @@ test('Shopify catalog images request right-sized CDN variants', () => {
   assert.equal(attributes.sizes, '(min-width: 1024px) 25vw, 50vw');
 });
 
-test('unmanaged images keep their original URL without inventing unavailable variants', () => {
-  assert.deepEqual(responsiveImageAttributes('/uploads/products/current.webp'), {});
+test('legacy uploads request derivatives that the API can create on demand', () => {
+  const attributes = responsiveImageAttributes('/uploads/products/current.webp', { shopifyWidths: [256, 512] });
+  assert.match(attributes.srcSet, /current-320\.webp 320w/);
+  assert.match(attributes.srcSet, /current-800\.webp 800w/);
 });
 
 test('normalized local product uploads use generated card and thumbnail derivatives', () => {
@@ -33,12 +35,12 @@ test('normalized local product uploads use generated card and thumbnail derivati
     { sizes: '64px', shopifyWidths: [128, 256] }
   );
   assert.match(attributes.srcSet, /current-320\.webp 320w/);
-  assert.match(attributes.srcSet, /current-800\.webp 800w/);
   assert.equal(attributes.sizes, '64px');
-  assert.deepEqual(responsiveImageAttributes(
+  const galleryAttributes = responsiveImageAttributes(
     '/uploads/products/current-optimized.webp',
     { shopifyWidths: [480, 960, 1600] }
-  ), {});
+  );
+  assert.match(galleryAttributes.srcSet, /current-1600\.webp 1600w/);
 });
 
 test('preloading uses the same responsive candidates as the rendered image', () => {

@@ -57,7 +57,7 @@ test('customer checkout uses server totals and private confirmation', async ({ p
 
   await page.getByRole('button', { name: 'Review order', exact: true }).click();
   await expect(page).toHaveURL(/\/checkout\/review$/);
-  await expect(page.getByRole('heading', { name: 'Review and payment', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Review and place your COD order', exact: true })).toBeVisible();
   await expect(page.getByText('12 Test Street, BUCANDALA IV, IMUS, CAVITE, Philippines')).toBeVisible();
   await expect(page.getByText('09171234567', { exact: true })).toBeVisible();
   await expect(page.getByText('ZIP Code', { exact: true })).toHaveCount(0);
