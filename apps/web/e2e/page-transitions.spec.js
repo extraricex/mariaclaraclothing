@@ -57,5 +57,5 @@ test('mobile product page keeps responsive width and blended photo backgrounds',
   expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
   expect(layout.pageTransform).toBe('none');
   expect(layout.pageBackground).toBe('rgb(241, 241, 241)');
-  await expect(page.locator('.product-photo-blend').first()).toHaveCSS('mix-blend-mode', 'multiply');
+  await expect(page.locator('.product-photo-blend').first()).toHaveCSS('mix-blend-mode', 'darken');
 });
