@@ -22,13 +22,13 @@ for (const viewport of [
   test(`oversized product content and size chart work on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto(`/product/${abotSlug}`);
+    await page.locator('.product-detail-accordion summary').filter({ hasText: 'Product details' }).click();
     await expect(page.getByText(description, { exact: true }).first()).toBeVisible();
 
-    await page.getByRole('button', { name: 'Product details', exact: true }).click();
     await expect(page.getByText(/Fit: Oversized Fit/)).toBeVisible();
     await expect(page.getByText(/Thickness: 240 GSM/)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Shipping', exact: true }).click();
+    await page.locator('.product-detail-accordion summary').filter({ hasText: 'Shipping & returns' }).click();
     await expect(page.getByText(/Estimated delivery: Metro Manila and Cavite 2-4 days\./)).toBeVisible();
 
     await page.getByRole('button', { name: 'View Size Chart', exact: true }).click();

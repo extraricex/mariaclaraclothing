@@ -40,7 +40,7 @@ function CollectionSection({ id, index, title, blurb, slug, products, compactTop
           </Link>
         </div>
       </div>
-      <div className="storefront-product-grid mt-6 sm:mt-8">
+      <div className="storefront-product-grid storefront-product-grid--mobile-two mt-6 sm:mt-8">
         {visibleProducts.map((product, i) => (
           <ProductCard key={product.id} product={product} index={i} eager={eagerImages && i < 4} />
         ))}
@@ -56,7 +56,7 @@ function CollectionLoadingSkeleton() {
         <div className="h-3 w-24 rounded bg-line" />
         <div className="mt-3 h-9 w-56 max-w-full rounded bg-line" />
       </div>
-      <div className="storefront-product-grid mt-6">
+      <div className="storefront-product-grid storefront-product-grid--mobile-two mt-6">
         {[0, 1, 2, 3].map((item) => <div key={item} className="aspect-[4/5] rounded bg-line/70" />)}
       </div>
     </section>
@@ -290,7 +290,7 @@ export default function Home() {
             </div>
             <Link to="/shop" className="text-action text-xs font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-deep">View all</Link>
           </div>
-          <div className="storefront-product-grid mt-6">
+          <div className="storefront-product-grid storefront-product-grid--mobile-two mt-6">
             {recentProducts.map((product, index) => <ProductCard key={product.id} product={product} index={index} />)}
           </div>
         </section>

@@ -50,13 +50,14 @@ test('customer product photos visually remove flattened light studio backgrounds
 });
 
 test('shared roots and every active storefront route define shrink and responsive boundaries', async () => {
-  const [css, shell, cart, checkoutReview, account, product, breadcrumbs] = await Promise.all([
+  const [css, shell, cart, checkoutReview, account, product, home, breadcrumbs] = await Promise.all([
     source('src/index.css'),
     source('src/components/Shell.jsx'),
     source('src/pages/Cart.jsx'),
     source('src/pages/CheckoutReview.jsx'),
     source('src/pages/Account.jsx'),
     source('src/pages/Product.jsx'),
+    source('src/pages/Home.jsx'),
     source('src/components/Breadcrumbs.jsx'),
   ]);
 
@@ -71,9 +72,15 @@ test('shared roots and every active storefront route define shrink and responsiv
   assert.match(product, /className="mt-5 grid min-w-0 gap-7[^\"]*md:grid-cols-\[1\.05fr_1fr\][^\"]*lg:grid-cols-\[1\.15fr_1fr\]">\s*<div className="order-1 min-w-0">/);
   assert.match(product, /<div className="order-2 min-w-0">/);
   assert.match(css, /\.storefront-product-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
+  assert.match(css, /\.storefront-product-grid--mobile-two\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s);
+  assert.match(home, /storefront-product-grid storefront-product-grid--mobile-two/);
+  assert.match(product, /storefront-product-grid storefront-product-grid--mobile-two mt-8/);
   assert.match(css, /@media \(min-width: 420px\)[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
   assert.match(css, /@media \(min-width: 768px\)[\s\S]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
   assert.match(css, /@media \(min-width: 1024px\)[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/);
   assert.match(shell, /hidden overflow-x-auto[^\"]*lg:block/);
+  assert.match(shell, /aria-label="Store announcements"/);
+  assert.match(shell, /ticker-group flex shrink-0 items-center/);
+  assert.doesNotMatch(shell, /ticker-track flex w-max gap-10/);
   assert.match(breadcrumbs, /hideLongCurrentItemOnPhone[^\n]*items\.length > 2/);
 });

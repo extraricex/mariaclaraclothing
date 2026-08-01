@@ -20,6 +20,63 @@ import { productSeoDescriptor } from '../lib/seo.js';
 import { normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
 import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 
+function ProductDetailContent({ detail, productName }) {
+  if (detail.type === 'html') {
+    return (
+      <div
+        className="prose-sm max-w-none [&_a]:text-accent [&_a]:underline [&_li]:ml-4 [&_li]:list-disc [&_p]:mt-3"
+        dangerouslySetInnerHTML={{ __html: detail.html }}
+      />
+    );
+  }
+  if (detail.type === 'section') {
+    return (
+      <div>
+        {detail.section.body && <p>{detail.section.body}</p>}
+        {Array.isArray(detail.section.items) && (
+          <ul className="space-y-1">
+            {detail.section.items.map((item, index) => (
+              <li key={index} className="flex gap-2"><span className="text-accent">—</span>{item}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+  if (detail.type === 'image') {
+    return <img src={detail.imageUrl} alt={detail.imageAltText || productName + ' size chart'} className="w-full" loading="lazy" />;
+  }
+  if (detail.type === 'size-chart') {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-clay">
+              <th className="py-2 pr-4">Size</th>
+              <th className="py-2 pr-4">Width</th>
+              <th className="py-2 pr-4">Length</th>
+              <th className="py-2 pr-4">Sleeve length</th>
+              <th className="py-2">Shoulder drop</th>
+            </tr>
+          </thead>
+          <tbody>
+            {detail.rows.map((row, index) => (
+              <tr key={(row.size || 'size') + '-' + index} className="border-b border-line/60">
+                <td className="py-2 pr-4 font-semibold text-ink">{row.size}</td>
+                <td className="py-2 pr-4">{row.width}</td>
+                <td className="py-2 pr-4">{row.length}</td>
+                <td className="py-2 pr-4">{row.sleeveLength}</td>
+                <td className="py-2">{row.shoulderDropLength}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return <p className="whitespace-pre-line">{detail.body}</p>;
+}
+
 export default function Product() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -33,7 +90,6 @@ export default function Product() {
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [stockMessage, setStockMessage] = useState('');
-  const [activeDetailTab, setActiveDetailTab] = useState(0);
   const [sizeChartOpen, setSizeChartOpen] = useState(false);
   const [recommendations, setRecommendations] = useState([]);
   const [loadedImageUrl, setLoadedImageUrl] = useState('');
@@ -55,7 +111,6 @@ export default function Product() {
     setProduct(null);
     setError('');
     setActiveImage(0);
-    setActiveDetailTab(0);
     setQuantity(1);
     setVariantId('');
     setAdded(false);
@@ -205,7 +260,7 @@ export default function Product() {
       body: [shippingEstimateCopy, freeShippingProductCopy].filter(Boolean).join('\n\n')
     }
   ].filter(Boolean);
-  const activeTab = detailTabs[activeDetailTab] || detailTabs[0];
+  const primaryDetailSections = detailTabs.filter((detail) => !['Size Chart', 'Shipping'].includes(detail.title));
   const productCollections = new Set((product.collections || []).map((name) => String(name).trim().toLowerCase()));
   const normalizedCandidateFact = (candidate, key) => {
     const value = candidate.metafields?.[key];
@@ -468,17 +523,6 @@ export default function Product() {
             {onSale && <p className="text-base text-clay line-through">{formatMoney(product.compareAtPriceCents)}</p>}
             {onSale && <p className="rounded-full bg-accent/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-accent-deep">Save {formatMoney(savingsCents)}</p>}
           </div>
-          {productFacts.length > 0 && (
-            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-line py-4 text-sm">
-              {productFacts.map(([label, value]) => (
-                <div key={label} className="min-w-0">
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-clay">{label}</dt>
-                  <dd className="mt-1 break-words text-ink">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-
           {countdown && (
             <CollectionCountdown collectionName={countdown.collectionName} config={countdown.config} />
           )}
@@ -552,101 +596,65 @@ export default function Product() {
               <Link to="/checkout" className="underline">checkout</Link>.
             </p>
           )}
-          {freeShippingEnabled && (
-            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-ink">
-              Add {freeShippingMinimumItems} or more item{freeShippingMinimumItems === 1 ? '' : 's'} and get free shipping.
-            </p>
-          )}
-
-          <ul className="mt-4 grid gap-2 border-y border-line py-4 text-xs leading-relaxed text-ink-soft sm:grid-cols-2" aria-label="Payment and delivery reassurance">
-            {cashOnDeliveryAvailable && <li><strong className="text-ink">Cash on Delivery</strong> — no advance payment</li>}
-            <li><strong className="text-ink">J&amp;T nationwide delivery</strong> with the fee confirmed before ordering</li>
-            <li>Shipping fee is shown before you place the order</li>
-            <li><strong className="text-ink">7-day replacement support</strong> for a wrong or damaged item</li>
+          <ul className="mt-4 grid grid-cols-2 gap-2 text-xs leading-snug text-ink-soft" aria-label="Payment and delivery reassurance">
+            {cashOnDeliveryAvailable && (
+              <li className="border border-line p-3"><strong className="block text-ink">Cash on Delivery</strong>No advance payment</li>
+            )}
+            <li className="border border-line p-3"><strong className="block text-ink">J&amp;T nationwide</strong>Shipping fee is shown before you place the order</li>
+            <li className="col-span-2 border border-line p-3"><strong className="text-ink">7-day replacement support</strong> for a wrong or damaged item</li>
+            {freeShippingEnabled && (
+              <li className="col-span-2 border border-line p-3 font-semibold text-ink">
+                Add {freeShippingMinimumItems} or more item{freeShippingMinimumItems === 1 ? '' : 's'} and get free shipping.
+              </li>
+            )}
           </ul>
 
-          <p className="mt-3 text-xs leading-relaxed text-ink-soft">
-            Items must be unworn and unwashed. Size exchanges depend on stock and return shipping is shouldered by the buyer.{' '}
-            <Link to="/shipping-returns" className="font-semibold text-accent underline">Read the complete shipping and exchange policy.</Link>
-          </p>
-
-          <nav className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold uppercase tracking-[0.1em] text-accent" aria-label="Product help and collection links">
-            {parentCollection && (
-              <Link to={`/collections/${encodeURIComponent(parentCollection.slug)}`} className="underline hover:text-accent-deep">
-                More in {parentCollection.name}
-              </Link>
+          <div className="product-detail-accordion mt-6 border-y border-line" aria-label="Product information">
+            {(productFacts.length > 0 || primaryDetailSections.length > 0) && (
+              <details className="group border-b border-line last:border-b-0">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-xs font-semibold uppercase tracking-[0.12em]">
+                  Product details <span className="text-lg font-normal transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+                </summary>
+                <div className="space-y-5 pb-5 text-sm leading-relaxed text-ink-soft">
+                  {productFacts.length > 0 && (
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      {productFacts.map(([label, value]) => (
+                        <div key={label} className="min-w-0">
+                          <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-clay">{label}</dt>
+                          <dd className="mt-1 break-words text-ink">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  {primaryDetailSections.map((detail, index) => (
+                    <section key={detail.title + '-' + index}>
+                      {primaryDetailSections.length > 1 && (
+                        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-clay">{detail.title}</h3>
+                      )}
+                      <ProductDetailContent detail={detail} productName={product.name} />
+                    </section>
+                  ))}
+                </div>
+              </details>
             )}
-            <Link to="/size-chart" className="underline hover:text-accent-deep">Full size guide</Link>
-            <Link to="/shipping-returns" className="underline hover:text-accent-deep">Shipping & returns</Link>
-          </nav>
-
-          {activeTab && (
-            <div className="mt-10 border-t border-line">
-              <div className="flex overflow-x-auto border-b border-line">
-                {detailTabs.map((tab, index) => (
-                  <button
-                    key={`${tab.title}-${index}`}
-                    type="button"
-                    onClick={() => setActiveDetailTab(index)}
-                    className={`shrink-0 border-b-2 px-4 py-4 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-                      index === activeDetailTab ? 'border-ink text-ink' : 'border-transparent text-clay hover:text-ink'
-                    }`}
-                  >
-                    {tab.title}
-                  </button>
-                ))}
-              </div>
-              <div className="py-5 text-sm leading-relaxed text-ink-soft">
-                {activeTab.type === 'html' && (
-                  <div
-                    className="prose-sm max-w-none [&_a]:text-accent [&_a]:underline [&_li]:ml-4 [&_li]:list-disc [&_p]:mt-3"
-                    dangerouslySetInnerHTML={{ __html: activeTab.html }}
-                  />
-                )}
-                {activeTab.type === 'section' && (
-                  <div>
-                    {activeTab.section.body && <p>{activeTab.section.body}</p>}
-                    {Array.isArray(activeTab.section.items) && (
-                      <ul className="space-y-1">
-                        {activeTab.section.items.map((item, i) => (
-                          <li key={i} className="flex gap-2"><span className="text-accent">—</span>{item}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-                {activeTab.type === 'image' && (
-                  <img src={activeTab.imageUrl} alt={activeTab.imageAltText || `${product.name} size chart`} className="w-full" loading="lazy" />
-                )}
-                {activeTab.type === 'size-chart' && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[620px] border-collapse text-left text-sm">
-                      <thead>
-                        <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-clay">
-                          <th className="py-2 pr-4">Size</th>
-                          <th className="py-2 pr-4">Width</th>
-                          <th className="py-2 pr-4">Length</th>
-                          <th className="py-2 pr-4">Sleeve length</th>
-                          <th className="py-2">Shoulder drop</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeTab.rows.map((row, index) => (
-                          <tr key={`${row.size || 'size'}-${index}`} className="border-b border-line/60">
-                            <td className="py-2 pr-4 font-semibold text-ink">{row.size}</td>
-                            <td className="py-2 pr-4">{row.width}</td>
-                            <td className="py-2 pr-4">{row.length}</td>
-                            <td className="py-2 pr-4">{row.sleeveLength}</td>
-                            <td className="py-2">{row.shoulderDropLength}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {activeTab.type === 'text' && <p>{activeTab.body}</p>}
-              </div>
-            </div>
+            {detailTabs.filter((detail) => ['Size Chart', 'Shipping'].includes(detail.title)).map((detail, index) => (
+              <details key={`${detail.title}-${index}`} className="group border-b border-line last:border-b-0">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-xs font-semibold uppercase tracking-[0.12em]">
+                  {detail.title === 'Size Chart' ? 'Size & fit' : 'Shipping & returns'} <span className="text-lg font-normal transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+                </summary>
+                <div className="pb-5 text-sm leading-relaxed text-ink-soft">
+                  <ProductDetailContent detail={detail} productName={product.name} />
+                  {detail.title === 'Shipping' && (
+                    <Link to="/shipping-returns" className="mt-3 inline-block font-semibold text-accent underline">Read the complete shipping and exchange policy</Link>
+                  )}
+                </div>
+              </details>
+            ))}
+          </div>
+          {parentCollection && (
+            <Link to={'/collections/' + encodeURIComponent(parentCollection.slug)} className="mt-4 inline-block text-xs font-semibold uppercase tracking-[0.1em] text-accent underline">
+              More in {parentCollection.name}
+            </Link>
           )}
           </div>
         </div>
@@ -665,7 +673,7 @@ export default function Product() {
                 : 'Explore more available pieces from Maria Clara Clothing.'}
             </p>
           </div>
-          <div className="storefront-product-grid mt-8">
+          <div className="storefront-product-grid storefront-product-grid--mobile-two mt-8">
             {recommendedProducts.map(({ candidate: recommended }, index) => (
               <ProductCard key={recommended.id} product={recommended} index={index} />
             ))}
