@@ -40,16 +40,15 @@ const FREE_SHIPPING_OFFER_DISMISSED = 'maria-clara-free-shipping-offer-dismissed
 const RECOMMENDATION_DISMISSED = 'maria-clara-new-arrival-recommendation-dismissed';
 
 function Ticker({ items }) {
-  const sequence = [...items, ...items, ...items];
   return (
-    <div className="overflow-hidden bg-ink py-2 text-paper">
-      <div className="ticker-track flex w-max gap-10">
+    <div className="storefront-ticker relative z-[50] flex min-h-8 items-center overflow-hidden bg-ink text-paper" role="region" aria-label="Store announcements">
+      <div className="ticker-track flex w-max items-center">
         {[0, 1].map((copy) => (
-          <div key={copy} className="flex shrink-0 gap-10" aria-hidden={copy === 1}>
-            {sequence.map((item, index) => (
-              <span key={index} className="flex items-center gap-10 text-[11px] font-semibold uppercase tracking-[0.22em]">
+          <div key={copy} className="ticker-group flex shrink-0 items-center" aria-hidden={copy === 1}>
+            {items.map((item, index) => (
+              <span key={index} className="flex shrink-0 items-center whitespace-nowrap px-4 text-[10px] font-semibold uppercase tracking-[0.16em] sm:px-5 sm:text-[11px] sm:tracking-[0.22em]">
                 {item}
-                <span className="text-accent">✺</span>
+                <span className="ml-8 text-paper/50" aria-hidden="true">✺</span>
               </span>
             ))}
           </div>

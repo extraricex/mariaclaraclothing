@@ -117,6 +117,9 @@
   .storefront-product-grid > * {
     min-width: 0;
   }
+  .storefront-product-grid--mobile-two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   @media (min-width: 420px) {
     .storefront-product-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -767,6 +770,18 @@
 }
 .ticker-track {
   animation: ticker 22s linear infinite;
+  will-change: transform;
+}
+.ticker-group {
+  width: max-content;
+  min-width: 100vw;
+  justify-content: space-around;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+    transform: none;
+  }
 }
 
 /* staggered page-load reveal */

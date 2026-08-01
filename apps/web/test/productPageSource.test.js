@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-test('product page includes reference-style gallery, tabs, and upsell markers', async () => {
+test('product page keeps the purchase path prominent and secondary information collapsed', async () => {
   const source = await readFile(path.join(import.meta.dirname, '..', 'src', 'pages', 'Product.jsx'), 'utf8');
 
   assert.match(source, /aria-label="Previous product image"/);
@@ -16,7 +16,9 @@ test('product page includes reference-style gallery, tabs, and upsell markers', 
   assert.match(source, /You May Also Like/);
   assert.match(source, /Add \{freeShippingMinimumItems\} or more item/);
   assert.match(source, /freeShippingEnabled/);
-  assert.match(source, /activeDetailTab/);
+  assert.doesNotMatch(source, /activeDetailTab/);
+  assert.match(source, /product-detail-accordion/);
+  assert.match(source, /<summary className=/);
   assert.match(source, /title: 'Size Chart'/);
   assert.match(source, /View Size Chart/);
   assert.match(source, /sizeChartOpen/);
@@ -34,5 +36,8 @@ test('product page includes reference-style gallery, tabs, and upsell markers', 
   assert.match(source, /btn-ink customer-compact-button min-w-44 flex-1 !rounded/);
   assert.doesNotMatch(source, /border border-ink bg-white text-2xl/);
   assert.doesNotMatch(source, /aspect-\[4\/5\] overflow-hidden border border-line bg-white/);
-  assert.doesNotMatch(source, /<details key=\{index\}/);
+  assert.match(source, /primaryDetailSections/);
+  assert.match(source, /Size & fit/);
+  assert.match(source, /Shipping & returns/);
+  assert.match(source, /storefront-product-grid storefront-product-grid--mobile-two mt-8/);
 });
