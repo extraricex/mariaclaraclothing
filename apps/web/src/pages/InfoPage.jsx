@@ -18,7 +18,7 @@ export default function InfoPage({ title, pageKey }) {
   }, [pageKey]);
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-14 lg:px-8">
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-5 sm:py-14 lg:px-8">
       <p className="eyebrow">Maria Clara Clothing</p>
       <h1 className="display mt-2 text-4xl sm:text-5xl">{title}</h1>
       <div className="mt-10">

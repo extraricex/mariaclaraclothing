@@ -49,14 +49,15 @@ test('customer product photos visually remove flattened light studio backgrounds
   assert.match(card, /media-zoom relative isolate aspect-\[4\/5\][^\"]*bg-\[var\(--customer-bg\)\]/);
 });
 
-test('shared roots and every active storefront route define shrink and overflow boundaries', async () => {
-  const [css, shell, cart, checkoutReview, account, product] = await Promise.all([
+test('shared roots and every active storefront route define shrink and responsive boundaries', async () => {
+  const [css, shell, cart, checkoutReview, account, product, breadcrumbs] = await Promise.all([
     source('src/index.css'),
     source('src/components/Shell.jsx'),
     source('src/pages/Cart.jsx'),
     source('src/pages/CheckoutReview.jsx'),
     source('src/pages/Account.jsx'),
     source('src/pages/Product.jsx'),
+    source('src/components/Breadcrumbs.jsx'),
   ]);
 
   assert.match(css, /body,\s*#root\s*{[^}]*min-width:\s*0;[^}]*}/s);
@@ -67,6 +68,12 @@ test('shared roots and every active storefront route define shrink and overflow 
   assert.match(checkoutReview, /<article[^>]*className="flex min-w-0/);
   assert.match(account, /className="flex flex-wrap items-center gap-3"/);
   assert.match(product, /className="mt-6 flex flex-wrap items-center gap-3/);
-  assert.match(product, /className="mt-6 grid gap-10 lg:grid-cols-\[1\.15fr_1fr\]">\s*<div className="order-2 min-w-0 lg:order-1">/);
-  assert.match(product, /<div className="order-1 min-w-0 lg:order-2">/);
+  assert.match(product, /className="mt-5 grid min-w-0 gap-7[^\"]*md:grid-cols-\[1\.05fr_1fr\][^\"]*lg:grid-cols-\[1\.15fr_1fr\]">\s*<div className="order-1 min-w-0">/);
+  assert.match(product, /<div className="order-2 min-w-0">/);
+  assert.match(css, /\.storefront-product-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
+  assert.match(css, /@media \(min-width: 420px\)[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(css, /@media \(min-width: 768px\)[\s\S]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.match(css, /@media \(min-width: 1024px\)[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/);
+  assert.match(shell, /hidden overflow-x-auto[^\"]*lg:block/);
+  assert.match(breadcrumbs, /hideLongCurrentItemOnPhone[^\n]*items\.length > 2/);
 });

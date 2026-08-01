@@ -158,7 +158,7 @@ export default function Cart() {
   }
 
   return (
-    <div className="customer-page mx-auto max-w-5xl px-5 py-10 sm:py-12 lg:px-8">
+    <div className="customer-page mx-auto max-w-5xl px-4 py-8 sm:px-5 sm:py-12 lg:px-8">
       <p className="eyebrow">Cart / {quantity} item{quantity === 1 ? '' : 's'}</p>
       <h1 className="display mt-2 text-3xl sm:text-5xl">Your cart</h1>
       <p className="mt-4 inline-block bg-cream px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft">

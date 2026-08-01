@@ -376,8 +376,8 @@ export default function Checkout() {
   return (
     <div className="customer-checkout-shell min-h-screen min-w-0 overflow-x-hidden bg-[var(--customer-bg)]">
       <CheckoutHeader current="information" />
-      <main className="mx-auto max-w-4xl px-5 pb-14 pt-7 lg:px-8">
-        <form className="customer-card mx-auto max-w-3xl rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-5 shadow-sm sm:p-7" onSubmit={continueToReview} noValidate>
+      <main className="mx-auto max-w-4xl px-4 pb-14 pt-6 sm:px-5 sm:pt-7 lg:px-8">
+        <form className="customer-card mx-auto max-w-3xl rounded-[8px] border border-[var(--customer-border)] bg-[var(--customer-surface)] p-4 shadow-sm sm:p-7" onSubmit={continueToReview} noValidate>
           <p className="eyebrow">Checkout information</p>
           <h1 className="display mt-2 text-3xl leading-tight sm:text-4xl">Where do we send it?</h1>
           <p className="mt-3 text-sm leading-relaxed text-ink-soft">Enter your contact and delivery details. You will review the products, total, and payment method on the next page.</p>

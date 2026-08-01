@@ -119,8 +119,8 @@ export default function ReportIssueWidget({ settings, cartItems, inline = false 
       <button
         type="button"
         className={inline
-          ? 'text-action inline-flex text-sm text-paper/80 underline hover:text-accent sm:hidden'
-          : `fixed bottom-[5.25rem] z-[45] hidden rounded-full border border-ink/10 bg-paper px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink shadow-2xl transition-transform hover:-translate-y-1 sm:block ${rightSide ? 'right-4' : 'left-4'}`}
+          ? 'text-action inline-flex text-sm text-paper/80 underline hover:text-accent lg:hidden'
+          : `fixed bottom-[5.25rem] z-[45] hidden rounded-full border border-ink/10 bg-paper px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink shadow-2xl transition-transform hover:-translate-y-1 lg:block ${rightSide ? 'right-4' : 'left-4'}`}
         onClick={() => setOpen(true)}
         aria-label="Report an issue"
       >

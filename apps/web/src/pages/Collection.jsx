@@ -63,11 +63,11 @@ export default function Collection() {
     <div className="pb-8">
       <SEO {...collectionSeoDescriptor(collection, members)} />
       <section className="border-b border-line bg-ink text-paper">
-        <div className={`mx-auto grid max-w-7xl items-center ${collection.imageUrl ? 'gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]' : ''} px-5 py-12 sm:py-16 lg:px-8`}>
+        <div className={`mx-auto grid max-w-7xl items-center ${collection.imageUrl ? 'gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]' : ''} px-4 py-10 sm:px-5 sm:py-16 lg:px-8`}>
           <div>
             <Breadcrumbs className="mb-6 [&_ol]:text-paper/60" items={[{ label: 'Home', to: '/' }, { label: 'Shop', to: '/shop' }, { label: collection.name }]} />
             <p className="eyebrow text-paper/60">Collection</p>
-            <h1 className="display mt-3 text-4xl sm:text-6xl">{collection.name}</h1>
+            <h1 className="display mt-3 break-words text-[clamp(2rem,10vw,3.75rem)]">{collection.name}</h1>
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-paper/75">{collection.introText || collection.description}</p>
           </div>
           {collection.imageUrl && (
@@ -91,13 +91,13 @@ export default function Collection() {
         </div>
       </section>
 
-      <section className="mx-auto mt-10 max-w-7xl px-5 sm:mt-14 lg:px-8">
+      <section className="mx-auto mt-8 max-w-7xl px-4 sm:mt-14 sm:px-5 lg:px-8">
         <div className="flex items-end justify-between gap-4 border-b border-line pb-4">
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em]">Products</h2>
           <p className="text-xs text-clay">{members.length} {members.length === 1 ? 'piece' : 'pieces'}</p>
         </div>
         {members.length ? (
-          <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
+          <div className="storefront-product-grid mt-6">
             {members.map((product, index) => <ProductCard key={product.id} product={product} index={index} eager={index < 4} />)}
           </div>
         ) : (

@@ -96,7 +96,7 @@ export default function Shop() {
   if (error) return <div className="mx-auto min-h-[70vh] max-w-7xl px-5 py-16 text-sm text-accent-deep" role="alert">{error}</div>;
 
   return (
-    <div className="customer-page mx-auto max-w-7xl px-5 py-10 sm:py-14 lg:px-8">
+    <div className="customer-page mx-auto max-w-7xl px-4 py-8 sm:px-5 sm:py-14 lg:px-8">
       <SEO
         title="Shop Premium T-Shirts | Maria Clara Clothing"
         description="Shop Maria Clara Clothing oversized, regular-fit, and crop-box shirts with current size availability and nationwide delivery."
@@ -105,7 +105,7 @@ export default function Shop() {
         structuredData={breadcrumbStructuredData([{ name: 'Home', path: '/' }, { name: 'Shop' }])}
       />
       <p className="eyebrow">Shop</p>
-      <h1 className="display mt-2 text-4xl sm:text-6xl">Find your next piece</h1>
+      <h1 className="display mt-2 break-words text-[clamp(2rem,10vw,3.75rem)]">Find your next piece</h1>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-soft">Search real in-stock products and filter by collection, available size, or price.</p>
 
       <section className="mt-8 rounded-[8px] border border-line bg-white p-4 sm:p-5" aria-label="Product filters">
@@ -126,7 +126,7 @@ export default function Shop() {
         <p className="text-xs text-clay" aria-live="polite">{results.length} {results.length === 1 ? 'piece' : 'pieces'}</p>
       </div>
       {results.length ? (
-        <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4">
+        <div className="storefront-product-grid mt-6">
           {results.map((product, index) => <ProductCard key={product.id} product={product} index={index} eager={index < 4} />)}
         </div>
       ) : (

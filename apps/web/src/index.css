@@ -71,12 +71,27 @@
     @apply bg-paper text-ink antialiased;
     font-family: var(--font-body);
     overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   body,
   #root {
     min-width: 0;
     max-width: 100%;
     overflow-x: clip;
+  }
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
+  input,
+  select,
+  textarea {
+    min-width: 0;
+    max-width: 100%;
   }
   ::selection {
     @apply bg-accent text-paper;
@@ -91,6 +106,33 @@
   .display {
     font-family: var(--font-display);
     @apply font-semibold uppercase tracking-tight;
+    overflow-wrap: anywhere;
+  }
+  .storefront-product-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 1rem;
+    row-gap: 1.75rem;
+  }
+  .storefront-product-grid > * {
+    min-width: 0;
+  }
+  @media (min-width: 420px) {
+    .storefront-product-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 768px) {
+    .storefront-product-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      column-gap: 1.25rem;
+      row-gap: 2.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .storefront-product-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
   }
   .storefront-deferred-section {
     content-visibility: auto;

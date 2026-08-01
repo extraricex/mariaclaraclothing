@@ -7,11 +7,11 @@ function ContactLink({ href, label, value }) {
       href={href}
       target={href.startsWith('http') ? '_blank' : undefined}
       rel={href.startsWith('http') ? 'noreferrer' : undefined}
-      className="group flex items-center justify-between gap-4 border-t border-line py-4 text-sm"
+      className="group flex flex-col items-start gap-1.5 border-t border-line py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4"
       aria-label={`${label}: ${value}`}
     >
       <span className="font-semibold uppercase tracking-[0.12em]">{label}</span>
-      <span className="min-w-0 truncate text-right text-ink-soft group-hover:text-accent">{value}</span>
+      <span className="min-w-0 max-w-full break-words text-left text-ink-soft group-hover:text-accent sm:text-right">{value}</span>
     </a>
   );
 }
@@ -19,9 +19,9 @@ function ContactLink({ href, label, value }) {
 function ContactDetail({ label, value }) {
   if (!value) return null;
   return (
-    <div className="flex items-start justify-between gap-4 border-t border-line py-4 text-sm">
+    <div className="flex flex-col items-start gap-1.5 border-t border-line py-4 text-sm sm:flex-row sm:justify-between sm:gap-4">
       <span className="font-semibold uppercase tracking-[0.12em]">{label}</span>
-      <span className="min-w-0 text-right leading-relaxed text-ink-soft">{value}</span>
+      <span className="min-w-0 break-words text-left leading-relaxed text-ink-soft sm:text-right">{value}</span>
     </div>
   );
 }
@@ -36,7 +36,7 @@ export default function Contact() {
   const address = settings.storeAddress || '';
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-14 lg:px-8">
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-5 sm:py-14 lg:px-8">
       <p className="eyebrow">Maria Clara Clothing</p>
       <h1 className="display mt-2 text-4xl sm:text-5xl">Contact</h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-soft">
