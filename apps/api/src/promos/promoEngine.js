@@ -33,7 +33,7 @@ async function quoteCart(input = {}) {
   };
 
   const discountCode = String(input.discountCode || '').trim();
-  let applied = null;
+  let codePromo = null;
 
   if (discountCode) {
     const discount = await findDiscountByCode(discountCode);
@@ -43,13 +43,13 @@ async function quoteCart(input = {}) {
       error.status = 400;
       throw error;
     }
-    applied = applyDiscount(discount, context);
-  } else {
-    const discounts = await listDiscounts();
-    const automaticPromo = selectBestAutomaticPromo(discounts, context);
-    applied = automaticPromo ? applyDiscount(automaticPromo, context) : null;
+    codePromo = applyDiscount(discount, context);
   }
 
+  const discounts = await listDiscounts();
+  const automaticPromo = selectBestAutomaticPromo(discounts, context);
+  const automaticApplied = automaticPromo ? applyDiscount(automaticPromo, context) : null;
+  const applied = combineAppliedDiscounts(codePromo, automaticApplied, context);
   const discountTotalCents = applied?.discountTotalCents || 0;
   const freeShippingUnlocked = Boolean(applied?.freeShippingApplied);
   const shippingFeeCents = freeShippingUnlocked ? 0 : baseShippingFeeCents;
@@ -65,6 +65,32 @@ async function quoteCart(input = {}) {
     shippingFeeCents,
     freeShippingUnlocked,
     totalCents
+  };
+}
+
+function combineAppliedDiscounts(codePromo, automaticPromo, context) {
+  if (!codePromo) return automaticPromo;
+  if (!automaticPromo) return codePromo;
+
+  const discountTotalCents = Math.min(
+    context.subtotalCents,
+    Number(codePromo.discountTotalCents || 0) + Number(automaticPromo.discountTotalCents || 0)
+  );
+  const freeShippingApplied = Boolean(
+    codePromo.freeShippingApplied || automaticPromo.freeShippingApplied
+  );
+
+  return {
+    ...codePromo,
+    discountTotalCents,
+    freeShippingApplied,
+    savingsCents: discountTotalCents + (freeShippingApplied ? context.shippingFeeCents : 0),
+    discountSnapshot: {
+      ...codePromo.discountSnapshot,
+      discountAmountCents: discountTotalCents,
+      freeShippingApplied,
+      automaticPromos: [automaticPromo.discountSnapshot]
+    }
   };
 }
 
@@ -203,6 +229,7 @@ function isPromoInDateWindow(discount, now) {
 
 module.exports = {
   applyDiscount,
+  combineAppliedDiscounts,
   normalizeQuoteItems,
   quoteCart,
   selectBestAutomaticPromo
