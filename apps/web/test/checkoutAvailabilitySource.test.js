@@ -12,7 +12,7 @@ test('invalid inventory is blocked before checkout instead of redirecting after 
     source('components/Shell.jsx')
   ]);
 
-  assert.match(checkout, /createCheckoutQuote\(\{ cartSessionId: getCartSessionId\(\), items \}\)/);
+  assert.match(checkout, /createCheckoutQuote\(\{ cartSessionId: getCartSessionId\(\), items, discountCode: checkoutDiscountCode \}\)/);
   assert.match(checkout, /setCartAvailability\(\{ state: 'blocked', message: error\.message \}\)/);
   assert.match(checkout, /Your details are saved\./);
   assert.match(checkout, /quote: null/);

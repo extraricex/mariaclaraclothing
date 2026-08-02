@@ -8,12 +8,14 @@ import { productPath } from '../lib/productUrl.js';
 import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
 import { fetchWithRecovery, responseErrorMessage } from '../lib/network.js';
 import { cartAvailabilityRepair, isCartAvailabilityError } from '../lib/checkoutAvailability.js';
+import { claimedOfferCode } from '../lib/claimOffer.js';
 
 export default function Cart() {
   const items = useCart();
   const location = useLocation();
   const navigate = useNavigate();
   const recoveryStarted = useRef(false);
+  const offerCode = claimedOfferCode();
   const [products, setProducts] = useState([]);
   const [quote, setQuote] = useState(null);
   const [quoteIssue, setQuoteIssue] = useState(null);
@@ -72,7 +74,7 @@ export default function Cart() {
       return;
     }
     let cancelled = false;
-    createCheckoutQuote({ cartSessionId: getCartSessionId(), items })
+    createCheckoutQuote({ cartSessionId: getCartSessionId(), items, discountCode: offerCode })
       .then((body) => {
         if (cancelled) return;
         setQuote(body.quote || null);
@@ -86,7 +88,7 @@ export default function Cart() {
     return () => {
       cancelled = true;
     };
-  }, [items]);
+  }, [items, offerCode]);
 
   function addUpsell(product) {
     const variant = (product.variants || []).find((candidate) => candidate.id === upsellVariantIds[product.id] && Number(candidate.stockQuantity || 0) > 0);

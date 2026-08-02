@@ -1,0 +1,38 @@
+{
+  "discounts": [
+    {
+      "code": "CLAIM5",
+      "name": "Claim 5% Off",
+      "method": "code",
+      "type": "percentage",
+      "value": 5,
+      "status": "active",
+      "minimumQuantity": 1,
+      "minimumSubtotalCents": null,
+      "usageLimit": null,
+      "usageCount": 0,
+      "rules": []
+    },
+    {
+      "code": "BUY2FREESHIP",
+      "name": "Buy 2 Free Shipping",
+      "method": "automatic",
+      "type": "buy_more_save_more",
+      "value": 0,
+      "status": "active",
+      "minimumQuantity": 2,
+      "minimumSubtotalCents": null,
+      "usageLimit": null,
+      "usageCount": 0,
+      "rules": [
+        {
+          "minimumQuantity": 2,
+          "discountType": "fixed",
+          "discountValue": 0,
+          "discountValueCents": 0,
+          "freeShipping": true
+        }
+      ]
+    }
+  ]
+}
