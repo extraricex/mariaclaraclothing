@@ -32,12 +32,13 @@ test('required consent uses a non-blocking choices bar that the footer can reope
   assert.doesNotMatch(choices, /fixed inset-0|aria-modal="true"/);
 });
 
-test('storefront loads one dismissible New Arrivals recommendation into a responsive offer dock', async () => {
+test('storefront loads one dismissible sale recommendation into the left-side offer dock', async () => {
   const source = await readFile(shellPath, 'utf8');
   assert.match(source, /fetchProducts/);
-  assert.match(source, /selectNewArrivalRecommendation/);
+  assert.match(source, /selectSaleRecommendation/);
   assert.match(source, /function ProductRecommendation/);
-  assert.match(source, /You may also like/);
+  assert.match(source, /SAVE.*formatMoney\(savingsCents\)/);
+  assert.match(source, /line-through/);
   assert.match(source, /RECOMMENDATION_DISMISSED/);
   assert.match(source, /aria-expanded=\{mobileOffersOpen\}/);
   assert.match(source, /aria-controls="storefront-offer-cards"/);
@@ -46,6 +47,7 @@ test('storefront loads one dismissible New Arrivals recommendation into a respon
   assert.match(source, /pointer-events-none/);
   assert.match(source, /lg:hidden/);
   assert.match(source, /lg:grid/);
+  assert.doesNotMatch(source, /ClaimOfferDialog|Claim my 5% off|Take 5% off every item/);
 });
 
 test('Messenger support uses a visible responsive Chat Support label', async () => {

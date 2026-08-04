@@ -30,7 +30,6 @@ import { selectStableCheckoutUpsells } from '../lib/checkoutUpsell.js';
 import CheckoutHeader from '../components/CheckoutHeader.jsx';
 import CheckoutUpsell from '../components/CheckoutUpsell.jsx';
 import { formatCheckoutAddress, normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
-import { CLAIM_OFFER_CODE, redeemClaimedOffer } from '../lib/claimOffer.js';
 
 const REVIEWED_TOTAL_FIELDS = ['subtotalCents', 'discountTotalCents', 'shippingFeeCents', 'totalCents'];
 
@@ -365,7 +364,6 @@ export default function CheckoutReview() {
         ? await createPayMongoCheckout(payload, latestQuote.id, idempotencyKey)
         : await createQuoteBackedOrder(payload, latestQuote.id, idempotencyKey);
 
-      if (latestQuote.discountCode === CLAIM_OFFER_CODE) redeemClaimedOffer();
       saveCustomerDetails().catch(() => {});
       sessionStorage.setItem('maria-clara-last-order', JSON.stringify({
         orderNumber: result.orderNumber,

@@ -24,14 +24,27 @@ export function freeShippingOffer(shipping, quantity) {
   };
 }
 
-export function selectNewArrivalRecommendation(products, randomValue = Math.random()) {
+export function selectSaleRecommendation(products, randomValue = Math.random()) {
   const eligible = (Array.isArray(products) ? products : []).filter((product) => {
-    const collections = Array.isArray(product?.collections) ? product.collections : [product?.collection];
-    return collections.includes('New Arrivals')
-      && Boolean(product?.slug)
-      && Boolean(product?.images?.[0]?.url);
+    const priceCents = Number(product?.priceCents || 0);
+    const compareAtPriceCents = Number(product?.compareAtPriceCents || 0);
+    const availableStock = (product?.variants || []).reduce(
+      (total, variant) => total + Math.max(0, Number(variant?.stockQuantity || 0)),
+      0
+    );
+    return Boolean(product?.slug)
+      && Boolean(product?.images?.[0]?.url)
+      && availableStock > 0
+      && compareAtPriceCents > priceCents;
   });
   if (!eligible.length) return null;
+
+  const largestSaving = Math.max(...eligible.map(
+    (product) => Number(product.compareAtPriceCents) - Number(product.priceCents)
+  ));
+  const strongestOffers = eligible.filter(
+    (product) => Number(product.compareAtPriceCents) - Number(product.priceCents) === largestSaving
+  );
   const normalizedRandom = Math.min(0.999999, Math.max(0, Number(randomValue) || 0));
-  return eligible[Math.floor(normalizedRandom * eligible.length)];
+  return strongestOffers[Math.floor(normalizedRandom * strongestOffers.length)];
 }

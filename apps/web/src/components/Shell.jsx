@@ -9,20 +9,12 @@ import { productPath } from '../lib/productUrl.js';
 import { getMetaTrackingConsent, setMetaTrackingConsent } from '../lib/metaPixel.js';
 import { loadStorefrontSettings } from '../lib/storeSettings.js';
 import { collectionMembers, normalizeCollectionDefinitions } from '../lib/storefrontCollections.js';
-import { freeShippingOffer, selectNewArrivalRecommendation } from '../lib/storefrontSupport.js';
+import { freeShippingOffer, selectSaleRecommendation } from '../lib/storefrontSupport.js';
 import useModalFocus from '../hooks/useModalFocus.js';
 import PageTransition from './PageTransition.jsx';
 import ReportIssueWidget from './ReportIssueWidget.jsx';
 import { responsiveImageAttributes } from '../lib/responsiveImage.js';
 import { prefetchCustomerRoute } from '../lib/routePrefetch.js';
-import {
-  CLAIM_OFFER_CHANGED_EVENT,
-  claimOffer,
-  claimedOfferCode,
-  claimOfferWasDismissed,
-  dismissClaimOffer,
-  offerWasClaimedOrRedeemed
-} from '../lib/claimOffer.js';
 
 const TICKER_ITEMS = [
   'Free shipping on 2+ items',
@@ -106,56 +98,12 @@ function FreeShippingAside({ offer, onClose }) {
   );
 }
 
-function ClaimOfferDialog({ open, claimed, onClaim, onClose }) {
-  const dialogRef = useRef(null);
-  const primaryButtonRef = useRef(null);
-  useModalFocus({
-    open,
-    containerRef: dialogRef,
-    initialFocusRef: primaryButtonRef,
-    onClose
-  });
-
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-ink/65 p-3 sm:items-center sm:p-6" role="presentation">
-      <section
-        ref={dialogRef}
-        tabIndex={-1}
-        className="relative w-full max-w-md overflow-hidden border border-line bg-paper p-5 shadow-2xl sm:p-7"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="claim-offer-title"
-      >
-        <button type="button" className="absolute right-2 top-2 h-11 w-11 text-2xl text-clay hover:text-ink" aria-label="Close 5% offer" onClick={onClose}>×</button>
-        <p className="eyebrow">{claimed ? 'Offer claimed' : 'One-time offer'}</p>
-        <div className="mt-4 border-y border-line py-5">
-          <p className="display text-[clamp(3.5rem,18vw,6.5rem)] leading-[0.78]">5% OFF</p>
-          <h2 id="claim-offer-title" className="display mt-5 pr-8 text-2xl leading-tight sm:text-3xl">
-            {claimed ? 'Your discount is ready' : 'Take 5% off every item'}
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-            {claimed
-              ? 'Your 5% discount will be applied automatically in your cart and at checkout.'
-              : 'Claim once for your next order. The discount applies to every item, and automatic free shipping can still apply.'}
-          </p>
-        </div>
-        <button ref={primaryButtonRef} type="button" className="btn-ink mt-5 w-full" onClick={claimed ? onClose : onClaim}>
-          {claimed ? 'Start shopping' : 'Claim my 5% off'}
-        </button>
-        <p className="mt-3 text-center text-[10px] uppercase tracking-[0.12em] text-clay">
-          One claim per browser · One order · COD checkout
-        </p>
-      </section>
-    </div>
-  );
-}
-
 function ProductRecommendation({ product, onClose, onNavigate }) {
   if (!product) return null;
   const image = product.images[0];
+  const savingsCents = Number(product.compareAtPriceCents) - Number(product.priceCents);
   return (
-    <aside className="relative flex items-center gap-3 border border-line bg-paper p-2.5 shadow-2xl" aria-label="You may also like">
+    <aside className="relative flex items-center gap-3 border border-line bg-paper p-2.5 shadow-2xl" aria-label={`Sale: save ${formatMoney(savingsCents)} on ${product.name}`}>
       <Link to={productPath(product)} className="flex min-w-0 flex-1 items-center gap-3" onClick={onNavigate}>
         <img
           src={image.url}
@@ -164,9 +112,13 @@ function ProductRecommendation({ product, onClose, onNavigate }) {
           loading="lazy"
         />
         <span className="min-w-0 flex-1">
-          <span className="block text-[9px] font-bold uppercase tracking-[0.14em] text-clay">You may also like</span>
+          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-accent-deep">SAVE {formatMoney(savingsCents)}</span>
           <span className="mt-1 block truncate text-xs font-semibold">{product.name}</span>
-          <span className="mt-1 block text-[11px] font-semibold">{formatMoney(product.priceCents)} · <span className="underline">View</span></span>
+          <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] font-semibold">
+            <span className="text-accent-deep">{formatMoney(product.priceCents)}</span>
+            <span className="text-clay line-through">{formatMoney(product.compareAtPriceCents)}</span>
+            <span className="underline">View</span>
+          </span>
         </span>
       </Link>
       <button type="button" className="absolute right-1 top-1 h-8 w-8 text-clay hover:text-ink" aria-label="Close product recommendation" onClick={onClose}>×</button>
@@ -379,10 +331,6 @@ function CartDrawer({ items, quote, quoteIssue, settings, open, onClose }) {
 export default function Shell() {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
-  const canShowClaimOffer = isHomePage ||
-    location.pathname === '/shop' ||
-    location.pathname.startsWith('/product/') ||
-    location.pathname.startsWith('/collections/');
   const hideFloatingUtilities = ['/login', '/register', '/account', '/account/settings'].includes(location.pathname);
   const items = useCart();
   const count = cartQuantity(items);
@@ -400,9 +348,6 @@ export default function Shell() {
   const [recommendation, setRecommendation] = useState(null);
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [mobileOffersOpen, setMobileOffersOpen] = useState(false);
-  const [claimOfferOpen, setClaimOfferOpen] = useState(false);
-  const [claimOfferConfirmed, setClaimOfferConfirmed] = useState(false);
-  const [activeClaimOfferCode, setActiveClaimOfferCode] = useState(() => claimedOfferCode());
   const [recommendationDismissed, setRecommendationDismissed] = useState(() => {
     try {
       return window.sessionStorage.getItem(RECOMMENDATION_DISMISSED) === 'true';
@@ -477,27 +422,13 @@ export default function Shell() {
   }, [storeInfo?.metaPixel?.requireConsent]);
 
   useEffect(() => {
-    if (!canShowClaimOffer || privacyDialogOpen || offerWasClaimedOrRedeemed() || claimOfferWasDismissed()) return undefined;
-    const timer = window.setTimeout(() => setClaimOfferOpen(true), 1800);
-    return () => window.clearTimeout(timer);
-  }, [canShowClaimOffer, privacyDialogOpen]);
-
-  useEffect(() => {
-    function syncClaimOfferCode() {
-      setActiveClaimOfferCode(claimedOfferCode());
-    }
-    window.addEventListener(CLAIM_OFFER_CHANGED_EVENT, syncClaimOfferCode);
-    return () => window.removeEventListener(CLAIM_OFFER_CHANGED_EVENT, syncClaimOfferCode);
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     fetchProducts()
       .then((body) => {
         if (!cancelled) {
           const products = body.products || [];
           setCatalogProducts(products);
-          setRecommendation(selectNewArrivalRecommendation(products));
+          setRecommendation(selectSaleRecommendation(products));
         }
       })
       .catch(() => {});
@@ -537,7 +468,7 @@ export default function Shell() {
       return;
     }
     let cancelled = false;
-    createCheckoutQuote({ cartSessionId: getCartSessionId(), items, discountCode: activeClaimOfferCode })
+    createCheckoutQuote({ cartSessionId: getCartSessionId(), items })
       .then((body) => {
         if (cancelled) return;
         setQuote(body.quote || null);
@@ -551,7 +482,7 @@ export default function Shell() {
     return () => {
       cancelled = true;
     };
-  }, [activeClaimOfferCode, cartDrawerOpen, items]);
+  }, [cartDrawerOpen, items]);
 
   const headerSolid = !isHomePage || headerScrolled || menuOpen;
   const activeHeaderLogo = headerSolid ? (blackLogo || headerLogo) : headerLogo;
@@ -602,19 +533,9 @@ export default function Shell() {
     }
   }
 
-  function claimFivePercentOffer() {
-    setActiveClaimOfferCode(claimOffer());
-    setClaimOfferConfirmed(true);
-  }
-
-  function closeClaimOffer() {
-    if (!claimOfferConfirmed) dismissClaimOffer();
-    setClaimOfferOpen(false);
-  }
-
   const shippingOffer = freeShippingOffer(storeInfo?.shipping, count);
   const visibleShippingOffer = freeShippingOfferDismissed ? null : shippingOffer;
-  const visibleRecommendation = recommendationDismissed || visibleShippingOffer ? null : recommendation;
+  const visibleRecommendation = recommendationDismissed ? null : recommendation;
   const offerCount = Number(Boolean(visibleShippingOffer)) + Number(Boolean(visibleRecommendation));
   const instagramUrl = storeInfo?.socialLinks?.instagram || 'https://www.instagram.com/mariaclaraclothingshop/';
   const facebookUrl = storeInfo?.socialLinks?.facebook || 'https://www.facebook.com/mariaclaraclothing';
@@ -776,13 +697,6 @@ export default function Shell() {
           requireConsent={Boolean(storeInfo?.metaPixel?.requireConsent)}
         />
       )}
-      <ClaimOfferDialog
-        open={claimOfferOpen}
-        claimed={claimOfferConfirmed}
-        onClaim={claimFivePercentOffer}
-        onClose={closeClaimOffer}
-      />
-
       <main className="flex-1">
         <PageTransition>
           <Outlet />

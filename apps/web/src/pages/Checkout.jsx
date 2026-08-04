@@ -13,7 +13,6 @@ import { normalizedCheckoutDetails } from '../lib/checkoutValidation.js';
 import { isCartAvailabilityError } from '../lib/checkoutAvailability.js';
 import { trackFunnelEvent } from '../lib/funnelAnalytics.js';
 import { fetchWithRecovery } from '../lib/network.js';
-import { claimedOfferCode } from '../lib/claimOffer.js';
 
 function checkoutErrorCategory(error, fallback = 'order_api_failure') {
   const code = String(error?.code || '').trim().toLowerCase();
@@ -34,7 +33,6 @@ export default function Checkout() {
   );
   const loggedIn = useCustomerLoggedIn();
   const initialDraft = useMemo(() => loadCheckoutReviewDraft(), []);
-  const checkoutDiscountCode = initialDraft?.discountCode || claimedOfferCode();
   const metaTestAuthorization = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const reference = String(params.get('meta_test_reference') || '').trim().toUpperCase();
@@ -134,7 +132,7 @@ export default function Checkout() {
     if (!items.length) return undefined;
     let cancelled = false;
     setCartAvailability({ state: 'checking', message: '' });
-    createCheckoutQuote({ cartSessionId: getCartSessionId(), items, discountCode: checkoutDiscountCode })
+    createCheckoutQuote({ cartSessionId: getCartSessionId(), items })
       .then(() => {
         if (!cancelled) setCartAvailability({ state: 'ready', message: '' });
       })
@@ -147,7 +145,7 @@ export default function Checkout() {
     return () => {
       cancelled = true;
     };
-  }, [checkoutDiscountCode, items]);
+  }, [items]);
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -314,7 +312,7 @@ export default function Checkout() {
       const body = await createCheckoutQuote({
         cartSessionId,
         items,
-        discountCode: checkoutDiscountCode,
+        discountCode: initialDraft?.discountCode || '',
         address
       });
       const quote = body.quote;
@@ -339,7 +337,7 @@ export default function Checkout() {
         address,
         saveAddress,
         recoveryConsent,
-        discountCode: checkoutDiscountCode,
+        discountCode: initialDraft?.discountCode || '',
         quote,
         ...metaTestAuthorization
       });
@@ -361,7 +359,7 @@ export default function Checkout() {
           address,
           saveAddress,
           recoveryConsent,
-          discountCode: checkoutDiscountCode,
+          discountCode: initialDraft?.discountCode || '',
           quote: null,
           ...metaTestAuthorization
         });
